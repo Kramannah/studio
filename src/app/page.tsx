@@ -68,7 +68,8 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="master" className="mt-6">
             <MasterList 
-              doctors={doctors} 
+              doctors={doctors}
+              entries={masterEntries}
               onAddDoctor={addDoctor}
               onAddDoctorsBulk={addDoctorsBulk}
               onUpdateDoctor={updateDoctor} 

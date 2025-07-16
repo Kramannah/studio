@@ -1,6 +1,6 @@
 "use client"
 
-import type { Doctor } from "@/lib/types";
+import type { Doctor, CoverageEntry } from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -30,7 +30,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
@@ -38,18 +37,27 @@ import { useToast } from "@/hooks/use-toast";
 
 type MasterListProps = {
   doctors: Doctor[];
+  entries: CoverageEntry[];
   onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
   onAddDoctorsBulk: (doctors: Omit<Doctor, 'id'>[]) => void;
   onUpdateDoctor: (doctor: Doctor) => void;
   onDeleteDoctor: (id: string) => void;
 }
 
-export function MasterList({ doctors, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor }: MasterListProps) {
+export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor }: MasterListProps) {
   const [filter, setFilter] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const visitCounts = useMemo(() => {
+    return entries.reduce((acc, entry) => {
+      const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
+      acc[doctorName] = (acc[doctorName] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [entries]);
 
   const filteredDoctors = useMemo(() => {
     return doctors.filter(doctor =>
@@ -173,16 +181,21 @@ export function MasterList({ doctors, onAddDoctor, onAddDoctorsBulk, onUpdateDoc
                         <TableHead>Name</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
+                        <TableHead className="text-center">Frequency</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {filteredDoctors.length > 0 ? (
-                        filteredDoctors.map((doctor) => (
+                        filteredDoctors.map((doctor) => {
+                          const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                          const visitCount = visitCounts[doctorName] || 0;
+                          return (
                             <TableRow key={doctor.id}>
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell className="text-center">{visitCount}</TableCell>
                                 <TableCell className="text-right">
                                   <AlertDialog>
                                     <DropdownMenu>
@@ -217,10 +230,11 @@ export function MasterList({ doctors, onAddDoctor, onAddDoctorsBulk, onUpdateDoc
                                   </AlertDialog>
                                 </TableCell>
                             </TableRow>
-                        ))
+                          );
+                        })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center">
+                            <TableCell colSpan={5} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>
