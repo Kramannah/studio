@@ -47,7 +47,7 @@ const formSchema = z.object({
   clinic: z.string().min(2, "Clinic is required"),
   coverageType: z.enum(["inbase", "outbase"]),
   coverageDate: z.date(),
-  photos: z.array(z.string()).optional(),
+  photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable(),
 })
 
@@ -114,11 +114,11 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
     if (!video || !canvas || !hasCameraPermission) return;
     
     const currentPhotos = form.getValues("photos") || [];
-    if (currentPhotos.length >= 5) {
+    if (currentPhotos.length >= 1) {
       toast({
         variant: "destructive",
         title: "Capture limit reached",
-        description: "You can only save a maximum of 5 photos.",
+        description: "You can only save a maximum of 1 photo.",
       });
       return;
     }
@@ -304,13 +304,13 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
                                 </div>
                             )}
                         </div>
-                        <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission || (form.getValues("photos") || []).length >= 5} className="w-full md:w-auto font-headline">
+                        <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission || (form.getValues("photos") || []).length >= 1} className="w-full md:w-auto font-headline">
                             <Camera className="mr-2" />
                             Capture Photo
                         </Button>
                     </div>
                   </FormControl>
-                  <FormDescription>You can capture up to 5 photos.</FormDescription>
+                  <FormDescription>You can capture 1 photo.</FormDescription>
                   {photoPreviews.length > 0 && (
                     <div className="grid grid-cols-2 gap-4 mt-4 sm:grid-cols-3 md:grid-cols-5">
                       {photoPreviews.map((src, index) => (
