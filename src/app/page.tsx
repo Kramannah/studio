@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 
 export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
-  const { doctors, addDoctor, updateDoctor, deleteDoctor } = useDoctors();
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
@@ -67,7 +67,12 @@ export default function Home() {
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
           </TabsContent>
           <TabsContent value="master" className="mt-6">
-            <MasterList doctors={doctors} onAddDoctor={addDoctor} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} />
+            <MasterList 
+              doctors={doctors} 
+              onAddDoctor={addDoctor}
+              onAddDoctorsBulk={addDoctorsBulk}
+              onUpdateDoctor={updateDoctor} 
+              onDeleteDoctor={deleteDoctor} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} />

@@ -43,6 +43,14 @@ export const useDoctors = () => {
     toast({ title: "Doctor Added", description: `${newDoctor.firstName} ${newDoctor.lastName} has been added to your masterlist.` });
   }, [doctors, toast]);
 
+  const addDoctorsBulk = useCallback((doctorsData: Omit<Doctor, 'id'>[]) => {
+    const newDoctors: Doctor[] = doctorsData.map(d => ({...d, id: crypto.randomUUID()}));
+    const updatedDoctors = [...doctors, ...newDoctors];
+    setDoctors(updatedDoctors);
+    updateLocalStorage(updatedDoctors);
+  }, [doctors]);
+
+
   const updateDoctor = useCallback((doctorData: Doctor) => {
     const updatedDoctors = doctors.map(d => d.id === doctorData.id ? doctorData : d);
     setDoctors(updatedDoctors);
@@ -60,5 +68,5 @@ export const useDoctors = () => {
     }
   }, [doctors, toast]);
 
-  return { doctors, addDoctor, updateDoctor, deleteDoctor };
+  return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor };
 };
