@@ -75,7 +75,7 @@ export function MasterList({ entries }: { entries: CoverageEntry[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Submitted Coverage</CardTitle>
+        <CardTitle className="font-headline">Masterlist</CardTitle>
         <div className="mt-4">
           <Input 
             placeholder="Filter by name, clinic, or specialty..."

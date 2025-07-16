@@ -54,7 +54,7 @@ export default function Home() {
                 <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlineEntries.length}</Badge>
               }
             </TabsTrigger>
-            <TabsTrigger value="master" className="font-headline">Submitted Coverage</TabsTrigger>
+            <TabsTrigger value="master" className="font-headline">Masterlist</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
             <CoverageForm onSave={saveEntry} isOnline={isOnline} />
