@@ -1,9 +1,10 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { format } from "date-fns"
+import { format, isThisMonth, parseISO } from "date-fns"
 import { Calendar as CalendarIcon, Save, Camera, X } from "lucide-react"
 import React, { useState, useRef, useEffect, useCallback } from "react"
 
@@ -58,9 +59,10 @@ type CoverageFormProps = {
   onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt'>) => void;
   isOnline: boolean;
   doctors: Doctor[];
+  masterEntries: CoverageEntry[];
 }
 
-export function CoverageForm({ onSave, isOnline, doctors }: CoverageFormProps) {
+export function CoverageForm({ onSave, isOnline, doctors, masterEntries }: CoverageFormProps) {
   const { toast } = useToast()
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -158,6 +160,31 @@ export function CoverageForm({ onSave, isOnline, doctors }: CoverageFormProps) {
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    const doctorInMasterlist = doctors.find(
+      (d) =>
+        d.firstName.toLowerCase() === values.firstName.toLowerCase() &&
+        d.lastName.toLowerCase() === values.lastName.toLowerCase()
+    );
+
+    if (doctorInMasterlist) {
+      const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
+      
+      const coveragesThisMonth = masterEntries.filter(entry => 
+        entry.firstName.toLowerCase() === values.firstName.toLowerCase() &&
+        entry.lastName.toLowerCase() === values.lastName.toLowerCase() &&
+        isThisMonth(parseISO(entry.submittedAt))
+      ).length;
+
+      if (coveragesThisMonth >= frequency) {
+        toast({
+          variant: "destructive",
+          title: "Submission Limit Reached",
+          description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency}.`,
+        });
+        return; 
+      }
+    }
+
     onSave({
       ...values,
       coverageDate: values.coverageDate.toISOString(),

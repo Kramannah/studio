@@ -64,7 +64,7 @@ export default function Home() {
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
-            <CoverageForm onSave={saveEntry} isOnline={isOnline} doctors={doctors} />
+            <CoverageForm onSave={saveEntry} isOnline={isOnline} doctors={doctors} masterEntries={masterEntries} />
           </TabsContent>
           <TabsContent value="offline" className="mt-6">
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
