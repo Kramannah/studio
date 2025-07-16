@@ -1,6 +1,6 @@
 "use client"
 
-import type { CoverageEntry } from "@/lib/types";
+import type { Doctor } from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -9,73 +9,83 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { useState, useMemo } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { ArrowUpDown } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { Plus, MoreHorizontal, Trash2, Edit } from "lucide-react";
+import { DoctorFormDialog } from "./doctor-form-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
-type SortKey = keyof CoverageEntry | '';
-type SortDirection = 'asc' | 'desc';
+type MasterListProps = {
+  doctors: Doctor[];
+  onAddDoctor: (doctor: Omit<Doctor, 'id'>) => void;
+  onUpdateDoctor: (doctor: Doctor) => void;
+  onDeleteDoctor: (id: string) => void;
+}
 
-export function MasterList({ entries }: { entries: CoverageEntry[] }) {
+export function MasterList({ doctors, onAddDoctor, onUpdateDoctor, onDeleteDoctor }: MasterListProps) {
   const [filter, setFilter] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('submittedAt');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | undefined>(undefined);
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+  const filteredDoctors = useMemo(() => {
+    return doctors.filter(doctor =>
+      `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
+      doctor.clinic.toLowerCase().includes(filter.toLowerCase()) ||
+      doctor.specialty.toLowerCase().includes(filter.toLowerCase())
+    );
+  }, [doctors, filter]);
+
+  const handleSaveDoctor = (doctorData: Omit<Doctor, 'id'> | Doctor) => {
+    if ('id' in doctorData) {
+      onUpdateDoctor(doctorData);
     } else {
-      setSortKey(key);
-      setSortDirection('asc');
+      onAddDoctor(doctorData);
     }
-  };
-
-  const sortedAndFilteredEntries = useMemo(() => {
-    let result = entries.filter(entry =>
-      `${entry.firstName} ${entry.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
-      entry.clinic.toLowerCase().includes(filter.toLowerCase()) ||
-      entry.specialty.toLowerCase().includes(filter.toLowerCase())
-    );
-
-    if (sortKey) {
-      result.sort((a, b) => {
-        const valA = a[sortKey];
-        const valB = b[sortKey];
-        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return result;
-  }, [entries, filter, sortKey, sortDirection]);
-
-  if (entries.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-center">
-          <p className="text-muted-foreground">No synced entries yet. Saved entries will appear here after synchronization.</p>
-        </CardContent>
-      </Card>
-    );
+    setEditingDoctor(undefined);
+    setIsFormOpen(false);
   }
 
-  const SortableHeader = ({ tKey, label }: { tKey: SortKey, label: string }) => (
-    <TableHead>
-        <Button variant="ghost" onClick={() => handleSort(tKey)}>
-            {label}
-            <ArrowUpDown className="w-4 h-4 ml-2" />
-        </Button>
-    </TableHead>
-  )
+  const handleEdit = (doctor: Doctor) => {
+    setEditingDoctor(doctor);
+    setIsFormOpen(true);
+  }
+
+  const handleAddNew = () => {
+    setEditingDoctor(undefined);
+    setIsFormOpen(true);
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Masterlist</CardTitle>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="font-headline">Doctor Masterlist</CardTitle>
+            <CardDescription>Add, edit, or remove doctors from your list.</CardDescription>
+          </div>
+          <Button onClick={handleAddNew}>
+            <Plus className="mr-2" />
+            Add Doctor
+          </Button>
+        </div>
         <div className="mt-4">
           <Input 
             placeholder="Filter by name, clinic, or specialty..."
@@ -90,36 +100,70 @@ export function MasterList({ entries }: { entries: CoverageEntry[] }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <SortableHeader tKey="lastName" label="Provider" />
-                        <SortableHeader tKey="specialty" label="Specialty" />
-                        <SortableHeader tKey="clinic" label="Clinic" />
-                        <SortableHeader tKey="coverageDate" label="Coverage Date" />
-                        <SortableHeader tKey="coverageType" label="Type" />
-                        <SortableHeader tKey="submittedAt" label="Submitted" />
+                        <TableHead>Name</TableHead>
+                        <TableHead>Specialty</TableHead>
+                        <TableHead>Clinic</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {sortedAndFilteredEntries.length > 0 ? (
-                        sortedAndFilteredEntries.map((entry) => (
-                            <TableRow key={entry.id}>
-                                <TableCell className="font-medium">{entry.firstName} {entry.lastName}</TableCell>
-                                <TableCell>{entry.specialty}</TableCell>
-                                <TableCell>{entry.clinic}</TableCell>
-                                <TableCell>{format(parseISO(entry.coverageDate), 'MMM d, yyyy')}</TableCell>
-                                <TableCell className="capitalize">{entry.coverageType}</TableCell>
-                                <TableCell>{format(parseISO(entry.submittedAt), 'MMM d, yyyy HH:mm')}</TableCell>
+                    {filteredDoctors.length > 0 ? (
+                        filteredDoctors.map((doctor) => (
+                            <TableRow key={doctor.id}>
+                                <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
+                                <TableCell>{doctor.specialty}</TableCell>
+                                <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell className="text-right">
+                                  <AlertDialog>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                          <MoreHorizontal />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handleEdit(doctor)}>
+                                          <Edit className="mr-2" /> Edit
+                                        </DropdownMenuItem>
+                                        <AlertDialogTrigger asChild>
+                                          <DropdownMenuItem className="text-destructive focus:text-destructive">
+                                            <Trash2 className="mr-2" /> Delete
+                                          </DropdownMenuItem>
+                                        </AlertDialogTrigger>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This action cannot be undone. This will permanently delete the doctor from your masterlist.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => onDeleteDoctor(doctor.id)}>Continue</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </TableCell>
                             </TableRow>
                         ))
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center">
-                                No results found.
+                            <TableCell colSpan={4} className="h-24 text-center">
+                                {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>
                     )}
                 </TableBody>
             </Table>
         </div>
+        <DoctorFormDialog 
+          isOpen={isFormOpen} 
+          onOpenChange={setIsFormOpen}
+          onSave={handleSaveDoctor}
+          doctor={editingDoctor}
+        />
       </CardContent>
     </Card>
   );

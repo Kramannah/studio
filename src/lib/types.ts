@@ -10,3 +10,11 @@ export interface CoverageEntry {
   signature: string | null; // base64 encoded string
   submittedAt: string; // Storing as ISO string
 }
+
+export interface Doctor {
+  id: string;
+  firstName: string;
+  lastName: string;
+  specialty: string;
+  clinic: string;
+}

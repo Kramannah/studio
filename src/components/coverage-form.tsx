@@ -4,8 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Save, Upload, X, Camera } from "lucide-react"
-import React, { useState, useRef, useEffect } from "react"
+import { Calendar as CalendarIcon, Save, Camera, X } from "lucide-react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -34,11 +34,12 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { SignaturePad } from "./signature-pad"
-import type { CoverageEntry } from "@/lib/types"
+import type { CoverageEntry, Doctor } from "@/lib/types"
 import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
+import { Autocomplete } from "./autocomplete"
 
 const formSchema = z.object({
   firstName: z.string().min(2, "First name is too short"),
@@ -54,15 +55,16 @@ const formSchema = z.object({
 type CoverageFormProps = {
   onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt'>) => void;
   isOnline: boolean;
+  doctors: Doctor[];
 }
 
-export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
+export function CoverageForm({ onSave, isOnline, doctors }: CoverageFormProps) {
   const { toast } = useToast()
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -76,6 +78,14 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
       signature: null,
     },
   })
+
+  const handleDoctorSelect = useCallback((doctor: Doctor) => {
+    form.setValue("firstName", doctor.firstName);
+    form.setValue("lastName", doctor.lastName);
+    form.setValue("specialty", doctor.specialty);
+    form.setValue("clinic", doctor.clinic);
+  }, [form]);
+
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -99,7 +109,6 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
     };
     getCameraPermission();
     
-    // Cleanup function to stop video stream
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
@@ -169,7 +178,13 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
                   <FormItem>
                     <FormLabel className="font-headline">First Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="John" {...field} />
+                       <Autocomplete
+                          doctors={doctors}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onSelect={handleDoctorSelect}
+                          placeholder="John"
+                        />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -181,8 +196,15 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="font-headline">Last Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Doe" {...field} />
+                     <FormControl>
+                       <Autocomplete
+                          doctors={doctors}
+                          value={field.value}
+                          onChange={field.onChange}
+                          onSelect={handleDoctorSelect}
+                          placeholder="Doe"
+                          triggerOn="lastName"
+                        />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

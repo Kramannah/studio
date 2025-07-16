@@ -6,12 +6,14 @@ import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
 import { CallSummary } from '@/components/call-summary';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
+import { useDoctors } from '@/hooks/use-doctors';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
+  const { doctors, addDoctor, updateDoctor, deleteDoctor } = useDoctors();
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
@@ -55,17 +57,17 @@ export default function Home() {
                 <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlineEntries.length}</Badge>
               }
             </TabsTrigger>
-            <TabsTrigger value="master" className="font-headline">Masterlist</TabsTrigger>
+            <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
-            <CoverageForm onSave={saveEntry} isOnline={isOnline} />
+            <CoverageForm onSave={saveEntry} isOnline={isOnline} doctors={doctors} />
           </TabsContent>
           <TabsContent value="offline" className="mt-6">
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
           </TabsContent>
           <TabsContent value="master" className="mt-6">
-            <MasterList entries={masterEntries} />
+            <MasterList doctors={doctors} onAddDoctor={addDoctor} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} />
