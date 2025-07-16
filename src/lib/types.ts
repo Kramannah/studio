@@ -17,4 +17,5 @@ export interface Doctor {
   lastName: string;
   specialty: string;
   clinic: string;
+  frequency: '1x' | '2x' | '3x' | '4x';
 }

@@ -181,7 +181,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         <TableHead>Name</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
-                        <TableHead className="text-center">Frequency</TableHead>
+                        <TableHead className="text-center">Target</TableHead>
+                        <TableHead className="text-center">Actual</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -195,6 +196,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell className="text-center">{doctor.frequency}</TableCell>
                                 <TableCell className="text-center">{visitCount}</TableCell>
                                 <TableCell className="text-right">
                                   <AlertDialog>
@@ -234,7 +236,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
+                            <TableCell colSpan={6} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>

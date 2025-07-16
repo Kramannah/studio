@@ -44,7 +44,7 @@ export const useDoctors = () => {
   }, [doctors, toast]);
 
   const addDoctorsBulk = useCallback((doctorsData: Omit<Doctor, 'id'>[]) => {
-    const newDoctors: Doctor[] = doctorsData.map(d => ({...d, id: crypto.randomUUID()}));
+    const newDoctors: Doctor[] = doctorsData.map(d => ({...d, id: crypto.randomUUID(), frequency: d.frequency || '1x'}));
     const updatedDoctors = [...doctors, ...newDoctors];
     setDoctors(updatedDoctors);
     updateLocalStorage(updatedDoctors);
