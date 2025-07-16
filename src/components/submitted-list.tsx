@@ -49,8 +49,8 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                 <CardTitle className="font-headline">Submitted Coverage Calendar</CardTitle>
                 <CardDescription>Select a date to see the coverage details for that day.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-8 md:grid-cols-2">
-                <div className="flex justify-center">
+            <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                <div className="flex justify-center w-full">
                      <Calendar
                         mode="single"
                         selected={selectedDate}
@@ -76,7 +76,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                                 );
                             },
                         }}
-                        className="p-4 border rounded-md"
+                        className="p-4 border rounded-md w-full"
                     />
                 </div>
                 <div>
