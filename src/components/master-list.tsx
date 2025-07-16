@@ -185,7 +185,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             </Button>
             <Button onClick={handleUploadClick} variant="outline">
               <Upload className="mr-2" />
-              Upload Excel
+              Upload Masterlist
             </Button>
             <Button onClick={handleAddNew}>
               <Plus className="mr-2" />
