@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Save, Upload, X } from "lucide-react"
+import { Calendar as CalendarIcon, Save, Upload, X, Camera } from "lucide-react"
+import React, { useState, useRef, useEffect } from "react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -35,9 +36,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { SignaturePad } from "./signature-pad"
 import type { CoverageEntry } from "@/lib/types"
 import Image from "next/image"
-import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 
 const formSchema = z.object({
   firstName: z.string().min(2, "First name is too short"),
@@ -58,6 +59,9 @@ type CoverageFormProps = {
 export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
   const { toast } = useToast()
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -73,6 +77,72 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
     },
   })
 
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      if (hasCameraPermission === null) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          setHasCameraPermission(true);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error("Error accessing camera:", error);
+          setHasCameraPermission(false);
+          toast({
+            variant: "destructive",
+            title: "Camera Access Denied",
+            description: "Please enable camera permissions to capture photos.",
+          });
+        }
+      }
+    };
+    getCameraPermission();
+    
+    // Cleanup function to stop video stream
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [hasCameraPermission, toast]);
+
+  const handleCapturePhoto = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !hasCameraPermission) return;
+    
+    const currentPhotos = form.getValues("photos") || [];
+    if (currentPhotos.length >= 5) {
+      toast({
+        variant: "destructive",
+        title: "Capture limit reached",
+        description: "You can only save a maximum of 5 photos.",
+      });
+      return;
+    }
+
+    const context = canvas.getContext('2d');
+    if(context) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        const dataUri = canvas.toDataURL('image/png');
+        
+        const updatedPhotos = [...currentPhotos, dataUri];
+        form.setValue("photos", updatedPhotos);
+        setPhotoPreviews(updatedPhotos);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    const currentPhotos = form.getValues("photos") || [];
+    const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
+    form.setValue("photos", updatedPhotos);
+    setPhotoPreviews(updatedPhotos);
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     onSave({
       ...values,
@@ -81,51 +151,6 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
     form.reset();
     setPhotoPreviews([]);
   }
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      const currentPhotos = form.getValues("photos") || [];
-
-      if (currentPhotos.length + files.length > 5) {
-        toast({
-          variant: "destructive",
-          title: "Upload limit exceeded",
-          description: "You can only upload a maximum of 5 photos.",
-        });
-        return;
-      }
-      
-      const newPhotoPromises = files.map(file => {
-        return new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      });
-
-      Promise.all(newPhotoPromises).then(newBase64Photos => {
-        const updatedPhotos = [...currentPhotos, ...newBase64Photos];
-        form.setValue("photos", updatedPhotos);
-        setPhotoPreviews(updatedPhotos);
-      }).catch(err => {
-        console.error("Error reading files:", err);
-        toast({
-          variant: "destructive",
-          title: "Photo upload failed",
-          description: "There was an error processing your photos.",
-        });
-      });
-    }
-  };
-  
-  const removePhoto = (index: number) => {
-    const currentPhotos = form.getValues("photos") || [];
-    const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
-    form.setValue("photos", updatedPhotos);
-    setPhotoPreviews(updatedPhotos);
-  };
 
   return (
     <Card>
@@ -262,17 +287,30 @@ export function CoverageForm({ onSave, isOnline }: CoverageFormProps) {
               name="photos"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Upload Photos</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 px-4 py-2 text-white rounded-md cursor-pointer bg-primary hover:bg-primary/90">
-                            <Upload size={16}/>
-                            <span className="font-headline">Add Photos</span>
-                            <Input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                        </label>
+                  <FormLabel className="font-headline">Capture Photo</FormLabel>
+                   <FormControl>
+                    <div className="p-4 space-y-4 border rounded-md bg-muted">
+                        <div className="relative w-full overflow-hidden rounded-md aspect-video bg-background">
+                            <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+                            <canvas ref={canvasRef} className="hidden" />
+                            {hasCameraPermission === false && (
+                                <div className="absolute inset-0 flex items-center justify-center p-4 text-center bg-black/50">
+                                    <Alert variant="destructive" className="max-w-sm">
+                                      <AlertTitle>Camera Access Required</AlertTitle>
+                                      <AlertDescription>
+                                        Please allow camera access in your browser to use this feature.
+                                      </AlertDescription>
+                                    </Alert>
+                                </div>
+                            )}
+                        </div>
+                        <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission || (form.getValues("photos") || []).length >= 5} className="w-full md:w-auto font-headline">
+                            <Camera className="mr-2" />
+                            Capture Photo
+                        </Button>
                     </div>
                   </FormControl>
-                  <FormDescription>You can upload up to 5 photos.</FormDescription>
+                  <FormDescription>You can capture up to 5 photos.</FormDescription>
                   {photoPreviews.length > 0 && (
                     <div className="grid grid-cols-2 gap-4 mt-4 sm:grid-cols-3 md:grid-cols-5">
                       {photoPreviews.map((src, index) => (
