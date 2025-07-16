@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -45,10 +46,25 @@ export const useDoctors = () => {
 
   const addDoctorsBulk = useCallback((doctorsData: Omit<Doctor, 'id'>[]) => {
     const newDoctors: Doctor[] = doctorsData.map(d => ({...d, id: crypto.randomUUID(), frequency: d.frequency || '1x'}));
-    const updatedDoctors = [...doctors, ...newDoctors];
-    setDoctors(updatedDoctors);
-    updateLocalStorage(updatedDoctors);
-  }, [doctors]);
+    
+    const existingDoctors = new Set(doctors.map(d => `${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
+    const uniqueNewDoctors = newDoctors.filter(d => !existingDoctors.has(`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
+
+    if (uniqueNewDoctors.length !== newDoctors.length) {
+        const duplicateCount = newDoctors.length - uniqueNewDoctors.length;
+        toast({
+            variant: "destructive",
+            title: "Duplicates Found",
+            description: `${duplicateCount} doctor(s) from the uploaded file were already in the masterlist and have been skipped.`,
+        });
+    }
+
+    if (uniqueNewDoctors.length > 0) {
+        const updatedDoctors = [...doctors, ...uniqueNewDoctors];
+        setDoctors(updatedDoctors);
+        updateLocalStorage(updatedDoctors);
+    }
+  }, [doctors, toast]);
 
 
   const updateDoctor = useCallback((doctorData: Doctor) => {

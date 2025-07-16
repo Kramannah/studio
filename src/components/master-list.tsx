@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, CoverageEntry } from "@/lib/types";
@@ -13,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Plus, MoreHorizontal, Trash2, Edit, Upload } from "lucide-react";
+import { Plus, MoreHorizontal, Trash2, Edit, Upload, Download } from "lucide-react";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import {
   DropdownMenu,
@@ -105,14 +106,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json<Omit<Doctor, 'id'>>(worksheet);
 
-        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic'];
+        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency'];
         const isValid = json.every(row => requiredFields.every(field => row[field] && typeof row[field] === 'string'));
 
         if (!isValid) {
           toast({
             variant: "destructive",
             title: "Upload Failed",
-            description: "The Excel file is missing required columns (firstName, lastName, specialty, clinic) or contains invalid data.",
+            description: "The Excel file is missing required columns (firstName, lastName, specialty, clinic, frequency) or contains invalid data.",
           });
           return;
         }
@@ -139,6 +140,29 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     reader.readAsArrayBuffer(file);
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency'];
+    const sampleData = [
+      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', frequency: '2x' },
+      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', frequency: '3x' }
+    ];
+    
+    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
+  
+    // Set column widths for better visibility
+    worksheet['!cols'] = [
+      { wch: 20 }, // firstName
+      { wch: 20 }, // lastName
+      { wch: 25 }, // specialty
+      { wch: 40 }, // clinic
+      { wch: 10 }  // frequency
+    ];
+
+    XLSX.writeFile(workbook, 'doctor_masterlist_template.xlsx');
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -147,7 +171,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             <CardTitle className="font-headline">Doctor Masterlist</CardTitle>
             <CardDescription>Add, edit, or remove doctors from your list.</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="file"
               ref={fileInputRef}
@@ -155,6 +179,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
               className="hidden"
               accept=".xlsx, .xls"
             />
+             <Button onClick={handleDownloadTemplate} variant="outline">
+              <Download className="mr-2" />
+              Download Template
+            </Button>
             <Button onClick={handleUploadClick} variant="outline">
               <Upload className="mr-2" />
               Upload Excel
