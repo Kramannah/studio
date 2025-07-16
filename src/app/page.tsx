@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CoverageForm } from '@/components/coverage-form';
 import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
+import { CallSummary } from '@/components/call-summary';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
@@ -46,7 +47,7 @@ export default function Home() {
       </header>
       <main className="flex-1 p-4 md:p-6">
         <Tabs defaultValue="coverage" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="coverage" className="font-headline">New Coverage</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
               Offline Entries
@@ -55,6 +56,7 @@ export default function Home() {
               }
             </TabsTrigger>
             <TabsTrigger value="master" className="font-headline">Masterlist</TabsTrigger>
+            <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
             <CoverageForm onSave={saveEntry} isOnline={isOnline} />
@@ -64,6 +66,9 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="master" className="mt-6">
             <MasterList entries={masterEntries} />
+          </TabsContent>
+          <TabsContent value="summary" className="mt-6">
+            <CallSummary entries={masterEntries} />
           </TabsContent>
         </Tabs>
       </main>
