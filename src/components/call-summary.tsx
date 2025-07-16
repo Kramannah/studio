@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry } from "@/lib/types";
@@ -27,6 +28,8 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
                 completed2x: 0,
                 avgCallsPerDay: 0,
                 totalWorkingDaysThisMonth: 0,
+                totalInbaseDays: 0,
+                totalOutbaseDays: 0,
                 monthlyPerformance: [],
                 absentProviders: []
             };
@@ -53,6 +56,9 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
         const totalCalls = thisMonthEntries.length;
         const avgCallsPerDay = totalWorkingDaysThisMonth > 0 ? (totalCalls / totalWorkingDaysThisMonth).toFixed(2) : 0;
         
+        const inbaseDays = new Set(thisMonthEntries.filter(e => e.coverageType === 'inbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
+        const outbaseDays = new Set(thisMonthEntries.filter(e => e.coverageType === 'outbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
+        
         const monthlyPerformance = entries.reduce((acc, entry) => {
             const date = new Date(entry.submittedAt);
             const month = date.toLocaleString('default', { month: 'short' });
@@ -75,6 +81,8 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
             completed2x,
             avgCallsPerDay,
             totalWorkingDaysThisMonth,
+            totalInbaseDays: inbaseDays.size,
+            totalOutbaseDays: outbaseDays.size,
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             absentProviders: [] // Placeholder as 'absent' logic is not defined
         };
@@ -97,11 +105,13 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
                     <CardTitle className="font-headline">This Month's Summary</CardTitle>
                     <CardDescription>A quick overview of your performance for the current month.</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <StatCard title="Completed 3x Frequency" value={insights.completed3x} description="Providers visited 3 or more times." />
-                    <StatCard title="Completed 2x Frequency" value={insights.completed2x} description="Providers visited 2 or more times." />
-                    <StatCard title="Average Calls Per Day" value={insights.avgCallsPerDay} description="Average calls made on working days." />
-                    <StatCard title="Total Working Days" value={insights.totalWorkingDaysThisMonth} description="Unique days with coverage this month." />
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <StatCard title="Completed 3x Frequency" value={insights.completed3x} description="Providers visited 3+ times." />
+                    <StatCard title="Completed 2x Frequency" value={insights.completed2x} description="Providers visited 2+ times." />
+                    <StatCard title="Avg Calls / Day" value={insights.avgCallsPerDay} description="Average on working days." />
+                    <StatCard title="Total Working Days" value={insights.totalWorkingDaysThisMonth} description="Unique days with coverage." />
+                    <StatCard title="Inbase Days" value={insights.totalInbaseDays} description="Unique days with inbase calls." />
+                    <StatCard title="Outbase Days" value={insights.totalOutbaseDays} description="Unique days with outbase calls." />
                 </CardContent>
             </Card>
 
