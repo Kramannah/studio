@@ -120,7 +120,7 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <StatCard 
-                        title="3x+ Frequency Completion" 
+                        title="Call Concentration" 
                         value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
                         description="Actual vs. Target for 3x/4x doctors." 
                         icon={Target}
@@ -217,3 +217,5 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         </div>
     )
 }
+
+    
