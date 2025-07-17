@@ -236,7 +236,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
             toast({
                 variant: "destructive",
                 title: "Unplanned Call Limit Reached",
-                description: `You can only submit a maximum of ${MAX_UNPLANNed_CALLS} unplanned calls per day.`,
+                description: `You can only submit a maximum of ${MAX_UNPLANNED_CALLS} unplanned calls per day.`,
             });
             return;
         }
@@ -593,3 +593,5 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
+
+    
