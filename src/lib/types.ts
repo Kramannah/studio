@@ -29,3 +29,10 @@ export interface Plan {
   doctorLastName: string;
   plannedDate: string; // ISO string
 }
+
+export interface NonCallDay {
+  id: string;
+  date: string; // ISO string
+  reason: string;
+  remarks: string;
+}

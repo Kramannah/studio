@@ -10,6 +10,7 @@ import { PlanningCalendar } from '@/components/planning-calendar';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
+import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
+  const { nonCallDays, addNonCallDay } = useNonCallDays();
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -80,7 +82,15 @@ export default function Home() {
           </TabsList>
           
           <TabsContent value="planning" className="mt-6">
-            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} />
+            <PlanningCalendar 
+              doctors={doctors} 
+              plans={plans} 
+              onAddPlan={addPlan} 
+              onRemovePlan={removePlan} 
+              onLogCall={handleLogPlannedCall}
+              nonCallDays={nonCallDays}
+              onAddNonCallDay={addNonCallDay}
+            />
           </TabsContent>
           <TabsContent value="coverage" className="mt-6">
             <CoverageForm 
