@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { CoverageEntry, Doctor } from "@/lib/types";
+import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth } from "date-fns";
+import { getYear, isThisMonth, parseISO, format } from "date-fns";
 import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +23,9 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
     </Card>
 )
 
-export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], doctors: Doctor[] }) {
+export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[] }) {
     const insights = useMemo(() => {
-        if (entries.length === 0) {
+        if (entries.length === 0 && doctors.length === 0) {
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
                 coverageReach: { actual: 0, total: 0, percentage: 0 },
@@ -34,7 +34,6 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                 totalInbaseDays: 0,
                 totalOutbaseDays: 0,
                 monthlyPerformance: [],
-                absentProviders: []
             };
         }
         
@@ -97,11 +96,15 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
             totalInbaseDays: inbaseDays.size,
             totalOutbaseDays: outbaseDays.size,
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
-            absentProviders: [] // Placeholder as 'absent' logic is not defined
         };
     }, [entries, doctors]);
+    
+    const sortedNonCallDays = useMemo(() => {
+        return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [nonCallDays]);
 
-    if (entries.length === 0 && doctors.length === 0) {
+
+    if (entries.length === 0 && doctors.length === 0 && nonCallDays.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -191,31 +194,42 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
             <Card>
                 <CardHeader>
                     <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                    <CardDescription>This feature is not yet implemented. It will show a list of non-call days.</CardDescription>
+                    <CardDescription>A log of all submitted non-call days.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provider</TableHead>
-                                <TableHead>Reason for Absence</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow>
-                                <TableCell colSpan={2} className="h-24 text-center">
-                                    <div className="flex flex-col items-center justify-center gap-2">
-                                        <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                        <p>No absentee data available.</p>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        </TableBody>
-                    </Table>
+                    <div className="border rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Reason</TableHead>
+                                    <TableHead>Remarks</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {sortedNonCallDays.length > 0 ? (
+                                    sortedNonCallDays.map((day) => (
+                                        <TableRow key={day.id}>
+                                            <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
+                                            <TableCell>{day.reason}</TableCell>
+                                            <TableCell>{day.remarks || 'N/A'}</TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="h-24 text-center">
+                                            <div className="flex flex-col items-center justify-center gap-2">
+                                                <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+                                                <p>No non-call days have been logged.</p>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>
     )
 }
-
-    
