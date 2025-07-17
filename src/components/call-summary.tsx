@@ -2,15 +2,18 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download } from "lucide-react";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
+import { DateRange } from "react-day-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -26,22 +29,32 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[] }) {
+    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
                 coverageReach: { actual: 0, total: 0, percentage: 0 },
                 avgCallsPerDay: 0,
-                totalWorkingDaysThisMonth: 0,
+                totalWorkingDays: 0,
                 totalInbaseDays: 0,
                 totalOutbaseDays: 0,
                 monthlyPerformance: [],
+                isDataAvailable: false,
             };
         }
-        
-        const thisMonthEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
 
-        const providerVisits = thisMonthEntries.reduce((acc, entry) => {
+        const filteredEntries = entries.filter(e => {
+            if (!dateRange || !dateRange.from) {
+                return isThisMonth(new Date(e.submittedAt));
+            }
+            const from = startOfDay(dateRange.from);
+            const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(from);
+            return isWithinInterval(new Date(e.submittedAt), { start: from, end: to });
+        });
+        
+        const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName.toLowerCase()} ${entry.lastName.toLowerCase()}`;
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
@@ -56,22 +69,22 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         const percentage3x = total3xPlusTarget > 0 ? Math.round((actual3xPlusCompleted / total3xPlusTarget) * 100) : 0;
         
         const totalDoctors = doctors.length;
-        const visitedDoctorNames = new Set(thisMonthEntries.map(e => `${e.firstName.toLowerCase()} ${e.lastName.toLowerCase()}`));
+        const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName.toLowerCase()} ${e.lastName.toLowerCase()}`));
         const actualVisitedCount = visitedDoctorNames.size;
         const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
 
-        const callsByDay = thisMonthEntries.reduce((acc, entry) => {
+        const callsByDay = filteredEntries.reduce((acc, entry) => {
             const day = new Date(entry.submittedAt).toISOString().split('T')[0];
             acc[day] = (acc[day] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        const totalWorkingDaysThisMonth = Object.keys(callsByDay).length;
-        const totalCalls = thisMonthEntries.length;
-        const avgCallsPerDay = totalWorkingDaysThisMonth > 0 ? (totalCalls / totalWorkingDaysThisMonth).toFixed(2) : 0;
+        const totalWorkingDays = Object.keys(callsByDay).length;
+        const totalCalls = filteredEntries.length;
+        const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
-        const inbaseDays = new Set(thisMonthEntries.filter(e => e.coverageType === 'inbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
-        const outbaseDays = new Set(thisMonthEntries.filter(e => e.coverageType === 'outbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
+        const inbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
+        const outbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
         
         const monthlyPerformance = entries.reduce((acc, entry) => {
             const date = new Date(entry.submittedAt);
@@ -94,18 +107,21 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
             avgCallsPerDay,
-            totalWorkingDaysThisMonth,
+            totalWorkingDays,
             totalInbaseDays: inbaseDays.size,
             totalOutbaseDays: outbaseDays.size,
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
+            isDataAvailable: true,
         };
-    }, [entries, doctors]);
+    }, [entries, doctors, dateRange]);
     
     const sortedNonCallDays = useMemo(() => {
         return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [nonCallDays]);
 
     const handleDownloadSummary = () => {
+        if (!dateRange || !dateRange.from) return;
+
         const header = [
             "Call Concentration", null, null,
             "Call Reach", null, null,
@@ -144,11 +160,12 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
-        XLSX.writeFile(workbook, "call_summary_report.xlsx");
+        const fileName = `call_summary_${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
     };
 
 
-    if (entries.length === 0 && doctors.length === 0 && nonCallDays.length === 0) {
+    if (!insights.isDataAvailable && nonCallDays.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -162,15 +179,57 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         <div className="space-y-6">
              <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <CardTitle className="font-headline">This Month's Summary</CardTitle>
-                            <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                            <CardTitle className="font-headline">
+                                {dateRange?.from ? "Summary for Selected Period" : "This Month's Summary"}
+                            </CardTitle>
+                            <CardDescription>
+                                {dateRange?.from ? "Overview of performance for the selected dates." : "A quick overview of your performance for the current month."}
+                            </CardDescription>
                         </div>
-                        <Button onClick={handleDownloadSummary} variant="outline">
-                            <Download className="mr-2"/>
-                            Download Summary
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        id="date"
+                                        variant={"outline"}
+                                        className={cn(
+                                        "w-[300px] justify-start text-left font-normal",
+                                        !dateRange && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {dateRange?.from ? (
+                                        dateRange.to ? (
+                                            <>
+                                            {format(dateRange.from, "LLL dd, y")} -{" "}
+                                            {format(dateRange.to, "LLL dd, y")}
+                                            </>
+                                        ) : (
+                                            format(dateRange.from, "LLL dd, y")
+                                        )
+                                        ) : (
+                                        <span>Pick a date range</span>
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="end">
+                                    <Calendar
+                                        initialFocus
+                                        mode="range"
+                                        defaultMonth={dateRange?.from}
+                                        selected={dateRange}
+                                        onSelect={setDateRange}
+                                        numberOfMonths={2}
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!dateRange || !dateRange.from}>
+                                <Download className="mr-2"/>
+                                Download Summary
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -197,7 +256,7 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
                     />
                     <StatCard 
                         title="Total Working Days" 
-                        value={insights.totalWorkingDaysThisMonth} 
+                        value={insights.totalWorkingDays} 
                         description="Unique days with coverage." 
                         icon={CalendarDays}
                         color="text-yellow-500"
