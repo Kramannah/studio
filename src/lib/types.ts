@@ -19,3 +19,11 @@ export interface Doctor {
   clinic: string;
   frequency: '1x' | '2x' | '3x' | '4x';
 }
+
+export interface Plan {
+  id: string;
+  doctorId: string;
+  doctorFirstName: string;
+  doctorLastName: string;
+  plannedDate: string; // ISO string
+}

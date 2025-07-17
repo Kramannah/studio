@@ -6,8 +6,10 @@ import { CoverageForm } from '@/components/coverage-form';
 import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
 import { CallSummary } from '@/components/call-summary';
+import { PlanningCalendar } from '@/components/planning-calendar';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
+import { usePlans } from '@/hooks/use-plans';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,6 +18,7 @@ import { SubmittedList } from "@/components/submitted-list";
 export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
+  const { plans, addPlan, removePlan } = usePlans();
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
@@ -51,7 +54,7 @@ export default function Home() {
       </header>
       <main className="flex-1 p-4 md:p-6">
         <Tabs defaultValue="coverage" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="coverage" className="font-headline">New Coverage</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
               Offline Entries
@@ -61,6 +64,7 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
             <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
+            <TabsTrigger value="planning" className="font-headline">Visit Planning</TabsTrigger>
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
@@ -80,6 +84,9 @@ export default function Home() {
               onAddDoctorsBulk={addDoctorsBulk}
               onUpdateDoctor={updateDoctor} 
               onDeleteDoctor={deleteDoctor} />
+          </TabsContent>
+          <TabsContent value="planning" className="mt-6">
+            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} />
