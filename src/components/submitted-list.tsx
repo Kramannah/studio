@@ -89,7 +89,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                 </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <div className="flex justify-center w-full">
+                <div className="w-full">
                      <Calendar
                         mode="single"
                         selected={selectedDate}
@@ -115,7 +115,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                                 );
                             },
                         }}
-                        className="p-4 border rounded-md"
+                        className="w-full p-4 border rounded-md"
                     />
                 </div>
                 <div>
@@ -175,4 +175,3 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
         </Card>
     );
 }
-
