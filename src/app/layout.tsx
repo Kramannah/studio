@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: 'Hovidcoverage',
+  title: 'SFE Offline coverage',
   description: 'A coverage logging application',
 };
 

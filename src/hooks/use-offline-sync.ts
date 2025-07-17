@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 
-const OFFLINE_KEY = 'hovidcoverage-offline';
-const MASTER_KEY = 'hovidcoverage-master';
+const OFFLINE_KEY = 'sfe-offline-coverage-offline';
+const MASTER_KEY = 'sfe-offline-coverage-master';
 
 export const useOfflineSync = () => {
   const { toast } = useToast();

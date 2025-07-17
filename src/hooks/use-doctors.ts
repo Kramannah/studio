@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 
-const DOCTORS_KEY = 'hovidcoverage-doctors';
+const DOCTORS_KEY = 'sfe-offline-coverage-doctors';
 
 export const useDoctors = () => {
   const { toast } = useToast();
