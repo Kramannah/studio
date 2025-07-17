@@ -193,8 +193,8 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Absentee List</CardTitle>
-                    <CardDescription>This feature is not yet implemented. It will show a list of absent providers.</CardDescription>
+                    <CardTitle className="font-headline">Non-Call Day</CardTitle>
+                    <CardDescription>This feature is not yet implemented. It will show a list of non-call days.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Table>
