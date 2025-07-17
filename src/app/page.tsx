@@ -64,7 +64,7 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
             <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
-            <TabsTrigger value="planning" className="font-headline">Visit Planning</TabsTrigger>
+            <TabsTrigger value="planning" className="font-headline">Call Planned</TabsTrigger>
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
