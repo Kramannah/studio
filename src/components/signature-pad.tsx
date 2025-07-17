@@ -105,9 +105,20 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     lastPos.current = null;
     const canvas = canvasRef.current;
     if (canvas) {
-      onChange(canvas.toDataURL('image/png'));
+      const dataUrl = canvas.toDataURL('image/png');
+      const isEmpty = isCanvasBlank(canvas);
+      onChange(isEmpty ? null : dataUrl);
     }
   };
+
+  const isCanvasBlank = (canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext('2d');
+    if (!context) return true;
+    const pixelBuffer = new Uint32Array(
+        context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+    );
+    return !pixelBuffer.some(pixel => pixel !== 0);
+  }
 
   return (
     <div className={cn('relative w-full', className)}>
@@ -120,7 +131,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchStart={startDrawing}
         onTouchMove={draw}
         onTouchEnd={stopDrawing}
-        className="w-full h-[400px] bg-white rounded-md cursor-crosshair touch-none"
+        className="w-full h-[400px] bg-white rounded-md cursor-crosshair touch-none border"
       />
       <Button
         type="button"

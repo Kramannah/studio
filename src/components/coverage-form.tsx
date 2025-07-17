@@ -72,6 +72,18 @@ const formSchema = z.object({
              ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is too short", path: ["lastName"] });
         }
     }
+    if ((!data.photos || data.photos.length === 0) && !data.signature) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A photo or signature is required as proof of coverage.",
+        path: ["photos"], 
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A photo or signature is required as proof of coverage.",
+        path: ["signature"], 
+      });
+    }
 });
 
 
@@ -208,7 +220,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
         const dataUri = canvas.toDataURL('image/png');
         
         const updatedPhotos = [...currentPhotos, dataUri];
-        form.setValue("photos", updatedPhotos);
+        form.setValue("photos", updatedPhotos, { shouldValidate: true });
         setPhotoPreviews(updatedPhotos);
         setIsCameraDialogOpen(false); // Close dialog after capture
     }
@@ -217,7 +229,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
   const removePhoto = (index: number) => {
     const currentPhotos = form.getValues("photos") || [];
     const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
-    form.setValue("photos", updatedPhotos);
+    form.setValue("photos", updatedPhotos, { shouldValidate: true });
     setPhotoPreviews(updatedPhotos);
   };
 
@@ -576,7 +588,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                     <FormItem className="mt-6">
                     <FormLabel className="font-headline">Provider Signature</FormLabel>
                     <FormControl>
-                        <SignaturePad value={field.value} onChange={field.onChange} />
+                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -593,5 +605,3 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
-
-    
