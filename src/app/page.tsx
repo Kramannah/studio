@@ -66,7 +66,7 @@ export default function Home() {
       <main className="flex-1 p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="coverage" className="font-headline">New Coverage</TabsTrigger>
+            <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
               Offline Entries
               {offlineEntries.length > 0 && 
