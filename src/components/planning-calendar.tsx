@@ -4,7 +4,7 @@
 import type { Doctor, Plan } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay } from "date-fns";
+import { format, parseISO, isSameDay, isToday } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -23,10 +23,11 @@ type PlanningCalendarProps = {
   plans: Plan[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
+  onLogCall: (doctor: Doctor) => void;
 };
 
 
-export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan }: PlanningCalendarProps) {
+export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan, onLogCall }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
@@ -63,6 +64,13 @@ export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan }: Pl
             onAddPlan(doctor, selectedDate);
             setIsPopoverOpen(false);
             setDoctorFilter("");
+        }
+    }
+    
+    const handleLogCallClick = (plan: Plan) => {
+        const doctor = doctors.find(d => d.id === plan.doctorId);
+        if (doctor) {
+            onLogCall(doctor);
         }
     }
 
@@ -166,8 +174,16 @@ export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan }: Pl
                                 {selectedDayPlans.length > 0 ? (
                                     selectedDayPlans.map((plan) => (
                                         <TableRow key={plan.id}>
-                                            <TableCell className="font-medium">
-                                                {plan.doctorFirstName} {plan.doctorLastName}
+                                            <TableCell>
+                                                <Button 
+                                                    variant="link" 
+                                                    className="p-0 h-auto font-medium"
+                                                    onClick={() => handleLogCallClick(plan)}
+                                                    disabled={!selectedDate || !isToday(selectedDate)}
+                                                    title={!selectedDate || !isToday(selectedDate) ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`}
+                                                >
+                                                    {plan.doctorFirstName} {plan.doctorLastName}
+                                                </Button>
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)}>

@@ -14,12 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
+import type { Doctor } from "@/lib/types";
 
 export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const [isOnline, setIsOnline] = useState(true);
+  const [activeTab, setActiveTab] = useState('coverage');
+  const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'onLine' in navigator) {
@@ -40,6 +43,11 @@ export default function Home() {
     };
   }, []);
 
+  const handleLogPlannedCall = (doctor: Doctor) => {
+    setDoctorToLog(doctor);
+    setActiveTab('coverage');
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -53,7 +61,7 @@ export default function Home() {
         </div>
       </header>
       <main className="flex-1 p-4 md:p-6">
-        <Tabs defaultValue="coverage" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="coverage" className="font-headline">New Coverage</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
@@ -68,7 +76,14 @@ export default function Home() {
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
           </TabsList>
           <TabsContent value="coverage" className="mt-6">
-            <CoverageForm onSave={saveEntry} isOnline={isOnline} doctors={doctors} masterEntries={masterEntries} />
+            <CoverageForm 
+              onSave={saveEntry} 
+              isOnline={isOnline} 
+              doctors={doctors} 
+              masterEntries={masterEntries}
+              initialDoctor={doctorToLog} 
+              onFormSubmit={() => setDoctorToLog(null)}
+            />
           </TabsContent>
           <TabsContent value="offline" className="mt-6">
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
@@ -86,7 +101,7 @@ export default function Home() {
               onDeleteDoctor={deleteDoctor} />
           </TabsContent>
           <TabsContent value="planning" className="mt-6">
-            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} />
+            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} />

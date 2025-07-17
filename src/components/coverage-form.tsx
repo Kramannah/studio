@@ -60,9 +60,11 @@ type CoverageFormProps = {
   isOnline: boolean;
   doctors: Doctor[];
   masterEntries: CoverageEntry[];
+  initialDoctor?: Doctor | null;
+  onFormSubmit?: () => void;
 }
 
-export function CoverageForm({ onSave, isOnline, doctors, masterEntries }: CoverageFormProps) {
+export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit }: CoverageFormProps) {
   const { toast } = useToast()
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -83,6 +85,19 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries }: Cover
       signature: null,
     },
   })
+
+  useEffect(() => {
+    if (initialDoctor) {
+      form.reset({
+        ...form.getValues(),
+        firstName: initialDoctor.firstName,
+        lastName: initialDoctor.lastName,
+        specialty: initialDoctor.specialty,
+        clinic: initialDoctor.clinic,
+        coverageDate: new Date(),
+      });
+    }
+  }, [initialDoctor, form]);
 
   const handleDoctorSelect = useCallback((doctor: Doctor) => {
     form.setValue("firstName", doctor.firstName);
@@ -191,6 +206,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries }: Cover
     });
     form.reset();
     setPhotoPreviews([]);
+    onFormSubmit?.();
   }
 
   const handleCameraOpen = async (open: boolean) => {
