@@ -7,15 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth } from "date-fns";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const StatCard = ({ title, value, description }: { title: string, value: string | number, description: string }) => (
+const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardDescription className="font-headline">{title}</CardDescription>
-            <CardTitle className="font-headline">{value}</CardTitle>
+            <Icon className={cn("w-6 h-6 text-muted-foreground", color)} />
         </CardHeader>
         <CardContent>
-            <p className="text-xs text-muted-foreground">{description}</p>
+            <CardTitle className="text-2xl font-bold font-headline">{value}</CardTitle>
+            <p className="text-xs text-muted-foreground pt-1">{description}</p>
         </CardContent>
     </Card>
 )
@@ -121,18 +124,46 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <StatCard 
                         title="3x+ Frequency Completion" 
-                        value={`${insights.completed3x.actual} / ${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
+                        value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
                         description="Actual vs. Target for 3x/4x doctors." 
+                        icon={Target}
+                        color="text-primary"
                     />
                     <StatCard 
                         title="2x Frequency Completion" 
-                        value={`${insights.completed2x.actual} / ${insights.completed2x.total} (${insights.completed2x.percentage}%)`} 
+                        value={`${insights.completed2x.actual}/${insights.completed2x.total} (${insights.completed2x.percentage}%)`} 
                         description="Actual vs. Target for 2x doctors." 
+                        icon={CheckCircle2}
+                        color="text-teal-500"
                     />
-                    <StatCard title="Avg Calls / Day" value={insights.avgCallsPerDay} description="Average on working days." />
-                    <StatCard title="Total Working Days" value={insights.totalWorkingDaysThisMonth} description="Unique days with coverage." />
-                    <StatCard title="Inbase Days" value={insights.totalInbaseDays} description="Unique days with inbase calls." />
-                    <StatCard title="Outbase Days" value={insights.totalOutbaseDays} description="Unique days with outbase calls." />
+                    <StatCard 
+                        title="Avg Calls / Day" 
+                        value={insights.avgCallsPerDay} 
+                        description="Average on working days." 
+                        icon={TrendingUp}
+                        color="text-blue-500"
+                    />
+                    <StatCard 
+                        title="Total Working Days" 
+                        value={insights.totalWorkingDaysThisMonth} 
+                        description="Unique days with coverage." 
+                        icon={CalendarDays}
+                        color="text-yellow-500"
+                    />
+                    <StatCard 
+                        title="Inbase Days" 
+                        value={insights.totalInbaseDays} 
+                        description="Unique days with inbase calls."
+                        icon={Home}
+                        color="text-indigo-500"
+                     />
+                    <StatCard 
+                        title="Outbase Days" 
+                        value={insights.totalOutbaseDays} 
+                        description="Unique days with outbase calls." 
+                        icon={Plane}
+                        color="text-pink-500"
+                    />
                 </CardContent>
             </Card>
 
@@ -147,7 +178,12 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" />
                             <YAxis allowDecimals={false} />
-                            <Tooltip />
+                            <Tooltip 
+                                contentStyle={{
+                                    backgroundColor: "hsl(var(--background))",
+                                    borderColor: "hsl(var(--border))"
+                                }}
+                            />
                             <Legend />
                             <Bar dataKey="calls" fill="hsl(var(--primary))" name="Total Calls" />
                         </BarChart>
@@ -171,7 +207,10 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                         <TableBody>
                             <TableRow>
                                 <TableCell colSpan={2} className="h-24 text-center">
-                                    No absentee data available.
+                                    <div className="flex flex-col items-center justify-center gap-2">
+                                        <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+                                        <p>No absentee data available.</p>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         </TableBody>
