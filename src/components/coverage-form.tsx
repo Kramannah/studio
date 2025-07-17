@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Calendar as CalendarIcon, Save, Camera, X } from "lucide-react"
+import { Calendar as CalendarIcon, Save, Camera, X, Upload } from "lucide-react"
 import React, { useState, useRef, useEffect, useCallback } from "react"
 
 import { cn } from "@/lib/utils"
@@ -107,6 +107,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
   const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -300,6 +301,34 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       }
     }
   }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const currentPhotos = form.getValues("photos") || [];
+    if (currentPhotos.length >= 1) {
+      toast({
+        variant: "destructive",
+        title: "Upload limit reached",
+        description: "You can only save a maximum of 1 photo.",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUri = e.target?.result as string;
+      const updatedPhotos = [...currentPhotos, dataUri];
+      form.setValue("photos", updatedPhotos, { shouldValidate: true });
+      setPhotoPreviews(updatedPhotos);
+    };
+    reader.readAsDataURL(file);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   return (
     <Card>
@@ -520,50 +549,67 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                 name="photos"
                 render={({ field }) => (
                     <FormItem className="mt-6">
-                    <FormLabel className="font-headline">Capture Photo</FormLabel>
+                    <FormLabel className="font-headline">Proof of Coverage</FormLabel>
                     <FormControl>
-                        <div>
-                        <Dialog open={isCameraDialogOpen} onOpenChange={handleCameraOpen}>
-                            <DialogTrigger asChild>
-                            <Button 
-                                type="button" 
-                                variant="outline" 
+                        <div className="flex gap-2">
+                            <Dialog open={isCameraDialogOpen} onOpenChange={handleCameraOpen}>
+                                <DialogTrigger asChild>
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    disabled={(form.getValues("photos") || []).length >= 1}
+                                    className="font-headline"
+                                >
+                                    <Camera className="mr-2" />
+                                    Capture Photo
+                                </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Live Camera</DialogTitle>
+                                </DialogHeader>
+                                <div className="relative w-full overflow-hidden rounded-md aspect-video bg-background">
+                                    <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+                                    <canvas ref={canvasRef} className="hidden" />
+                                    {hasCameraPermission === false && (
+                                        <div className="absolute inset-0 flex items-center justify-center p-4 text-center bg-black/50">
+                                            <Alert variant="destructive" className="max-w-sm">
+                                                <AlertTitle>Camera Access Required</AlertTitle>
+                                                <AlertDescription>
+                                                Please allow camera access in your browser to use this feature.
+                                                </AlertDescription>
+                                            </Alert>
+                                        </div>
+                                    )}
+                                </div>
+                                <DialogFooter>
+                                    <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission}>
+                                        <Camera className="mr-2" />
+                                        Take Picture
+                                    </Button>
+                                </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                             <Button
+                                type="button"
+                                variant="outline"
                                 disabled={(form.getValues("photos") || []).length >= 1}
                                 className="font-headline"
-                            >
-                                <Camera className="mr-2" />
-                                Capture Photo
-                            </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Live Camera</DialogTitle>
-                            </DialogHeader>
-                            <div className="relative w-full overflow-hidden rounded-md aspect-video bg-background">
-                                <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                                <canvas ref={canvasRef} className="hidden" />
-                                {hasCameraPermission === false && (
-                                    <div className="absolute inset-0 flex items-center justify-center p-4 text-center bg-black/50">
-                                        <Alert variant="destructive" className="max-w-sm">
-                                            <AlertTitle>Camera Access Required</AlertTitle>
-                                            <AlertDescription>
-                                            Please allow camera access in your browser to use this feature.
-                                            </AlertDescription>
-                                        </Alert>
-                                    </div>
-                                )}
-                            </div>
-                            <DialogFooter>
-                                <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission}>
-                                    <Camera className="mr-2" />
-                                    Take Picture
-                                </Button>
-                            </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
+                                onClick={() => fileInputRef.current?.click()}
+                              >
+                                <Upload className="mr-2" />
+                                Upload Photo
+                              </Button>
+                              <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                                accept="image/*"
+                              />
                         </div>
                     </FormControl>
-                    <FormDescription>You can capture 1 photo.</FormDescription>
+                    <FormDescription>You can capture or upload 1 photo.</FormDescription>
                     {photoPreviews.length > 0 && (
                         <div className="grid grid-cols-2 gap-4 mt-4 sm:grid-cols-3 md:grid-cols-5">
                         {photoPreviews.map((src, index) => (
