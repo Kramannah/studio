@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription className="font-headline">{title}</CardDescription>
+            <CardDescription className="font-headline text-base">{title}</CardDescription>
             <Icon className={cn("w-6 h-6 text-muted-foreground", color)} />
         </CardHeader>
         <CardContent>
@@ -127,7 +127,7 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                         color="text-primary"
                     />
                     <StatCard 
-                        title="Coverage Reach" 
+                        title="Call Reach" 
                         value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} 
                         description="Doctors visited at least once."
                         icon={Users}
