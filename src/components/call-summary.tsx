@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users } from "lucide-react";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import * as XLSX from 'xlsx';
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -103,6 +105,48 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [nonCallDays]);
 
+    const handleDownloadSummary = () => {
+        const header = [
+            "Call Concentration", null, null,
+            "Call Reach", null, null,
+            "Avg Calls/Day"
+        ];
+        const subHeader = [
+            "Target", "Actual", "Achieved",
+            "Target", "Actual", "Achieved",
+            null
+        ];
+        const data = [
+            insights.completed3x.total,
+            insights.completed3x.actual,
+            `${insights.completed3x.percentage}%`,
+            insights.coverageReach.total,
+            insights.coverageReach.actual,
+            `${insights.coverageReach.percentage}%`,
+            insights.avgCallsPerDay
+        ];
+
+        const aoa = [header, subHeader, data];
+        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Define merges
+        worksheet['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, // Merge A1:C1 for "Call Concentration"
+            { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } }  // Merge D1:F1 for "Call Reach"
+        ];
+
+        // Set column widths
+        worksheet['!cols'] = [
+            { wch: 15 }, { wch: 15 }, { wch: 15 },
+            { wch: 15 }, { wch: 15 }, { wch: 15 },
+            { wch: 15 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
+        XLSX.writeFile(workbook, "call_summary_report.xlsx");
+    };
+
 
     if (entries.length === 0 && doctors.length === 0 && nonCallDays.length === 0) {
         return (
@@ -118,8 +162,16 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         <div className="space-y-6">
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">This Month's Summary</CardTitle>
-                    <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="font-headline">This Month's Summary</CardTitle>
+                            <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                        </div>
+                        <Button onClick={handleDownloadSummary} variant="outline">
+                            <Download className="mr-2"/>
+                            Download Summary
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <StatCard 
