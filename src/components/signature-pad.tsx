@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useRef, useEffect, useCallback } from 'react';
@@ -42,7 +43,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     canvas.height = 300; // fixed height
 
     // Set drawing styles
-    ctx.strokeStyle = 'hsl(var(--foreground))';
+    ctx.strokeStyle = '#000000'; // Black ink
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -119,7 +120,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchStart={startDrawing}
         onTouchMove={draw}
         onTouchEnd={stopDrawing}
-        className="w-full h-[300px] bg-muted rounded-md cursor-crosshair touch-none"
+        className="w-full h-[300px] bg-white rounded-md cursor-crosshair touch-none"
       />
       <Button
         type="button"
