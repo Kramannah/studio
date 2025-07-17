@@ -8,15 +8,41 @@ import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-f
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Download } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive } from "lucide-react";
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+
 
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "./ui/calendar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
+type SubmittedListProps = {
+    entries: CoverageEntry[];
+    onDelete: (id: string) => void;
+};
+
+
+export function SubmittedList({ entries, onDelete }: SubmittedListProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const filteredEntries = useMemo(() => {
@@ -75,6 +101,23 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
         const fileName = `submitted_coverage_${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
       };
+      
+    const handleDownloadAttachments = async (entry: CoverageEntry) => {
+        const zip = new JSZip();
+        
+        if (entry.photos && entry.photos.length > 0) {
+            const photoData = entry.photos[0].split(',')[1];
+            zip.file("photo.png", photoData, { base64: true });
+        }
+        
+        if (entry.signature) {
+            const signatureData = entry.signature.split(',')[1];
+            zip.file("signature.png", signatureData, { base64: true });
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        saveAs(zipBlob, `attachments_${entry.firstName}_${entry.lastName}_${entry.id.substring(0, 8)}.zip`);
+    };
 
     if (entries.length === 0) {
         return (
@@ -147,6 +190,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                                 <TableHead>Clinic</TableHead>
                                 <TableHead>Submitted On</TableHead>
                                 <TableHead>Attachments</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -177,11 +221,44 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                                                 )}
                                             </div>
                                         </TableCell>
+                                        <TableCell className="text-right">
+                                            <AlertDialog>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="icon">
+                                                            <MoreHorizontal />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={() => handleDownloadAttachments(entry)}>
+                                                            <FileArchive className="mr-2"/> Download Attachments
+                                                        </DropdownMenuItem>
+                                                        <AlertDialogTrigger asChild>
+                                                            <DropdownMenuItem className="text-destructive focus:text-destructive">
+                                                                <Trash2 className="mr-2"/> Delete
+                                                            </DropdownMenuItem>
+                                                        </AlertDialogTrigger>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                        This action cannot be undone. This will permanently delete the submitted coverage entry.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => onDelete(entry.id)}>Continue</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
                                     </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
+                                    <TableCell colSpan={5} className="h-24 text-center">
                                        No submitted entries found for the selected date range.
                                     </TableCell>
                                 </TableRow>

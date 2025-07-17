@@ -19,7 +19,7 @@ import type { Doctor, Plan } from "@/lib/types";
 import { isToday, parseISO } from "date-fns";
 
 export default function Home() {
-  const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
@@ -108,7 +108,7 @@ export default function Home() {
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
           </TabsContent>
           <TabsContent value="submitted" className="mt-6">
-            <SubmittedList entries={masterEntries} />
+            <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays}/>

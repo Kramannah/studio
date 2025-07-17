@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -110,5 +111,15 @@ export const useOfflineSync = () => {
     }
   };
 
-  return { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries, isOnline };
+  const deleteMasterEntry = useCallback((id: string) => {
+    const entryToDelete = masterEntries.find(e => e.id === id);
+    const updatedEntries = masterEntries.filter(e => e.id !== id);
+    setMasterEntries(updatedEntries);
+    localStorage.setItem(MASTER_KEY, JSON.stringify(updatedEntries));
+    if (entryToDelete) {
+        toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage for ${entryToDelete.firstName} ${entryToDelete.lastName} has been removed.` });
+    }
+  }, [masterEntries, toast]);
+
+  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline };
 };
