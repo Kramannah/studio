@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Calendar as CalendarIcon, Save, Camera, X, Upload } from "lucide-react"
+import { Calendar as CalendarIcon, Save, X, Upload } from "lucide-react"
 import React, { useState, useRef, useEffect, useCallback } from "react"
 
 import { cn } from "@/lib/utils"
@@ -41,9 +41,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { Autocomplete } from "./autocomplete"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
-import { ScrollArea } from "./ui/scroll-area"
 
 const formSchema = z.object({
   callType: z.enum(["unplanned", "planned"]),
@@ -103,10 +101,6 @@ const MAX_UNPLANNED_CALLS = 5;
 export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries }: CoverageFormProps) {
   const { toast } = useToast()
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -166,67 +160,6 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     form.setValue("clinic", doctor.clinic);
   }, [form]);
 
-
-  const requestCameraPermission = async () => {
-    if (hasCameraPermission) return true;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      setHasCameraPermission(true);
-      return true;
-    } catch (error) {
-      console.error("Error accessing camera:", error);
-      setHasCameraPermission(false);
-      toast({
-        variant: "destructive",
-        title: "Camera Access Denied",
-        description: "Please enable camera permissions to capture photos.",
-      });
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      // Stop camera stream when component unmounts
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
-
-  const handleCapturePhoto = () => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || !hasCameraPermission) return;
-    
-    const currentPhotos = form.getValues("photos") || [];
-    if (currentPhotos.length >= 1) {
-      toast({
-        variant: "destructive",
-        title: "Capture limit reached",
-        description: "You can only save a maximum of 1 photo.",
-      });
-      return;
-    }
-
-    const context = canvas.getContext('2d');
-    if(context) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUri = canvas.toDataURL('image/png');
-        
-        const updatedPhotos = [...currentPhotos, dataUri];
-        form.setValue("photos", updatedPhotos, { shouldValidate: true });
-        setPhotoPreviews(updatedPhotos);
-        setIsCameraDialogOpen(false); // Close dialog after capture
-    }
-  };
-
   const removePhoto = (index: number) => {
     const currentPhotos = form.getValues("photos") || [];
     const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
@@ -284,22 +217,6 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     form.reset();
     setPhotoPreviews([]);
     onFormSubmit?.();
-  }
-
-  const handleCameraOpen = async (open: boolean) => {
-    if (open) {
-      const permissionGranted = await requestCameraPermission();
-      if (permissionGranted) {
-        setIsCameraDialogOpen(true);
-      }
-    } else {
-      setIsCameraDialogOpen(false);
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        videoRef.current.srcObject = null;
-      }
-    }
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -552,44 +469,6 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                     <FormLabel className="font-headline">Proof of Coverage</FormLabel>
                     <FormControl>
                         <div className="flex gap-2">
-                            <Dialog open={isCameraDialogOpen} onOpenChange={handleCameraOpen}>
-                                <DialogTrigger asChild>
-                                <Button 
-                                    type="button" 
-                                    variant="outline" 
-                                    disabled={(form.getValues("photos") || []).length >= 1}
-                                    className="font-headline"
-                                >
-                                    <Camera className="mr-2" />
-                                    Capture Photo
-                                </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Live Camera</DialogTitle>
-                                </DialogHeader>
-                                <div className="relative w-full overflow-hidden rounded-md aspect-video bg-background">
-                                    <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                                    <canvas ref={canvasRef} className="hidden" />
-                                    {hasCameraPermission === false && (
-                                        <div className="absolute inset-0 flex items-center justify-center p-4 text-center bg-black/50">
-                                            <Alert variant="destructive" className="max-w-sm">
-                                                <AlertTitle>Camera Access Required</AlertTitle>
-                                                <AlertDescription>
-                                                Please allow camera access in your browser to use this feature.
-                                                </AlertDescription>
-                                            </Alert>
-                                        </div>
-                                    )}
-                                </div>
-                                <DialogFooter>
-                                    <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission}>
-                                        <Camera className="mr-2" />
-                                        Take Picture
-                                    </Button>
-                                </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
                              <Button
                                 type="button"
                                 variant="outline"
@@ -609,7 +488,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                               />
                         </div>
                     </FormControl>
-                    <FormDescription>You can capture or upload 1 photo.</FormDescription>
+                    <FormDescription>You can upload 1 photo.</FormDescription>
                     {photoPreviews.length > 0 && (
                         <div className="grid grid-cols-2 gap-4 mt-4 sm:grid-cols-3 md:grid-cols-5">
                         {photoPreviews.map((src, index) => (
@@ -651,3 +530,5 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
+
+    
