@@ -37,15 +37,22 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
     }, [entriesByDate]);
 
     const handleDownloadSubmitted = () => {
-        const dataToExport = entries.map(entry => ({
-          'First Name': entry.firstName,
-          'Last Name': entry.lastName,
-          'Specialty': entry.specialty,
-          'Clinic': entry.clinic,
-          'Coverage Type': entry.coverageType,
-          'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
-          'Submitted At': format(parseISO(entry.submittedAt), 'yyyy-MM-dd HH:mm:ss'),
-        }));
+        const dataToExport = entries.map(entry => {
+            const proofs = [];
+            if (entry.photos && entry.photos.length > 0) proofs.push("Photo");
+            if (entry.signature) proofs.push("Signature");
+            
+            return {
+                'First Name': entry.firstName,
+                'Last Name': entry.lastName,
+                'Specialty': entry.specialty,
+                'Clinic': entry.clinic,
+                'Coverage Type': entry.coverageType,
+                'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
+                'Submitted At': format(parseISO(entry.submittedAt), 'yyyy-MM-dd HH:mm:ss'),
+                'Proof of Coverage': proofs.length > 0 ? proofs.join(', ') : 'None',
+            }
+        });
     
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
@@ -59,6 +66,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
             { wch: 15 }, // Coverage Type
             { wch: 15 }, // Coverage Date
             { wch: 20 }, // Submitted At
+            { wch: 25 }, // Proof of Coverage
         ];
     
         XLSX.writeFile(workbook, 'submitted_coverage.xlsx');
@@ -89,7 +97,7 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
                 </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <div className="w-full">
+                <div>
                      <Calendar
                         mode="single"
                         selected={selectedDate}
