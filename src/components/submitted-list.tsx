@@ -9,6 +9,9 @@ import Image from "next/image";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Download } from "lucide-react";
+import * as XLSX from 'xlsx';
 
 export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -33,6 +36,34 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
         return Object.keys(entriesByDate).map(dateStr => parseISO(dateStr));
     }, [entriesByDate]);
 
+    const handleDownloadSubmitted = () => {
+        const dataToExport = entries.map(entry => ({
+          'First Name': entry.firstName,
+          'Last Name': entry.lastName,
+          'Specialty': entry.specialty,
+          'Clinic': entry.clinic,
+          'Coverage Type': entry.coverageType,
+          'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
+          'Submitted At': format(parseISO(entry.submittedAt), 'yyyy-MM-dd HH:mm:ss'),
+        }));
+    
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Submitted Coverage');
+
+        worksheet['!cols'] = [
+            { wch: 20 }, // First Name
+            { wch: 20 }, // Last Name
+            { wch: 25 }, // Specialty
+            { wch: 40 }, // Clinic
+            { wch: 15 }, // Coverage Type
+            { wch: 15 }, // Coverage Date
+            { wch: 20 }, // Submitted At
+        ];
+    
+        XLSX.writeFile(workbook, 'submitted_coverage.xlsx');
+      };
+
     if (entries.length === 0) {
         return (
             <Card>
@@ -46,11 +77,19 @@ export function SubmittedList({ entries }: { entries: CoverageEntry[] }) {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Submitted Coverage Calendar</CardTitle>
-                <CardDescription>Select a date to see the coverage details for that day.</CardDescription>
+                <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <CardTitle className="font-headline">Submitted Coverage Calendar</CardTitle>
+                        <CardDescription>Select a date to see the coverage details for that day.</CardDescription>
+                    </div>
+                    <Button onClick={handleDownloadSubmitted} variant="outline">
+                        <Download className="mr-2" />
+                        Download All
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <div className="w-full">
+                <div className="flex justify-center w-full">
                      <Calendar
                         mode="single"
                         selected={selectedDate}
