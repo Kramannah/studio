@@ -22,7 +22,7 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const [isOnline, setIsOnline] = useState(true);
-  const [activeTab, setActiveTab] = useState('coverage');
+  const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
 
   useEffect(() => {
@@ -66,6 +66,7 @@ export default function Home() {
       <main className="flex-1 p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="planning" className="font-headline">Call Planned</TabsTrigger>
             <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
               Offline Entries
@@ -74,10 +75,13 @@ export default function Home() {
               }
             </TabsTrigger>
             <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
-            <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
-            <TabsTrigger value="planning" className="font-headline">Call Planned</TabsTrigger>
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
+            <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
           </TabsList>
+          
+          <TabsContent value="planning" className="mt-6">
+            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} />
+          </TabsContent>
           <TabsContent value="coverage" className="mt-6">
             <CoverageForm 
               onSave={saveEntry} 
@@ -96,6 +100,9 @@ export default function Home() {
           <TabsContent value="submitted" className="mt-6">
             <SubmittedList entries={masterEntries} />
           </TabsContent>
+          <TabsContent value="summary" className="mt-6">
+            <CallSummary entries={masterEntries} />
+          </TabsContent>
           <TabsContent value="master" className="mt-6">
             <MasterList 
               doctors={doctors}
@@ -104,12 +111,6 @@ export default function Home() {
               onAddDoctorsBulk={addDoctorsBulk}
               onUpdateDoctor={updateDoctor} 
               onDeleteDoctor={deleteDoctor} />
-          </TabsContent>
-          <TabsContent value="planning" className="mt-6">
-            <PlanningCalendar doctors={doctors} plans={plans} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} />
-          </TabsContent>
-          <TabsContent value="summary" className="mt-6">
-            <CallSummary entries={masterEntries} />
           </TabsContent>
         </Tabs>
       </main>
