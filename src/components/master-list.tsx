@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
+import { isThisMonth, parseISO } from "date-fns";
+import { cn } from "@/lib/utils";
 
 
 type MasterListProps = {
@@ -53,8 +55,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const visitCounts = useMemo(() => {
-    return entries.reduce((acc, entry) => {
+  const visitCountsThisMonth = useMemo(() => {
+    const thisMonthEntries = entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+    return thisMonthEntries.reduce((acc, entry) => {
       const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
       acc[doctorName] = (acc[doctorName] || 0) + 1;
       return acc;
@@ -211,7 +214,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
                         <TableHead className="text-center">Target</TableHead>
-                        <TableHead className="text-center">Actual</TableHead>
+                        <TableHead className="text-center">Actual (This Month)</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -219,9 +222,12 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                     {filteredDoctors.length > 0 ? (
                         filteredDoctors.map((doctor) => {
                           const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                          const visitCount = visitCounts[doctorName] || 0;
+                          const visitCount = visitCountsThisMonth[doctorName] || 0;
+                          const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                          const isCompleted = visitCount >= targetCount;
+                          
                           return (
-                            <TableRow key={doctor.id}>
+                            <TableRow key={doctor.id} data-completed={isCompleted} className={cn(isCompleted && "bg-primary/10 hover:bg-primary/20")}>
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
