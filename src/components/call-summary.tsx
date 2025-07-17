@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle } from "lucide-react";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
@@ -28,7 +28,7 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         if (entries.length === 0) {
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
-                completed2x: { actual: 0, total: 0, percentage: 0 },
+                coverageReach: { actual: 0, total: 0, percentage: 0 },
                 avgCallsPerDay: 0,
                 totalWorkingDaysThisMonth: 0,
                 totalInbaseDays: 0,
@@ -54,13 +54,10 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         }).length;
         const percentage3x = total3xPlusTarget > 0 ? Math.round((actual3xPlusCompleted / total3xPlusTarget) * 100) : 0;
         
-        const target2xDoctors = doctors.filter(d => d.frequency === '2x');
-        const total2xTarget = target2xDoctors.length;
-        const actual2xCompleted = target2xDoctors.filter(d => {
-            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
-            return visitCount >= 2;
-        }).length;
-        const percentage2x = total2xTarget > 0 ? Math.round((actual2xCompleted / total2xTarget) * 100) : 0;
+        const totalDoctors = doctors.length;
+        const visitedDoctorNames = new Set(thisMonthEntries.map(e => `${e.firstName.toLowerCase()} ${e.lastName.toLowerCase()}`));
+        const actualVisitedCount = visitedDoctorNames.size;
+        const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
 
         const callsByDay = thisMonthEntries.reduce((acc, entry) => {
             const day = new Date(entry.submittedAt).toISOString().split('T')[0];
@@ -94,7 +91,7 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         
         return {
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
-            completed2x: { actual: actual2xCompleted, total: total2xTarget, percentage: percentage2x },
+            coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
             avgCallsPerDay,
             totalWorkingDaysThisMonth,
             totalInbaseDays: inbaseDays.size,
@@ -130,10 +127,10 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                         color="text-primary"
                     />
                     <StatCard 
-                        title="2x Frequency Completion" 
-                        value={`${insights.completed2x.actual}/${insights.completed2x.total} (${insights.completed2x.percentage}%)`} 
-                        description="Actual vs. Target for 2x doctors." 
-                        icon={CheckCircle2}
+                        title="Coverage Reach" 
+                        value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} 
+                        description="Doctors visited at least once."
+                        icon={Users}
                         color="text-teal-500"
                     />
                     <StatCard 
