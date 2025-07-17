@@ -69,7 +69,7 @@ export default function Home() {
             <TabsTrigger value="planning" className="font-headline">Call Planned</TabsTrigger>
             <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
-              Offline Entries
+              Offline Call
               {offlineEntries.length > 0 && 
                 <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlineEntries.length}</Badge>
               }
