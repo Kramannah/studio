@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
-import type { Doctor } from "@/lib/types";
+import type { Doctor, Plan } from "@/lib/types";
+import { isToday, parseISO } from "date-fns";
 
 export default function Home() {
   const { offlineEntries, masterEntries, saveEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
@@ -47,6 +48,8 @@ export default function Home() {
     setDoctorToLog(doctor);
     setActiveTab('coverage');
   };
+
+  const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
 
   return (
@@ -83,6 +86,8 @@ export default function Home() {
               masterEntries={masterEntries}
               initialDoctor={doctorToLog} 
               onFormSubmit={() => setDoctorToLog(null)}
+              todaysPlans={todaysPlans}
+              offlineEntries={offlineEntries}
             />
           </TabsContent>
           <TabsContent value="offline" className="mt-6">

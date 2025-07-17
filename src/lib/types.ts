@@ -1,3 +1,4 @@
+
 export interface CoverageEntry {
   id: string;
   firstName: string;
@@ -5,6 +6,7 @@ export interface CoverageEntry {
   specialty: string;
   clinic: string;
   coverageType: 'inbase' | 'outbase';
+  callType: 'planned' | 'unplanned';
   coverageDate: string; // Storing as ISO string
   photos: string[]; // base64 encoded strings
   signature: string | null; // base64 encoded string

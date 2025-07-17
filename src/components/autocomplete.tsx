@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -29,9 +30,10 @@ type AutocompleteProps = {
     onSelect: (doctor: Doctor) => void;
     placeholder?: string;
     triggerOn?: 'firstName' | 'lastName';
+    disabled?: boolean;
 }
 
-export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, triggerOn = 'firstName' }: AutocompleteProps) {
+export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, triggerOn = 'firstName', disabled = false }: AutocompleteProps) {
   const [open, setOpen] = React.useState(false)
   
   const filteredDoctors = React.useMemo(() => {
@@ -66,6 +68,7 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
                 placeholder={placeholder}
                 className="w-full"
                 autoComplete="off"
+                disabled={disabled}
             />
         </div>
       </PopoverTrigger>
