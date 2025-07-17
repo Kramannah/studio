@@ -38,8 +38,13 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     if (!canvas || !ctx) return;
 
     // Set canvas dimensions based on container
-    const rect = canvas.parentElement!.getBoundingClientRect();
-    canvas.width = rect.width;
+    const parent = canvas.parentElement;
+    if (parent) {
+      const rect = parent.getBoundingClientRect();
+      if(canvas.width !== rect.width) {
+        canvas.width = rect.width;
+      }
+    }
     canvas.height = 300; 
 
     // Set drawing styles
