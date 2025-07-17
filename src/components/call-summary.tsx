@@ -25,7 +25,7 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         if (entries.length === 0) {
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
-                completed2x: 0,
+                completed2x: { actual: 0, total: 0, percentage: 0 },
                 avgCallsPerDay: 0,
                 totalWorkingDaysThisMonth: 0,
                 totalInbaseDays: 0,
@@ -43,15 +43,21 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
             return acc;
         }, {} as Record<string, number>);
         
-        const target3xDoctors = doctors.filter(d => d.frequency === '3x' || d.frequency === '4x');
-        const total3xTarget = target3xDoctors.length;
-        const actual3xCompleted = target3xDoctors.filter(d => {
+        const target3xPlusDoctors = doctors.filter(d => d.frequency === '3x' || d.frequency === '4x');
+        const total3xPlusTarget = target3xPlusDoctors.length;
+        const actual3xPlusCompleted = target3xPlusDoctors.filter(d => {
             const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
             return visitCount >= 3;
         }).length;
-        const percentage3x = total3xTarget > 0 ? Math.round((actual3xCompleted / total3xTarget) * 100) : 0;
-
-        const completed2x = Object.values(providerVisits).filter(count => count >= 2).length;
+        const percentage3x = total3xPlusTarget > 0 ? Math.round((actual3xPlusCompleted / total3xPlusTarget) * 100) : 0;
+        
+        const target2xDoctors = doctors.filter(d => d.frequency === '2x');
+        const total2xTarget = target2xDoctors.length;
+        const actual2xCompleted = target2xDoctors.filter(d => {
+            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
+            return visitCount >= 2;
+        }).length;
+        const percentage2x = total2xTarget > 0 ? Math.round((actual2xCompleted / total2xTarget) * 100) : 0;
 
         const callsByDay = thisMonthEntries.reduce((acc, entry) => {
             const day = new Date(entry.submittedAt).toISOString().split('T')[0];
@@ -84,8 +90,8 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
         
         return {
-            completed3x: { actual: actual3xCompleted, total: total3xTarget, percentage: percentage3x },
-            completed2x,
+            completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
+            completed2x: { actual: actual2xCompleted, total: total2xTarget, percentage: percentage2x },
             avgCallsPerDay,
             totalWorkingDaysThisMonth,
             totalInbaseDays: inbaseDays.size,
@@ -118,7 +124,11 @@ export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], do
                         value={`${insights.completed3x.actual} / ${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
                         description="Actual vs. Target for 3x/4x doctors." 
                     />
-                    <StatCard title="Completed 2x Frequency" value={insights.completed2x} description="Providers visited 2+ times." />
+                    <StatCard 
+                        title="2x Frequency Completion" 
+                        value={`${insights.completed2x.actual} / ${insights.completed2x.total} (${insights.completed2x.percentage}%)`} 
+                        description="Actual vs. Target for 2x doctors." 
+                    />
                     <StatCard title="Avg Calls / Day" value={insights.avgCallsPerDay} description="Average on working days." />
                     <StatCard title="Total Working Days" value={insights.totalWorkingDaysThisMonth} description="Unique days with coverage." />
                     <StatCard title="Inbase Days" value={insights.totalInbaseDays} description="Unique days with inbase calls." />
