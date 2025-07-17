@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { CoverageEntry } from "@/lib/types";
+import type { CoverageEntry, Doctor } from "@/lib/types";
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getMonth, getYear, isThisMonth } from "date-fns";
+import { getYear, isThisMonth } from "date-fns";
 
 const StatCard = ({ title, value, description }: { title: string, value: string | number, description: string }) => (
     <Card>
@@ -20,11 +20,11 @@ const StatCard = ({ title, value, description }: { title: string, value: string 
     </Card>
 )
 
-export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
+export function CallSummary({ entries, doctors }: { entries: CoverageEntry[], doctors: Doctor[] }) {
     const insights = useMemo(() => {
         if (entries.length === 0) {
             return {
-                completed3x: 0,
+                completed3x: { actual: 0, total: 0, percentage: 0 },
                 completed2x: 0,
                 avgCallsPerDay: 0,
                 totalWorkingDaysThisMonth: 0,
@@ -38,12 +38,19 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
         const thisMonthEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
 
         const providerVisits = thisMonthEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName} ${entry.lastName}`;
+            const providerName = `${entry.firstName.toLowerCase()} ${entry.lastName.toLowerCase()}`;
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
+        
+        const target3xDoctors = doctors.filter(d => d.frequency === '3x' || d.frequency === '4x');
+        const total3xTarget = target3xDoctors.length;
+        const actual3xCompleted = target3xDoctors.filter(d => {
+            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
+            return visitCount >= 3;
+        }).length;
+        const percentage3x = total3xTarget > 0 ? Math.round((actual3xCompleted / total3xTarget) * 100) : 0;
 
-        const completed3x = Object.values(providerVisits).filter(count => count >= 3).length;
         const completed2x = Object.values(providerVisits).filter(count => count >= 2).length;
 
         const callsByDay = thisMonthEntries.reduce((acc, entry) => {
@@ -77,7 +84,7 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
         
         return {
-            completed3x,
+            completed3x: { actual: actual3xCompleted, total: total3xTarget, percentage: percentage3x },
             completed2x,
             avgCallsPerDay,
             totalWorkingDaysThisMonth,
@@ -86,13 +93,13 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             absentProviders: [] // Placeholder as 'absent' logic is not defined
         };
-    }, [entries]);
+    }, [entries, doctors]);
 
-    if (entries.length === 0) {
+    if (entries.length === 0 && doctors.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
-                    <p className="text-muted-foreground">No data available to generate a call summary. Synced entries will appear here.</p>
+                    <p className="text-muted-foreground">No data available to generate a call summary. Synced entries and a doctor masterlist are required.</p>
                 </CardContent>
             </Card>
         );
@@ -106,7 +113,11 @@ export function CallSummary({ entries }: { entries: CoverageEntry[] }) {
                     <CardDescription>A quick overview of your performance for the current month.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                    <StatCard title="Completed 3x Frequency" value={insights.completed3x} description="Providers visited 3+ times." />
+                    <StatCard 
+                        title="3x+ Frequency Completion" 
+                        value={`${insights.completed3x.actual} / ${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
+                        description="Actual vs. Target for 3x/4x doctors." 
+                    />
                     <StatCard title="Completed 2x Frequency" value={insights.completed2x} description="Providers visited 2+ times." />
                     <StatCard title="Avg Calls / Day" value={insights.avgCallsPerDay} description="Average on working days." />
                     <StatCard title="Total Working Days" value={insights.totalWorkingDaysThisMonth} description="Unique days with coverage." />

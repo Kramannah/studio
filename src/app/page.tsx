@@ -101,7 +101,7 @@ export default function Home() {
             <SubmittedList entries={masterEntries} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
-            <CallSummary entries={masterEntries} />
+            <CallSummary entries={masterEntries} doctors={doctors} />
           </TabsContent>
           <TabsContent value="master" className="mt-6">
             <MasterList 
