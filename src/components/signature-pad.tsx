@@ -40,7 +40,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     // Set canvas dimensions based on container
     const rect = canvas.parentElement!.getBoundingClientRect();
     canvas.width = rect.width;
-    canvas.height = 300; // fixed height
+    canvas.height = 400; // fixed height
 
     // Set drawing styles
     ctx.strokeStyle = '#000000'; // Black ink
@@ -120,7 +120,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchStart={startDrawing}
         onTouchMove={draw}
         onTouchEnd={stopDrawing}
-        className="w-full h-[300px] bg-white rounded-md cursor-crosshair touch-none"
+        className="w-full h-[400px] bg-white rounded-md cursor-crosshair touch-none"
       />
       <Button
         type="button"
