@@ -18,6 +18,11 @@ export interface CoverageEntry {
   primaryProductBal?: number;
   secondaryProductQty?: number;
   secondaryProductBal?: number;
+  topicsDiscussed?: string;
+  doctorsIssue?: string;
+  planOfAction?: string;
+  whatWentWell?: string;
+  areasForImprovement?: string;
 }
 
 export interface Doctor {

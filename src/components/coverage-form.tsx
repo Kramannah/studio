@@ -61,6 +61,11 @@ const formSchema = z.object({
   primaryProductBal: z.coerce.number().optional(),
   secondaryProductQty: z.coerce.number().optional(),
   secondaryProductBal: z.coerce.number().optional(),
+  topicsDiscussed: z.string().optional(),
+  doctorsIssue: z.string().optional(),
+  planOfAction: z.string().optional(),
+  whatWentWell: z.string().optional(),
+  areasForImprovement: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (data.callType === 'planned' && !data.plannedDoctorId) {
         ctx.addIssue({
@@ -129,6 +134,11 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       primaryProductBal: 0,
       secondaryProductQty: 0,
       secondaryProductBal: 0,
+      topicsDiscussed: "",
+      doctorsIssue: "",
+      planOfAction: "",
+      whatWentWell: "",
+      areasForImprovement: "",
     },
   })
 
@@ -655,6 +665,81 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                     </FormItem>
                 )}
                 />
+
+                <h3 className="mt-6 text-lg font-semibold font-headline">Post Call Analysis</h3>
+                <div className="p-4 mt-4 space-y-4 border rounded-md bg-muted/20">
+                    <FormField
+                      control={form.control}
+                      name="topicsDiscussed"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-headline">Topics Discussed</FormLabel>
+                          <FormControl>
+                            <Textarea placeholder="Enter topics discussed..." {...field} rows={4} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="doctorsIssue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-headline">Doctor's Issue/Concern</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="Enter doctor's issues or concerns..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="planOfAction"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-headline">Plan of Action</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="Enter your plan of action..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                    </div>
+                    <h4 className="pt-2 font-semibold font-headline">Post-Call Notes</h4>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                         <FormField
+                          control={form.control}
+                          name="whatWentWell"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-headline">What went well?</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="What were the successes?" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="areasForImprovement"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="font-headline">Areas for Improvement</FormLabel>
+                              <FormControl>
+                                <Textarea placeholder="What could be improved?" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                    </div>
+                </div>
+
                 <Button type="submit" className="w-full mt-6 md:w-auto font-headline">
                 <Save className="mr-2" />
                 Save Coverage
