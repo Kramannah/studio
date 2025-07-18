@@ -54,6 +54,9 @@ const formSchema = z.object({
   coverageDate: z.date(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable(),
+  callObjective: z.string().optional(),
+  primaryProduct: z.string().optional(),
+  secondaryProduct: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (data.callType === 'planned' && !data.plannedDoctorId) {
         ctx.addIssue({
@@ -115,6 +118,9 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       coverageDate: new Date(),
       photos: [],
       signature: null,
+      callObjective: "",
+      primaryProduct: "",
+      secondaryProduct: "",
     },
   })
 
@@ -394,6 +400,68 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                     )}
                 />
                 </div>
+
+                <h3 className="mt-6 text-lg font-semibold font-headline">Pre-call Planning</h3>
+                <div className="grid grid-cols-1 gap-4 mt-4 md:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="callObjective"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel className="font-headline">Call Objective</FormLabel>
+                          <FormControl>
+                            <Textarea placeholder="Enter call objective..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="primaryProduct"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-headline">Primary Product</FormLabel>
+                           <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                  <SelectTrigger>
+                                  <SelectValue placeholder="Select primary product..." />
+                                  </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                  <SelectItem value="productA">Product A</SelectItem>
+                                  <SelectItem value="productB">Product B</SelectItem>
+                                  <SelectItem value="productC">Product C</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormField
+                      control={form.control}
+                      name="secondaryProduct"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-headline">Secondary Product</FormLabel>
+                           <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                  <SelectTrigger>
+                                  <SelectValue placeholder="Select secondary product..." />
+                                  </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                  <SelectItem value="productA">Product A</SelectItem>
+                                  <SelectItem value="productB">Product B</SelectItem>
+                                  <SelectItem value="productC">Product C</SelectItem>
+                                  <SelectItem value="none">None</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                </div>
                 
                 <h3 className="mt-6 text-lg font-semibold font-headline">Coverage Details</h3>
                 <div className="grid grid-cols-1 gap-4 mt-4 md:grid-cols-2">
@@ -530,5 +598,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
+
+    
 
     

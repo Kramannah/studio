@@ -11,6 +11,9 @@ export interface CoverageEntry {
   photos: string[]; // base64 encoded strings
   signature: string | null; // base64 encoded string
   submittedAt: string; // Storing as ISO string
+  callObjective?: string;
+  primaryProduct?: string;
+  secondaryProduct?: string;
 }
 
 export interface Doctor {
@@ -36,3 +39,5 @@ export interface NonCallDay {
   reason: string;
   remarks: string;
 }
+
+    
