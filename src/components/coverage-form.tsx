@@ -57,6 +57,10 @@ const formSchema = z.object({
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
+  primaryProductQty: z.coerce.number().optional(),
+  primaryProductBal: z.coerce.number().optional(),
+  secondaryProductQty: z.coerce.number().optional(),
+  secondaryProductBal: z.coerce.number().optional(),
 }).superRefine((data, ctx) => {
     if (data.callType === 'planned' && !data.plannedDoctorId) {
         ctx.addIssue({
@@ -121,6 +125,10 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
+      primaryProductQty: 0,
+      primaryProductBal: 0,
+      secondaryProductQty: 0,
+      secondaryProductBal: 0,
     },
   })
 
@@ -416,51 +424,111 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="primaryProduct"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="font-headline">Primary Product</FormLabel>
-                           <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                  <SelectTrigger>
-                                  <SelectValue placeholder="Select primary product..." />
-                                  </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                  <SelectItem value="productA">Product A</SelectItem>
-                                  <SelectItem value="productB">Product B</SelectItem>
-                                  <SelectItem value="productC">Product C</SelectItem>
-                              </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                     <FormField
-                      control={form.control}
-                      name="secondaryProduct"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="font-headline">Secondary Product</FormLabel>
-                           <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                  <SelectTrigger>
-                                  <SelectValue placeholder="Select secondary product..." />
-                                  </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                  <SelectItem value="productA">Product A</SelectItem>
-                                  <SelectItem value="productB">Product B</SelectItem>
-                                  <SelectItem value="productC">Product C</SelectItem>
-                                  <SelectItem value="none">None</SelectItem>
-                              </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                </div>
+
+                <h3 className="mt-6 text-lg font-semibold font-headline">Promo / Display Materials</h3>
+                 <div className="p-4 mt-4 border rounded-md bg-muted/20">
+                    <div className="grid items-end grid-cols-1 gap-4 md:grid-cols-3">
+                         <FormField
+                            control={form.control}
+                            name="primaryProduct"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Primary Product</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Select primary product..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="productA">Product A</SelectItem>
+                                        <SelectItem value="productB">Product B</SelectItem>
+                                        <SelectItem value="productC">Product C</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                        <FormField
+                            control={form.control}
+                            name="primaryProductQty"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Qty</FormLabel>
+                                <FormControl>
+                                    <Input type="number" placeholder="0" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="primaryProductBal"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Bal</FormLabel>
+                                <FormControl>
+                                    <Input type="number" placeholder="0" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+                     <div className="grid items-end grid-cols-1 gap-4 mt-4 md:grid-cols-3">
+                         <FormField
+                            control={form.control}
+                            name="secondaryProduct"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Secondary Product</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Select secondary product..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="productA">Product A</SelectItem>
+                                        <SelectItem value="productB">Product B</SelectItem>
+                                        <SelectItem value="productC">Product C</SelectItem>
+                                        <SelectItem value="none">None</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
+                        <FormField
+                            control={form.control}
+                            name="secondaryProductQty"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Qty</FormLabel>
+                                <FormControl>
+                                    <Input type="number" placeholder="0" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="secondaryProductBal"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Bal</FormLabel>
+                                <FormControl>
+                                    <Input type="number" placeholder="0" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
                 </div>
                 
                 <h3 className="mt-6 text-lg font-semibold font-headline">Coverage Details</h3>

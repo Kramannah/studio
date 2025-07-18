@@ -14,6 +14,10 @@ export interface CoverageEntry {
   callObjective?: string;
   primaryProduct?: string;
   secondaryProduct?: string;
+  primaryProductQty?: number;
+  primaryProductBal?: number;
+  secondaryProductQty?: number;
+  secondaryProductBal?: number;
 }
 
 export interface Doctor {
