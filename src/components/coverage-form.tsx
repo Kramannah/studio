@@ -5,8 +5,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Save, ChevronDown } from "lucide-react"
+import { Save, ChevronDown, Camera, Upload, Trash2, X } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import Image from "next/image"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
 
 
 const formSchema = z.object({
@@ -89,7 +91,7 @@ type CoverageFormProps = {
   isOnline: boolean;
   doctors: Doctor[];
   masterEntries: CoverageEntry[];
-  offlineEntries: CoverageEntry[];
+  offlineEntries: Plan[];
   todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
   onFormSubmit?: () => void;
@@ -126,6 +128,9 @@ const productList = [
 
 export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries }: CoverageFormProps) {
   const { toast } = useToast()
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -156,6 +161,65 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
 
   const callType = form.watch("callType");
   const plannedDoctorId = form.watch("plannedDoctorId");
+  const photos = form.watch("photos");
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+  
+  const handleOpenCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraOpen(true);
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Camera Access Denied',
+        description: 'Please enable camera permissions in your browser settings.',
+      });
+    }
+  };
+
+  const handleCloseCamera = () => {
+    stopCamera();
+    setIsCameraOpen(false);
+  };
+
+  const handleCapture = () => {
+    const video = videoRef.current;
+    if (video) {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        form.setValue('photos', [dataUrl]);
+      }
+      handleCloseCamera();
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        form.setValue('photos', [dataUrl]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   
   useEffect(() => {
     if (initialDoctor) {
@@ -185,6 +249,12 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
         form.setValue("plannedDoctorId", undefined);
     }
   }, [callType, plannedDoctorId, doctors, form]);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const doctorInMasterlist = doctors.find(
@@ -600,19 +670,65 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                         </AccordionItem>
                     </Accordion>
                     
-                    <FormField
-                        control={form.control}
-                        name="signature"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
-                            <FormControl>
-                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <FormField
+                            control={form.control}
+                            name="photos"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-lg font-semibold font-headline">Photo Proof</FormLabel>
+                                    <div className="p-4 border rounded-md">
+                                        {photos && photos.length > 0 ? (
+                                             <div className="relative w-full max-w-xs mx-auto">
+                                                <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
+                                                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
+                                                    <Trash2 />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center gap-4">
+                                                <p className="text-sm text-center text-muted-foreground">Attach a photo as proof of visit.</p>
+                                                <div className="flex gap-2">
+                                                    <Button type="button" onClick={handleOpenCamera}>
+                                                        <Camera className="mr-2" />
+                                                        Capture Photo
+                                                    </Button>
+                                                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                                                        <Upload className="mr-2" />
+                                                        Upload Photo
+                                                    </Button>
+                                                    <FormControl>
+                                                      <Input 
+                                                        type="file" 
+                                                        className="hidden" 
+                                                        ref={fileInputRef} 
+                                                        accept="image/*"
+                                                        onChange={handleFileUpload}
+                                                      />
+                                                    </FormControl>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        <FormField
+                            control={form.control}
+                            name="signature"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
+                                <FormControl>
+                                    <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
                     
                     <Button type="submit" size="lg" className="w-full font-headline">
                         <Save className="mr-2" />
@@ -622,8 +738,29 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
             </form>
             </Form>
         </CardContent>
+         <Dialog open={isCameraOpen} onOpenChange={handleCloseCamera}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Capture Photo</DialogTitle>
+                </DialogHeader>
+                <div className="relative">
+                    <video ref={videoRef} className="w-full rounded-md" autoPlay muted playsInline />
+                    <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={handleCloseCamera}>
+                        <X />
+                    </Button>
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleCapture} className="w-full">
+                        <Camera className="mr-2" />
+                        Capture
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </Card>
   )
 }
+
+    
 
     
