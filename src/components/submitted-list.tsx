@@ -4,11 +4,11 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Badge } from "./ui/badge";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
@@ -188,7 +189,24 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
 
 
 export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
+    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    
+    const entriesByDate = useMemo(() => {
+        return entries.reduce((acc, entry) => {
+            const date = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
+            if (!acc[date]) {
+                acc[date] = [];
+            }
+            acc[date].push(entry);
+            return acc;
+        }, {} as Record<string, CoverageEntry[]>);
+    }, [entries]);
+
+    const submittedDays = useMemo(() => {
+        return Object.keys(entriesByDate).map(dateStr => parseISO(dateStr));
+    }, [entriesByDate]);
 
     const filteredEntries = useMemo(() => {
         if (!dateRange || !dateRange.from) {
@@ -204,14 +222,20 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
             .sort((a, b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
 
     }, [entries, dateRange]);
+
+    const selectedDayEntries = useMemo(() => {
+        if (!selectedDate) return [];
+        return entries.filter(entry => isSameDay(parseISO(entry.submittedAt), selectedDate));
+    }, [entries, selectedDate]);
     
 
     const handleDownloadSubmitted = () => {
-        if (!dateRange || !dateRange.from) {
-            return;
-        }
-
-        const dataToExport = filteredEntries.map(entry => {
+        if (viewMode === 'list' && (!dateRange || !dateRange.from)) return;
+        if (viewMode === 'calendar' && !selectedDate) return;
+        
+        const entriesToExport = viewMode === 'list' ? filteredEntries : selectedDayEntries;
+        
+        const dataToExport = entriesToExport.map(entry => {
             const proofs = [];
             if (entry.photos && entry.photos.length > 0) proofs.push("Photo");
             if (entry.signature) proofs.push("Signature");
@@ -249,7 +273,11 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
              wch: key.length > 20 ? key.length : 20 
         }));
     
-        const fileName = `submitted_coverage_${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}.xlsx`;
+        const dateIdentifier = viewMode === 'list' 
+            ? `${format(dateRange!.from!, 'yyyy-MM-dd')}_to_${format(dateRange!.to || dateRange!.from!, 'yyyy-MM-dd')}`
+            : format(selectedDate!, 'yyyy-MM-dd');
+
+        const fileName = `submitted_coverage_${dateIdentifier}.xlsx`;
         XLSX.writeFile(workbook, fileName);
       };
       
@@ -270,9 +298,24 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
                         <CardTitle className="font-headline">Submitted Coverage</CardTitle>
-                        <CardDescription>Filter by date range and download reports.</CardDescription>
+                        <CardDescription>
+                            {viewMode === 'list'
+                                ? 'Filter by date range and download reports.'
+                                : 'View submissions by date on the calendar.'
+                            }
+                        </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button variant={viewMode === 'list' ? 'secondary' : 'outline'} onClick={() => setViewMode('list')}>
+                            <List className="mr-2"/> List View
+                        </Button>
+                        <Button variant={viewMode === 'calendar' ? 'secondary' : 'outline'} onClick={() => setViewMode('calendar')}>
+                            <CalendarViewIcon className="mr-2"/> Calendar View
+                        </Button>
+                    </div>
+                </div>
+                {viewMode === 'list' && (
+                    <div className="flex items-center gap-2 pt-4">
                          <Popover>
                             <PopoverTrigger asChild>
                                 <Button
@@ -314,38 +357,116 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                             Download Report
                         </Button>
                     </div>
-                </div>
+                )}
+                 {viewMode === 'calendar' && (
+                     <div className="flex items-center gap-2 pt-4">
+                        <Button onClick={handleDownloadSubmitted} disabled={!selectedDate || selectedDayEntries.length === 0}>
+                            <Download className="mr-2" />
+                            Download Report for {selectedDate ? format(selectedDate, 'PPP') : ''}
+                        </Button>
+                     </div>
+                 )}
             </CardHeader>
             <CardContent>
-                 <div className="border rounded-md">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provider</TableHead>
-                                <TableHead>Clinic</TableHead>
-                                <TableHead>Submitted On</TableHead>
-                                <TableHead>Attachments</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        
-                            {filteredEntries.length > 0 ? (
-                                filteredEntries.map((entry) => (
-                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
-                                ))
-                            ) : (
-                                <TableBody>
+                {viewMode === 'list' && (
+                    <div className="border rounded-md">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center">
-                                       No submitted entries found for the selected date range.
-                                    </TableCell>
+                                    <TableHead>Provider</TableHead>
+                                    <TableHead>Clinic</TableHead>
+                                    <TableHead>Submitted On</TableHead>
+                                    <TableHead>Attachments</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
-                                </TableBody>
-                            )}
-                        
-                    </Table>
-                </div>
+                            </TableHeader>
+                            
+                                {filteredEntries.length > 0 ? (
+                                    filteredEntries.map((entry) => (
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
+                                    ))
+                                ) : (
+                                    <TableBody>
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        No submitted entries found for the selected date range.
+                                        </TableCell>
+                                    </TableRow>
+                                    </TableBody>
+                                )}
+                            
+                        </Table>
+                    </div>
+                 )}
+                 {viewMode === 'calendar' && (
+                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                        <div>
+                             <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                modifiers={{ 
+                                    submitted: submittedDays
+                                }}
+                                modifiersStyles={{
+                                    submitted: { 
+                                        fontWeight: 'bold',
+                                        color: 'hsl(var(--primary-foreground))',
+                                        backgroundColor: 'hsl(var(--primary))',
+                                    },
+                                }}
+                                components={{
+                                    DayContent: ({ date }) => {
+                                        const dateString = format(date, 'yyyy-MM-dd');
+                                        const count = entriesByDate[dateString]?.length;
+                                        return (
+                                            <div className="relative flex items-center justify-center w-full h-full">
+                                                {date.getDate()}
+                                                {count && (
+                                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{count}</Badge>
+                                                )}
+                                            </div>
+                                        );
+                                    },
+                                }}
+                                className="w-full p-4 border rounded-md"
+                            />
+                        </div>
+                        <div>
+                            <h3 className="mb-4 text-xl font-semibold font-headline">
+                                Submissions for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
+                            </h3>
+                            <div className="border rounded-md">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Provider</TableHead>
+                                            <TableHead>Clinic</TableHead>
+                                            <TableHead>Attachments</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                        {selectedDayEntries.length > 0 ? (
+                                            selectedDayEntries.map((entry) => (
+                                                <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
+                                            ))
+                                        ) : (
+                                            <TableBody>
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="h-24 text-center">
+                                                    No submissions for this date.
+                                                </TableCell>
+                                            </TableRow>
+                                            </TableBody>
+                                        )}
+                                </Table>
+                            </div>
+                        </div>
+                    </div>
+                 )}
             </CardContent>
         </Card>
     );
 }
+
+    
