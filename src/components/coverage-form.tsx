@@ -470,7 +470,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="primaryProductQty"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Primary Qty</FormLabel>
+                                        <FormLabel className="font-headline">Primary Samples</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
@@ -483,7 +483,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="primaryProductBal"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Primary Bal</FormLabel>
+                                        <FormLabel className="font-headline">Primary Balance</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
@@ -498,7 +498,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="secondaryProductQty"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Secondary Qty</FormLabel>
+                                        <FormLabel className="font-headline">Secondary Samples</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
@@ -511,7 +511,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="secondaryProductBal"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Secondary Bal</FormLabel>
+                                        <FormLabel className="font-headline">Secondary Balance</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
