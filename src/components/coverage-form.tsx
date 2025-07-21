@@ -462,7 +462,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
-                                        <SelectItem value="inbase">In Person</SelectItem>
+                                        <SelectItem value="inbase">Inbase</SelectItem>
                                         <SelectItem value="outbase">Outbase</SelectItem>
                                     </SelectContent>
                                     </Select>
@@ -760,7 +760,5 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
-
-    
 
     
