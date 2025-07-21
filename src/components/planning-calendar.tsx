@@ -1,15 +1,15 @@
 
 "use client"
 
-import type { Doctor, Plan, NonCallDay } from "@/lib/types";
+import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, CalendarOff } from "lucide-react";
+import { PlusCircle, Trash2, CalendarOff, CheckCircle2 } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -19,10 +19,12 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import * as z from "zod"
+import { cn } from "@/lib/utils";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
   plans: Plan[];
+  entries: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
@@ -31,11 +33,20 @@ type PlanningCalendarProps = {
 };
 
 
-export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay }: PlanningCalendarProps) {
+export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
+
+    const visitCountsThisMonth = useMemo(() => {
+        const thisMonthEntries = entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+        return thisMonthEntries.reduce((acc, entry) => {
+          const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
+          acc[doctorName] = (acc[doctorName] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+    }, [entries]);
 
     const plansByDate = useMemo(() => {
         return plans.reduce((acc, plan) => {
@@ -200,15 +211,32 @@ export function PlanningCalendar({ doctors, plans, onAddPlan, onRemovePlan, onLo
                                             className="mt-2"
                                         />
                                         <ScrollArea className="h-48">
-                                            <div className="flex flex-col gap-2 p-1">
-                                            {filteredDoctors.map(doctor => (
-                                                <div key={doctor.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent">
-                                                    <span>{doctor.firstName} {doctor.lastName}</span>
-                                                    <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)}>
-                                                        <PlusCircle size={16}/>
-                                                    </Button>
-                                                </div>
-                                            ))}
+                                            <div className="flex flex-col gap-1 p-1">
+                                            {filteredDoctors.map(doctor => {
+                                                const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                                const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                const isCompleted = visitCount >= targetCount;
+
+                                                return (
+                                                    <div key={doctor.id} className={cn("flex items-center justify-between p-2 rounded-md hover:bg-accent/50", isCompleted && "bg-primary/10")}>
+                                                        <div className="flex flex-col">
+                                                            <span>{doctor.firstName} {doctor.lastName}</span>
+                                                            {isCompleted ? (
+                                                                <Badge variant="secondary" className="w-fit text-primary">
+                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                                    Covered
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="w-fit">Not yet covered</Badge>
+                                                            )}
+                                                        </div>
+                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)}>
+                                                            <PlusCircle size={16}/>
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
                                             </div>
                                         </ScrollArea>
                                     </div>

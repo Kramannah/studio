@@ -97,7 +97,8 @@ export default function Home() {
           <TabsContent value="planning" className="mt-6">
             <PlanningCalendar 
               doctors={doctors} 
-              plans={plans} 
+              plans={plans}
+              entries={masterEntries}
               onAddPlan={addPlan} 
               onRemovePlan={removePlan} 
               onLogCall={handleLogPlannedCall}
