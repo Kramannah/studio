@@ -44,8 +44,14 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
       if(canvas.width !== rect.width) {
         canvas.width = rect.width;
       }
+      if (canvas.height !== rect.height) {
+        // Use parent height if available and className is passed
+        canvas.height = className ? rect.height : 200;
+      }
+    } else {
+        canvas.height = 200;
     }
-    canvas.height = 300; 
+
 
     // Set drawing styles
     ctx.strokeStyle = '#000000'; // Black ink
@@ -64,7 +70,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-  }, [value, getCanvasContext]);
+  }, [value, getCanvasContext, className]);
 
   const getPosition = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -126,7 +132,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   }
 
   return (
-    <div className={cn('relative w-full', className)}>
+    <div className={cn('relative w-full h-full', className)}>
       <canvas
         ref={canvasRef}
         onMouseDown={startDrawing}
@@ -136,18 +142,10 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchStart={startDrawing}
         onTouchMove={draw}
         onTouchEnd={stopDrawing}
-        className="w-full h-[300px] bg-white rounded-md cursor-crosshair touch-none border"
+        className="w-full h-full bg-white rounded-md cursor-crosshair touch-none border"
       />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={clearCanvas}
-        className="absolute top-2 right-2"
-      >
-        <Eraser className="w-4 h-4 mr-2" />
-        Clear
-      </Button>
     </div>
   );
 }
+
+    

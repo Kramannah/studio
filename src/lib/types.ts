@@ -18,6 +18,9 @@ export interface CoverageEntry {
   primaryProductBal?: number;
   secondaryProductQty?: number;
   secondaryProductBal?: number;
+  reminderProduct?: string;
+  reminderProductQty?: number;
+  reminderProductBal?: number;
   topicsDiscussed?: string;
   doctorsIssue?: string;
   planOfAction?: string;
@@ -48,5 +51,7 @@ export interface NonCallDay {
   reason: string;
   remarks: string;
 }
+
+    
 
     

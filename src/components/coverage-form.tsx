@@ -5,27 +5,20 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Calendar as CalendarIcon, Save, X, Upload } from "lucide-react"
-import React, { useState, useRef, useEffect, useCallback } from "react"
+import { Save, Eraser } from "lucide-react"
+import React, { useState, useEffect, useCallback } from "react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -36,11 +29,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignaturePad } from "./signature-pad"
 import type { CoverageEntry, Doctor, Plan } from "@/lib/types"
-import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
-import { Autocomplete } from "./autocomplete"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 
 const formSchema = z.object({
@@ -66,6 +56,9 @@ const formSchema = z.object({
   planOfAction: z.string().optional(),
   whatWentWell: z.string().optional(),
   areasForImprovement: z.string().optional(),
+  reminderProduct: z.string().optional(),
+  reminderProductQty: z.coerce.number().optional(),
+  reminderProductBal: z.coerce.number().optional(),
 }).superRefine((data, ctx) => {
     if (data.callType === 'planned' && !data.plannedDoctorId) {
         ctx.addIssue({
@@ -76,21 +69,16 @@ const formSchema = z.object({
     }
     if (data.callType === 'unplanned') {
         if (!data.firstName || data.firstName.length < 2) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "First name is too short", path: ["firstName"] });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "First name is required", path: ["firstName"] });
         }
         if (!data.lastName || data.lastName.length < 2) {
-             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is too short", path: ["lastName"] });
+             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is required", path: ["lastName"] });
         }
     }
-    if ((!data.photos || data.photos.length === 0) && !data.signature) {
+    if (!data.signature) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "A photo or signature is required as proof of coverage.",
-        path: ["photos"], 
-      });
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "A photo or signature is required as proof of coverage.",
+        message: "A signature is required as proof of coverage.",
         path: ["signature"], 
       });
     }
@@ -110,10 +98,14 @@ type CoverageFormProps = {
 
 const MAX_UNPLANNED_CALLS = 5;
 
+const SectionHeader = ({ title, className }: { title: string, className?: string }) => (
+    <div className={cn("py-1 px-2 bg-blue-900 text-white", className)}>
+        <h3 className="text-sm font-bold text-center uppercase">{title}</h3>
+    </div>
+);
+
 export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries }: CoverageFormProps) {
   const { toast } = useToast()
-  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -134,6 +126,9 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       primaryProductBal: 0,
       secondaryProductQty: 0,
       secondaryProductBal: 0,
+      reminderProduct: "",
+      reminderProductQty: 0,
+      reminderProductBal: 0,
       topicsDiscussed: "",
       doctorsIssue: "",
       planOfAction: "",
@@ -144,6 +139,10 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
 
   const callType = form.watch("callType");
   const plannedDoctorId = form.watch("plannedDoctorId");
+  const selectedDoctor = callType === 'planned' 
+    ? doctors.find(d => d.id === plannedDoctorId) 
+    : doctors.find(d => d.firstName.toLowerCase() === form.watch('firstName').toLowerCase() && d.lastName.toLowerCase() === form.watch('lastName').toLowerCase());
+
 
   useEffect(() => {
     if (initialDoctor) {
@@ -182,12 +181,6 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     form.setValue("clinic", doctor.clinic);
   }, [form]);
 
-  const removePhoto = (index: number) => {
-    const currentPhotos = form.getValues("photos") || [];
-    const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
-    form.setValue("photos", updatedPhotos, { shouldValidate: true });
-    setPhotoPreviews(updatedPhotos);
-  };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const doctorInMasterlist = doctors.find(
@@ -224,7 +217,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
         toast({
           variant: "destructive",
           title: "Submission Limit Reached",
-          description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency}.`,
+          description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInmasterlist.frequency}.`,
         });
         return; 
       }
@@ -237,535 +230,394 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
       coverageDate: values.coverageDate.toISOString(),
     });
     form.reset();
-    setPhotoPreviews([]);
     onFormSubmit?.();
   }
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const currentPhotos = form.getValues("photos") || [];
-    if (currentPhotos.length >= 1) {
-      toast({
-        variant: "destructive",
-        title: "Upload limit reached",
-        description: "You can only save a maximum of 1 photo.",
-      });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUri = e.target?.result as string;
-      const updatedPhotos = [...currentPhotos, dataUri];
-      form.setValue("photos", updatedPhotos, { shouldValidate: true });
-      setPhotoPreviews(updatedPhotos);
-    };
-    reader.readAsDataURL(file);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
   
-  const SectionHeader = ({ title }: { title: string }) => (
-    <div className="py-1 px-4 bg-primary/80 text-primary-foreground rounded-t-md">
-        <h3 className="text-base font-semibold font-headline">{title}</h3>
+
+  const InfoField = ({ label, value }: { label: string, value: string | undefined }) => (
+    <div>
+        <span className="text-xs font-bold text-gray-400">{label}: </span>
+        <span className="text-sm">{value || 'N/A'}</span>
     </div>
   );
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="font-headline">Log New Coverage Event</CardTitle>
-        <CardDescription>Select the call type and fill in the details below.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-
-            <FormField
-              control={form.control}
-              name="callType"
-              render={({ field }) => (
-                <FormItem className="space-y-3">
-                  <FormLabel className="text-lg font-semibold font-headline">Call Type</FormLabel>
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex gap-4"
-                    >
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="unplanned" />
-                        </FormControl>
-                        <FormLabel className="font-normal">
-                          Unplanned Call
-                        </FormLabel>
-                      </FormItem>
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="planned" />
-                        </FormControl>
-                        <FormLabel className="font-normal">
-                          Planned Call
-                        </FormLabel>
-                      </FormItem>
-                    </RadioGroup>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {callType === 'planned' && (
-                <FormField
-                    control={form.control}
-                    name="plannedDoctorId"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel className="text-lg font-semibold font-headline">Select a Planned Doctor</FormLabel>
-                         <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                                <SelectTrigger>
-                                <SelectValue placeholder="Select a doctor from today's plan..." />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                {todaysPlans.length > 0 ? (
-                                    todaysPlans.map(plan => (
-                                        <SelectItem key={plan.id} value={plan.doctorId}>
-                                            {plan.doctorFirstName} {plan.doctorLastName}
-                                        </SelectItem>
-                                    ))
-                                ) : (
-                                    <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
-                                )}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-            )}
-
-            <div className={cn(callType === 'planned' && !plannedDoctorId && 'hidden', 'space-y-6')}>
-                
-                <div className="p-4 space-y-4 border rounded-md">
-                    <SectionHeader title="Provider Information" />
-                    <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2">
-                    <FormField
-                        control={form.control}
-                        name="firstName"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="font-headline">First Name</FormLabel>
-                            <FormControl>
-                            <Autocomplete
-                                doctors={doctors}
-                                value={field.value}
-                                onChange={field.onChange}
-                                onSelect={handleDoctorSelect}
-                                placeholder="John"
-                                disabled={callType === 'planned'}
-                                />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="lastName"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="font-headline">Last Name</FormLabel>
-                            <FormControl>
-                            <Autocomplete
-                                doctors={doctors}
-                                value={field.value}
-                                onChange={field.onChange}
-                                onSelect={handleDoctorSelect}
-                                placeholder="Doe"
-                                triggerOn="lastName"
-                                disabled={callType === 'planned'}
-                                />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="specialty"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="font-headline">Specialty</FormLabel>
-                            <FormControl>
-                            <Input placeholder="Cardiology" {...field} disabled={callType === 'planned'} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="clinic"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="font-headline">Clinic</FormLabel>
-                            <FormControl>
-                            <Textarea placeholder="Community General Hospital" {...field} disabled={callType === 'planned'} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
+        <CardHeader>
+            <CardTitle className="font-headline">Log New Coverage Event</CardTitle>
+            <CardDescription>Select the call type and fill in the details below.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="p-2 space-y-2 border rounded-md">
                      <FormField
                         control={form.control}
-                        name="coverageDate"
+                        name="callType"
                         render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                            <FormLabel className="font-headline">Coverage Date</FormLabel>
-                            <Popover>
-                            <PopoverTrigger asChild>
-                                <FormControl>
-                                <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                    "w-full pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                    )}
+                            <FormItem className="mb-4">
+                            <FormLabel className="text-base font-semibold font-headline">Call Type</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={(value) => {
+                                    field.onChange(value);
+                                    form.reset({ 
+                                        ...form.getValues(),
+                                        callType: value as 'planned' | 'unplanned',
+                                        plannedDoctorId: undefined,
+                                        firstName: '', lastName: '', specialty: '', clinic: ''
+                                    });
+                                }}
+                                value={field.value}
+                                className="flex gap-4"
                                 >
-                                    {field.value ? (
-                                    format(field.value, "PPP")
-                                    ) : (
-                                    <span>Pick a date</span>
-                                    )}
-                                    <CalendarIcon className="w-4 h-4 ml-auto opacity-50" />
-                                </Button>
-                                </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                    date > new Date() || date < new Date("1900-01-01")
-                                }
-                                initialFocus
-                                />
-                            </PopoverContent>
-                            </Popover>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                    <RadioGroupItem value="unplanned" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                    Unplanned Call
+                                    </FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                    <RadioGroupItem value="planned" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                    Planned Call
+                                    </FormLabel>
+                                </FormItem>
+                                </RadioGroup>
+                            </FormControl>
                             <FormMessage />
-                        </FormItem>
+                            </FormItem>
                         )}
-                    />
-                    </div>
+                        />
+
+                    {callType === 'planned' && (
+                        <FormField
+                            control={form.control}
+                            name="plannedDoctorId"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Select a doctor from today's plan..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {todaysPlans.length > 0 ? (
+                                            todaysPlans.map(plan => (
+                                                <SelectItem key={plan.id} value={plan.doctorId}>
+                                                    {plan.doctorFirstName} {plan.doctorLastName}
+                                                </SelectItem>
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
+                     {callType === 'unplanned' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="firstName"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-headline">First Name</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="John" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="lastName"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-headline">Last Name</FormLabel>
+                                    <FormControl>
+                                       <Input placeholder="Doe" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                    {/* Left Column */}
-                    <div className="space-y-6">
-                        <div className="p-4 space-y-4 border rounded-md">
+                <div className={cn((callType === 'planned' && !plannedDoctorId) && 'hidden', 'space-y-4')}>
+                    {/* Doctor Info Header */}
+                    <div className="p-2 text-white bg-green-700 rounded-md">
+                        <SectionHeader title="Doctor's Information" className="bg-transparent"/>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-1 text-sm">
+                            <InfoField label="HCP Name" value={selectedDoctor ? `${selectedDoctor.firstName} ${selectedDoctor.lastName}` : 'N/A'} />
+                            <InfoField label="HCP Position" value={selectedDoctor?.specialty} />
+                            <InfoField label="HCP ID" value={selectedDoctor?.id.substring(0,8)} />
+                             <InfoField label="Subspecialty" value={'N/A'} />
+                            <InfoField label="HACME NO" value={'N/A'} />
+                            <InfoField label="Contact" value={'N/A'} />
+                            <InfoField label="PRC #" value={'N/A'} />
+                        </div>
+                    </div>
+                
+                    {/* Main Content Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr] gap-4">
+                        {/* Column 1: Pre-call */}
+                        <div className="space-y-2 border border-gray-400 rounded-md">
                             <SectionHeader title="Pre-call Planning" />
-                            <div className="grid grid-cols-1 gap-4 pt-4 md:grid-cols-2">
-                                <FormField
-                                    control={form.control}
-                                    name="coverageType"
-                                    render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="font-headline">Type of Call</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                            <SelectValue placeholder="Select coverage type" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="inbase">In Person</SelectItem>
-                                            <SelectItem value="outbase">Outbase</SelectItem>
-                                        </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                  control={form.control}
-                                  name="callObjective"
-                                  render={({ field }) => (
-                                    <FormItem className="md:col-span-2">
-                                      <FormLabel className="font-headline">Call Objective</FormLabel>
-                                      <FormControl>
-                                        <Textarea placeholder="Enter call objective..." {...field} />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="p-4 space-y-4 border rounded-md">
-                            <SectionHeader title="Promo / Display Materials" />
-                             <div className="grid items-end grid-cols-1 gap-4 pt-4 md:grid-cols-3">
-                                 <FormField
-                                    control={form.control}
-                                    name="primaryProduct"
-                                    render={({ field }) => (
+                            <div className="p-2 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                     <FormField
+                                        control={form.control}
+                                        name="coverageType"
+                                        render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Primary Product</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormLabel className="text-xs font-semibold">Type of Call</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
                                             <FormControl>
-                                                <SelectTrigger>
-                                                <SelectValue placeholder="Select primary product..." />
+                                                <SelectTrigger className="h-8">
+                                                <SelectValue placeholder="Select type" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="productA">Product A</SelectItem>
-                                                <SelectItem value="productB">Product B</SelectItem>
-                                                <SelectItem value="productC">Product C</SelectItem>
+                                                <SelectItem value="inbase">In Person</SelectItem>
+                                                <SelectItem value="outbase">Outbase</SelectItem>
                                             </SelectContent>
-                                        </Select>
-                                        <FormMessage />
+                                            </Select>
+                                            <FormMessage />
                                         </FormItem>
-                                    )}
+                                        )}
                                     />
-                                <FormField
-                                    control={form.control}
-                                    name="primaryProductQty"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Qty</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" placeholder="0" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="primaryProductBal"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Bal</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" placeholder="0" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
-                             <div className="grid items-end grid-cols-1 gap-4 mt-2 md:grid-cols-3">
-                                 <FormField
-                                    control={form.control}
-                                    name="secondaryProduct"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormField
+                                        control={form.control}
+                                        name="callObjective"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-xs font-semibold">Call Objective</FormLabel>
                                             <FormControl>
-                                                <SelectTrigger>
-                                                <SelectValue placeholder="Select secondary product..." />
-                                                </SelectTrigger>
+                                                <Textarea placeholder="..." {...field} className="h-8"/>
                                             </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="productA">Product A</SelectItem>
-                                                <SelectItem value="productB">Product B</SelectItem>
-                                                <SelectItem value="productC">Product C</SelectItem>
-                                                <SelectItem value="none">None</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
                                     />
-                                <FormField
-                                    control={form.control}
-                                    name="secondaryProductQty"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Qty</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" placeholder="0" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="secondaryProductBal"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Bal</FormLabel>
-                                        <FormControl>
-                                            <Input type="number" placeholder="0" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                </div>
+                                <SectionHeader title="Product" />
+                                <div className="grid grid-cols-2 gap-2">
+                                     <FormField
+                                        control={form.control}
+                                        name="primaryProduct"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-xs font-semibold">Primary</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger className="h-8">
+                                                    <SelectValue placeholder="Select..." />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="productA">Product A</SelectItem>
+                                                    <SelectItem value="productB">Product B</SelectItem>
+                                                    <SelectItem value="productC">Product C</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                        />
+                                        <FormField
+                                        control={form.control}
+                                        name="secondaryProduct"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-xs font-semibold">Secondary</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger className="h-8">
+                                                    <SelectValue placeholder="Select..." />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="productA">Product A</SelectItem>
+                                                    <SelectItem value="productB">Product B</SelectItem>
+                                                    <SelectItem value="productC">Product C</SelectItem>
+                                                    <SelectItem value="none">None</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                        />
+                                </div>
+                                 <SectionHeader title="Promo / Display Materials" />
+                                 <div className="space-y-1">
+                                    <div className="grid grid-cols-[1fr_50px_50px] gap-1 items-center bg-blue-300 p-1 rounded-t-md">
+                                        <FormLabel className="text-xs font-semibold">Primary Product</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Qty</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Bal</FormLabel>
+                                    </div>
+                                    <div className="grid grid-cols-[1fr_50px_50px] gap-1 items-center p-1">
+                                        <p className="text-sm truncate">{form.watch('primaryProduct') || 'N/A'}</p>
+                                        <FormField control={form.control} name="primaryProductQty" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                        <FormField control={form.control} name="primaryProductBal" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                    </div>
+                                    <div className="grid grid-cols-[1fr_50px_50px] gap-1 items-center bg-blue-300 p-1">
+                                        <FormLabel className="text-xs font-semibold">Secondary Product</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Qty</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Bal</FormLabel>
+                                    </div>
+                                     <div className="grid grid-cols-[1fr_50px_50px] gap-1 items-center p-1">
+                                        <p className="text-sm truncate">{form.watch('secondaryProduct') || 'N/A'}</p>
+                                        <FormField control={form.control} name="secondaryProductQty" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                        <FormField control={form.control} name="secondaryProductBal" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                    </div>
+                                 </div>
+                                <SectionHeader title="Reminder Products" />
+                                 <div className="space-y-1">
+                                    <div className="grid grid-cols-[1fr_60px_60px] gap-1 items-center p-1">
+                                        <FormLabel className="text-xs font-semibold">Product</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Quantity</FormLabel>
+                                        <FormLabel className="text-xs font-semibold">Balance</FormLabel>
+                                    </div>
+                                     <div className="grid grid-cols-[1fr_60px_60px] gap-1 items-center p-1">
+                                        <FormField control={form.control} name="reminderProduct" render={({ field }) => (<Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger className="h-8"><SelectValue placeholder="Select..."/></SelectTrigger></FormControl><SelectContent><SelectItem value="reminderA">Reminder A</SelectItem></SelectContent></Select>)} />
+                                        <FormField control={form.control} name="reminderProductQty" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                        <FormField control={form.control} name="reminderProductBal" render={({ field }) => (<Input type="number" {...field} className="h-8"/>)} />
+                                    </div>
+                                 </div>
                             </div>
                         </div>
 
-                        <div className="p-4 space-y-4 border rounded-md">
-                            <SectionHeader title="Signature / Proof of Coverage" />
-                            <div className="pt-4 space-y-4">
+                        {/* Column 2: Signature */}
+                        <div className="space-y-2 border border-gray-400 rounded-md">
+                             <SectionHeader title="Signature" />
+                             <div className="p-2 space-y-2">
+                                <div className="flex justify-between">
+                                    <Button type="button" size="sm" variant="outline" onClick={() => form.setValue('signature', null)}>
+                                        <Eraser className="mr-2"/>
+                                        Clear Signature
+                                    </Button>
+                                    <Button type="submit" size="sm">
+                                        <Save className="mr-2" />
+                                        Save Signature
+                                    </Button>
+                                </div>
                                 <FormField
                                 control={form.control}
                                 name="signature"
                                 render={({ field }) => (
                                     <FormItem>
-                                    <FormLabel className="font-headline">Provider Signature</FormLabel>
+                                    <FormLabel className="sr-only">Sign</FormLabel>
                                     <FormControl>
-                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} />
+                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
                                     </FormControl>
                                     <FormMessage />
                                     </FormItem>
                                 )}
                                 />
-                                 <FormField
-                                    control={form.control}
-                                    name="photos"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel className="font-headline">Photo Proof</FormLabel>
-                                        <FormControl>
-                                            <div>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    disabled={(form.getValues("photos") || []).length >= 1}
-                                                    className="font-headline"
-                                                    onClick={() => fileInputRef.current?.click()}
-                                                >
-                                                    <Upload className="mr-2" />
-                                                    Upload Photo
-                                                </Button>
-                                                <input
-                                                    type="file"
-                                                    ref={fileInputRef}
-                                                    onChange={handleFileChange}
-                                                    className="hidden"
-                                                    accept="image/*"
-                                                />
-                                            </div>
-                                        </FormControl>
-                                        <FormDescription>You can upload 1 photo.</FormDescription>
-                                        {photoPreviews.length > 0 && (
-                                            <div className="grid grid-cols-2 gap-4 mt-4 sm:grid-cols-3 md:grid-cols-5">
-                                            {photoPreviews.map((src, index) => (
-                                                <div key={index} className="relative group">
-                                                <Image src={src} alt={`Preview ${index + 1}`} width={150} height={150} className="object-cover w-full h-auto rounded-md aspect-square" />
-                                                <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => removePhoto(index)}>
-                                                    <X size={16}/>
-                                                </Button>
-                                                </div>
-                                            ))}
-                                            </div>
-                                        )}
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                    />
-                                    <FormMessage>{form.formState.errors.photos?.message || form.formState.errors.signature?.message}</FormMessage>
-                            </div>
+                             </div>
                         </div>
-                    </div>
 
-                    {/* Right Column */}
-                     <div className="p-4 space-y-4 border rounded-md">
-                        <SectionHeader title="Post Call Analysis" />
-                        <div className="pt-4 space-y-4">
-                             <FormField
-                              control={form.control}
-                              name="topicsDiscussed"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="font-headline">Topics Discussed</FormLabel>
-                                  <FormControl>
-                                    <Textarea placeholder="Enter topics discussed..." {...field} rows={4} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="doctorsIssue"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="font-headline">Doctor's Issue/Concern</FormLabel>
-                                  <FormControl>
-                                    <Textarea placeholder="Enter doctor's issues or concerns..." {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="planOfAction"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="font-headline">Plan of Action</FormLabel>
-                                  <FormControl>
-                                    <Textarea placeholder="Enter your plan of action..." {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <div className="pt-2">
-                                <h4 className="py-1 px-4 mb-2 bg-primary/10 text-primary-foreground rounded-t-md font-semibold font-headline">Post-Call Notes</h4>
-                                <div className="grid grid-cols-1 gap-4">
+                        {/* Column 3: Post-call */}
+                         <div className="space-y-2 border border-gray-400 rounded-md">
+                            <SectionHeader title="Post Call Analysis" />
+                            <div className="p-2 space-y-2">
+                                <FormField
+                                control={form.control}
+                                name="topicsDiscussed"
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel className="text-xs font-semibold">Topics Discussed</FormLabel>
+                                    <FormControl>
+                                        <Textarea placeholder="..." {...field} rows={3} />
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                                />
+                                <div className="grid grid-cols-2 gap-2">
                                     <FormField
                                     control={form.control}
-                                    name="whatWentWell"
+                                    name="doctorsIssue"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">What went well?</FormLabel>
-                                        <FormControl>
-                                            <Textarea placeholder="What were the successes?" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
+                                            <SectionHeader title="Doctor's Issue/Concern" className="bg-red-600" />
+                                            <FormControl>
+                                                <Textarea placeholder="..." {...field} rows={2} />
+                                            </FormControl>
+                                            <FormMessage />
                                         </FormItem>
                                     )}
                                     />
                                     <FormField
                                     control={form.control}
-                                    name="areasForImprovement"
+                                    name="planOfAction"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Areas for Improvement</FormLabel>
-                                        <FormControl>
-                                            <Textarea placeholder="What could be improved?" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
+                                            <SectionHeader title="Plan of Action" className="bg-cyan-400"/>
+                                            <FormControl>
+                                                <Textarea placeholder="..." {...field} rows={2} />
+                                            </FormControl>
+                                            <FormMessage />
                                         </FormItem>
                                     )}
                                     />
                                 </div>
+                                 <SectionHeader title="Post-Call Notes" />
+                                 <div className="grid grid-cols-2 gap-2">
+                                    <FormField
+                                        control={form.control}
+                                        name="whatWentWell"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-xs font-semibold">What went well?</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="..." {...field} rows={2} />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="areasForImprovement"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-xs font-semibold">Areas for Improvement</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="..." {...field} rows={2} />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <Button type="submit" className="w-full mt-6 md:w-auto font-headline">
-                    <Save className="mr-2" />
-                    Save Coverage
-                </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
+                    <Button type="submit" className="w-full mt-4 font-headline">
+                        <Save className="mr-2" />
+                        Save Full Coverage Report
+                    </Button>
+                </div>
+            </form>
+            </Form>
+        </CardContent>
     </Card>
   )
 }
+
+    
