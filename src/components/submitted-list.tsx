@@ -4,11 +4,11 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -40,6 +40,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collap
 type SubmittedListProps = {
     entries: CoverageEntry[];
     onDelete: (id: string) => void;
+    onEdit: (entry: CoverageEntry) => void;
 };
 
 
@@ -53,7 +54,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete }: { entry: CoverageEntry, onDelete: (id: string) => void }) => {
+const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -72,6 +73,13 @@ const EntryRow = ({ entry, onDelete }: { entry: CoverageEntry, onDelete: (id: st
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `attachments_${entry.firstName}_${entry.lastName}_${entry.id.substring(0, 8)}.zip`);
     };
+
+    const isEditable = useMemo(() => {
+        const submittedDate = parseISO(entry.submittedAt);
+        // The deadline is Sunday midnight of the submission week.
+        const deadline = endOfWeek(submittedDate, { weekStartsOn: 1 }); // week starts on Monday
+        return isBefore(new Date(), deadline);
+    }, [entry.submittedAt]);
 
     return (
          <Collapsible asChild>
@@ -110,6 +118,9 @@ const EntryRow = ({ entry, onDelete }: { entry: CoverageEntry, onDelete: (id: st
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}>
+                                    <Edit className="mr-2"/> Edit
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleDownloadAttachments(entry)}>
                                     <FileArchive className="mr-2"/> Download Attachments
                                 </DropdownMenuItem>
@@ -176,7 +187,7 @@ const EntryRow = ({ entry, onDelete }: { entry: CoverageEntry, onDelete: (id: st
 }
 
 
-export function SubmittedList({ entries, onDelete }: SubmittedListProps) {
+export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const filteredEntries = useMemo(() => {
@@ -320,7 +331,7 @@ export function SubmittedList({ entries, onDelete }: SubmittedListProps) {
                         <TableBody>
                             {filteredEntries.length > 0 ? (
                                 filteredEntries.map((entry) => (
-                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} />
+                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
                                 ))
                             ) : (
                                 <TableRow>
@@ -336,5 +347,3 @@ export function SubmittedList({ entries, onDelete }: SubmittedListProps) {
         </Card>
     );
 }
-
-    

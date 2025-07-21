@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 
 
 const formSchema = z.object({
+  id: z.string().optional(),
   callType: z.enum(["unplanned", "planned"]),
   plannedDoctorId: z.string().optional(),
   firstName: z.string(),
@@ -88,12 +89,14 @@ const formSchema = z.object({
 
 type CoverageFormProps = {
   onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt'>) => void;
+  onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
   isOnline: boolean;
   doctors: Doctor[];
   masterEntries: CoverageEntry[];
   offlineEntries: Plan[];
   todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
+  entryToEdit?: CoverageEntry | null;
   onFormSubmit?: () => void;
 }
 
@@ -126,7 +129,7 @@ const productList = [
 ];
 
 
-export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -222,7 +225,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
   };
   
   useEffect(() => {
-    if (initialDoctor) {
+    if (initialDoctor && !entryToEdit) {
       form.reset({
         ...form.getValues(),
         callType: 'planned',
@@ -234,7 +237,40 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
         coverageDate: new Date(),
       });
     }
-  }, [initialDoctor, form]);
+  }, [initialDoctor, entryToEdit, form]);
+  
+  useEffect(() => {
+    if (entryToEdit) {
+      form.reset({
+        ...entryToEdit,
+        coverageDate: parseISO(entryToEdit.coverageDate),
+      });
+    } else if (!initialDoctor) {
+      form.reset({
+        callType: "unplanned",
+        firstName: "",
+        lastName: "",
+        specialty: "",
+        clinic: "",
+        coverageType: "inbase",
+        coverageDate: new Date(),
+        photos: [],
+        signature: null,
+        callObjective: "",
+        primaryProduct: "",
+        secondaryProduct: "",
+        primaryProductQty: 0,
+        primaryProductBal: 0,
+        secondaryProductQty: 0,
+        secondaryProductBal: 0,
+        topicsDiscussed: "",
+        doctorsIssue: "",
+        planOfAction: "",
+        whatWentWell: "",
+        areasForImprovement: "",
+      });
+    }
+  }, [entryToEdit, initialDoctor, form]);
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
@@ -245,10 +281,10 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
             form.setValue("specialty", doctor.specialty);
             form.setValue("clinic", doctor.clinic);
         }
-    } else if (callType === 'unplanned') {
+    } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
     }
-  }, [callType, plannedDoctorId, doctors, form]);
+  }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
 
   useEffect(() => {
     return () => {
@@ -257,6 +293,19 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
   }, []);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+
+    if(entryToEdit){
+      onUpdate({
+        ...values,
+        id: entryToEdit.id,
+        coverageDate: values.coverageDate.toISOString(),
+      });
+      form.reset();
+      onFormSubmit?.();
+      return;
+    }
+
+
     const doctorInMasterlist = doctors.find(
       (d) =>
         d.firstName.toLowerCase() === values.firstName.toLowerCase() &&
@@ -307,92 +356,97 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     onFormSubmit?.();
   }
 
+  const isEditMode = !!entryToEdit;
+
   return (
     <Card>
         <CardHeader>
-            <CardTitle className="font-headline">Log New Coverage Event</CardTitle>
-            <CardDescription>Select the call type and fill in the details below.</CardDescription>
+            <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage Event' : 'Log New Coverage Event'}</CardTitle>
+            <CardDescription>{isEditMode ? 'Update the details for this coverage event below.' : 'Select the call type and fill in the details below.'}</CardDescription>
         </CardHeader>
         <CardContent>
             <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                <div className="space-y-4">
-                     <FormField
-                        control={form.control}
-                        name="callType"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel className="text-base font-semibold font-headline">Call Type</FormLabel>
-                            <FormControl>
-                                <RadioGroup
-                                onValueChange={(value) => {
-                                    field.onChange(value);
-                                    form.reset({ 
-                                        ...form.getValues(),
-                                        callType: value as 'planned' | 'unplanned',
-                                        plannedDoctorId: undefined,
-                                        firstName: '', lastName: '', specialty: '', clinic: ''
-                                    });
-                                }}
-                                value={field.value}
-                                className="flex gap-4 pt-2"
-                                >
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                    <RadioGroupItem value="unplanned" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">
-                                    Unplanned Call
-                                    </FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                    <RadioGroupItem value="planned" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">
-                                    Planned Call
-                                    </FormLabel>
-                                </FormItem>
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                        />
+                {!isEditMode && (
+                  <div className="space-y-4">
+                      <FormField
+                          control={form.control}
+                          name="callType"
+                          render={({ field }) => (
+                              <FormItem>
+                              <FormLabel className="text-base font-semibold font-headline">Call Type</FormLabel>
+                              <FormControl>
+                                  <RadioGroup
+                                  onValueChange={(value) => {
+                                      field.onChange(value);
+                                      form.reset({ 
+                                          ...form.getValues(),
+                                          callType: value as 'planned' | 'unplanned',
+                                          plannedDoctorId: undefined,
+                                          firstName: '', lastName: '', specialty: '', clinic: ''
+                                      });
+                                  }}
+                                  value={field.value}
+                                  className="flex gap-4 pt-2"
+                                  >
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl>
+                                      <RadioGroupItem value="unplanned" />
+                                      </FormControl>
+                                      <FormLabel className="font-normal">
+                                      Unplanned Call
+                                      </FormLabel>
+                                  </FormItem>
+                                  <FormItem className="flex items-center space-x-3 space-y-0">
+                                      <FormControl>
+                                      <RadioGroupItem value="planned" />
+                                      </FormControl>
+                                      <FormLabel className="font-normal">
+                                      Planned Call
+                                      </FormLabel>
+                                  </FormItem>
+                                  </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                              </FormItem>
+                          )}
+                          />
 
-                    {callType === 'planned' && (
-                        <FormField
-                            control={form.control}
-                            name="plannedDoctorId"
-                            render={({ field }) => (
-                                <FormItem>
-                                <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger>
-                                        <SelectValue placeholder="Select a doctor from today's plan..." />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        {todaysPlans.length > 0 ? (
-                                            todaysPlans.map(plan => (
-                                                <SelectItem key={plan.id} value={plan.doctorId}>
-                                                    {plan.doctorFirstName} {plan.doctorLastName}
-                                                </SelectItem>
-                                            ))
-                                        ) : (
-                                            <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    )}
-                </div>
+                      {callType === 'planned' && (
+                          <FormField
+                              control={form.control}
+                              name="plannedDoctorId"
+                              render={({ field }) => (
+                                  <FormItem>
+                                  <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
+                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Select a doctor from today's plan..." />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          {todaysPlans.length > 0 ? (
+                                              todaysPlans.map(plan => (
+                                                  <SelectItem key={plan.id} value={plan.doctorId}>
+                                                      {plan.doctorFirstName} {plan.doctorLastName}
+                                                  </SelectItem>
+                                              ))
+                                          ) : (
+                                              <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
+                                          )}
+                                      </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                  </FormItem>
+                              )}
+                          />
+                      )}
+                  </div>
+                )}
 
-                <div className={cn((callType === 'planned' && !plannedDoctorId) && 'hidden', 'space-y-6')}>
+
+                <div className={cn((callType === 'planned' && !plannedDoctorId && !isEditMode) && 'hidden', 'space-y-6')}>
                     
                     <div>
                         <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
@@ -404,7 +458,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                 <FormItem>
                                     <FormLabel className="font-headline">First Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="John" {...field} disabled={callType === 'planned'}/>
+                                        <Input placeholder="John" {...field} disabled={callType === 'planned' || isEditMode}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -417,7 +471,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                 <FormItem>
                                     <FormLabel className="font-headline">Last Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Doe" {...field} disabled={callType === 'planned'}/>
+                                        <Input placeholder="Doe" {...field} disabled={callType === 'planned' || isEditMode}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -430,7 +484,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                 <FormItem>
                                     <FormLabel className="font-headline">Specialty</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Cardiology" {...field} disabled={callType === 'planned'}/>
+                                        <Input placeholder="Cardiology" {...field} disabled={callType === 'planned' || isEditMode}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -443,7 +497,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                 <FormItem>
                                     <FormLabel className="font-headline">Clinic</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Community General Hospital" {...field} disabled={callType === 'planned'}/>
+                                        <Input placeholder="Community General Hospital" {...field} disabled={callType === 'planned' || isEditMode}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -455,7 +509,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel className="font-headline">Type of Coverage</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select type" />
@@ -498,7 +552,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                             render={({ field }) => (
                                                 <FormItem>
                                                 <FormLabel className="font-headline">Primary Product</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <Select onValueChange={field.onChange} value={field.value}>
                                                     <FormControl>
                                                         <SelectTrigger>
                                                         <SelectValue placeholder="Select..." />
@@ -520,7 +574,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                             render={({ field }) => (
                                                 <FormItem>
                                                 <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <Select onValueChange={field.onChange} value={field.value}>
                                                     <FormControl>
                                                         <SelectTrigger>
                                                         <SelectValue placeholder="Select..." />
@@ -732,7 +786,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                     
                     <Button type="submit" size="lg" className="w-full font-headline">
                         <Save className="mr-2" />
-                        Save Coverage Report
+                        {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
                     </Button>
                 </div>
             </form>
@@ -760,5 +814,3 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
     </Card>
   )
 }
-
-    

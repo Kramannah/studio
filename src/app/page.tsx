@@ -15,17 +15,18 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
-import type { Doctor, Plan } from "@/lib/types";
+import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO } from "date-fns";
 
 export default function Home() {
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries } = useOfflineSync();
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry } = useOfflineSync();
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
+  const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'onLine' in navigator) {
@@ -48,7 +49,19 @@ export default function Home() {
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
+    setEntryToEdit(null);
     setActiveTab('coverage');
+  };
+
+  const handleEditEntry = (entry: CoverageEntry) => {
+    setEntryToEdit(entry);
+    setDoctorToLog(null);
+    setActiveTab('coverage');
+  };
+
+  const handleFormSubmit = () => {
+    setDoctorToLog(null);
+    setEntryToEdit(null);
   };
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
@@ -94,21 +107,23 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="coverage" className="mt-6">
             <CoverageForm 
-              onSave={saveEntry} 
+              onSave={saveEntry}
+              onUpdate={updateMasterEntry}
               isOnline={isOnline} 
               doctors={doctors} 
               masterEntries={masterEntries}
               initialDoctor={doctorToLog} 
-              onFormSubmit={() => setDoctorToLog(null)}
+              onFormSubmit={handleFormSubmit}
               todaysPlans={todaysPlans}
               offlineEntries={offlineEntries}
+              entryToEdit={entryToEdit}
             />
           </TabsContent>
           <TabsContent value="offline" className="mt-6">
             <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
           </TabsContent>
           <TabsContent value="submitted" className="mt-6">
-            <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} />
+            <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={handleEditEntry} />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays}/>

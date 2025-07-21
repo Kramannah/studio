@@ -121,5 +121,20 @@ export const useOfflineSync = () => {
     }
   }, [masterEntries, toast]);
 
-  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline };
+  const updateMasterEntry = useCallback((entryToUpdate: Omit<CoverageEntry, 'submittedAt'>) => {
+    const originalEntry = masterEntries.find(e => e.id === entryToUpdate.id);
+    if (!originalEntry) return;
+
+    const updatedEntry: CoverageEntry = {
+      ...originalEntry,
+      ...entryToUpdate,
+    };
+    
+    const updatedEntries = masterEntries.map(e => e.id === updatedEntry.id ? updatedEntry : e);
+    setMasterEntries(updatedEntries);
+    localStorage.setItem(MASTER_KEY, JSON.stringify(updatedEntries));
+    toast({ title: "Entry Updated", description: `Coverage for ${updatedEntry.firstName} ${updatedEntry.lastName} has been updated.` });
+  }, [masterEntries, toast]);
+
+  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry };
 };
