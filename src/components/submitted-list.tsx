@@ -163,11 +163,11 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                                     <DetailItem label="Coverage Type" value={entry.coverageType} />
                                     <DetailItem label="Call Objective" value={entry.callObjective} />
                                     <DetailItem label="Primary Product" value={entry.primaryProduct} />
-                                    <DetailItem label="Primary Samples" value={entry.primaryProductQty} />
-                                    <DetailItem label="Primary Quantity" value={entry.primaryProductBal} />
+                                    <DetailItem label="Primary Sample" value={entry.primarySampleName} />
+                                    <DetailItem label="Primary Quantity" value={entry.primaryProductQty} />
                                     <DetailItem label="Secondary Product" value={entry.secondaryProduct} />
-                                    <DetailItem label="Secondary Samples" value={entry.secondaryProductQty} />
-                                    <DetailItem label="Secondary Quantity" value={entry.secondaryProductBal} />
+                                    <DetailItem label="Secondary Sample" value={entry.secondarySampleName} />
+                                    <DetailItem label="Secondary Quantity" value={entry.secondaryProductQty} />
                                 </div>
                                 <div className="space-y-4">
                                      <h4 className="font-bold font-headline text-primary">Post-call Analysis</h4>
@@ -252,11 +252,11 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 'Proof of Coverage': proofs.length > 0 ? proofs.join(', ') : 'None',
                 'Call Objective': entry.callObjective,
                 'Primary Product': entry.primaryProduct,
-                'Primary Samples': entry.primaryProductQty,
-                'Primary Quantity': entry.primaryProductBal,
+                'Primary Sample': entry.primarySampleName,
+                'Primary Quantity': entry.primaryProductQty,
                 'Secondary Product': entry.secondaryProduct,
-                'Secondary Samples': entry.secondaryProductQty,
-                'Secondary Quantity': entry.secondaryProductBal,
+                'Secondary Sample': entry.secondarySampleName,
+                'Secondary Quantity': entry.secondaryProductQty,
                 'Topics Discussed': entry.topicsDiscussed,
                 'Doctors Issue': entry.doctorsIssue,
                 'Plan of Action': entry.planOfAction,
@@ -468,5 +468,3 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         </Card>
     );
 }
-
-    

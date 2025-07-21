@@ -15,8 +15,10 @@ export interface CoverageEntry {
   callObjective?: string;
   primaryProduct?: string;
   secondaryProduct?: string;
+  primarySampleName?: string;
   primaryProductQty?: number;
   primaryProductBal?: number;
+  secondarySampleName?: string;
   secondaryProductQty?: number;
   secondaryProductBal?: number;
   topicsDiscussed?: string;
@@ -59,4 +61,3 @@ export interface MarketingSample {
     
 
     
-

@@ -56,11 +56,11 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     if (syncedEntries.length > 0) {
       if (updateSampleUsage) {
           for (const entry of syncedEntries) {
-              if (entry.primaryProduct && entry.primaryProductQty) {
-                  updateSampleUsage(entry.primaryProduct, entry.primaryProductQty);
+              if (entry.primarySampleName && entry.primaryProductQty) {
+                  updateSampleUsage(entry.primarySampleName, entry.primaryProductQty);
               }
-              if (entry.secondaryProduct && entry.secondaryProductQty) {
-                  updateSampleUsage(entry.secondaryProduct, entry.secondaryProductQty);
+              if (entry.secondarySampleName && entry.secondaryProductQty) {
+                  updateSampleUsage(entry.secondarySampleName, entry.secondaryProductQty);
               }
           }
       }

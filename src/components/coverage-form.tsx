@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
 import { Save, ChevronDown, Camera, Upload, Trash2, X } from "lucide-react"
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
 import { cn } from "@/lib/utils"
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignaturePad } from "./signature-pad"
-import type { CoverageEntry, Doctor, Plan } from "@/lib/types"
+import type { CoverageEntry, Doctor, Plan, MarketingSample } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
@@ -52,8 +52,10 @@ const formSchema = z.object({
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
+  primarySampleName: z.string().optional(),
   primaryProductQty: z.coerce.number().optional(),
   primaryProductBal: z.coerce.number().optional(),
+  secondarySampleName: z.string().optional(),
   secondaryProductQty: z.coerce.number().optional(),
   secondaryProductBal: z.coerce.number().optional(),
   topicsDiscussed: z.string().optional(),
@@ -92,6 +94,7 @@ type CoverageFormProps = {
   onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
   isOnline: boolean;
   doctors: Doctor[];
+  marketingSamples: MarketingSample[];
   masterEntries: CoverageEntry[];
   offlineEntries: Plan[];
   todaysPlans: Plan[];
@@ -129,7 +132,7 @@ const productList = [
 ];
 
 
-export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -150,8 +153,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
+      primarySampleName: "",
       primaryProductQty: 0,
       primaryProductBal: 0,
+      secondarySampleName: "",
       secondaryProductQty: 0,
       secondaryProductBal: 0,
       topicsDiscussed: "",
@@ -165,6 +170,26 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
   const callType = form.watch("callType");
   const plannedDoctorId = form.watch("plannedDoctorId");
   const photos = form.watch("photos");
+  const primaryProduct = form.watch("primaryProduct");
+  const secondaryProduct = form.watch("secondaryProduct");
+
+  const primarySampleOptions = useMemo(() => {
+    if (!primaryProduct) return [];
+    return marketingSamples.filter(s => s.productGroup === primaryProduct);
+  }, [primaryProduct, marketingSamples]);
+
+  const secondarySampleOptions = useMemo(() => {
+    if (!secondaryProduct) return [];
+    return marketingSamples.filter(s => s.productGroup === secondaryProduct);
+  }, [secondaryProduct, marketingSamples]);
+
+  useEffect(() => {
+    form.setValue("primarySampleName", undefined);
+  }, [primaryProduct, form]);
+
+  useEffect(() => {
+    form.setValue("secondarySampleName", undefined);
+  }, [secondaryProduct, form]);
 
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -239,6 +264,34 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
     }
   }, [initialDoctor, entryToEdit, form]);
   
+  const resetForm = useCallback(() => {
+    form.reset({
+      callType: "unplanned",
+      firstName: "",
+      lastName: "",
+      specialty: "",
+      clinic: "",
+      coverageType: "inbase",
+      coverageDate: new Date(),
+      photos: [],
+      signature: null,
+      callObjective: "",
+      primaryProduct: "",
+      secondaryProduct: "",
+      primarySampleName: "",
+      primaryProductQty: 0,
+      primaryProductBal: 0,
+      secondarySampleName: "",
+      secondaryProductQty: 0,
+      secondaryProductBal: 0,
+      topicsDiscussed: "",
+      doctorsIssue: "",
+      planOfAction: "",
+      whatWentWell: "",
+      areasForImprovement: "",
+    });
+  }, [form]);
+
   useEffect(() => {
     if (entryToEdit) {
       form.reset({
@@ -246,31 +299,9 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
         coverageDate: parseISO(entryToEdit.coverageDate),
       });
     } else if (!initialDoctor) {
-      form.reset({
-        callType: "unplanned",
-        firstName: "",
-        lastName: "",
-        specialty: "",
-        clinic: "",
-        coverageType: "inbase",
-        coverageDate: new Date(),
-        photos: [],
-        signature: null,
-        callObjective: "",
-        primaryProduct: "",
-        secondaryProduct: "",
-        primaryProductQty: 0,
-        primaryProductBal: 0,
-        secondaryProductQty: 0,
-        secondaryProductBal: 0,
-        topicsDiscussed: "",
-        doctorsIssue: "",
-        planOfAction: "",
-        whatWentWell: "",
-        areasForImprovement: "",
-      });
+      resetForm();
     }
-  }, [entryToEdit, initialDoctor, form]);
+  }, [entryToEdit, initialDoctor, form, resetForm]);
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
@@ -300,7 +331,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
         id: entryToEdit.id,
         coverageDate: values.coverageDate.toISOString(),
       });
-      form.reset();
+      resetForm();
       onFormSubmit?.();
       return;
     }
@@ -352,7 +383,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
       ...restOfValues,
       coverageDate: values.coverageDate.toISOString(),
     });
-    form.reset();
+    resetForm();
     onFormSubmit?.();
   }
 
@@ -594,20 +625,29 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormField
                                             control={form.control}
-                                            name="primaryProductQty"
+                                            name="primarySampleName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                <FormLabel className="font-headline">Primary Samples</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" placeholder="0" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
+                                                    <FormLabel className="font-headline">Primary Samples</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value} disabled={!primaryProduct}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select sample..." />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {primarySampleOptions.map(sample => (
+                                                                <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
                                         <FormField
                                             control={form.control}
-                                            name="primaryProductBal"
+                                            name="primaryProductQty"
                                             render={({ field }) => (
                                                 <FormItem>
                                                 <FormLabel className="font-headline">Quantity</FormLabel>
@@ -622,20 +662,29 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
                                     <div className="grid grid-cols-2 gap-4">
                                         <FormField
                                             control={form.control}
-                                            name="secondaryProductQty"
+                                            name="secondarySampleName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                <FormLabel className="font-headline">Secondary Samples</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" placeholder="0" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
+                                                    <FormLabel className="font-headline">Secondary Samples</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value} disabled={!secondaryProduct}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select sample..." />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {secondarySampleOptions.map(sample => (
+                                                                <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
                                         <FormField
                                             control={form.control}
-                                            name="secondaryProductBal"
+                                            name="secondaryProductQty"
                                             render={({ field }) => (
                                                 <FormItem>
                                                 <FormLabel className="font-headline">Quantity</FormLabel>

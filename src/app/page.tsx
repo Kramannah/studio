@@ -116,7 +116,8 @@ export default function Home() {
               onSave={saveEntry}
               onUpdate={updateMasterEntry}
               isOnline={isOnline} 
-              doctors={doctors} 
+              doctors={doctors}
+              marketingSamples={marketingSamples}
               masterEntries={masterEntries}
               initialDoctor={doctorToLog} 
               onFormSubmit={handleFormSubmit}
