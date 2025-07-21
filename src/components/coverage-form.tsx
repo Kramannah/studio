@@ -724,7 +724,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
                         </AccordionItem>
                     </Accordion>
                     
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <div className="space-y-6">
                         <FormField
                             control={form.control}
                             name="photos"
@@ -773,10 +773,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
                             control={form.control}
                             name="signature"
                             render={({ field }) => (
-                                <FormItem>
+                                <FormItem className="col-span-full">
                                 <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
                                 <FormControl>
-                                    <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
+                                    <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
                                 </FormControl>
                                 <FormMessage />
                                 </FormItem>
@@ -814,3 +814,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, masterEntrie
     </Card>
   )
 }
+
+    
