@@ -120,21 +120,6 @@ const productList = [
   "Tocovid-Tocovid 50mg",
   "Tocovid-Tocovid D'Repair",
   "Tocovid-Tocovid Vitality",
-  "Antibiotics-Cefuroxime Axetil",
-  "Antibiotics-Cefixime",
-  "Antibiotics-Clarithromycin",
-  "Antibiotics-Co-amoxiclav",
-  "Antibiotics-Azithromycin",
-  "Antibiotics-Levofloxacin",
-  "Cardiovascular-Amlodipine",
-  "Cardiovascular-Losartan K",
-  "Cardiovascular-Atorvastatin",
-  "Cardiovascular-Rosuvastatin",
-  "Gastro-intestinal-Omeprazole",
-  "Gastro-intestinal-Esomeprazole",
-  "Respiratory-Montelukast",
-  "Respiratory-Levocetirizine",
-  "Respiratory-Salbutamol Nebule",
 ];
 
 
@@ -526,7 +511,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="secondaryProductBal"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Secondary Balance</FormLabel>
+                                        <FormLabel className="font-headline">Quantity</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
