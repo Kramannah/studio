@@ -95,6 +95,19 @@ type CoverageFormProps = {
 
 const MAX_UNPLANNED_CALLS = 5;
 
+const productList = [
+  "Bonamine 25mg",
+  "Bonamine Chewable",
+  "Benadryl AH 25mg",
+  "Benadryl AH 50mg",
+  "Dramamine",
+  "Dolfenal",
+  "Neozep Forte",
+  "Tuseran Forte",
+  "Diatabs",
+];
+
+
 export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries }: CoverageFormProps) {
   const { toast } = useToast()
   
@@ -403,9 +416,9 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="productA">Product A</SelectItem>
-                                                <SelectItem value="productB">Product B</SelectItem>
-                                                <SelectItem value="productC">Product C</SelectItem>
+                                                {productList.map(product => (
+                                                  <SelectItem key={product} value={product}>{product}</SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -425,9 +438,9 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="productA">Product A</SelectItem>
-                                                <SelectItem value="productB">Product B</SelectItem>
-                                                <SelectItem value="productC">Product C</SelectItem>
+                                                {productList.map(product => (
+                                                  <SelectItem key={product} value={product}>{product}</SelectItem>
+                                                ))}
                                                 <SelectItem value="none">None</SelectItem>
                                             </SelectContent>
                                         </Select>
