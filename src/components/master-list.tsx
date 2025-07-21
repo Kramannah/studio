@@ -37,6 +37,7 @@ import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { isThisMonth, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Badge } from "./ui/badge";
 
 
 type MasterListProps = {
@@ -215,6 +216,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         <TableHead>Clinic</TableHead>
                         <TableHead className="text-center">Target</TableHead>
                         <TableHead className="text-center">Actual (This Month)</TableHead>
+                        <TableHead>Remarks</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -225,6 +227,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                           const visitCount = visitCountsThisMonth[doctorName] || 0;
                           const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
                           const isCompleted = visitCount >= targetCount;
+                          const isCovered = visitCount > 0;
                           
                           return (
                             <TableRow key={doctor.id} data-completed={isCompleted} className={cn(isCompleted && "bg-primary/10 hover:bg-primary/20")}>
@@ -233,6 +236,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                 <TableCell>{doctor.clinic}</TableCell>
                                 <TableCell className="text-center">{doctor.frequency}</TableCell>
                                 <TableCell className="text-center">{visitCount}</TableCell>
+                                <TableCell>
+                                  {isCovered ? (
+                                    <Badge variant="secondary" className="text-primary">Covered</Badge>
+                                  ) : (
+                                    <Badge variant="outline">Not Yet Covered</Badge>
+                                  )}
+                                </TableCell>
                                 <TableCell className="text-right">
                                   <AlertDialog>
                                     <DropdownMenu>
@@ -271,7 +281,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={6} className="h-24 text-center">
+                            <TableCell colSpan={7} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>
