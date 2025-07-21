@@ -120,6 +120,21 @@ const productList = [
   "Tocovid-Tocovid 50mg",
   "Tocovid-Tocovid D'Repair",
   "Tocovid-Tocovid Vitality",
+  "Antibiotics-Cefuroxime Axetil",
+  "Antibiotics-Cefixime",
+  "Antibiotics-Clarithromycin",
+  "Antibiotics-Co-amoxiclav",
+  "Antibiotics-Azithromycin",
+  "Antibiotics-Levofloxacin",
+  "Cardiovascular-Amlodipine",
+  "Cardiovascular-Losartan K",
+  "Cardiovascular-Atorvastatin",
+  "Cardiovascular-Rosuvastatin",
+  "Gastro-intestinal-Omeprazole",
+  "Gastro-intestinal-Esomeprazole",
+  "Respiratory-Montelukast",
+  "Respiratory-Levocetirizine",
+  "Respiratory-Salbutamol Nebule",
 ];
 
 
@@ -483,7 +498,7 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                     name="primaryProductBal"
                                     render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="font-headline">Primary Balance</FormLabel>
+                                        <FormLabel className="font-headline">Quantity</FormLabel>
                                         <FormControl>
                                             <Input type="number" placeholder="0" {...field} />
                                         </FormControl>
@@ -592,27 +607,19 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <FormField
-                            control={form.control}
-                            name="signature"
-                            render={({ field }) => (
-                                <FormItem>
-                                <div className="flex items-center justify-between">
-                                    <FormLabel className="font-headline">Provider Signature</FormLabel>
-                                    <Button type="button" size="sm" variant="ghost" onClick={() => field.onChange(null)}>
-                                        <Eraser className="mr-2"/>
-                                        Clear
-                                    </Button>
-                                </div>
-                                <FormControl>
-                                    <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
-                                </FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
+                    <FormField
+                        control={form.control}
+                        name="signature"
+                        render={({ field }) => (
+                            <FormItem className="mt-6">
+                            <FormLabel className="font-headline">Provider Signature</FormLabel>
+                            <FormControl>
+                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[200px]" />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                     
                     <Button type="submit" className="w-full mt-4 font-headline">
                         <Save className="mr-2" />
