@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,9 +18,12 @@ import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO } from "date-fns";
+import { useMarketingSamples } from "@/hooks/use-marketing-samples";
+import { MarketingList } from "@/components/marketing-list";
 
 export default function Home() {
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry } = useOfflineSync();
+  const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry } = useOfflineSync(updateSampleUsage);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
@@ -80,7 +84,7 @@ export default function Home() {
       </header>
       <main className="flex-1 p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="planning" className="font-headline">Call Planning</TabsTrigger>
             <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
             <TabsTrigger value="offline" className="relative font-headline">
@@ -90,6 +94,7 @@ export default function Home() {
               }
             </TabsTrigger>
             <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
+            <TabsTrigger value="marketing" className="font-headline">Marketing Samples</TabsTrigger>
             <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
             <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
           </TabsList>
@@ -125,6 +130,13 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="submitted" className="mt-6">
             <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={handleEditEntry} />
+          </TabsContent>
+          <TabsContent value="marketing" className="mt-6">
+            <MarketingList 
+              samples={marketingSamples}
+              usedQuantities={usedQuantities}
+              onAddSamplesBulk={addMarketingSamplesBulk}
+            />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
             <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays}/>

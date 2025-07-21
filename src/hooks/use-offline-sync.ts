@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -8,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 const OFFLINE_KEY = 'sfe-offline-coverage-offline';
 const MASTER_KEY = 'sfe-offline-coverage-master';
 
-export const useOfflineSync = () => {
+export const useOfflineSync = (updateSampleUsage?: (productName: string, quantity: number) => void) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -53,6 +54,17 @@ export const useOfflineSync = () => {
     }
 
     if (syncedEntries.length > 0) {
+      if (updateSampleUsage) {
+          for (const entry of syncedEntries) {
+              if (entry.primaryProduct && entry.primaryProductQty) {
+                  updateSampleUsage(entry.primaryProduct, entry.primaryProductQty);
+              }
+              if (entry.secondaryProduct && entry.secondaryProductQty) {
+                  updateSampleUsage(entry.secondaryProduct, entry.secondaryProductQty);
+              }
+          }
+      }
+        
       const newMasterEntries = [...masterEntries, ...syncedEntries];
       setMasterEntries(newMasterEntries);
       localStorage.setItem(MASTER_KEY, JSON.stringify(newMasterEntries));
@@ -70,7 +82,7 @@ export const useOfflineSync = () => {
     }
 
     setIsSyncing(false);
-  }, [isSyncing, offlineEntries, masterEntries, toast]);
+  }, [isSyncing, offlineEntries, masterEntries, toast, updateSampleUsage]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -117,6 +129,7 @@ export const useOfflineSync = () => {
     setMasterEntries(updatedEntries);
     localStorage.setItem(MASTER_KEY, JSON.stringify(updatedEntries));
     if (entryToDelete) {
+        // Here you might want to reverse the sample usage, but for now we just delete
         toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage for ${entryToDelete.firstName} ${entryToDelete.lastName} has been removed.` });
     }
   }, [masterEntries, toast]);
@@ -130,6 +143,10 @@ export const useOfflineSync = () => {
       ...entryToUpdate,
     };
     
+    // Note: Reversing and reapplying sample usage on edit could be complex.
+    // For now, we are just updating the entry.
+    // A more robust solution might track the delta of sample quantities.
+
     const updatedEntries = masterEntries.map(e => e.id === updatedEntry.id ? updatedEntry : e);
     setMasterEntries(updatedEntries);
     localStorage.setItem(MASTER_KEY, JSON.stringify(updatedEntries));

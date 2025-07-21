@@ -1,4 +1,5 @@
 
+
 export interface CoverageEntry {
   id: string;
   firstName: string;
@@ -49,6 +50,13 @@ export interface NonCallDay {
   remarks: string;
 }
 
+export interface MarketingSample {
+    id: string;
+    productGroup: string;
+    materialName: string;
+    allocationQuantity: number;
+}
     
 
     
+
