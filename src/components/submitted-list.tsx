@@ -83,7 +83,7 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
 
     return (
          <Collapsible asChild>
-            <>
+            <TableBody>
             <TableRow>
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
@@ -181,7 +181,7 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                     </TableCell>
                 </TableRow>
             </CollapsibleContent>
-            </>
+            </TableBody>
         </Collapsible>
     )
 }
@@ -328,19 +328,21 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
-                        <TableBody>
+                        
                             {filteredEntries.length > 0 ? (
                                 filteredEntries.map((entry) => (
                                     <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
                                 ))
                             ) : (
+                                <TableBody>
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">
                                        No submitted entries found for the selected date range.
                                     </TableCell>
                                 </TableRow>
+                                </TableBody>
                             )}
-                        </TableBody>
+                        
                     </Table>
                 </div>
             </CardContent>
