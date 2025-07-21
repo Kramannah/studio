@@ -109,7 +109,6 @@ const productList = [
   "CNS/Pain-Pengesic",
   "Dermatology-Calazin",
   "Dermatology-Hovicor",
-  "Category-Product",
   "Endocrine-Dapavid",
   "Endocrine-Hovideuform 500",
   "Endocrine-Hovideuform XRS5",
@@ -456,7 +455,6 @@ export function CoverageForm({ onSave, isOnline, doctors, masterEntries, initial
                                                 {productList.map(product => (
                                                   <SelectItem key={product} value={product}>{product}</SelectItem>
                                                 ))}
-                                                <SelectItem value="none">None</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
