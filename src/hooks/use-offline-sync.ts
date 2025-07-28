@@ -44,7 +44,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     for (const entry of entriesToSync) {
       try {
         // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
         console.log('Syncing entry:', entry.id);
         syncedEntries.push(entry);
       } catch (error) {
