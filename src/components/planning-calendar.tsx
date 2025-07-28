@@ -136,7 +136,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Visit Planning Calendar</CardTitle>
+                <CardTitle className="font-headline">Call Planning Calendar</CardTitle>
                 <CardDescription>Plan your upcoming doctor visits. Select a date to view or add plans.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
