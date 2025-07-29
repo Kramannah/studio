@@ -830,15 +830,15 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                             )}
                         />
 
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-6">
                             <FormField
                                 control={form.control}
                                 name="signature"
                                 render={({ field }) => (
                                     <FormItem>
-                                    <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
+                                    <FormLabel className="text-lg font-semibold font-headline">MD Signature</FormLabel>
                                     <FormControl>
-                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
+                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
                                     </FormControl>
                                     <FormMessage />
                                     </FormItem>
@@ -852,7 +852,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                         <FormItem>
                                         <FormLabel className="text-lg font-semibold font-headline">DSM Signature</FormLabel>
                                         <FormControl>
-                                            <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
+                                            <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
                                         </FormControl>
                                         <FormMessage />
                                         </FormItem>
@@ -895,3 +895,4 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
     
 
+    
