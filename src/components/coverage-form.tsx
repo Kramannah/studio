@@ -892,7 +892,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    
-
-    
