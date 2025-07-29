@@ -424,7 +424,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                       <FormControl>
                                       <RadioGroupItem value="unplanned" />
                                       </FormControl>
-                                      <FormLabel className="font-normal">
+                                      <FormLabel className="font-normal text-sm">
                                       Unplanned Call
                                       </FormLabel>
                                   </FormItem>
@@ -432,7 +432,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                       <FormControl>
                                       <RadioGroupItem value="planned" />
                                       </FormControl>
-                                      <FormLabel className="font-normal">
+                                      <FormLabel className="font-normal text-sm">
                                       Planned Call
                                       </FormLabel>
                                   </FormItem>
