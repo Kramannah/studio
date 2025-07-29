@@ -155,14 +155,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 border: '2px solid hsl(var(--accent))',
                                 borderRadius: 'var(--radius)',
                             },
-                            nonCall: {
-                                textDecoration: 'line-through',
-                                color: 'hsl(var(--destructive))',
-                                backgroundColor: 'hsla(var(--destructive) / 0.1)',
-                            },
-                            weekend: {
-                                color: 'hsl(var(--muted-foreground))'
-                            }
                         }}
                         components={{
                             DayContent: ({ date, activeModifiers }) => {
@@ -307,3 +299,4 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+

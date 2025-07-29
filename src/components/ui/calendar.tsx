@@ -77,7 +77,7 @@ function Calendar({
           }
           if(weekend) {
             return (
-              <div {...props} className={cn(buttonVariants({ variant: "ghost" }), "h-20 w-full p-0 font-normal text-muted-foreground/80")}>
+              <div {...props} className={cn(buttonVariants({ variant: "ghost" }), "h-20 w-full p-0 font-normal text-destructive")}>
                 {date.getDate()}
               </div>
             )
@@ -92,3 +92,4 @@ function Calendar({
 Calendar.displayName = "Calendar"
 
 export { Calendar }
+
