@@ -70,6 +70,11 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
             const signatureData = entry.signature.split(',')[1];
             zip.file("signature.png", signatureData, { base64: true });
         }
+        
+        if (entry.dsmSignature) {
+            const dsmSignatureData = entry.dsmSignature.split(',')[1];
+            zip.file("dsm_signature.png", dsmSignatureData, { base64: true });
+        }
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `attachments_${entry.firstName}_${entry.lastName}_${entry.id.substring(0, 8)}.zip`);
@@ -106,6 +111,11 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                         {entry.signature && (
                             <div className="p-1 bg-white border rounded-md">
                                 <Image src={entry.signature} alt="signature" width={40} height={20} />
+                            </div>
+                        )}
+                        {entry.dsmSignature && (
+                            <div className="p-1 bg-white border rounded-md">
+                                <Image src={entry.dsmSignature} alt="dsm signature" width={40} height={20} />
                             </div>
                         )}
                     </div>
@@ -239,6 +249,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
             const proofs = [];
             if (entry.photos && entry.photos.length > 0) proofs.push("Photo");
             if (entry.signature) proofs.push("Signature");
+            if (entry.dsmSignature) proofs.push("DSM Signature");
             
             return {
                 'First Name': entry.firstName,
@@ -416,7 +427,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                                     },
                                 }}
                                 components={{
-                                    DayContent: ({ date }) => {
+                                    DayContent: ({ date, activeModifiers }) => {
                                         const dateString = format(date, 'yyyy-MM-dd');
                                         const count = entriesByDate[dateString]?.length;
                                         return (

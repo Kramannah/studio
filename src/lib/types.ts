@@ -6,11 +6,12 @@ export interface CoverageEntry {
   lastName: string;
   specialty: string;
   clinic: string;
-  coverageType: 'inbase' | 'outbase';
+  coverageType: 'inbase' | 'outbase' | 'joint';
   callType: 'planned' | 'unplanned';
   coverageDate: string; // Storing as ISO string
   photos: string[]; // base64 encoded strings
   signature: string | null; // base64 encoded string
+  dsmSignature: string | null; // base64 encoded string for DSM
   submittedAt: string; // Storing as ISO string
   callObjective?: string;
   primaryProduct?: string;

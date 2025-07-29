@@ -45,10 +45,11 @@ const formSchema = z.object({
   lastName: z.string(),
   specialty: z.string(),
   clinic: z.string(),
-  coverageType: z.enum(["inbase", "outbase"]),
+  coverageType: z.enum(["inbase", "outbase", "joint"]),
   coverageDate: z.date(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable(),
+  dsmSignature: z.string().nullable(),
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
@@ -85,6 +86,13 @@ const formSchema = z.object({
         message: "A signature is required as proof of coverage.",
         path: ["signature"], 
       });
+    }
+    if (data.coverageType === 'joint' && !data.dsmSignature) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "A DSM signature is required for joint calls.",
+            path: ["dsmSignature"],
+        });
     }
 });
 
@@ -150,6 +158,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       coverageDate: new Date(),
       photos: [],
       signature: null,
+      dsmSignature: null,
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
@@ -168,6 +177,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   })
 
   const callType = form.watch("callType");
+  const coverageType = form.watch("coverageType");
   const plannedDoctorId = form.watch("plannedDoctorId");
   const photos = form.watch("photos");
   const primaryProduct = form.watch("primaryProduct");
@@ -275,6 +285,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       coverageDate: new Date(),
       photos: [],
       signature: null,
+      dsmSignature: null,
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
@@ -549,6 +560,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                     <SelectContent>
                                         <SelectItem value="inbase">Inbase</SelectItem>
                                         <SelectItem value="outbase">Outbase</SelectItem>
+                                        <SelectItem value="joint">Joint Call</SelectItem>
                                     </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -818,19 +830,36 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                             )}
                         />
 
-                        <FormField
-                            control={form.control}
-                            name="signature"
-                            render={({ field }) => (
-                                <FormItem className="col-span-full">
-                                <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
-                                <FormControl>
-                                    <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
-                                </FormControl>
-                                <FormMessage />
-                                </FormItem>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                            <FormField
+                                control={form.control}
+                                name="signature"
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel className="text-lg font-semibold font-headline">Provider Signature</FormLabel>
+                                    <FormControl>
+                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             {coverageType === 'joint' && (
+                                <FormField
+                                    control={form.control}
+                                    name="dsmSignature"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                        <FormLabel className="text-lg font-semibold font-headline">DSM Signature</FormLabel>
+                                        <FormControl>
+                                            <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px]" />
+                                        </FormControl>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             )}
-                        />
+                        </div>
                     </div>
                     
                     <Button type="submit" size="lg" className="w-full font-headline">
@@ -865,3 +894,4 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 }
 
     
+
