@@ -1,8 +1,9 @@
+
 "use client"
 
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import { DayPicker, DayProps } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -56,6 +57,33 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        Day: ({ date, displayMonth, activeModifiers, ...props }: DayProps) => {
+          const { nonCall, weekend } = activeModifiers;
+          if (nonCall) {
+            return (
+              <div
+                {...props}
+                className={cn(
+                  buttonVariants({ variant: "ghost" }),
+                  "h-20 w-full p-0 font-normal relative"
+                )}
+              >
+                <div className="absolute inset-0 bg-destructive/10"></div>
+                <span className="relative z-10 text-destructive line-through">
+                  {date.getDate()}
+                </span>
+              </div>
+            );
+          }
+          if(weekend) {
+            return (
+              <div {...props} className={cn(buttonVariants({ variant: "ghost" }), "h-20 w-full p-0 font-normal text-muted-foreground/80")}>
+                {date.getDate()}
+              </div>
+            )
+          }
+          return <button {...props} >{date.getDate()}</button>;
+        },
       }}
       {...props}
     />

@@ -148,6 +148,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                         modifiers={{ 
                             planned: plannedDays,
                             nonCall: nonCallCalendarDays,
+                            weekend: { dayOfWeek: [0, 6] }
                         }}
                         modifiersStyles={{
                             planned: { 
@@ -156,17 +157,21 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                             },
                             nonCall: {
                                 textDecoration: 'line-through',
-                                color: 'hsl(var(--destructive-foreground))'
+                                color: 'hsl(var(--destructive))',
+                                backgroundColor: 'hsla(var(--destructive) / 0.1)',
+                            },
+                            weekend: {
+                                color: 'hsl(var(--muted-foreground))'
                             }
                         }}
                         components={{
-                            DayContent: ({ date }) => {
+                            DayContent: ({ date, activeModifiers }) => {
                                 const dateString = format(date, 'yyyy-MM-dd');
                                 const count = plansByDate[dateString]?.length;
                                 return (
                                     <div className="relative flex items-center justify-center w-full h-full">
                                         {date.getDate()}
-                                        {count && (
+                                        {count && !activeModifiers.nonCall && (
                                             <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{count}</Badge>
                                         )}
                                     </div>
