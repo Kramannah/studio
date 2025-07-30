@@ -82,12 +82,17 @@ const formSchema = z.object({
              ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is required", path: ["lastName"] });
         }
     }
-    if (!data.signature) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "A signature is required as proof of coverage.",
-        path: ["signature"], 
-      });
+    if (!data.signature && (!data.photos || data.photos.length === 0)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Either a signature or a photo is required as proof of coverage.",
+            path: ["signature"],
+        });
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Either a signature or a photo is required as proof of coverage.",
+            path: ["photos"],
+        });
     }
     if (data.coverageType === 'joint' && !data.dsmSignature) {
         ctx.addIssue({
