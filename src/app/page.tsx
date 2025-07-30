@@ -13,13 +13,16 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO } from "date-fns";
+import { isToday, parseISO, format } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingList } from "@/components/marketing-list";
+import { useTimeLog } from "@/hooks/use-time-log";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default function Home() {
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
@@ -27,6 +30,7 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
+  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs } = useTimeLog();
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -70,16 +74,49 @@ export default function Home() {
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
+  if (!currentTimeLog) {
+    return (
+       <div className="flex flex-col min-h-screen bg-background text-foreground">
+        <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
+          <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-4 md:p-6">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <Clock className="w-12 h-12 mx-auto text-primary"/>
+              <CardTitle className="mt-4 font-headline">Ready to Start Your Day?</CardTitle>
+              <CardDescription>Click the button below to log your time-in and begin your tasks.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button size="lg" className="w-full font-headline" onClick={handleTimeIn}>
+                <LogIn className="mr-2" />
+                Time In
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
-        <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
+           <div className="text-sm text-muted-foreground font-headline">
+              Timed in at: {format(parseISO(currentTimeLog.timeIn), "hh:mm a")}
+            </div>
+        </div>
+        <div className="flex items-center gap-4">
             <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                 {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                 <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
             </Badge>
+            <Button size="sm" variant="destructive" className="font-headline" onClick={handleTimeOut}>
+              <LogOut className="mr-2"/>
+              Time Out
+            </Button>
         </div>
       </header>
       <main className="flex-1 p-4 md:p-6">
@@ -140,7 +177,7 @@ export default function Home() {
             />
           </TabsContent>
           <TabsContent value="summary" className="mt-6">
-            <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays}/>
+            <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} clearTimeLogs={clearTimeLogs} />
           </TabsContent>
           <TabsContent value="master" className="mt-6">
             <MasterList 

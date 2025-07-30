@@ -1,13 +1,14 @@
 
+
 "use client";
 
-import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
+import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon } from "lucide-react";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes } from "date-fns";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -28,7 +29,7 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
     </Card>
 )
 
-export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[] }) {
+export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const insights = useMemo(() => {
@@ -119,9 +120,17 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [nonCallDays]);
 
+    const sortedTimeLogs = useMemo(() => {
+        return [...timeLogs].sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+    }, [timeLogs]);
+
     const handleDownloadSummary = () => {
         if (!dateRange || !dateRange.from) return;
 
+        // Create a new workbook
+        const workbook = XLSX.utils.book_new();
+
+        // Call Summary Worksheet
         const header = [
             "Call Concentration", null, null,
             "Call Reach", null, null,
@@ -141,31 +150,41 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             `${insights.coverageReach.percentage}%`,
             insights.avgCallsPerDay
         ];
-
         const aoa = [header, subHeader, data];
         const worksheet = XLSX.utils.aoa_to_sheet(aoa);
-
-        // Define merges
         worksheet['!merges'] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, // Merge A1:C1 for "Call Concentration"
-            { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } }  // Merge D1:F1 for "Call Reach"
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, 
+            { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } }
         ];
-
-        // Set column widths
         worksheet['!cols'] = [
             { wch: 15 }, { wch: 15 }, { wch: 15 },
             { wch: 15 }, { wch: 15 }, { wch: 15 },
             { wch: 15 }
         ];
-
-        const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
+
+        // Time Logs Worksheet
+        if(sortedTimeLogs.length > 0) {
+            const timeLogData = sortedTimeLogs.map(log => ({
+                "Date": format(parseISO(log.timeIn), "PPP"),
+                "Time In": format(parseISO(log.timeIn), "p"),
+                "Time Out": log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A',
+                "Duration (minutes)": log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A'
+            }));
+            const timeLogWorksheet = XLSX.utils.json_to_sheet(timeLogData);
+            timeLogWorksheet['!cols'] = [
+                { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+            ];
+            XLSX.utils.book_append_sheet(workbook, timeLogWorksheet, "Time Logs");
+        }
+
+
         const fileName = `call_summary_${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
     };
 
 
-    if (!insights.isDataAvailable && nonCallDays.length === 0) {
+    if (!insights.isDataAvailable && nonCallDays.length === 0 && timeLogs.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -302,45 +321,95 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                    <CardDescription>A log of all submitted non-call days.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="border rounded-md">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Reason</TableHead>
-                                    <TableHead>Remarks</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedNonCallDays.length > 0 ? (
-                                    sortedNonCallDays.map((day) => (
-                                        <TableRow key={day.id}>
-                                            <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
-                                            <TableCell>{day.reason}</TableCell>
-                                            <TableCell>{day.remarks || 'N/A'}</TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="font-headline">Time Log</CardTitle>
+                                <CardDescription>A log of all time-in and time-out events.</CardDescription>
+                            </div>
+                            <Button variant="destructive" size="sm" onClick={clearTimeLogs} disabled={timeLogs.length === 0}>
+                                <Trash2 className="mr-2"/> Clear History
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="border rounded-md">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={3} className="h-24 text-center">
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                <p>No non-call days have been logged.</p>
-                                            </div>
-                                        </TableCell>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Time In</TableHead>
+                                        <TableHead>Time Out</TableHead>
+                                        <TableHead>Duration</TableHead>
                                     </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedTimeLogs.length > 0 ? (
+                                        sortedTimeLogs.map((log) => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="font-medium">{format(parseISO(log.timeIn), "PPP")}</TableCell>
+                                                <TableCell>{format(parseISO(log.timeIn), "p")}</TableCell>
+                                                <TableCell>{log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}</TableCell>
+                                                <TableCell>{log.timeOut ? `${differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn))} mins` : 'N/A'}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-24 text-center">
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    <Clock className="w-8 h-8 text-muted-foreground" />
+                                                    <p>No time logs have been recorded.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline">Non-Call Day</CardTitle>
+                        <CardDescription>A log of all submitted non-call days.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="border rounded-md">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Reason</TableHead>
+                                        <TableHead>Remarks</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedNonCallDays.length > 0 ? (
+                                        sortedNonCallDays.map((day) => (
+                                            <TableRow key={day.id}>
+                                                <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
+                                                <TableCell>{day.reason}</TableCell>
+                                                <TableCell>{day.remarks || 'N/A'}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={3} className="h-24 text-center">
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+                                                    <p>No non-call days have been logged.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     )
 }
