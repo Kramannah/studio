@@ -1,5 +1,6 @@
 
 
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -15,6 +16,7 @@ import * as XLSX from 'xlsx';
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import Image from "next/image";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -169,11 +171,12 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                 "Date": format(parseISO(log.timeIn), "PPP"),
                 "Time In": format(parseISO(log.timeIn), "p"),
                 "Time Out": log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A',
-                "Duration (minutes)": log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A'
+                "Duration (minutes)": log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A',
+                "Location Type": log.locationType
             }));
             const timeLogWorksheet = XLSX.utils.json_to_sheet(timeLogData);
             timeLogWorksheet['!cols'] = [
-                { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }
+                { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
             ];
             XLSX.utils.book_append_sheet(workbook, timeLogWorksheet, "Time Logs");
         }
@@ -342,7 +345,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                         <TableHead>Date</TableHead>
                                         <TableHead>Time In</TableHead>
                                         <TableHead>Time Out</TableHead>
-                                        <TableHead>Duration</TableHead>
+                                        <TableHead>Location</TableHead>
+                                        <TableHead>Proof</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -352,12 +356,34 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                                 <TableCell className="font-medium">{format(parseISO(log.timeIn), "PPP")}</TableCell>
                                                 <TableCell>{format(parseISO(log.timeIn), "p")}</TableCell>
                                                 <TableCell>{log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}</TableCell>
-                                                <TableCell>{log.timeOut ? `${differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn))} mins` : 'N/A'}</TableCell>
+                                                <TableCell className="capitalize">{log.locationType}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-2">
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Image src={log.timeInPhoto} alt="Time-in proof" width={40} height={40} className="rounded-md cursor-pointer" />
+                                                            </PopoverTrigger>
+                                                            <PopoverContent>
+                                                                <Image src={log.timeInPhoto} alt="Time-in proof" width={256} height={192} className="rounded-md" />
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                         {log.timeOutPhoto && (
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <Image src={log.timeOutPhoto} alt="Time-out proof" width={40} height={40} className="rounded-md cursor-pointer" />
+                                                                </PopoverTrigger>
+                                                                <PopoverContent>
+                                                                    <Image src={log.timeOutPhoto} alt="Time-out proof" width={256} height={192} className="rounded-md" />
+                                                                </PopoverContent>
+                                                            </Popover>
+                                                         )}
+                                                    </div>
+                                                </TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-24 text-center">
+                                            <TableCell colSpan={5} className="h-24 text-center">
                                                 <div className="flex flex-col items-center justify-center gap-2">
                                                     <Clock className="w-8 h-8 text-muted-foreground" />
                                                     <p>No time logs have been recorded.</p>
@@ -413,3 +439,4 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         </div>
     )
 }
+

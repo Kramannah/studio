@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -48,23 +49,27 @@ export const useTimeLog = () => {
     }
   };
 
-  const handleTimeIn = useCallback(() => {
+  const handleTimeIn = useCallback((photo: string, locationType: 'inbase' | 'outbase') => {
     const newLog: TimeLog = {
       id: crypto.randomUUID(),
       timeIn: new Date().toISOString(),
       timeOut: null,
+      timeInPhoto: photo,
+      timeOutPhoto: null,
+      locationType,
     };
     setCurrentTimeLog(newLog);
     updateCurrentLogInStorage(newLog);
     toast({ title: "Time In Successful", description: `You timed in at ${format(new Date(newLog.timeIn), 'PPP p')}.` });
   }, [toast]);
 
-  const handleTimeOut = useCallback(() => {
+  const handleTimeOut = useCallback((photo: string) => {
     if (!currentTimeLog) return;
     
     const completedLog: TimeLog = {
       ...currentTimeLog,
       timeOut: new Date().toISOString(),
+      timeOutPhoto: photo,
     };
 
     const updatedLogs = [...timeLogs, completedLog];
@@ -86,3 +91,4 @@ export const useTimeLog = () => {
 
   return { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs };
 };
+

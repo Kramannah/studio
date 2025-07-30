@@ -66,8 +66,12 @@ export interface TimeLog {
     id: string;
     timeIn: string; // ISO string
     timeOut: string | null; // ISO string
+    timeInPhoto: string; // base64 data URI
+    timeOutPhoto: string | null; // base64 data URI
+    locationType: 'inbase' | 'outbase';
 }
     
 
     
+
 
