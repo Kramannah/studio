@@ -36,6 +36,7 @@ export interface Doctor {
   specialty: string;
   clinic: string;
   frequency: '1x' | '2x' | '3x' | '4x';
+  hacme: 'YES' | 'NO';
 }
 
 export interface Plan {

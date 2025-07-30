@@ -32,6 +32,7 @@ const doctorFormSchema = z.object({
   specialty: z.string().min(2, "Specialty is required"),
   clinic: z.string().min(2, "Clinic is required"),
   frequency: z.enum(['1x', '2x', '3x', '4x']),
+  hacme: z.enum(['YES', 'NO']),
 })
 
 type DoctorFormDialogProps = {
@@ -50,6 +51,7 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
       specialty: "",
       clinic: "",
       frequency: "1x",
+      hacme: "NO",
     },
   })
 
@@ -63,6 +65,7 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
         specialty: "",
         clinic: "",
         frequency: "1x",
+        hacme: "NO",
       });
     }
   }, [doctor, form, isOpen]);
@@ -140,29 +143,52 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
                 </FormItem>
               )}
             />
-             <FormField
-                control={form.control}
-                name="frequency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="font-headline">Frequency</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select target frequency" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="1x">1x</SelectItem>
-                        <SelectItem value="2x">2x</SelectItem>
-                        <SelectItem value="3x">3x</SelectItem>
-                        <SelectItem value="4x">4x</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="grid grid-cols-2 gap-4">
+                <FormField
+                    control={form.control}
+                    name="frequency"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="font-headline">Frequency</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                            <SelectValue placeholder="Select target frequency" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="1x">1x</SelectItem>
+                            <SelectItem value="2x">2x</SelectItem>
+                            <SelectItem value="3x">3x</SelectItem>
+                            <SelectItem value="4x">4x</SelectItem>
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="hacme"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="font-headline">HACME</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                            <SelectValue placeholder="Select..." />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="YES">YES</SelectItem>
+                            <SelectItem value="NO">NO</SelectItem>
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+            </div>
             <DialogFooter>
               <Button type="submit">Save changes</Button>
             </DialogFooter>

@@ -110,14 +110,19 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json<Omit<Doctor, 'id'>>(worksheet);
 
-        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency'];
-        const isValid = json.every(row => requiredFields.every(field => row[field] && typeof row[field] === 'string'));
+        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency', 'hacme'];
+        const isValid = json.every(row => requiredFields.every(field => {
+            if(field === 'hacme') {
+                return row[field] === 'YES' || row[field] === 'NO';
+            }
+            return row[field] && typeof row[field] === 'string'
+        }));
 
         if (!isValid) {
           toast({
             variant: "destructive",
             title: "Upload Failed",
-            description: "The Excel file is missing required columns (firstName, lastName, specialty, clinic, frequency) or contains invalid data.",
+            description: "The Excel file is missing required columns (firstName, lastName, specialty, clinic, frequency, hacme) or contains invalid data.",
           });
           return;
         }
@@ -145,10 +150,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency'];
+    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency', 'hacme'];
     const sampleData = [
-      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', frequency: '2x' },
-      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', frequency: '3x' }
+      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', frequency: '2x', hacme: 'NO' },
+      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', frequency: '3x', hacme: 'YES' }
     ];
     
     const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -161,7 +166,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
       { wch: 20 }, // lastName
       { wch: 25 }, // specialty
       { wch: 40 }, // clinic
-      { wch: 10 }  // frequency
+      { wch: 10 },  // frequency
+      { wch: 10 }  // hacme
     ];
 
     XLSX.writeFile(workbook, 'doctor_masterlist_template.xlsx');
@@ -214,6 +220,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         <TableHead>Name</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
+                        <TableHead className="text-center">HACME</TableHead>
                         <TableHead className="text-center">Target</TableHead>
                         <TableHead className="text-center">Actual (This Month)</TableHead>
                         <TableHead>Remarks</TableHead>
@@ -234,6 +241,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell className="text-center">{doctor.hacme}</TableCell>
                                 <TableCell className="text-center">{doctor.frequency}</TableCell>
                                 <TableCell className="text-center">{visitCount}</TableCell>
                                 <TableCell>
@@ -281,7 +289,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center">
+                            <TableCell colSpan={8} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>
