@@ -144,6 +144,18 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchEnd={stopDrawing}
         className="w-full h-full bg-white rounded-md cursor-crosshair touch-none border"
       />
+      {value && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={clearCanvas}
+          className="absolute top-2 right-2"
+        >
+          <Eraser className="h-4 w-4" />
+          <span className="sr-only">Clear signature</span>
+        </Button>
+      )}
     </div>
   );
 }
