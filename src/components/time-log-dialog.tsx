@@ -44,6 +44,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   useEffect(() => {
     const getCameraPermission = async () => {
       if (isOpen) {
+        setPhoto(null); // Reset photo on open
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: true })
           setHasCameraPermission(true)
@@ -61,7 +62,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
         }
       } else {
         stopCamera()
-        setPhoto(null)
       }
     }
 
@@ -85,6 +85,20 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
         setPhoto(dataUrl)
         stopCamera()
       }
+    }
+  }
+
+  const startCamera = async () => {
+    setPhoto(null);
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+        }
+    } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
     }
   }
 
@@ -132,7 +146,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
           </div>
           <div className="flex justify-center">
             {photo ? (
-                <Button variant="outline" onClick={() => setPhoto(null)}>
+                <Button variant="outline" onClick={startCamera}>
                   Retake Photo
                 </Button>
             ) : (
