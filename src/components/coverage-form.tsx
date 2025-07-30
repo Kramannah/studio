@@ -35,6 +35,7 @@ import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
+import { Autocomplete } from "./autocomplete"
 
 
 const formSchema = z.object({
@@ -146,6 +147,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [autocompleteValue, setAutocompleteValue] = useState('');
+  const [isUnplannedManual, setIsUnplannedManual] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -305,6 +308,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       whatWentWell: "",
       areasForImprovement: "",
     });
+    setAutocompleteValue('');
+    setIsUnplannedManual(false);
   }, [form]);
 
   useEffect(() => {
@@ -331,14 +336,42 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
         form.setValue("hacme", "NO"); // Reset HACME for unplanned
+        if (!isUnplannedManual) {
+            form.setValue("firstName", "");
+            form.setValue("lastName", "");
+            form.setValue("specialty", "");
+            form.setValue("clinic", "");
+        }
     }
-  }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
+  }, [callType, plannedDoctorId, doctors, form, entryToEdit, isUnplannedManual]);
 
   useEffect(() => {
     return () => {
       stopCamera();
     };
   }, []);
+
+  const handleAutocompleteSelect = (doctor: Doctor) => {
+    form.setValue("firstName", doctor.firstName);
+    form.setValue("lastName", doctor.lastName);
+    form.setValue("specialty", doctor.specialty);
+    form.setValue("clinic", doctor.clinic);
+    form.setValue("hacme", doctor.hacme);
+    setAutocompleteValue(`${doctor.firstName} ${doctor.lastName}`);
+    setIsUnplannedManual(true);
+  };
+  
+  const handleAutocompleteChange = (value: string) => {
+    setAutocompleteValue(value);
+    if (isUnplannedManual) {
+      setIsUnplannedManual(false);
+      form.setValue("firstName", "");
+      form.setValue("lastName", "");
+      form.setValue("specialty", "");
+      form.setValue("clinic", "");
+      form.setValue("hacme", "NO");
+    }
+  };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
 
@@ -438,6 +471,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                           plannedDoctorId: undefined,
                                           firstName: '', lastName: '', specialty: '', clinic: '', hacme: 'NO'
                                       });
+                                      setAutocompleteValue('');
+                                      setIsUnplannedManual(false);
                                   }}
                                   value={field.value}
                                   className="flex gap-4 pt-2"
@@ -503,6 +538,20 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                     
                     <div>
                         <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
+                         {callType === 'unplanned' && !isEditMode && (
+                          <div className="space-y-4 mb-4">
+                            <FormItem>
+                                <FormLabel className="font-headline">Search Doctor</FormLabel>
+                                <Autocomplete
+                                    doctors={doctors}
+                                    value={autocompleteValue}
+                                    onChange={handleAutocompleteChange}
+                                    onSelect={handleAutocompleteSelect}
+                                    placeholder="Type to search for a doctor..."
+                                />
+                            </FormItem>
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormField
                                 control={form.control}
@@ -511,7 +560,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">First Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="John" {...field} disabled={callType === 'planned' || isEditMode}/>
+                                        <Input placeholder="John" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue) }/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -524,7 +573,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Last Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Doe" {...field} disabled={callType === 'planned' || isEditMode}/>
+                                        <Input placeholder="Doe" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue)} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -537,7 +586,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Specialty</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Cardiology" {...field} disabled={callType === 'planned' || isEditMode}/>
+                                        <Input placeholder="Cardiology" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue)}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -550,7 +599,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Clinic</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Community General Hospital" {...field} disabled={callType === 'planned' || isEditMode}/>
+                                        <Input placeholder="Community General Hospital" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue)}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -584,7 +633,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 render={({ field }) => (
                                 <FormItem>
                                     <FormLabel className="font-headline">HACME</FormLabel>
-                                     <Select onValueChange={field.onChange} value={field.value} disabled>
+                                     <Select onValueChange={field.onChange} value={field.value} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue)}>
                                         <FormControl>
                                             <SelectTrigger>
                                             <SelectValue placeholder="Select..." />

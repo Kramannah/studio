@@ -29,32 +29,33 @@ type AutocompleteProps = {
     onChange: (value: string) => void;
     onSelect: (doctor: Doctor) => void;
     placeholder?: string;
-    triggerOn?: 'firstName' | 'lastName';
     disabled?: boolean;
 }
 
-export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, triggerOn = 'firstName', disabled = false }: AutocompleteProps) {
+export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, disabled = false }: AutocompleteProps) {
   const [open, setOpen] = React.useState(false)
   
   const filteredDoctors = React.useMemo(() => {
     if (!value) return [];
+    const lowercasedValue = value.toLowerCase();
     return doctors.filter(doctor =>
-      doctor.firstName.toLowerCase().includes(value.toLowerCase()) ||
-      doctor.lastName.toLowerCase().includes(value.toLowerCase())
+      doctor.firstName.toLowerCase().includes(lowercasedValue) ||
+      doctor.lastName.toLowerCase().includes(lowercasedValue) ||
+      `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`.includes(lowercasedValue)
     );
   }, [doctors, value]);
 
   const handleSelect = (doctor: Doctor) => {
-    const triggerField = triggerOn === 'lastName' ? 'lastName' : 'firstName';
-    onChange(doctor[triggerField]);
     onSelect(doctor);
     setOpen(false);
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
-    if (!open) {
-      setOpen(true);
+    if (e.target.value) {
+      if (!open) setOpen(true);
+    } else {
+      if (open) setOpen(false);
     }
   }
 
@@ -69,14 +70,18 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
                 className="w-full"
                 autoComplete="off"
                 disabled={disabled}
+                onClick={() => {
+                  if (value && filteredDoctors.length > 0) setOpen(true)
+                }}
             />
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command>
           <CommandList>
-            {filteredDoctors.length === 0 && value.length > 0 && <CommandEmpty>No doctor found.</CommandEmpty>}
-            {filteredDoctors.length > 0 && (
+            {filteredDoctors.length === 0 && value.length > 0 ? (
+                <CommandEmpty>No doctor found. You can add them manually.</CommandEmpty>
+            ) : (
                 <CommandGroup>
                 {filteredDoctors.map((doctor) => (
                     <CommandItem
@@ -84,6 +89,12 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
                     value={`${doctor.firstName} ${doctor.lastName}`}
                     onSelect={() => handleSelect(doctor)}
                     >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === `${doctor.firstName} ${doctor.lastName}` ? "opacity-100" : "opacity-0"
+                      )}
+                    />
                     {doctor.firstName} {doctor.lastName}
                     </CommandItem>
                 ))}
