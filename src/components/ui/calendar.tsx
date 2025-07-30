@@ -68,8 +68,8 @@ function Calendar({
                   "h-20 w-full p-0 font-normal relative"
                 )}
               >
-                <div className="absolute inset-0 bg-destructive/10"></div>
-                <span className="relative z-10 text-destructive line-through">
+                <div className="absolute inset-0 bg-yellow-400/20"></div>
+                <span className="relative z-10 text-red-500 line-through">
                   {date.getDate()}
                 </span>
               </div>
@@ -92,4 +92,5 @@ function Calendar({
 Calendar.displayName = "Calendar"
 
 export { Calendar }
+
 
