@@ -22,88 +22,81 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
       const masterData = localStorage.getItem(MASTER_KEY);
       if (offlineData) setOfflineEntries(JSON.parse(offlineData));
       if (masterData) setMasterEntries(JSON.parse(masterData));
-      setIsOnline(navigator.onLine);
+      
+      const onlineStatus = navigator.onLine;
+      setIsOnline(onlineStatus);
+      if (onlineStatus && offlineData && JSON.parse(offlineData).length > 0) {
+        syncAllOfflineEntries();
+      }
     }
   }, []);
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!navigator.onLine || isSyncing || offlineEntries.length === 0) {
-      if(offlineEntries.length > 0 && navigator.onLine){
-        toast({ title: 'Sync in progress.', description: 'Please wait.' });
-      }
+    if (!navigator.onLine) {
+        toast({ variant: 'destructive', title: 'You are offline', description: 'Please connect to the internet to sync.' });
+        return;
+    }
+
+    const entriesToSync = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
+    if (entriesToSync.length === 0) {
+        return;
+    }
+
+    if (isSyncing) {
+      toast({ title: 'Sync in progress.', description: 'Please wait.' });
       return;
     }
 
     setIsSyncing(true);
-    toast({ title: 'Syncing started...', description: `${offlineEntries.length} entries to sync.` });
+    toast({ title: 'Syncing started...', description: `${entriesToSync.length} entries to sync.` });
 
-    const entriesToSync = [...offlineEntries];
-    const syncedEntries: CoverageEntry[] = [];
-    const failedEntries: CoverageEntry[] = [];
+    // Simulate API calls for each entry
+    await new Promise(resolve => setTimeout(resolve, 100 * entriesToSync.length));
 
-    for (const entry of entriesToSync) {
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 100));
-        console.log('Syncing entry:', entry.id);
-        syncedEntries.push(entry);
-      } catch (error) {
-        console.error('Failed to sync entry:', entry.id, error);
-        failedEntries.push(entry);
-      }
-    }
+    // Move entries from offline to master
+    const currentMasterEntries = JSON.parse(localStorage.getItem(MASTER_KEY) || '[]');
+    const newMasterEntries = [...currentMasterEntries, ...entriesToSync];
+    
+    setMasterEntries(newMasterEntries);
+    localStorage.setItem(MASTER_KEY, JSON.stringify(newMasterEntries));
 
-    if (syncedEntries.length > 0) {
-      if (updateSampleUsage) {
-          for (const entry of syncedEntries) {
-              if (entry.primarySampleName && entry.primaryProductQty) {
-                  updateSampleUsage(entry.primarySampleName, entry.primaryProductQty);
-              }
-              if (entry.secondarySampleName && entry.secondaryProductQty) {
-                  updateSampleUsage(entry.secondarySampleName, entry.secondaryProductQty);
-              }
-          }
-      }
-        
-      const newMasterEntries = [...masterEntries, ...syncedEntries];
-      setMasterEntries(newMasterEntries);
-      localStorage.setItem(MASTER_KEY, JSON.stringify(newMasterEntries));
-
-      const newOfflineEntries = offlineEntries.filter(
-        entry => !syncedEntries.some(synced => synced.id === entry.id)
-      );
-      setOfflineEntries(newOfflineEntries);
-      localStorage.setItem(OFFLINE_KEY, JSON.stringify(newOfflineEntries));
-      toast({ title: 'Sync successful!', description: `${syncedEntries.length} entries have been synced.` });
+    if (updateSampleUsage) {
+        for (const entry of entriesToSync) {
+            if (entry.primarySampleName && entry.primaryProductQty) {
+                updateSampleUsage(entry.primarySampleName, entry.primaryProductQty);
+            }
+            if (entry.secondarySampleName && entry.secondaryProductQty) {
+                updateSampleUsage(entry.secondarySampleName, entry.secondaryProductQty);
+            }
+        }
     }
     
-    if (failedEntries.length > 0) {
-      toast({ variant: 'destructive', title: 'Sync issues', description: `${failedEntries.length} entries failed to sync.` });
-    }
+    setOfflineEntries([]);
+    localStorage.setItem(OFFLINE_KEY, JSON.stringify([]));
 
+    toast({ title: 'Sync successful!', description: `${entriesToSync.length} entries have been synced.` });
     setIsSyncing(false);
-  }, [isSyncing, offlineEntries, masterEntries, toast, updateSampleUsage]);
+    
+  }, [isSyncing, toast, updateSampleUsage]);
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      syncAllOfflineEntries();
+      const offlineData = localStorage.getItem(OFFLINE_KEY);
+      if (offlineData && JSON.parse(offlineData).length > 0) {
+        syncAllOfflineEntries();
+      }
     };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial sync check
-    if(navigator.onLine && offlineEntries.length > 0){
-        syncAllOfflineEntries();
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncAllOfflineEntries, offlineEntries.length]);
+  }, [syncAllOfflineEntries]);
 
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt'>) => {
@@ -113,13 +106,34 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
       submittedAt: new Date().toISOString(),
     };
     
-    const newOfflineEntries = [newEntry, ...offlineEntries];
-    setOfflineEntries(newOfflineEntries);
-    localStorage.setItem(OFFLINE_KEY, JSON.stringify(newOfflineEntries));
-    toast({ title: "Entry saved locally", description: "It will be synced when you're online." });
+    if (isOnline) {
+        // If online, sync immediately
+        setIsSyncing(true);
+        toast({ title: "Submitting...", description: "Saving your entry directly." });
+        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network latency
 
-    if(isOnline) {
-      syncAllOfflineEntries();
+        if (updateSampleUsage) {
+            if (newEntry.primarySampleName && newEntry.primaryProductQty) {
+                updateSampleUsage(newEntry.primarySampleName, newEntry.primaryProductQty);
+            }
+            if (newEntry.secondarySampleName && newEntry.secondaryProductQty) {
+                updateSampleUsage(newEntry.secondarySampleName, newEntry.secondaryProductQty);
+            }
+        }
+
+        const newMasterEntries = [...masterEntries, newEntry];
+        setMasterEntries(newMasterEntries);
+        localStorage.setItem(MASTER_KEY, JSON.stringify(newMasterEntries));
+
+        toast({ title: "Entry Submitted", description: "Your coverage has been saved." });
+        setIsSyncing(false);
+
+    } else {
+        // If offline, save to queue
+        const newOfflineEntries = [newEntry, ...offlineEntries];
+        setOfflineEntries(newOfflineEntries);
+        localStorage.setItem(OFFLINE_KEY, JSON.stringify(newOfflineEntries));
+        toast({ title: "Entry saved locally", description: "It will be synced when you're online." });
     }
   };
 
