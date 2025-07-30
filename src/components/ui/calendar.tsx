@@ -57,8 +57,8 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-        Day: ({ date, displayMonth, activeModifiers, ...props }: DayProps) => {
-          const { nonCall, weekend } = activeModifiers || {};
+        Day: ({ date, displayMonth, activeModifiers = {}, ...props }: DayProps) => {
+          const { nonCall, weekend } = activeModifiers;
           if (nonCall) {
             return (
               <div
@@ -92,5 +92,6 @@ function Calendar({
 Calendar.displayName = "Calendar"
 
 export { Calendar }
+
 
 
