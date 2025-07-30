@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -32,7 +33,7 @@ const doctorFormSchema = z.object({
   specialty: z.string().min(2, "Specialty is required"),
   clinic: z.string().min(2, "Clinic is required"),
   frequency: z.enum(['1x', '2x', '3x', '4x']),
-  hacme: z.enum(['YES', 'NO']),
+  hacme: z.enum(['YES', 'NO']).optional().default('NO'),
 })
 
 type DoctorFormDialogProps = {
