@@ -74,6 +74,17 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         if (!selectedDate) return [];
         return plans.filter(plan => isSameDay(parseISO(plan.plannedDate), selectedDate));
     }, [plans, selectedDate]);
+
+    const entriesByDate = useMemo(() => {
+        return entries.reduce((acc, entry) => {
+            const date = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
+            if(!acc[date]){
+                acc[date] = [];
+            }
+            acc[date].push(entry);
+            return acc;
+        }, {} as Record<string, CoverageEntry[]>);
+    }, [entries]);
     
     const selectedDayNonCallEntry = useMemo(() => {
         if (!selectedDate) return undefined;
@@ -252,31 +263,48 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Provider</TableHead>
+                                        <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {selectedDayPlans.length > 0 ? (
-                                        selectedDayPlans.map((plan) => (
+                                        selectedDayPlans.map((plan) => {
+                                            const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
+                                            const isCovered = dayEntries.some(entry => 
+                                                entry.firstName.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
+                                                entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
+                                            );
+                                            return (
                                             <TableRow key={plan.id}>
                                                 <TableCell>
                                                     <Button 
                                                         variant="link" 
                                                         className="p-0 h-auto font-medium"
                                                         onClick={() => handleLogCallClick(plan)}
-                                                        disabled={!selectedDate || !isToday(selectedDate)}
-                                                        title={!selectedDate || !isToday(selectedDate) ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`}
+                                                        disabled={!selectedDate || !isToday(selectedDate) || isCovered}
+                                                        title={
+                                                            isCovered ? "Already covered today" :
+                                                            !selectedDate || !isToday(selectedDate) ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
+                                                        }
                                                     >
                                                         {plan.doctorFirstName} {plan.doctorLastName}
                                                     </Button>
                                                 </TableCell>
+                                                 <TableCell>
+                                                    {isCovered ? (
+                                                        <Badge variant="secondary" className="text-primary">Covered</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline">Not Yet Covered</Badge>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)}>
+                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isCovered}>
                                                         <Trash2 className="w-4 h-4 text-destructive"/>
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
-                                        ))
+                                        )})
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={3} className="h-24 text-center">
@@ -299,4 +327,3 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
-
