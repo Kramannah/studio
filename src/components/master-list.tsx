@@ -108,15 +108,30 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json<Omit<Doctor, 'id'>>(worksheet);
+        
+        const json = XLSX.utils.sheet_to_json<any>(worksheet);
 
         const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency', 'hacme'];
-        const isValid = json.every(row => requiredFields.every(field => {
+        
+        const mappedData = json.map(row => ({
+            firstName: row.firstName,
+            lastName: row.lastName,
+            specialty: row.specialty,
+            clinic: row.clinic,
+            frequency: row.frequency,
+            hacme: row.hacme,
+        }));
+
+        const isValid = mappedData.every(row => requiredFields.every(field => {
             if(field === 'hacme') {
                 return row[field] === 'YES' || row[field] === 'NO';
             }
-            return row[field] && typeof row[field] === 'string'
+             if(field === 'frequency') {
+                return ['1x', '2x', '3x', '4x'].includes(row[field]);
+            }
+            return row[field] !== undefined && row[field] !== null;
         }));
+
 
         if (!isValid) {
           toast({
@@ -127,10 +142,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
           return;
         }
 
-        onAddDoctorsBulk(json);
+        onAddDoctorsBulk(mappedData);
         toast({
           title: "Upload Successful",
-          description: `${json.length} doctors have been added to the masterlist.`,
+          description: `${mappedData.length} doctors have been added to the masterlist.`,
         });
       } catch (error) {
         console.error("Failed to parse Excel file", error);
@@ -140,7 +155,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
           description: "There was an error processing the Excel file. Please ensure it is a valid .xlsx or .xls file.",
         });
       } finally {
-        // Reset file input
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }

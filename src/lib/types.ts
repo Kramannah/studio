@@ -6,6 +6,7 @@ export interface CoverageEntry {
   lastName: string;
   specialty: string;
   clinic: string;
+  hacme: 'YES' | 'NO';
   coverageType: 'inbase' | 'outbase' | 'joint';
   callType: 'planned' | 'unplanned';
   coverageDate: string; // Storing as ISO string

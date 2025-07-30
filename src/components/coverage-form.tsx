@@ -45,6 +45,7 @@ const formSchema = z.object({
   lastName: z.string(),
   specialty: z.string(),
   clinic: z.string(),
+  hacme: z.enum(["YES", "NO"]),
   coverageType: z.enum(["inbase", "outbase", "joint"]),
   coverageDate: z.date(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
@@ -154,6 +155,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       lastName: "",
       specialty: "",
       clinic: "",
+      hacme: "NO",
       coverageType: "inbase",
       coverageDate: new Date(),
       photos: [],
@@ -269,6 +271,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,
         clinic: initialDoctor.clinic,
+        hacme: initialDoctor.hacme,
         coverageDate: new Date(),
       });
     }
@@ -281,6 +284,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       lastName: "",
       specialty: "",
       clinic: "",
+      hacme: "NO",
       coverageType: "inbase",
       coverageDate: new Date(),
       photos: [],
@@ -322,9 +326,11 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
             form.setValue("lastName", doctor.lastName);
             form.setValue("specialty", doctor.specialty);
             form.setValue("clinic", doctor.clinic);
+            form.setValue("hacme", doctor.hacme);
         }
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
+        form.setValue("hacme", "NO"); // Reset HACME for unplanned
     }
   }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
 
@@ -353,6 +359,11 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         d.firstName.toLowerCase() === values.firstName.toLowerCase() &&
         d.lastName.toLowerCase() === values.lastName.toLowerCase()
     );
+
+    let finalValues = { ...values };
+    if (doctorInMasterlist) {
+        finalValues.hacme = doctorInMasterlist.hacme;
+    }
 
     if (values.callType === 'unplanned') {
         const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => isToday(parseISO(e.submittedAt)));
@@ -388,7 +399,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       }
     }
     
-    const { plannedDoctorId, ...restOfValues } = values;
+    const { plannedDoctorId, ...restOfValues } = finalValues;
 
     onSave({
       ...restOfValues,
@@ -425,7 +436,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                           ...form.getValues(),
                                           callType: value as 'planned' | 'unplanned',
                                           plannedDoctorId: undefined,
-                                          firstName: '', lastName: '', specialty: '', clinic: ''
+                                          firstName: '', lastName: '', specialty: '', clinic: '', hacme: 'NO'
                                       });
                                   }}
                                   value={field.value}
@@ -562,6 +573,27 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                         <SelectItem value="outbase">Outbase</SelectItem>
                                         <SelectItem value="joint">Joint Call</SelectItem>
                                     </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="hacme"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="font-headline">HACME</FormLabel>
+                                     <Select onValueChange={field.onChange} value={field.value} disabled>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                            <SelectValue placeholder="Select..." />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="YES">YES</SelectItem>
+                                            <SelectItem value="NO">NO</SelectItem>
+                                        </SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>

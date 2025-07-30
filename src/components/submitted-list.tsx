@@ -171,6 +171,7 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                                     <h4 className="font-bold font-headline text-primary">Pre-call Plan</h4>
                                     <DetailItem label="Call Type" value={entry.callType} />
                                     <DetailItem label="Coverage Type" value={entry.coverageType} />
+                                    <DetailItem label="HACME" value={entry.hacme} />
                                     <DetailItem label="Call Objective" value={entry.callObjective} />
                                     <DetailItem label="Primary Product" value={entry.primaryProduct} />
                                     <DetailItem label="Primary Sample" value={entry.primarySampleName} />
@@ -256,6 +257,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 'Last Name': entry.lastName,
                 'Specialty': entry.specialty,
                 'Clinic': entry.clinic,
+                'HACME': entry.hacme,
                 'Call Type': entry.callType,
                 'Coverage Type': entry.coverageType,
                 'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
