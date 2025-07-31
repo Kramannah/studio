@@ -1,5 +1,6 @@
 
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,11 +10,14 @@ import { format } from 'date-fns';
 
 const TIME_LOGS_KEY = 'sfe-offline-coverage-time-logs';
 const CURRENT_LOG_KEY = 'sfe-offline-coverage-current-log';
+const USER_ID_KEY = 'sfe-offline-coverage-user-id';
+
 
 export const useTimeLog = () => {
   const { toast } = useToast();
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [currentTimeLog, setCurrentTimeLog] = useState<TimeLog | null>(null);
+  const [userId, setUserId] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -26,6 +30,14 @@ export const useTimeLog = () => {
         if (storedCurrent) {
           setCurrentTimeLog(JSON.parse(storedCurrent));
         }
+
+        let storedUserId = localStorage.getItem(USER_ID_KEY);
+        if(!storedUserId) {
+            storedUserId = `USER-${crypto.randomUUID().substring(0, 8)}`;
+            localStorage.setItem(USER_ID_KEY, storedUserId);
+        }
+        setUserId(storedUserId);
+
       } catch (error) {
         console.error("Failed to parse time logs from localStorage", error);
         toast({
@@ -49,27 +61,25 @@ export const useTimeLog = () => {
     }
   };
 
-  const handleTimeIn = useCallback((photo: string, locationType: 'inbase' | 'outbase') => {
+  const handleTimeIn = useCallback((locationType: 'inbase' | 'outbase') => {
     const newLog: TimeLog = {
       id: crypto.randomUUID(),
+      userId: userId,
       timeIn: new Date().toISOString(),
       timeOut: null,
-      timeInPhoto: photo,
-      timeOutPhoto: null,
       locationType,
     };
     setCurrentTimeLog(newLog);
     updateCurrentLogInStorage(newLog);
     toast({ title: "Time In Successful", description: `You timed in at ${format(new Date(newLog.timeIn), 'PPP p')}.` });
-  }, [toast]);
+  }, [toast, userId]);
 
-  const handleTimeOut = useCallback((photo: string) => {
+  const handleTimeOut = useCallback(() => {
     if (!currentTimeLog) return;
     
     const completedLog: TimeLog = {
       ...currentTimeLog,
       timeOut: new Date().toISOString(),
-      timeOutPhoto: photo,
     };
 
     const updatedLogs = [...timeLogs, completedLog];
@@ -89,6 +99,5 @@ export const useTimeLog = () => {
   }, [toast]);
 
 
-  return { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs };
+  return { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs, userId };
 };
-

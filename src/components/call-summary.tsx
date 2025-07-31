@@ -1,6 +1,7 @@
 
 
 
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -9,14 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock } from "lucide-react";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
-import Image from "next/image";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -168,6 +168,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         // Time Logs Worksheet
         if(sortedTimeLogs.length > 0) {
             const timeLogData = sortedTimeLogs.map(log => ({
+                "User ID": log.userId,
                 "Date": format(parseISO(log.timeIn), "PPP"),
                 "Time In": format(parseISO(log.timeIn), "p"),
                 "Time Out": log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A',
@@ -176,7 +177,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
             }));
             const timeLogWorksheet = XLSX.utils.json_to_sheet(timeLogData);
             timeLogWorksheet['!cols'] = [
-                { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
+                { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
             ];
             XLSX.utils.book_append_sheet(workbook, timeLogWorksheet, "Time Logs");
         }
@@ -342,43 +343,22 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead>User ID</TableHead>
                                         <TableHead>Date</TableHead>
                                         <TableHead>Time In</TableHead>
                                         <TableHead>Time Out</TableHead>
                                         <TableHead>Location</TableHead>
-                                        <TableHead>Proof</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {sortedTimeLogs.length > 0 ? (
                                         sortedTimeLogs.map((log) => (
                                             <TableRow key={log.id}>
+                                                <TableCell className="font-mono text-xs">{log.userId}</TableCell>
                                                 <TableCell className="font-medium">{format(parseISO(log.timeIn), "PPP")}</TableCell>
                                                 <TableCell>{format(parseISO(log.timeIn), "p")}</TableCell>
                                                 <TableCell>{log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}</TableCell>
                                                 <TableCell className="capitalize">{log.locationType}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <Popover>
-                                                            <PopoverTrigger asChild>
-                                                                <Image src={log.timeInPhoto} alt="Time-in proof" width={40} height={40} className="rounded-md cursor-pointer" />
-                                                            </PopoverTrigger>
-                                                            <PopoverContent>
-                                                                <Image src={log.timeInPhoto} alt="Time-in proof" width={256} height={192} className="rounded-md" />
-                                                            </PopoverContent>
-                                                        </Popover>
-                                                         {log.timeOutPhoto && (
-                                                            <Popover>
-                                                                <PopoverTrigger asChild>
-                                                                    <Image src={log.timeOutPhoto} alt="Time-out proof" width={40} height={40} className="rounded-md cursor-pointer" />
-                                                                </PopoverTrigger>
-                                                                <PopoverContent>
-                                                                    <Image src={log.timeOutPhoto} alt="Time-out proof" width={256} height={192} className="rounded-md" />
-                                                                </PopoverContent>
-                                                            </Popover>
-                                                         )}
-                                                    </div>
-                                                </TableCell>
                                             </TableRow>
                                         ))
                                     ) : (
@@ -439,4 +419,3 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         </div>
     )
 }
-

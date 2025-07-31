@@ -23,7 +23,9 @@ import { MarketingList } from "@/components/marketing-list";
 import { useTimeLog } from "@/hooks/use-time-log";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { TimeLogDialog } from "@/components/time-log-dialog";
+import { TimeInDialog } from "@/components/time-in-dialog";
+import { TimeOutDialog } from "@/components/time-out-dialog";
+
 
 export default function Home() {
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
@@ -31,12 +33,13 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
-  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs } = useTimeLog();
+  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs, userId } = useTimeLog();
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
-  const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
+  const [isTimeInDialogOpen, setIsTimeInDialogOpen] = useState(false);
+  const [isTimeOutDialogOpen, setIsTimeOutDialogOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'onLine' in navigator) {
@@ -76,14 +79,14 @@ export default function Home() {
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
-  const handleTimeInSubmit = (photo: string, locationType: 'inbase' | 'outbase') => {
-    handleTimeIn(photo, locationType);
-    setIsTimeLogDialogOpen(false);
+  const handleTimeInSubmit = (locationType: 'inbase' | 'outbase') => {
+    handleTimeIn(locationType);
+    setIsTimeInDialogOpen(false);
   };
 
-  const handleTimeOutSubmit = (photo: string) => {
-    handleTimeOut(photo);
-    setIsTimeLogDialogOpen(false);
+  const handleTimeOutSubmit = () => {
+    handleTimeOut();
+    setIsTimeOutDialogOpen(false);
   };
 
   if (!currentTimeLog) {
@@ -101,7 +104,7 @@ export default function Home() {
                 <CardDescription>Click the button below to log your time-in and begin your tasks.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button size="lg" className="w-full font-headline" onClick={() => setIsTimeLogDialogOpen(true)}>
+                <Button size="lg" className="w-full font-headline" onClick={() => setIsTimeInDialogOpen(true)}>
                   <LogIn className="mr-2" />
                   Time In
                 </Button>
@@ -109,11 +112,11 @@ export default function Home() {
             </Card>
           </main>
         </div>
-        <TimeLogDialog
-          isOpen={isTimeLogDialogOpen}
-          onOpenChange={setIsTimeLogDialogOpen}
-          mode="time-in"
+        <TimeInDialog
+          isOpen={isTimeInDialogOpen}
+          onOpenChange={setIsTimeInDialogOpen}
           onTimeIn={handleTimeInSubmit}
+          userId={userId}
         />
       </>
     )
@@ -134,7 +137,7 @@ export default function Home() {
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
               </Badge>
-              <Button size="sm" variant="destructive" className="font-headline" onClick={() => setIsTimeLogDialogOpen(true)}>
+              <Button size="sm" variant="destructive" className="font-headline" onClick={() => setIsTimeOutDialogOpen(true)}>
                 <LogOut className="mr-2"/>
                 Time Out
               </Button>
@@ -212,11 +215,11 @@ export default function Home() {
           </Tabs>
         </main>
       </div>
-      <TimeLogDialog
-          isOpen={isTimeLogDialogOpen && !!currentTimeLog}
-          onOpenChange={setIsTimeLogDialogOpen}
-          mode="time-out"
+       <TimeOutDialog
+          isOpen={isTimeOutDialogOpen && !!currentTimeLog}
+          onOpenChange={setIsTimeOutDialogOpen}
           onTimeOut={handleTimeOutSubmit}
+          userId={userId}
         />
     </>
   );
