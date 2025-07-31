@@ -50,8 +50,8 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     setIsSyncing(true);
     toast({ title: 'Syncing started...', description: `${entriesToSync.length} entries to sync.` });
 
-    // Simulate API calls for each entry
-    await new Promise(resolve => setTimeout(resolve, 100 * entriesToSync.length));
+    // Simulate API calls for each entry - removed delay for faster sync
+    await new Promise(resolve => setTimeout(resolve, 50)); 
 
     // Move entries from offline to master
     const currentMasterEntries = JSON.parse(localStorage.getItem(MASTER_KEY) || '[]');
@@ -110,7 +110,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
         // If online, sync immediately
         setIsSyncing(true);
         toast({ title: "Submitting...", description: "Saving your entry directly." });
-        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network latency
+        await new Promise(resolve => setTimeout(resolve, 50)); // Simulate network latency
 
         if (updateSampleUsage) {
             if (newEntry.primarySampleName && newEntry.primaryProductQty) {
