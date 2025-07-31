@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { Camera, LogIn, LogOut, X } from "lucide-react"
+import { Camera, LogIn, LogOut, Video } from "lucide-react"
 import { Label } from "./ui/label"
 import Image from "next/image"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
@@ -32,40 +32,43 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   const [photo, setPhoto] = useState<string | null>(null)
   const [locationType, setLocationType] = useState<"inbase" | "outbase">("inbase")
   const [hasCameraPermission, setHasCameraPermission] = useState(true)
+  const [isCameraActive, setIsCameraActive] = useState(false)
 
   const stopCamera = () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream
       stream.getTracks().forEach(track => track.stop())
       videoRef.current.srcObject = null
+      setIsCameraActive(false);
     }
   }
 
   const startCamera = async () => {
-    setPhoto(null);
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         setHasCameraPermission(true);
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
         }
+        setIsCameraActive(true);
     } catch (error) {
         console.error("Error accessing camera:", error);
         setHasCameraPermission(false);
     }
   }
 
+  const resetState = () => {
+    setPhoto(null);
+    setIsCameraActive(false);
+    setHasCameraPermission(true);
+  }
+
   useEffect(() => {
-    if (isOpen) {
-      startCamera();
-    } else {
+    if (!isOpen) {
       stopCamera();
+      resetState();
     }
-    
-    return () => {
-      stopCamera();
-    }
-  }, [isOpen])
+  }, [isOpen]);
 
 
   const handleCapture = () => {
@@ -83,6 +86,11 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
       }
     }
   }
+  
+  const handleRetake = () => {
+    setPhoto(null);
+    setIsCameraActive(true); // Re-activate camera view, but don't auto-start
+  }
 
   const handleSubmit = () => {
     if (!photo) {
@@ -99,6 +107,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     } else if (mode === "time-out" && onTimeOut) {
       onTimeOut(photo)
     }
+    onOpenChange(false);
   }
 
   return (
@@ -116,7 +125,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
           <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-muted">
             {photo ? (
               <Image src={photo} alt="Captured proof" layout="fill" objectFit="cover" />
-            ) : (
+            ) : isCameraActive ? (
                 <>
                     <video ref={videoRef} className="h-full w-full" autoPlay muted playsInline />
                     {!hasCameraPermission && (
@@ -130,18 +139,28 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
                     </div>
                     )}
               </>
+            ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                    <Video className="w-16 h-16 text-muted-foreground mb-4" />
+                    <Button onClick={startCamera}>
+                        <Camera className="mr-2" />
+                        Start Camera
+                    </Button>
+                </div>
             )}
           </div>
           <div className="flex justify-center">
             {photo ? (
-                <Button variant="outline" onClick={startCamera}>
+                <Button variant="outline" onClick={handleRetake}>
                   Retake Photo
                 </Button>
             ) : (
-                <Button onClick={handleCapture} disabled={!hasCameraPermission}>
-                  <Camera className="mr-2" />
-                  Capture Photo
-                </Button>
+                isCameraActive && (
+                    <Button onClick={handleCapture} disabled={!hasCameraPermission}>
+                      <Camera className="mr-2" />
+                      Capture Photo
+                    </Button>
+                )
             )}
           </div>
           {mode === "time-in" && (
