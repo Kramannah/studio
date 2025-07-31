@@ -88,11 +88,6 @@ const formSchema = z.object({
             message: "Either a signature or a photo is required as proof of coverage.",
             path: ["signature"],
         });
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Either a signature or a photo is required as proof of coverage.",
-            path: ["photos"],
-        });
     }
     if (data.coverageType === 'joint' && !data.dsmSignature) {
         ctx.addIssue({
@@ -632,27 +627,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={form.control}
-                                name="hacme"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">HACME</FormLabel>
-                                     <Select onValueChange={field.onChange} value={field.value} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && !isUnplannedManual && !!autocompleteValue)}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                            <SelectValue placeholder="Select..." />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="YES">YES</SelectItem>
-                                            <SelectItem value="NO">NO</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
                         </div>
                     </div>
 
@@ -978,3 +952,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
