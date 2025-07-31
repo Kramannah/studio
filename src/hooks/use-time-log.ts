@@ -1,6 +1,5 @@
 
 
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -33,7 +32,7 @@ export const useTimeLog = () => {
 
         let storedUserId = localStorage.getItem(USER_ID_KEY);
         if(!storedUserId) {
-            storedUserId = `USER-${crypto.randomUUID().substring(0, 8)}`;
+            storedUserId = `Mark Michael`;
             localStorage.setItem(USER_ID_KEY, storedUserId);
         }
         setUserId(storedUserId);
