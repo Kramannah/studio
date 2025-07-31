@@ -4,7 +4,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -131,6 +131,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
 
+    const isPastDate = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
+
     if (doctors.length === 0) {
         return (
             <Card>
@@ -141,8 +143,22 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry;
-    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry;
+    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isPastDate;
+    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || isPastDate;
+    
+    const getAddVisitTitle = () => {
+        if (isPastDate) return "Cannot add visits to past dates.";
+        if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
+        return "Add a new visit";
+    }
+
+    const getAddNonCallTitle = () => {
+        if (isPastDate) return "Cannot log non-call days for past dates.";
+        if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
+        if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
+        return "Log a non-call day";
+    }
+
 
     return (
         <Card>
@@ -194,14 +210,14 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
                                 disabled={isAddNonCallDisabled}
-                                title={isAddNonCallDisabled ? "Cannot add non-call day on a date with planned visits or an existing leave." : "Log a non-call day"}
+                                title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
                                 Add Non-Call Day
                             </Button>
                             <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                                 <PopoverTrigger asChild>
-                                    <Button disabled={isAddVisitDisabled}>
+                                    <Button disabled={isAddVisitDisabled} title={getAddVisitTitle()}>
                                         <PlusCircle className="mr-2"/>
                                         Add Visit
                                     </Button>
@@ -276,6 +292,15 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
+                                            const isDeleteDisabled = isCovered || isTodaySelected || isPastDate;
+
+                                            const getDeleteTitle = () => {
+                                                if (isPastDate) return "Cannot delete plans from past dates.";
+                                                if (isTodaySelected) return "Cannot delete plans on the day of coverage.";
+                                                if (isCovered) return "Cannot delete a covered plan.";
+                                                return "Delete plan";
+                                            };
+                                            
                                             return (
                                             <TableRow key={plan.id}>
                                                 <TableCell>
@@ -283,10 +308,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         variant="link" 
                                                         className="p-0 h-auto font-medium"
                                                         onClick={() => handleLogCallClick(plan)}
-                                                        disabled={!selectedDate || !isToday(selectedDate) || isCovered}
+                                                        disabled={!isTodaySelected || isCovered}
                                                         title={
                                                             isCovered ? "Already covered today" :
-                                                            !selectedDate || !isToday(selectedDate) ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
+                                                            !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                         }
                                                     >
                                                         {plan.doctorFirstName} {plan.doctorLastName}
@@ -300,7 +325,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isCovered || isTodaySelected} title={isTodaySelected ? "Cannot delete plans on the day of coverage." : "Delete plan"}>
+                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isDeleteDisabled} title={getDeleteTitle()}>
                                                         <Trash2 className="w-4 h-4 text-destructive"/>
                                                     </Button>
                                                 </TableCell>
