@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useRef, useEffect } from "react"
@@ -42,31 +41,32 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     }
   }
 
-  useEffect(() => {
-    const getCameraPermission = async () => {
-      if (isOpen) {
-        setPhoto(null); // Reset photo on open
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-          setHasCameraPermission(true)
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream
-          }
-        } catch (error) {
-          console.error("Error accessing camera:", error)
-          setHasCameraPermission(false)
+  const startCamera = async () => {
+    setPhoto(null);
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
         }
-      } else {
-        stopCamera()
-      }
+    } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
     }
+  }
 
-    getCameraPermission()
-
+  useEffect(() => {
+    if (isOpen) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    
     return () => {
-      stopCamera()
+      stopCamera();
     }
   }, [isOpen])
+
 
   const handleCapture = () => {
     const video = videoRef.current
@@ -81,20 +81,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
         setPhoto(dataUrl)
         stopCamera()
       }
-    }
-  }
-
-  const startCamera = async () => {
-    setPhoto(null);
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-        }
-    } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
     }
   }
 
