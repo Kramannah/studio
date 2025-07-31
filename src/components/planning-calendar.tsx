@@ -275,6 +275,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 entry.firstName.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
                                                 entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
+                                            const isTodaySelected = selectedDate && isToday(selectedDate);
                                             return (
                                             <TableRow key={plan.id}>
                                                 <TableCell>
@@ -299,7 +300,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isCovered}>
+                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isCovered || isTodaySelected} title={isTodaySelected ? "Cannot delete plans on the day of coverage." : "Delete plan"}>
                                                         <Trash2 className="w-4 h-4 text-destructive"/>
                                                     </Button>
                                                 </TableCell>
@@ -327,3 +328,5 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
