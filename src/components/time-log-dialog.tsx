@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Camera, LogIn, LogOut, X } from "lucide-react"
 import { Label } from "./ui/label"
 import Image from "next/image"
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 
 type TimeLogDialogProps = {
   isOpen: boolean
@@ -54,11 +55,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
         } catch (error) {
           console.error("Error accessing camera:", error)
           setHasCameraPermission(false)
-          toast({
-            variant: "destructive",
-            title: "Camera Access Denied",
-            description: "Please enable camera permissions in your browser settings to use this feature.",
-          })
         }
       } else {
         stopCamera()
@@ -70,7 +66,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     return () => {
       stopCamera()
     }
-  }, [isOpen, toast])
+  }, [isOpen])
 
   const handleCapture = () => {
     const video = videoRef.current
@@ -135,13 +131,19 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
             {photo ? (
               <Image src={photo} alt="Captured proof" layout="fill" objectFit="cover" />
             ) : (
-              <video ref={videoRef} className="h-full w-full" autoPlay muted playsInline />
-            )}
-            {!hasCameraPermission && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
-                <Camera className="h-12 w-12" />
-                <p className="mt-2 text-center">Camera access is required. Please check your browser permissions.</p>
-              </div>
+                <>
+                    <video ref={videoRef} className="h-full w-full" autoPlay muted playsInline />
+                    {!hasCameraPermission && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-black/50 text-white">
+                         <Alert variant="destructive">
+                            <AlertTitle>Camera Access Denied</AlertTitle>
+                            <AlertDescription>
+                                Please enable camera permissions in your browser settings to use this feature.
+                            </AlertDescription>
+                        </Alert>
+                    </div>
+                    )}
+              </>
             )}
           </div>
           <div className="flex justify-center">
