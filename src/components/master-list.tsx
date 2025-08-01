@@ -118,6 +118,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             lastName: row.lastName,
             specialty: row.specialty,
             clinic: row.clinic,
+            province: row.province,
+            municipality: row.municipality,
+            placeOfPractice: row.placeOfPractice,
             frequency: row.frequency,
             hacme: row.hacme,
         }));
@@ -164,10 +167,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency', 'hacme'];
+    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'province', 'municipality', 'placeOfPractice', 'frequency', 'hacme'];
     const sampleData = [
-      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', frequency: '2x', hacme: 'NO' },
-      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', frequency: '3x', hacme: 'YES' }
+      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', province: 'Metro Manila', municipality: 'Quezon City', placeOfPractice: 'Hospital', frequency: '2x', hacme: 'NO' },
+      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', province: 'Cebu', municipality: 'Cebu City', placeOfPractice: 'Clinic', frequency: '3x', hacme: 'YES' }
     ];
     
     const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -180,6 +183,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
       { wch: 20 }, // lastName
       { wch: 25 }, // specialty
       { wch: 40 }, // clinic
+      { wch: 20 }, // province
+      { wch: 20 }, // municipality
+      { wch: 20 }, // placeOfPractice
       { wch: 10 },  // frequency
       { wch: 10 }  // hacme
     ];
@@ -234,6 +240,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         <TableHead>Name</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
+                        <TableHead>Location</TableHead>
                         <TableHead className="text-center">HACME</TableHead>
                         <TableHead className="text-center">Target</TableHead>
                         <TableHead className="text-center">Actual (This Month)</TableHead>
@@ -255,6 +262,12 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell>
+                                    <div className="flex flex-col">
+                                        <span>{doctor.municipality}, {doctor.province}</span>
+                                        <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
+                                    </div>
+                                </TableCell>
                                 <TableCell className="text-center">{doctor.hacme}</TableCell>
                                 <TableCell className="text-center">{doctor.frequency}</TableCell>
                                 <TableCell className="text-center">{visitCount}</TableCell>
@@ -303,7 +316,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={8} className="h-24 text-center">
+                            <TableCell colSpan={9} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>

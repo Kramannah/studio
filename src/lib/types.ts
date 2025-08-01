@@ -38,6 +38,9 @@ export interface Doctor {
   lastName: string;
   specialty: string;
   clinic: string;
+  province?: string;
+  municipality?: string;
+  placeOfPractice?: string;
   frequency: '1x' | '2x' | '3x' | '4x';
   hacme: 'YES' | 'NO';
 }

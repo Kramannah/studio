@@ -32,6 +32,9 @@ const doctorFormSchema = z.object({
   lastName: z.string().min(2, "Last name is too short"),
   specialty: z.string().min(2, "Specialty is required"),
   clinic: z.string().min(2, "Clinic is required"),
+  province: z.string().optional(),
+  municipality: z.string().optional(),
+  placeOfPractice: z.string().optional(),
   frequency: z.enum(['1x', '2x', '3x', '4x']),
   hacme: z.enum(['YES', 'NO']).optional().default('NO'),
 })
@@ -51,6 +54,9 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
       lastName: "",
       specialty: "",
       clinic: "",
+      province: "",
+      municipality: "",
+      placeOfPractice: "",
       frequency: "1x",
       hacme: "NO",
     },
@@ -65,6 +71,9 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
         lastName: "",
         specialty: "",
         clinic: "",
+        province: "",
+        municipality: "",
+        placeOfPractice: "",
         frequency: "1x",
         hacme: "NO",
       });
@@ -81,7 +90,7 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-headline">{doctor ? "Edit Doctor" : "Add New Doctor"}</DialogTitle>
           <DialogDescription>
@@ -139,6 +148,45 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
                   <FormLabel className="font-headline">Clinic</FormLabel>
                   <FormControl>
                     <Textarea placeholder="Community General Hospital" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="province"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-headline">Province</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Metro Manila" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="municipality"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-headline">Municipality</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Quezon City" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="placeOfPractice"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-headline">Place of Practice</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Hospital" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
