@@ -66,6 +66,7 @@ const formSchema = z.object({
   planOfAction: z.string().optional(),
   whatWentWell: z.string().optional(),
   areasForImprovement: z.string().optional(),
+  isOffline: z.boolean().optional(),
 }).superRefine((data, ctx) => {
     if (data.callType === 'planned' && !data.plannedDoctorId) {
         ctx.addIssue({
@@ -109,7 +110,7 @@ type CoverageFormProps = {
   offlineEntries: Plan[];
   todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
-  entryToEdit?: CoverageEntry | null;
+  entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
   onFormSubmit?: () => void;
 }
 
@@ -178,6 +179,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       planOfAction: "",
       whatWentWell: "",
       areasForImprovement: "",
+      isOffline: false,
     },
   })
 
@@ -973,7 +975,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    
-
-    

@@ -167,5 +167,13 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     toast({ title: "Entry Updated", description: `Coverage for ${updatedEntry.firstName} ${updatedEntry.lastName} has been updated.` });
   }, [masterEntries, toast]);
 
-  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry };
+  const updateOfflineEntry = useCallback((entryToUpdate: Omit<CoverageEntry, 'submittedAt'>) => {
+    const updatedEntries = offlineEntries.map(e => e.id === entryToUpdate.id ? { ...e, ...entryToUpdate } : e);
+    setOfflineEntries(updatedEntries);
+    localStorage.setItem(OFFLINE_KEY, JSON.stringify(updatedEntries));
+    toast({ title: "Offline Entry Updated", description: `Changes for ${entryToUpdate.firstName} ${entryToUpdate.lastName} have been saved locally.` });
+  }, [offlineEntries, toast]);
+
+
+  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry };
 };

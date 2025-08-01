@@ -166,13 +166,16 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                 <TableRow>
                     <TableCell colSpan={5} className="p-0">
                         <div className="p-6 bg-muted/50">
-                             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                                 <div className="space-y-4">
                                     <h4 className="font-bold font-headline text-primary">Pre-call Plan</h4>
                                     <DetailItem label="Call Type" value={entry.callType} />
                                     <DetailItem label="Coverage Type" value={entry.coverageType} />
                                     <DetailItem label="HACME" value={entry.hacme} />
                                     <DetailItem label="Call Objective" value={entry.callObjective} />
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="font-bold font-headline text-primary">Samples & Products</h4>
                                     <DetailItem label="Primary Product" value={entry.primaryProduct} />
                                     <DetailItem label="Primary Sample" value={entry.primarySampleName} />
                                     <DetailItem label="Primary Quantity" value={entry.primaryProductQty} />

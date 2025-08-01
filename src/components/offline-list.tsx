@@ -5,16 +5,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { format, parseISO } from "date-fns";
 import Image from "next/image";
 import { Button } from "./ui/button";
-import { RefreshCw, Hourglass } from "lucide-react";
+import { RefreshCw, Hourglass, Edit } from "lucide-react";
 
 type OfflineListProps = {
   entries: CoverageEntry[];
   isSyncing: boolean;
   isOnline: boolean;
   syncAll: () => void;
+  onEdit: (entry: CoverageEntry) => void;
 };
 
-export function OfflineList({ entries, isSyncing, isOnline, syncAll }: OfflineListProps) {
+export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: OfflineListProps) {
   if (entries.length === 0) {
     return (
       <Card>
@@ -78,6 +79,12 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll }: OfflineLi
               </div>
             )}
           </CardContent>
+          <CardFooter>
+            <Button variant="outline" className="w-full" onClick={() => onEdit(entry)}>
+                <Edit className="mr-2" />
+                Edit Entry
+            </Button>
+          </CardFooter>
         </Card>
       ))}
     </div>

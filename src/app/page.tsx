@@ -29,7 +29,7 @@ import { TimeOutDialog } from "@/components/time-out-dialog";
 
 export default function Home() {
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry } = useOfflineSync(updateSampleUsage);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
@@ -66,8 +66,8 @@ export default function Home() {
     setActiveTab('coverage');
   };
 
-  const handleEditEntry = (entry: CoverageEntry) => {
-    setEntryToEdit(entry);
+  const handleEditEntry = (entry: CoverageEntry, isOffline: boolean = false) => {
+    setEntryToEdit({ ...entry, isOffline });
     setDoctorToLog(null);
     setActiveTab('coverage');
   };
@@ -175,7 +175,7 @@ export default function Home() {
             <TabsContent value="coverage" className="mt-6">
               <CoverageForm 
                 onSave={saveEntry}
-                onUpdate={updateMasterEntry}
+                onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry}
                 isOnline={isOnline} 
                 doctors={doctors}
                 marketingSamples={marketingSamples}
@@ -188,10 +188,16 @@ export default function Home() {
               />
             </TabsContent>
             <TabsContent value="offline" className="mt-6">
-              <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} />
+              <OfflineList 
+                entries={offlineEntries} 
+                isSyncing={isSyncing} 
+                syncAll={syncAllOfflineEntries} 
+                isOnline={isOnline}
+                onEdit={(entry) => handleEditEntry(entry, true)}
+              />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={handleEditEntry} />
+              <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />
             </TabsContent>
             <TabsContent value="marketing" className="mt-6">
               <MarketingList 

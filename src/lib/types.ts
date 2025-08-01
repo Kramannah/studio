@@ -29,6 +29,7 @@ export interface CoverageEntry {
   planOfAction?: string;
   whatWentWell?: string;
   areasForImprovement?: string;
+  isOffline?: boolean;
 }
 
 export interface Doctor {
@@ -47,6 +48,8 @@ export interface Plan {
   doctorFirstName: string;
   doctorLastName: string;
   plannedDate: string; // ISO string
+  submittedAt: string; // Keep submittedAt for filtering unplanned calls
+  callType: 'planned' | 'unplanned';
 }
 
 export interface NonCallDay {
@@ -70,9 +73,3 @@ export interface TimeLog {
     timeOut: string | null; // ISO string
     locationType: 'inbase' | 'outbase';
 }
-    
-
-    
-
-
-
