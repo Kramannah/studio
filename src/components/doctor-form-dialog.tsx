@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { Doctor } from "@/lib/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
+import { provinces } from "@/lib/philippine-locations";
 
 const doctorFormSchema = z.object({
   firstName: z.string().min(2, "First name is too short"),
@@ -62,6 +63,15 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
     },
   })
 
+  const selectedProvince = form.watch("province");
+
+  const municipalities = useMemo(() => {
+    if (!selectedProvince) return [];
+    const provinceData = provinces.find(p => p.name === selectedProvince);
+    return provinceData ? provinceData.municipalities : [];
+  }, [selectedProvince]);
+
+
   useEffect(() => {
     if (doctor) {
       form.reset(doctor);
@@ -79,6 +89,10 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
       });
     }
   }, [doctor, form, isOpen]);
+  
+  useEffect(() => {
+      form.setValue('municipality', '');
+  }, [selectedProvince, form]);
 
   const onSubmit = (values: z.infer<typeof doctorFormSchema>) => {
     if (doctor) {
@@ -159,9 +173,18 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-headline">Province</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Metro Manila" {...field} />
-                  </FormControl>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select province" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {provinces.map(p => (
+                        <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -172,9 +195,18 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-headline">Municipality</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Quezon City" {...field} />
-                  </FormControl>
+                   <Select onValueChange={field.onChange} value={field.value} disabled={!selectedProvince}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select municipality" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {municipalities.map(m => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
