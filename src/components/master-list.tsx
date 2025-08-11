@@ -38,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isThisMonth, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
+import { provinces } from "@/lib/philippine-locations";
 
 
 type MasterListProps = {
@@ -173,22 +174,83 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
       { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', province: 'Cebu', municipality: 'Cebu City', placeOfPractice: 'Clinic', frequency: '3x', hacme: 'YES' }
     ];
     
-    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
-  
-    // Set column widths for better visibility
+
+    // Main template sheet
+    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
     worksheet['!cols'] = [
-      { wch: 20 }, // firstName
-      { wch: 20 }, // lastName
-      { wch: 25 }, // specialty
-      { wch: 40 }, // clinic
-      { wch: 20 }, // province
-      { wch: 20 }, // municipality
-      { wch: 20 }, // placeOfPractice
-      { wch: 10 },  // frequency
-      { wch: 10 }  // hacme
+      { wch: 20 }, { wch: 20 }, { wch: 25 }, { wch: 40 }, 
+      { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 10 }
     ];
+    
+    // Add data validation for frequency and hacme
+    const addDataValidation = (worksheet: XLSX.WorkSheet, column: string, formula: string) => {
+        const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+        const colIndex = headers.indexOf(column);
+        if (colIndex === -1) return;
+
+        for (let R = range.s.r + 1; R <= range.e.r + 100; ++R) { // Apply to 100 rows
+            const cellRef = XLSX.utils.encode_cell({ r: R, c: colIndex });
+            if (!worksheet[cellRef]) worksheet[cellRef] = { t: 's', v: undefined };
+            if (!worksheet[cellRef].v) {
+                worksheet[cellRef].v = undefined;
+            }
+            worksheet[cellRef].t = 's';
+            if (!worksheet[cellRef].s) worksheet[cellRef].s = {};
+            worksheet[cellRef].s.dataValidation = {
+                type: 'list',
+                allowBlank: true,
+                showInputMessage: true,
+                showErrorMessage: true,
+                formula1: formula,
+            };
+        }
+    };
+    
+    addDataValidation(worksheet, 'frequency', '"1x,2x,3x,4x"');
+    addDataValidation(worksheet, 'hacme', '"YES,NO"');
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
+    
+    // Data validation sheet
+    const validationData: (string | null)[][] = [];
+    const provinceNames = provinces.map(p => p.name);
+    const maxMunis = Math.max(...provinces.map(p => p.municipalities.length));
+
+    // Header row for provinces
+    validationData.push(provinceNames);
+
+    // Data rows for municipalities
+    for(let i = 0; i < maxMunis; i++) {
+        const row: (string | null)[] = [];
+        for(let j = 0; j < provinces.length; j++) {
+            row.push(provinces[j].municipalities[i] || null);
+        }
+        validationData.push(row);
+    }
+    
+    const validationSheet = XLSX.utils.aoa_to_sheet(validationData);
+    
+    // Hide the sheet
+    if (!workbook.Workbook) workbook.Workbook = {};
+    if (!workbook.Workbook.Sheets) workbook.Workbook.Sheets = [];
+    
+    const sheetIndex = workbook.SheetNames.length;
+    XLSX.utils.book_append_sheet(workbook, validationSheet, 'DataValidationSheet');
+    workbook.Workbook.Sheets[sheetIndex] = {
+        name: 'DataValidationSheet',
+        Hidden: 1 // 1 for hidden, 2 for very hidden
+    };
+
+    // Add data validation for Province
+    addDataValidation(worksheet, 'province', `DataValidationSheet!$A$1:$${XLSX.utils.encode_col(provinceNames.length - 1)}$1`);
+    
+    // Note: Dependent dropdown for municipality is complex to set up via this library.
+    // We add instructions on how to set it up manually.
+    const instructionCell = "K1";
+    if(!worksheet[instructionCell]) worksheet[instructionCell] = { t: 's', v: '' };
+    worksheet[instructionCell].v = "To enable dependent municipality dropdowns, please follow these steps in Excel:\n1. Select the Municipality column (F).\n2. Go to Data > Data Validation.\n3. Choose 'List' from the Allow dropdown.\n4. In the Source formula box, enter: =INDIRECT(SUBSTITUTE(E2,\" \",\"_\"))\n(Assuming province is in column E, starting at row 2)\n5. You will also need to create Named Ranges for each province's municipality list on the DataValidationSheet.";
+
 
     XLSX.writeFile(workbook, 'doctor_masterlist_template.xlsx');
   };
