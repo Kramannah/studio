@@ -193,7 +193,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                     <div className="relative flex items-center justify-center w-full h-full">
                                         {date.getDate()}
                                         {count && !activeModifiers.nonCall && (
-                                            <Badge variant="secondary" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{count}</Badge>
+                                            <Badge variant="secondary" className="absolute w-5 h-5 p-0 -top-1 -right-1 justify-center">{count}</Badge>
                                         )}
                                     </div>
                                 );
@@ -367,6 +367,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
