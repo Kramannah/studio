@@ -102,7 +102,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     const filteredDoctors = useMemo(() => {
         if (!doctorFilter) return doctors;
         return doctors.filter(d => 
-            `${d.firstName} ${d.lastName}`.toLowerCase().includes(doctorFilter.toLowerCase())
+            `${d.firstName} ${d.lastName}`.toLowerCase().includes(doctorFilter.toLowerCase()) ||
+            (d.province && d.province.toLowerCase().includes(doctorFilter.toLowerCase())) ||
+            (d.municipality && d.municipality.toLowerCase().includes(doctorFilter.toLowerCase()))
         );
     }, [doctors, doctorFilter]);
 
@@ -222,45 +224,58 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         Add Visit
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-80">
+                                <PopoverContent className="w-[80vw] max-w-[60rem]">
                                     <div className="grid gap-4">
                                         <h4 className="font-medium leading-none">Add Doctor to Plan</h4>
                                         <p className="text-sm text-muted-foreground">
                                             Select a doctor to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
                                         </p>
                                         <Input
-                                            placeholder="Search doctors..."
+                                            placeholder="Search by name, province or municipality..."
                                             value={doctorFilter}
                                             onChange={(e) => setDoctorFilter(e.target.value)}
                                             className="mt-2"
                                         />
-                                        <ScrollArea className="h-48">
-                                            <div className="flex flex-col gap-1 p-1">
-                                            {filteredDoctors.map(doctor => {
-                                                const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                                const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                const isCompleted = visitCount >= targetCount;
+                                        <ScrollArea className="h-72">
+                                            <div className="border rounded-md">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Province</TableHead>
+                                                        <TableHead>Municipality</TableHead>
+                                                        <TableHead>Doctor</TableHead>
+                                                        <TableHead>Place of Practice</TableHead>
+                                                        <TableHead>Frequency</TableHead>
+                                                        <TableHead>Balance Freq.</TableHead>
+                                                        <TableHead className="text-right">Action</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {filteredDoctors.map(doctor => {
+                                                        const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                        const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                                        const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                        const balance = Math.max(0, targetCount - visitCount);
+                                                        const isCompleted = balance === 0;
 
-                                                return (
-                                                    <div key={doctor.id} className={cn("flex items-center justify-between p-2 rounded-md hover:bg-accent/50", isCompleted && "bg-primary/10")}>
-                                                        <div className="flex flex-col">
-                                                            <span>{doctor.firstName} {doctor.lastName}</span>
-                                                            {isCompleted ? (
-                                                                <Badge variant="secondary" className="w-fit text-primary">
-                                                                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                                                                    Covered
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="w-fit">Not yet covered</Badge>
-                                                            )}
-                                                        </div>
-                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)}>
-                                                            <PlusCircle size={16}/>
-                                                        </Button>
-                                                    </div>
-                                                )
-                                            })}
+                                                        return (
+                                                            <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
+                                                                <TableCell>{doctor.province}</TableCell>
+                                                                <TableCell>{doctor.municipality}</TableCell>
+                                                                <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
+                                                                <TableCell>{doctor.placeOfPractice}</TableCell>
+                                                                <TableCell>{doctor.frequency}</TableCell>
+                                                                <TableCell>{balance}</TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} title="Add to plan">
+                                                                        <PlusCircle size={16}/>
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
+                                                </TableBody>
+                                            </Table>
                                             </div>
                                         </ScrollArea>
                                     </div>
@@ -292,11 +307,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            const isDeleteDisabled = isCovered || isTodaySelected || isPastDate;
+                                            const isDeleteDisabled = isCovered || isPastDate;
 
                                             const getDeleteTitle = () => {
                                                 if (isPastDate) return "Cannot delete plans from past dates.";
-                                                if (isTodaySelected) return "Cannot delete plans on the day of coverage.";
                                                 if (isCovered) return "Cannot delete a covered plan.";
                                                 return "Delete plan";
                                             };
@@ -353,5 +367,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
