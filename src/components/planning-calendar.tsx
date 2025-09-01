@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
@@ -131,7 +132,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
 
-    const isPastDate = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
+    const isDateLockedForPlanning = selectedDate ? isBefore(selectedDate, startOfToday()) || isToday(selectedDate) : false;
 
     if (doctors.length === 0) {
         return (
@@ -143,17 +144,17 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isPastDate;
-    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || isPastDate;
+    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateLockedForPlanning;
+    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || isDateLockedForPlanning;
     
     const getAddVisitTitle = () => {
-        if (isPastDate) return "Cannot add visits to past dates.";
+        if (isDateLockedForPlanning) return "Cannot add visits for today or past dates.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         return "Add a new visit";
     }
 
     const getAddNonCallTitle = () => {
-        if (isPastDate) return "Cannot log non-call days for past dates.";
+        if (isDateLockedForPlanning) return "Cannot log non-call days for today or past dates.";
         if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
         if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
@@ -323,7 +324,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            const isDeleteDisabled = isCovered || isPastDate;
+                                            const isDeleteDisabled = isCovered || (selectedDate ? isBefore(selectedDate, startOfToday()) : false);
 
                                             const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
                                             const visitCount = visitCountsThisMonth[doctorName] || 0;
@@ -331,7 +332,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             const balance = Math.max(0, targetCount - visitCount);
 
                                             const getDeleteTitle = () => {
-                                                if (isPastDate) return "Cannot delete plans from past dates.";
+                                                if (selectedDate && isBefore(selectedDate, startOfToday())) return "Cannot delete plans from past dates.";
                                                 if (isCovered) return "Cannot delete a covered plan.";
                                                 return "Delete plan";
                                             };
@@ -396,6 +397,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
