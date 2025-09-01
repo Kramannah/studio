@@ -132,7 +132,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
 
-    const isDateLockedForPlanning = selectedDate ? isBefore(selectedDate, startOfToday()) || isToday(selectedDate) : false;
+    const isDateLockedForPlanning = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
 
     if (doctors.length === 0) {
         return (
@@ -148,13 +148,13 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || isDateLockedForPlanning;
     
     const getAddVisitTitle = () => {
-        if (isDateLockedForPlanning) return "Cannot add visits for today or past dates.";
+        if (isDateLockedForPlanning) return "Cannot add visits for past dates.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         return "Add a new visit";
     }
 
     const getAddNonCallTitle = () => {
-        if (isDateLockedForPlanning) return "Cannot log non-call days for today or past dates.";
+        if (isDateLockedForPlanning) return "Cannot log non-call days for past dates.";
         if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
         if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
@@ -306,8 +306,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                     <TableRow>
                                         <TableHead>Doctor</TableHead>
                                         <TableHead>Location</TableHead>
-                                        <TableHead className="text-center">Target</TableHead>
-                                        <TableHead className="text-center">Balance</TableHead>
+                                        <TableHead>Type</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -325,11 +324,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             const isDeleteDisabled = isCovered || (selectedDate ? isBefore(selectedDate, startOfToday()) : false);
-
-                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                            const balance = Math.max(0, targetCount - visitCount);
 
                                             const getDeleteTitle = () => {
                                                 if (selectedDate && isBefore(selectedDate, startOfToday())) return "Cannot delete plans from past dates.";
@@ -359,8 +353,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-center">{doctor.frequency}</TableCell>
-                                                <TableCell className="text-center">{balance}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={plan.callType === 'planned' ? 'default' : 'outline'} className="capitalize">{plan.callType}</Badge>
+                                                </TableCell>
                                                  <TableCell>
                                                     {isCovered ? (
                                                         <Badge variant="secondary" className="text-primary">Covered</Badge>
@@ -377,7 +372,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center">
+                                            <TableCell colSpan={5} className="h-24 text-center">
                                                 {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
                                             </TableCell>
                                         </TableRow>
