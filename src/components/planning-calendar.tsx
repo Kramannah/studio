@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/popover"
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
-import * as z from "zod"
 import { cn } from "@/lib/utils";
 
 type PlanningCalendarProps = {
@@ -246,10 +245,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                     <TableRow>
                                                         <TableHead>Province</TableHead>
                                                         <TableHead>Municipality</TableHead>
-                                                        <TableHead>Doctor</TableHead>
+                                                        <TableHead>Doctor Full Name</TableHead>
                                                         <TableHead>Place of Practice</TableHead>
-                                                        <TableHead>Target</TableHead>
-                                                        <TableHead>Balance</TableHead>
+                                                        <TableHead>Frequency</TableHead>
+                                                        <TableHead>Balance Frequency</TableHead>
                                                         <TableHead className="text-right">Action</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
@@ -378,3 +377,5 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
