@@ -36,7 +36,7 @@ export interface CoverageEntry {
 export interface Doctor {
   id: string;
   firstName: string;
-  lastName: string;
+  lastName:string;
   specialty: string;
   clinic: string;
   province?: string;
@@ -52,8 +52,8 @@ export interface Plan {
   doctorFirstName: string;
   doctorLastName: string;
   plannedDate: string; // ISO string
-  submittedAt: string; // Keep submittedAt for filtering unplanned calls
-  callType: 'planned' | 'unplanned';
+  submittedAt?: string; 
+  callType?: 'planned' | 'unplanned';
 }
 
 export interface NonCallDay {

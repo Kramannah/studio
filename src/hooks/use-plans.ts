@@ -41,6 +41,7 @@ export const usePlans = () => {
       doctorFirstName: doctor.firstName,
       doctorLastName: doctor.lastName,
       plannedDate: plannedDate.toISOString(),
+      callType: 'planned',
     };
     const updatedPlans = [...plans, newPlan];
     setPlans(updatedPlans);

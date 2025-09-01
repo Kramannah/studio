@@ -125,7 +125,7 @@ type CoverageFormProps = {
   doctors: Doctor[];
   marketingSamples: MarketingSample[];
   masterEntries: CoverageEntry[];
-  offlineEntries: Plan[];
+  offlineEntries: CoverageEntry[];
   todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
@@ -288,10 +288,11 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
+      const isPlanned = todaysPlans.some(p => p.doctorId === initialDoctor.id);
       form.reset({
         ...form.getValues(),
-        callType: 'planned',
-        plannedDoctorId: initialDoctor.id,
+        callType: isPlanned ? 'planned' : 'unplanned',
+        plannedDoctorId: isPlanned ? initialDoctor.id : undefined,
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,
@@ -300,7 +301,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         coverageDate: new Date(),
       });
     }
-  }, [initialDoctor, entryToEdit, form]);
+  }, [initialDoctor, entryToEdit, form, todaysPlans]);
   
   const resetForm = useCallback(() => {
     form.reset({
@@ -423,7 +424,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
 
     if (values.callType === 'unplanned') {
-        const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => isToday(parseISO(e.submittedAt)));
+        const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => e.submittedAt && isToday(parseISO(e.submittedAt)));
         const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
 
         if (todaysUnplannedCalls >= MAX_UNPLANNED_CALLS) {
@@ -443,7 +444,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       const coveragesThisMonth = allEntries.filter(entry => 
         entry.firstName.toLowerCase() === values.firstName.toLowerCase() &&
         entry.lastName.toLowerCase() === values.lastName.toLowerCase() &&
-        isThisMonth(parseISO(entry.submittedAt))
+        entry.submittedAt && isThisMonth(parseISO(entry.submittedAt))
       ).length;
 
       if (coveragesThisMonth >= frequency) {
