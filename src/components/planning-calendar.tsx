@@ -9,7 +9,7 @@ import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, CalendarOff, CheckCircle2 } from "lucide-react";
+import { PlusCircle, Trash2, CalendarOff } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
