@@ -9,7 +9,7 @@ import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, CalendarOff } from "lucide-react";
+import { PlusCircle, Trash2, CalendarOff, Search } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -169,7 +169,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                 <CardDescription>Plan your upcoming doctor visits. Select a date to view or add plans.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <div>
+                <div className="space-y-4">
                      <Calendar
                         mode="single"
                         selected={selectedDate}
@@ -201,6 +201,15 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                         }}
                         className="w-full p-4 border rounded-md"
                     />
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by name, province or municipality..."
+                            value={doctorFilter}
+                            onChange={(e) => setDoctorFilter(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
                 </div>
                 <div>
                     <div className="flex items-center justify-between mb-4">
@@ -230,12 +239,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         <p className="text-sm text-muted-foreground">
                                             Select a doctor to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
                                         </p>
-                                        <Input
-                                            placeholder="Search by name, province or municipality..."
-                                            value={doctorFilter}
-                                            onChange={(e) => setDoctorFilter(e.target.value)}
-                                            className="mt-2"
-                                        />
                                         <ScrollArea className="h-72">
                                             <div className="border rounded-md">
                                             <Table>
@@ -245,35 +248,43 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         <TableHead>Municipality</TableHead>
                                                         <TableHead>Doctor</TableHead>
                                                         <TableHead>Place of Practice</TableHead>
-                                                        <TableHead>Frequency</TableHead>
-                                                        <TableHead>Balance Freq.</TableHead>
+                                                        <TableHead>Target</TableHead>
+                                                        <TableHead>Balance</TableHead>
                                                         <TableHead className="text-right">Action</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {filteredDoctors.map(doctor => {
-                                                        const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                                        const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                        const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                        const balance = Math.max(0, targetCount - visitCount);
-                                                        const isCompleted = balance === 0;
+                                                    {filteredDoctors.length > 0 ? (
+                                                        filteredDoctors.map(doctor => {
+                                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                            const balance = Math.max(0, targetCount - visitCount);
+                                                            const isCompleted = balance === 0;
 
-                                                        return (
-                                                            <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
-                                                                <TableCell>{doctor.province}</TableCell>
-                                                                <TableCell>{doctor.municipality}</TableCell>
-                                                                <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                                <TableCell>{doctor.placeOfPractice}</TableCell>
-                                                                <TableCell>{doctor.frequency}</TableCell>
-                                                                <TableCell>{balance}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} title="Add to plan">
-                                                                        <PlusCircle size={16}/>
-                                                                    </Button>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
+                                                            return (
+                                                                <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
+                                                                    <TableCell>{doctor.province}</TableCell>
+                                                                    <TableCell>{doctor.municipality}</TableCell>
+                                                                    <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
+                                                                    <TableCell>{doctor.placeOfPractice}</TableCell>
+                                                                    <TableCell className="text-center">{doctor.frequency}</TableCell>
+                                                                    <TableCell className="text-center">{balance}</TableCell>
+                                                                    <TableCell className="text-right">
+                                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} title="Add to plan">
+                                                                            <PlusCircle size={16}/>
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )
+                                                        })
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={7} className="h-24 text-center">
+                                                                No doctors found.
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
                                                 </TableBody>
                                             </Table>
                                             </div>
@@ -367,9 +378,3 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
-
-    
-
-    
-
-    
