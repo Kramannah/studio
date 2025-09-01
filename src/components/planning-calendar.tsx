@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
@@ -203,7 +202,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name, province or municipality..."
+                            placeholder="Search doctors to add to plan..."
                             value={doctorFilter}
                             onChange={(e) => setDoctorFilter(e.target.value)}
                             className="pl-10"
@@ -243,12 +242,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead>Province</TableHead>
-                                                        <TableHead>Municipality</TableHead>
-                                                        <TableHead>Doctor Full Name</TableHead>
-                                                        <TableHead>Place of Practice</TableHead>
-                                                        <TableHead>Frequency</TableHead>
-                                                        <TableHead>Balance Frequency</TableHead>
+                                                        <TableHead>Doctor</TableHead>
+                                                        <TableHead>Location</TableHead>
+                                                        <TableHead className="text-center">Target</TableHead>
+                                                        <TableHead className="text-center">Balance</TableHead>
                                                         <TableHead className="text-right">Action</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
@@ -263,10 +260,13 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 
                                                             return (
                                                                 <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
-                                                                    <TableCell>{doctor.province}</TableCell>
-                                                                    <TableCell>{doctor.municipality}</TableCell>
                                                                     <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                                    <TableCell>{doctor.placeOfPractice}</TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex flex-col">
+                                                                            <span>{doctor.municipality}, {doctor.province}</span>
+                                                                            <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
+                                                                        </div>
+                                                                    </TableCell>
                                                                     <TableCell className="text-center">{doctor.frequency}</TableCell>
                                                                     <TableCell className="text-center">{balance}</TableCell>
                                                                     <TableCell className="text-right">
@@ -279,7 +279,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         })
                                                     ) : (
                                                         <TableRow>
-                                                            <TableCell colSpan={7} className="h-24 text-center">
+                                                            <TableCell colSpan={5} className="h-24 text-center">
                                                                 No doctors found.
                                                             </TableCell>
                                                         </TableRow>
@@ -303,7 +303,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Provider</TableHead>
+                                        <TableHead>Doctor</TableHead>
+                                        <TableHead>Location</TableHead>
+                                        <TableHead className="text-center">Target</TableHead>
+                                        <TableHead className="text-center">Balance</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -311,6 +314,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 <TableBody>
                                     {selectedDayPlans.length > 0 ? (
                                         selectedDayPlans.map((plan) => {
+                                            const doctor = doctors.find(d => d.id === plan.doctorId);
+                                            if (!doctor) return null;
+
                                             const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
                                             const isCovered = dayEntries.some(entry => 
                                                 entry.firstName.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
@@ -318,6 +324,11 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             const isDeleteDisabled = isCovered || isPastDate;
+
+                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                            const balance = Math.max(0, targetCount - visitCount);
 
                                             const getDeleteTitle = () => {
                                                 if (isPastDate) return "Cannot delete plans from past dates.";
@@ -330,7 +341,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 <TableCell>
                                                     <Button 
                                                         variant="link" 
-                                                        className="p-0 h-auto font-medium"
+                                                        className="p-0 h-auto font-medium text-left"
                                                         onClick={() => handleLogCallClick(plan)}
                                                         disabled={!isTodaySelected || isCovered}
                                                         title={
@@ -341,6 +352,14 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         {plan.doctorFirstName} {plan.doctorLastName}
                                                     </Button>
                                                 </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span>{doctor.municipality}, {doctor.province}</span>
+                                                        <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-center">{doctor.frequency}</TableCell>
+                                                <TableCell className="text-center">{balance}</TableCell>
                                                  <TableCell>
                                                     {isCovered ? (
                                                         <Badge variant="secondary" className="text-primary">Covered</Badge>
@@ -357,7 +376,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={3} className="h-24 text-center">
+                                            <TableCell colSpan={6} className="h-24 text-center">
                                                 {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
                                             </TableCell>
                                         </TableRow>
@@ -377,6 +396,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
