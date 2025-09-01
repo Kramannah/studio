@@ -52,6 +52,8 @@ const formSchema = z.object({
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable(),
   dsmSignature: z.string().nullable(),
+  jointCallWith: z.enum(["HOS", "GM", "PM", "SFE"]).optional(),
+  jointCallSignature: z.string().nullable(),
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
@@ -90,12 +92,28 @@ const formSchema = z.object({
             path: ["signature"],
         });
     }
-    if (data.coverageType === 'joint' && !data.dsmSignature) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "A DSM signature is required for joint calls.",
-            path: ["dsmSignature"],
-        });
+    if (data.coverageType === 'joint') {
+        if (!data.dsmSignature) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "A DSM signature is required for joint calls.",
+                path: ["dsmSignature"],
+            });
+        }
+        if (!data.jointCallWith) {
+             ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Please select the role of the person you are with.",
+                path: ["jointCallWith"],
+            });
+        }
+        if (!data.jointCallSignature) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "A signature for the joint call companion is required.",
+                path: ["jointCallSignature"],
+            });
+        }
     }
 });
 
@@ -165,6 +183,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       photos: [],
       signature: null,
       dsmSignature: null,
+      jointCallSignature: null,
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
@@ -185,6 +204,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
   const callType = form.watch("callType");
   const coverageType = form.watch("coverageType");
+  const jointCallWith = form.watch("jointCallWith");
   const plannedDoctorId = form.watch("plannedDoctorId");
   const photos = form.watch("photos");
   const primaryProduct = form.watch("primaryProduct");
@@ -295,6 +315,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       photos: [],
       signature: null,
       dsmSignature: null,
+      jointCallWith: undefined,
+      jointCallSignature: null,
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
@@ -928,19 +950,57 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 )}
                             />
                              {coverageType === 'joint' && (
-                                <FormField
-                                    control={form.control}
-                                    name="dsmSignature"
-                                    render={({ field }) => (
+                                <div className="space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="jointCallWith"
+                                        render={({ field }) => (
                                         <FormItem>
-                                        <FormLabel className="text-lg font-semibold font-headline">DSM Signature</FormLabel>
-                                        <FormControl>
-                                            <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
-                                        </FormControl>
-                                        <FormMessage />
+                                            <FormLabel className="font-headline">Joint Call With</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                <SelectValue placeholder="Select role..." />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="HOS">HOS</SelectItem>
+                                                <SelectItem value="GM">GM</SelectItem>
+                                                <SelectItem value="PM">PM</SelectItem>
+                                                <SelectItem value="SFE">SFE</SelectItem>
+                                            </SelectContent>
+                                            </Select>
+                                            <FormMessage />
                                         </FormItem>
-                                    )}
-                                />
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="dsmSignature"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-lg font-semibold font-headline">DSM Signature</FormLabel>
+                                            <FormControl>
+                                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="jointCallSignature"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel className="text-lg font-semibold font-headline">{jointCallWith || 'Companion'} Signature</FormLabel>
+                                            <FormControl>
+                                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>

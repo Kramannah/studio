@@ -75,6 +75,10 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
             const dsmSignatureData = entry.dsmSignature.split(',')[1];
             zip.file("dsm_signature.png", dsmSignatureData, { base64: true });
         }
+        if (entry.jointCallSignature) {
+            const jointCallSignatureData = entry.jointCallSignature.split(',')[1];
+            zip.file(`${entry.jointCallWith}_signature.png`, jointCallSignatureData, { base64: true });
+        }
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `attachments_${entry.firstName}_${entry.lastName}_${entry.id.substring(0, 8)}.zip`);
@@ -116,6 +120,11 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                         {entry.dsmSignature && (
                             <div className="p-1 bg-white border rounded-md">
                                 <Image src={entry.dsmSignature} alt="dsm signature" width={40} height={20} />
+                            </div>
+                        )}
+                         {entry.jointCallSignature && (
+                            <div className="p-1 bg-white border rounded-md">
+                                <Image src={entry.jointCallSignature} alt="joint call signature" width={40} height={20} />
                             </div>
                         )}
                     </div>
@@ -171,6 +180,7 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                                     <h4 className="font-bold font-headline text-primary">Pre-call Plan</h4>
                                     <DetailItem label="Call Type" value={entry.callType} />
                                     <DetailItem label="Coverage Type" value={entry.coverageType} />
+                                    {entry.coverageType === 'joint' && <DetailItem label="Joint Call With" value={entry.jointCallWith} />}
                                     <DetailItem label="HACME" value={entry.hacme} />
                                     <DetailItem label="Call Objective" value={entry.callObjective} />
                                 </div>
@@ -254,6 +264,8 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
             if (entry.photos && entry.photos.length > 0) proofs.push("Photo");
             if (entry.signature) proofs.push("Signature");
             if (entry.dsmSignature) proofs.push("DSM Signature");
+            if (entry.jointCallSignature) proofs.push(`${entry.jointCallWith} Signature`);
+
             
             return {
                 'First Name': entry.firstName,
@@ -263,6 +275,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 'HACME': entry.hacme,
                 'Call Type': entry.callType,
                 'Coverage Type': entry.coverageType,
+                'Joint Call With': entry.jointCallWith,
                 'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
                 'Submitted At': format(parseISO(entry.submittedAt), 'yyyy-MM-dd HH:mm:ss'),
                 'Proof of Coverage': proofs.length > 0 ? proofs.join(', ') : 'None',
