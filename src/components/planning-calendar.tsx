@@ -305,8 +305,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Doctor</TableHead>
-                                        <TableHead>Location</TableHead>
                                         <TableHead>Type</TableHead>
+                                        <TableHead className="text-center">Target</TableHead>
+                                        <TableHead className="text-center">Balance</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -324,6 +325,11 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             const isDeleteDisabled = isCovered || (selectedDate ? isBefore(selectedDate, startOfToday()) : false);
+                                            
+                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                            const balance = Math.max(0, targetCount - visitCount);
 
                                             const getDeleteTitle = () => {
                                                 if (selectedDate && isBefore(selectedDate, startOfToday())) return "Cannot delete plans from past dates.";
@@ -344,18 +350,17 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                             !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                         }
                                                     >
-                                                        {plan.doctorFirstName} {plan.doctorLastName}
+                                                        <div className="flex flex-col">
+                                                            <span>{plan.doctorFirstName} {plan.doctorLastName}</span>
+                                                            <span className="text-xs font-normal text-muted-foreground">{doctor.municipality}, {doctor.province}</span>
+                                                        </div>
                                                     </Button>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span>{doctor.municipality}, {doctor.province}</span>
-                                                        <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
-                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge variant={plan.callType === 'planned' ? 'default' : 'outline'} className="capitalize">{plan.callType}</Badge>
                                                 </TableCell>
+                                                 <TableCell className="text-center">{doctor.frequency}</TableCell>
+                                                 <TableCell className="text-center">{balance}</TableCell>
                                                  <TableCell>
                                                     {isCovered ? (
                                                         <Badge variant="secondary" className="text-primary">Covered</Badge>
@@ -372,7 +377,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="h-24 text-center">
+                                            <TableCell colSpan={6} className="h-24 text-center">
                                                 {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
                                             </TableCell>
                                         </TableRow>
