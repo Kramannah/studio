@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Plan, Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns';
+import { format, isSameWeek, startOfToday } from 'date-fns';
 
 const PLANS_KEY = 'sfe-offline-coverage-plans';
 
@@ -35,18 +35,25 @@ export const usePlans = () => {
   };
 
   const addPlan = useCallback((doctor: Doctor, plannedDate: Date) => {
+    const today = startOfToday();
+    const isCurrentWeek = isSameWeek(plannedDate, today, { weekStartsOn: 1 });
+    const callType = isCurrentWeek ? 'unplanned' : 'planned';
+
     const newPlan: Plan = {
       id: crypto.randomUUID(),
       doctorId: doctor.id,
       doctorFirstName: doctor.firstName,
       doctorLastName: doctor.lastName,
       plannedDate: plannedDate.toISOString(),
-      callType: 'planned',
+      callType: callType,
     };
     const updatedPlans = [...plans, newPlan];
     setPlans(updatedPlans);
     updateLocalStorage(updatedPlans);
-    toast({ title: "Visit Planned", description: `${doctor.firstName} ${doctor.lastName} scheduled for ${format(plannedDate, 'PPP')}.` });
+    toast({ 
+        title: "Visit Added", 
+        description: `${doctor.firstName} ${doctor.lastName} scheduled for ${format(plannedDate, 'PPP')} as an ${callType} call.` 
+    });
   }, [plans, toast]);
   
   const removePlan = useCallback((planId: string) => {
