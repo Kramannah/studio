@@ -305,6 +305,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Doctor</TableHead>
+                                        <TableHead>Location</TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead className="text-center">Target</TableHead>
                                         <TableHead className="text-center">Balance</TableHead>
@@ -350,11 +351,14 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                             !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                         }
                                                     >
-                                                        <div className="flex flex-col">
-                                                            <span>{plan.doctorFirstName} {plan.doctorLastName}</span>
-                                                            <span className="text-xs font-normal text-muted-foreground">{doctor.municipality}, {doctor.province}</span>
-                                                        </div>
+                                                        {plan.doctorFirstName} {plan.doctorLastName}
                                                     </Button>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span>{doctor.municipality}</span>
+                                                        <span className="text-xs text-muted-foreground">{doctor.province}</span>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge variant={plan.callType === 'planned' ? 'default' : 'outline'} className="capitalize">{plan.callType}</Badge>
@@ -377,7 +381,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center">
+                                            <TableCell colSpan={7} className="h-24 text-center">
                                                 {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
                                             </TableCell>
                                         </TableRow>
@@ -397,6 +401,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
