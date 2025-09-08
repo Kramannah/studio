@@ -2,17 +2,17 @@
 
 export interface CoverageEntry {
   id: string;
-  firstName: string;
-  lastName: string;
-  specialty: string;
-  clinic: string;
-  hacme: 'YES' | 'NO';
-  coverageType: 'inbase' | 'outbase' | 'joint';
-  callType: 'planned' | 'unplanned';
-  coverageDate: string; // Storing as ISO string
-  photos: string[]; // base64 encoded strings
-  signature: string | null; // base64 encoded string
-  dsmSignature: string | null; // base64 encoded string for DSM
+  firstName?: string;
+  lastName?: string;
+  specialty?: string;
+  clinic?: string;
+  hacme?: 'YES' | 'NO';
+  coverageType?: 'inbase' | 'outbase' | 'joint';
+  callType?: 'planned' | 'unplanned';
+  coverageDate?: string; // Storing as ISO string
+  photos?: string[]; // base64 encoded strings
+  signature?: string | null; // base64 encoded string
+  dsmSignature?: string | null; // base64 encoded string for DSM
   jointCallWith?: 'HOS' | 'GM' | 'PM' | 'SFE';
   jointCallSignature?: string | null;
   submittedAt: string; // Storing as ISO string
@@ -77,3 +77,5 @@ export interface TimeLog {
     timeOut: string | null; // ISO string
     locationType: 'inbase' | 'outbase';
 }
+
+    

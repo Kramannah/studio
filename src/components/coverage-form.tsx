@@ -42,18 +42,18 @@ const formSchema = z.object({
   id: z.string().optional(),
   callType: z.enum(["unplanned", "planned"]),
   plannedDoctorId: z.string().optional(),
-  firstName: z.string(),
-  lastName: z.string(),
-  specialty: z.string(),
-  clinic: z.string(),
-  hacme: z.enum(["YES", "NO"]),
-  coverageType: z.enum(["inbase", "outbase", "joint"]),
-  coverageDate: z.date(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  specialty: z.string().optional(),
+  clinic: z.string().optional(),
+  hacme: z.enum(["YES", "NO"]).optional(),
+  coverageType: z.enum(["inbase", "outbase", "joint"]).optional(),
+  coverageDate: z.date().optional(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
-  signature: z.string().nullable(),
-  dsmSignature: z.string().nullable(),
+  signature: z.string().nullable().optional(),
+  dsmSignature: z.string().nullable().optional(),
   jointCallWith: z.enum(["HOS", "GM", "PM", "SFE"]).optional(),
-  jointCallSignature: z.string().nullable(),
+  jointCallSignature: z.string().nullable().optional(),
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
@@ -77,12 +77,12 @@ const formSchema = z.object({
             path: ["plannedDoctorId"],
         });
     }
-    if (data.callType === 'unplanned') {
+    if (data.callType === 'planned' && data.plannedDoctorId) {
         if (!data.firstName || data.firstName.length < 2) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "First name is required", path: ["firstName"] });
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "First name is required for planned calls.", path: ["firstName"] });
         }
         if (!data.lastName || data.lastName.length < 2) {
-             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is required", path: ["lastName"] });
+             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Last name is required for planned calls.", path: ["lastName"] });
         }
     }
     if (!data.signature && (!data.photos || data.photos.length === 0)) {
@@ -342,7 +342,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     if (entryToEdit) {
       form.reset({
         ...entryToEdit,
-        coverageDate: parseISO(entryToEdit.coverageDate),
+        coverageDate: entryToEdit.coverageDate ? parseISO(entryToEdit.coverageDate) : new Date(),
       });
     } else if (!initialDoctor) {
       resetForm();
@@ -405,18 +405,17 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       onUpdate({
         ...values,
         id: entryToEdit.id,
-        coverageDate: values.coverageDate.toISOString(),
+        coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
       });
       resetForm();
       onFormSubmit?.();
       return;
     }
 
-
     const doctorInMasterlist = doctors.find(
       (d) =>
-        d.firstName.toLowerCase() === values.firstName.toLowerCase() &&
-        d.lastName.toLowerCase() === values.lastName.toLowerCase()
+        d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
+        d.lastName.toLowerCase() === values.lastName?.toLowerCase()
     );
 
     let finalValues = { ...values };
@@ -443,8 +442,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       
       const allEntries = [...masterEntries, ...offlineEntries];
       const coveragesThisMonth = allEntries.filter(entry => 
-        entry.firstName.toLowerCase() === values.firstName.toLowerCase() &&
-        entry.lastName.toLowerCase() === values.lastName.toLowerCase() &&
+        entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
+        entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
         entry.submittedAt && isThisMonth(parseISO(entry.submittedAt))
       ).length;
 
@@ -462,7 +461,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
     onSave({
       ...restOfValues,
-      coverageDate: values.coverageDate.toISOString(),
+      coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
     });
     resetForm();
     onFormSubmit?.();
@@ -1037,3 +1036,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
