@@ -75,6 +75,7 @@ export default function Home() {
   const handleFormSubmit = () => {
     setDoctorToLog(null);
     setEntryToEdit(null);
+    setActiveTab('submitted');
   };
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
