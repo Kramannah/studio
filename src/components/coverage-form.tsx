@@ -237,12 +237,12 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   };
   
   const handleOpenCamera = async () => {
+    setIsCameraOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      setIsCameraOpen(true);
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
@@ -250,6 +250,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         title: 'Camera Access Denied',
         description: 'Please enable camera permissions in your browser settings.',
       });
+      setIsCameraOpen(false); // Close dialog if permission is denied
     }
   };
 
