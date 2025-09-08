@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Save, ChevronDown, Camera, Upload, Trash2, X } from "lucide-react"
+import { Save, ChevronDown, Camera, Upload, Trash2, X, ImagePlus } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -34,7 +34,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog"
 import { Autocomplete } from "./autocomplete"
 
 
@@ -151,6 +151,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isPhotoSourceDialogOpen, setIsPhotoSourceDialogOpen] = useState(false);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [isUnplannedManual, setIsUnplannedManual] = useState(false);
   
@@ -222,6 +223,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   };
   
   const handleOpenCamera = async () => {
+    setIsPhotoSourceDialogOpen(false);
     setIsCameraOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -237,6 +239,11 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       });
       setIsCameraOpen(false); // Close dialog if permission is denied
     }
+  };
+
+  const handleOpenUpload = () => {
+    setIsPhotoSourceDialogOpen(false);
+    fileInputRef.current?.click();
   };
 
   const handleCloseCamera = () => {
@@ -898,13 +905,9 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                             <div className="flex flex-col items-center justify-center gap-4">
                                                 <p className="text-sm text-center text-muted-foreground">Attach a photo as proof of visit.</p>
                                                 <div className="flex gap-2">
-                                                    <Button type="button" onClick={handleOpenCamera}>
-                                                        <Camera className="mr-2" />
-                                                        Capture Photo
-                                                    </Button>
-                                                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                                        <Upload className="mr-2" />
-                                                        Upload Photo
+                                                    <Button type="button" onClick={() => setIsPhotoSourceDialogOpen(true)}>
+                                                        <ImagePlus className="mr-2" />
+                                                        Add Photo
                                                     </Button>
                                                     <FormControl>
                                                       <Input 
@@ -1019,6 +1022,28 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                         Capture
                     </Button>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        <Dialog open={isPhotoSourceDialogOpen} onOpenChange={setIsPhotoSourceDialogOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add Photo Proof</DialogTitle>
+                    <DialogDescription>Choose how you want to provide a photo.</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2">
+                     <Button type="button" variant="outline" className="h-24" onClick={handleOpenCamera}>
+                        <div className="flex flex-col items-center justify-center gap-2">
+                            <Camera className="w-8 h-8"/>
+                            <span>Capture Photo</span>
+                        </div>
+                    </Button>
+                    <Button type="button" variant="outline" className="h-24" onClick={handleOpenUpload}>
+                        <div className="flex flex-col items-center justify-center gap-2">
+                            <Upload className="w-8 h-8"/>
+                            <span>Upload Photo</span>
+                        </div>
+                    </Button>
+                </div>
             </DialogContent>
         </Dialog>
     </Card>
