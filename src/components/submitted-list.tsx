@@ -4,7 +4,7 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay, isValid } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
@@ -216,6 +218,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    const [selectedRange, setSelectedRange] = useState<DateRange | undefined>();
     
     const entriesByDate = useMemo(() => {
         return entries.reduce((acc, entry) => {
@@ -233,17 +236,16 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }, [entriesByDate]);
 
     const filteredEntries = useMemo(() => {
+        const sortedEntries = [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
+
         if (!dateRange || !dateRange.from) {
-            // Default to showing all entries if no date is selected
-            return [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
+            return sortedEntries;
         }
 
         const from = startOfDay(dateRange.from);
         const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(from);
 
-        return entries
-            .filter(entry => isWithinInterval(parseISO(entry.submittedAt), { start: from, end: to }))
-            .sort((a, b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
+        return sortedEntries.filter(entry => isWithinInterval(parseISO(entry.submittedAt), { start: from, end: to }));
 
     }, [entries, dateRange]);
 
@@ -252,6 +254,16 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         return entries.filter(entry => isSameDay(parseISO(entry.submittedAt), selectedDate));
     }, [entries, selectedDate]);
     
+    const handleDateInputChange = (field: 'from' | 'to', value: string) => {
+        const date = new Date(value);
+        if (isValid(date)) {
+            setSelectedRange(prev => ({ ...prev, [field]: date }));
+        }
+    };
+    
+    const handleApplyFilter = () => {
+        setDateRange(selectedRange);
+    };
 
     const handleDownloadSubmitted = () => {
         if (viewMode === 'list' && (!dateRange || !dateRange.from)) return;
@@ -344,44 +356,31 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                     </div>
                 </div>
                 {viewMode === 'list' && (
-                    <div className="flex items-center gap-2 pt-4">
-                         <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    id="date"
-                                    variant={"outline"}
-                                    className={cn(
-                                    "w-[300px] justify-start text-left font-normal",
-                                    !dateRange && "text-muted-foreground"
-                                    )}
-                                >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateRange?.from ? (
-                                    dateRange.to ? (
-                                        <>
-                                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                                        {format(dateRange.to, "LLL dd, y")}
-                                        </>
-                                    ) : (
-                                        format(dateRange.from, "LLL dd, y")
-                                    )
-                                    ) : (
-                                    <span>Pick a date range</span>
-                                    )}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="end">
-                                <Calendar
-                                    initialFocus
-                                    mode="range"
-                                    defaultMonth={dateRange?.from}
-                                    selected={dateRange}
-                                    onSelect={setDateRange}
-                                    numberOfMonths={1}
+                    <div className="flex flex-col items-stretch gap-2 pt-4 sm:flex-row sm:items-end">
+                        <div className="flex gap-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="start-date-submitted">Start Date</Label>
+                                <Input 
+                                    id="start-date-submitted"
+                                    type="date"
+                                    value={selectedRange?.from ? format(selectedRange.from, 'yyyy-MM-dd') : ''}
+                                    onChange={(e) => handleDateInputChange('from', e.target.value)}
+                                    className="w-full"
                                 />
-                            </PopoverContent>
-                        </Popover>
-                        <Button onClick={handleDownloadSubmitted} disabled={!dateRange || !dateRange.from}>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="end-date-submitted">End Date</Label>
+                                <Input
+                                    id="end-date-submitted"
+                                    type="date"
+                                    value={selectedRange?.to ? format(selectedRange.to, 'yyyy-MM-dd') : ''}
+                                    onChange={(e) => handleDateInputChange('to', e.target.value)}
+                                    className="w-full"
+                                />
+                            </div>
+                        </div>
+                        <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
+                        <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!dateRange || !dateRange.from}>
                             <Download className="mr-2" />
                             Download Report
                         </Button>
