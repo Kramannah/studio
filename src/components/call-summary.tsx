@@ -3,11 +3,11 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes } from "date-fns";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes, isValid } from "date-fns";
 import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx';
 import { DateRange } from "react-day-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -185,6 +187,13 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         XLSX.writeFile(workbook, fileName);
     };
 
+    const handleDateInputChange = (field: 'from' | 'to', value: string) => {
+        const date = new Date(value);
+        if (isValid(date)) {
+            setDateRange(prev => ({ ...prev, [field]: date }));
+        }
+    };
+
 
     if (!insights.isDataAvailable && nonCallDays.length === 0 && timeLogs.length === 0) {
         return (
@@ -244,6 +253,26 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                         onSelect={setDateRange}
                                         numberOfMonths={1}
                                     />
+                                    <div className="flex gap-2 p-4 border-t">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="start-date">Start Date</Label>
+                                            <Input 
+                                                id="start-date"
+                                                type="date"
+                                                value={dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : ''}
+                                                onChange={(e) => handleDateInputChange('from', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="end-date">End Date</Label>
+                                            <Input
+                                                id="end-date"
+                                                type="date"
+                                                value={dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : ''}
+                                                onChange={(e) => handleDateInputChange('to', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
                                 </PopoverContent>
                             </Popover>
                             <Button onClick={handleDownloadSummary} variant="outline" disabled={!dateRange || !dateRange.from}>
