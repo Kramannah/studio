@@ -118,13 +118,25 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         };
     }, [entries, doctors, filterRange]);
     
-    const sortedNonCallDays = useMemo(() => {
-        return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [nonCallDays]);
+    const filteredNonCallDays = useMemo(() => {
+        const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        if (!filterRange || !filterRange.from) {
+            return sorted.filter(day => isThisMonth(parseISO(day.date)));
+        }
+        const from = startOfDay(filterRange.from);
+        const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
+        return sorted.filter(day => isWithinInterval(parseISO(day.date), { start: from, end: to }));
+    }, [nonCallDays, filterRange]);
 
-    const sortedTimeLogs = useMemo(() => {
-        return [...timeLogs].sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
-    }, [timeLogs]);
+    const filteredTimeLogs = useMemo(() => {
+        const sorted = [...timeLogs].sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+        if (!filterRange || !filterRange.from) {
+             return sorted.filter(log => isThisMonth(parseISO(log.timeIn)));
+        }
+        const from = startOfDay(filterRange.from);
+        const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
+        return sorted.filter(log => isWithinInterval(parseISO(log.timeIn), { start: from, end: to }));
+    }, [timeLogs, filterRange]);
 
     const handleDownloadSummary = () => {
         if (!filterRange || !filterRange.from) return;
@@ -166,8 +178,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
 
         // Time Logs Worksheet
-        if(sortedTimeLogs.length > 0) {
-            const timeLogData = sortedTimeLogs.map(log => ({
+        if(filteredTimeLogs.length > 0) {
+            const timeLogData = filteredTimeLogs.map(log => ({
                 "User ID": log.userId,
                 "Date": format(parseISO(log.timeIn), "PPP"),
                 "Time In": format(parseISO(log.timeIn), "p"),
@@ -349,8 +361,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {sortedTimeLogs.length > 0 ? (
-                                        sortedTimeLogs.map((log) => (
+                                    {filteredTimeLogs.length > 0 ? (
+                                        filteredTimeLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell className="font-mono text-xs">{log.userId}</TableCell>
                                                 <TableCell className="font-medium">{format(parseISO(log.timeIn), "PPP")}</TableCell>
@@ -364,7 +376,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                             <TableCell colSpan={5} className="h-24 text-center">
                                                 <div className="flex flex-col items-center justify-center gap-2">
                                                     <Clock className="w-8 h-8 text-muted-foreground" />
-                                                    <p>No time logs have been recorded.</p>
+                                                    <p>No time logs have been recorded for the selected period.</p>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -390,8 +402,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {sortedNonCallDays.length > 0 ? (
-                                        sortedNonCallDays.map((day) => (
+                                    {filteredNonCallDays.length > 0 ? (
+                                        filteredNonCallDays.map((day) => (
                                             <TableRow key={day.id}>
                                                 <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
                                                 <TableCell>{day.reason}</TableCell>
@@ -403,7 +415,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                             <TableCell colSpan={3} className="h-24 text-center">
                                                 <div className="flex flex-col items-center justify-center gap-2">
                                                     <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                    <p>No non-call days have been logged.</p>
+                                                    <p>No non-call days have been logged for the selected period.</p>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -419,3 +431,4 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
 }
 
     
+
