@@ -13,8 +13,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { DateRange } from "react-day-picker";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Calendar } from "./ui/calendar";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
@@ -32,7 +30,9 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
-    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [filterRange, setFilterRange] = useState<DateRange | undefined>();
+    const [selectedRange, setSelectedRange] = useState<DateRange | undefined>();
+
 
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
@@ -49,11 +49,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
         const filteredEntries = entries.filter(e => {
-            if (!dateRange || !dateRange.from) {
+            if (!filterRange || !filterRange.from) {
                 return isThisMonth(new Date(e.submittedAt));
             }
-            const from = startOfDay(dateRange.from);
-            const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(from);
+            const from = startOfDay(filterRange.from);
+            const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
             return isWithinInterval(new Date(e.submittedAt), { start: from, end: to });
         });
         
@@ -116,7 +116,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             isDataAvailable: true,
         };
-    }, [entries, doctors, dateRange]);
+    }, [entries, doctors, filterRange]);
     
     const sortedNonCallDays = useMemo(() => {
         return [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -127,7 +127,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
     }, [timeLogs]);
 
     const handleDownloadSummary = () => {
-        if (!dateRange || !dateRange.from) return;
+        if (!filterRange || !filterRange.from) return;
 
         // Create a new workbook
         const workbook = XLSX.utils.book_new();
@@ -183,15 +183,19 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
 
-        const fileName = `call_summary_${format(dateRange.from, 'yyyy-MM-dd')}_to_${format(dateRange.to || dateRange.from, 'yyyy-MM-dd')}.xlsx`;
+        const fileName = `call_summary_${format(filterRange.from, 'yyyy-MM-dd')}_to_${format(filterRange.to || filterRange.from, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
     };
 
     const handleDateInputChange = (field: 'from' | 'to', value: string) => {
         const date = new Date(value);
         if (isValid(date)) {
-            setDateRange(prev => ({ ...prev, [field]: date }));
+            setSelectedRange(prev => ({ ...prev, [field]: date }));
         }
+    };
+    
+    const handleApplyFilter = () => {
+        setFilterRange(selectedRange);
     };
 
 
@@ -212,70 +216,37 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                     <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">
-                                {dateRange?.from ? "Summary for Selected Period" : "This Month's Summary"}
+                                {filterRange?.from ? "Summary for Selected Period" : "This Month's Summary"}
                             </CardTitle>
                             <CardDescription>
-                                {dateRange?.from ? "Overview of performance for the selected dates." : "A quick overview of your performance for the current month."}
+                                {filterRange?.from ? `Showing data from ${format(filterRange.from, "PPP")} to ${filterRange.to ? format(filterRange.to, "PPP") : format(filterRange.from, "PPP")}` : "A quick overview of your performance for the current month."}
                             </CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        id="date"
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-[300px] justify-start text-left font-normal",
-                                        !dateRange && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {dateRange?.from ? (
-                                        dateRange.to ? (
-                                            <>
-                                            {format(dateRange.from, "LLL dd, y")} -{" "}
-                                            {format(dateRange.to, "LLL dd, y")}
-                                            </>
-                                        ) : (
-                                            format(dateRange.from, "LLL dd, y")
-                                        )
-                                        ) : (
-                                        <span>Pick a date range</span>
-                                        )}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="end">
-                                    <Calendar
-                                        initialFocus
-                                        mode="range"
-                                        defaultMonth={dateRange?.from}
-                                        selected={dateRange}
-                                        onSelect={setDateRange}
-                                        numberOfMonths={1}
+                        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                            <div className="flex gap-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="start-date">Start Date</Label>
+                                    <Input 
+                                        id="start-date"
+                                        type="date"
+                                        value={selectedRange?.from ? format(selectedRange.from, 'yyyy-MM-dd') : ''}
+                                        onChange={(e) => handleDateInputChange('from', e.target.value)}
+                                        className="w-full"
                                     />
-                                    <div className="flex gap-2 p-4 border-t">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="start-date">Start Date</Label>
-                                            <Input 
-                                                id="start-date"
-                                                type="date"
-                                                value={dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : ''}
-                                                onChange={(e) => handleDateInputChange('from', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="end-date">End Date</Label>
-                                            <Input
-                                                id="end-date"
-                                                type="date"
-                                                value={dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : ''}
-                                                onChange={(e) => handleDateInputChange('to', e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!dateRange || !dateRange.from}>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="end-date">End Date</Label>
+                                    <Input
+                                        id="end-date"
+                                        type="date"
+                                        value={selectedRange?.to ? format(selectedRange.to, 'yyyy-MM-dd') : ''}
+                                        onChange={(e) => handleDateInputChange('to', e.target.value)}
+                                        className="w-full"
+                                    />
+                                </div>
+                            </div>
+                            <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
+                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!filterRange || !filterRange.from}>
                                 <Download className="mr-2"/>
                                 Download Summary
                             </Button>
