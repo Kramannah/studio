@@ -419,6 +419,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
 
     if (values.callType === 'unplanned') {
+      const pilotTestingEndDate = new Date('2024-09-14T00:00:00'); // End of Sept 13
+      const now = new Date();
+
+      if (now >= pilotTestingEndDate) {
         const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => e.submittedAt && isToday(parseISO(e.submittedAt)));
         const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
 
@@ -430,6 +434,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
             });
             return;
         }
+      }
     }
 
     if (doctorInMasterlist) {
@@ -1049,3 +1054,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
