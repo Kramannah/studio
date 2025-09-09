@@ -377,7 +377,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                                     defaultMonth={dateRange?.from}
                                     selected={dateRange}
                                     onSelect={setDateRange}
-                                    numberOfMonths={2}
+                                    numberOfMonths={1}
                                 />
                             </PopoverContent>
                         </Popover>
@@ -497,3 +497,5 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         </Card>
     );
 }
+
+    

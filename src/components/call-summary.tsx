@@ -1,7 +1,5 @@
 
 
-
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -244,7 +242,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                         defaultMonth={dateRange?.from}
                                         selected={dateRange}
                                         onSelect={setDateRange}
-                                        numberOfMonths={2}
+                                        numberOfMonths={1}
                                     />
                                 </PopoverContent>
                             </Popover>
@@ -419,3 +417,5 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         </div>
     )
 }
+
+    
