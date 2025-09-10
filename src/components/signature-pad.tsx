@@ -1,13 +1,14 @@
 
 "use client"
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { Eraser } from 'lucide-react';
+import { Eraser, Save, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface SignaturePadProps {
-  value: string | null;
+  value: string | null | undefined;
   onChange: (value: string | null) => void;
   className?: string;
 }
@@ -160,4 +161,47 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   );
 }
 
+
+interface SignaturePadFullScreenProps {
+    open: boolean;
+    onClose: () => void;
+    onSave: (value: string | null) => void;
+    value: string | null | undefined;
+}
+
+export function SignaturePadFullScreen({ open, onClose, onSave, value }: SignaturePadFullScreenProps) {
+    const [currentSignature, setCurrentSignature] = useState<string | null>(null);
+
+    useEffect(() => {
+        if(open) {
+            setCurrentSignature(value || null);
+        }
+    }, [open, value]);
+
+    const handleSave = () => {
+        onSave(currentSignature);
+        onClose();
+    }
     
+    return (
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent className="p-0 border-0 w-screen h-screen max-w-full max-h-screen rounded-none flex flex-col">
+                <DialogHeader className="p-4 border-b">
+                    <DialogTitle>Signature</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 p-4">
+                    <SignaturePad 
+                        value={currentSignature}
+                        onChange={setCurrentSignature}
+                        className="w-full h-full"
+                    />
+                </div>
+                <DialogFooter className="p-4 border-t flex-row justify-end gap-2">
+                    <Button variant="outline" onClick={onClose}><X className="mr-2" /> Close</Button>
+                    <Button variant="secondary" onClick={() => setCurrentSignature(null)}><Eraser className="mr-2" /> Clear</Button>
+                    <Button onClick={handleSave}><Save className="mr-2" /> Save</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}

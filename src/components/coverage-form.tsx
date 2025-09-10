@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday } from "date-fns"
-import { Save, ChevronDown, Camera, Upload, Trash2, X, ImagePlus } from "lucide-react"
+import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { SignaturePad } from "./signature-pad"
+import { SignaturePad, SignaturePadFullScreen } from "./signature-pad"
 import type { CoverageEntry, Doctor, Plan, MarketingSample } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
@@ -149,11 +149,12 @@ const productList = [
 export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isPhotoSourceDialogOpen, setIsPhotoSourceDialogOpen] = useState(false);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [isUnplannedManual, setIsUnplannedManual] = useState(false);
+  const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
+  const [signatureFieldToUpdate, setSignatureFieldToUpdate] = useState<'signature' | 'dsmSignature' | 'jointCallSignature' | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -195,6 +196,9 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const photos = form.watch("photos");
   const primaryProduct = form.watch("primaryProduct");
   const secondaryProduct = form.watch("secondaryProduct");
+  const signature = form.watch("signature");
+  const dsmSignature = form.watch("dsmSignature");
+  const jointCallSignature = form.watch("jointCallSignature");
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
@@ -223,7 +227,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   };
   
   const handleOpenCamera = async () => {
-    setIsPhotoSourceDialogOpen(false);
     setIsCameraOpen(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -241,10 +244,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
   };
 
-  const handleOpenUpload = () => {
-    setIsPhotoSourceDialogOpen(false);
-    fileInputRef.current?.click();
-  };
 
   const handleCloseCamera = () => {
     stopCamera();
@@ -264,18 +263,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         form.setValue('photos', [dataUrl]);
       }
       handleCloseCamera();
-    }
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        form.setValue('photos', [dataUrl]);
-      };
-      reader.readAsDataURL(file);
     }
   };
   
@@ -328,18 +315,25 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     });
     setAutocompleteValue('');
     setIsUnplannedManual(false);
+    setProofMethod(null);
   }, [form]);
 
   useEffect(() => {
     if (entryToEdit) {
-      form.reset({
-        ...entryToEdit,
-        coverageDate: entryToEdit.coverageDate ? parseISO(entryToEdit.coverageDate) : new Date(),
-      });
+        form.reset({
+            ...entryToEdit,
+            coverageDate: entryToEdit.coverageDate ? parseISO(entryToEdit.coverageDate) : new Date(),
+        });
+        if (entryToEdit.photos && entryToEdit.photos.length > 0) {
+            setProofMethod("photo");
+        } else if (entryToEdit.signature) {
+            setProofMethod("signature");
+        }
     } else if (!initialDoctor) {
-      resetForm();
+        resetForm();
     }
   }, [entryToEdit, initialDoctor, form, resetForm]);
+
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
@@ -391,6 +385,30 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
   };
 
+  const handleProofMethodChange = (value: 'photo' | 'signature') => {
+    setProofMethod(value);
+    if (value === 'photo') {
+        form.setValue('signature', null);
+        handleOpenCamera();
+    } else {
+        form.setValue('photos', []);
+        openSignaturePad('signature');
+    }
+  }
+
+  const openSignaturePad = (fieldName: 'signature' | 'dsmSignature' | 'jointCallSignature') => {
+    setSignatureFieldToUpdate(fieldName);
+    setIsSignaturePadOpen(true);
+  }
+
+  const handleSaveSignature = (dataUrl: string | null) => {
+      if(signatureFieldToUpdate) {
+          form.setValue(signatureFieldToUpdate, dataUrl);
+      }
+      setIsSignaturePadOpen(false);
+      setSignatureFieldToUpdate(null);
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const isEditMode = !!entryToEdit;
 
@@ -418,22 +436,20 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         form.setValue('hacme', doctorInMasterlist.hacme); // Ensure form state is updated too
     }
 
-    if (values.callType === 'unplanned') {
-      const pilotTestingEndDate = new Date('2024-09-14T00:00:00'); // End of Sept 13
-      const now = new Date();
+    const pilotTestingEndDate = new Date('2024-09-14T00:00:00'); // End of Sept 13
+    const now = new Date();
+    
+    if (values.callType === 'unplanned' && now >= pilotTestingEndDate) {
+      const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => e.submittedAt && isToday(parseISO(e.submittedAt)));
+      const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
 
-      if (now >= pilotTestingEndDate) {
-        const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => e.submittedAt && isToday(parseISO(e.submittedAt)));
-        const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
-
-        if (todaysUnplannedCalls >= MAX_UNPLANNED_CALLS) {
-            toast({
-                variant: "destructive",
-                title: "Unplanned Call Limit Reached",
-                description: `You can only submit a maximum of ${MAX_UNPLANNED_CALLS} unplanned calls per day.`,
-            });
-            return;
-        }
+      if (todaysUnplannedCalls >= MAX_UNPLANNED_CALLS) {
+          toast({
+              variant: "destructive",
+              title: "Unplanned Call Limit Reached",
+              description: `You can only submit a maximum of ${MAX_UNPLANNED_CALLS} unplanned calls per day.`,
+          });
+          return;
       }
     }
 
@@ -892,114 +908,102 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                     </Accordion>
                     
                     <div className="space-y-6">
-                        <FormField
-                            control={form.control}
-                            name="photos"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-lg font-semibold font-headline">Photo Proof</FormLabel>
-                                    <div className="p-4 border rounded-md">
-                                        {photos && photos.length > 0 ? (
-                                             <div className="relative w-full max-w-xs mx-auto">
-                                                <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
-                                                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
-                                                    <Trash2 />
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center gap-4">
-                                                <p className="text-sm text-center text-muted-foreground">Attach a photo as proof of visit.</p>
-                                                <div className="flex gap-2">
-                                                    <Button type="button" onClick={() => setIsPhotoSourceDialogOpen(true)}>
-                                                        <ImagePlus className="mr-2" />
-                                                        Add Photo
-                                                    </Button>
-                                                    <FormControl>
-                                                      <Input 
-                                                        type="file" 
-                                                        className="hidden" 
-                                                        ref={fileInputRef} 
-                                                        accept="image/*"
-                                                        onChange={handleFileUpload}
-                                                      />
-                                                    </FormControl>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <div className="grid grid-cols-1 gap-6">
-                            <FormField
-                                control={form.control}
-                                name="signature"
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel className="text-lg font-semibold font-headline">MD Signature</FormLabel>
-                                    <FormControl>
-                                        <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             {coverageType === 'joint' && (
-                                <div className="space-y-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="jointCallWith"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="font-headline">Joint Call With</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value}>
+                        <div>
+                            <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
+                            <Card className="mt-2">
+                                <CardContent className="p-4">
+                                    <RadioGroup
+                                        value={proofMethod || ""}
+                                        onValueChange={handleProofMethodChange}
+                                        className="flex gap-4 pt-2"
+                                    >
+                                        <FormItem className="flex items-center space-x-3 space-y-0">
                                             <FormControl>
-                                                <SelectTrigger>
-                                                <SelectValue placeholder="Select role..." />
-                                                </SelectTrigger>
+                                                <RadioGroupItem value="photo" />
                                             </FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="HOS">HOS</SelectItem>
-                                                <SelectItem value="GM">GM</SelectItem>
-                                                <SelectItem value="PM">PM</SelectItem>
-                                                <SelectItem value="SFE">SFE</SelectItem>
-                                            </SelectContent>
-                                            </Select>
-                                            <FormMessage />
+                                            <FormLabel className="font-normal text-sm">Selfie Photo</FormLabel>
                                         </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="dsmSignature"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="text-lg font-semibold font-headline">DSM Signature</FormLabel>
+                                        <FormItem className="flex items-center space-x-3 space-y-0">
                                             <FormControl>
-                                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
+                                                <RadioGroupItem value="signature" />
                                             </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="jointCallSignature"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="text-lg font-semibold font-headline">{jointCallWith || 'Companion'} Signature</FormLabel>
-                                            <FormControl>
-                                                <SignaturePad value={field.value} onChange={(value) => field.onChange(value)} className="h-[250px] w-full" />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-                            )}
+                                            <FormLabel className="font-normal text-sm">MD Signature</FormLabel>
+                                        </FormItem>
+                                    </RadioGroup>
+
+                                    {proofMethod === 'photo' && photos && photos.length > 0 && (
+                                        <div className="relative w-full max-w-xs mx-auto mt-4">
+                                            <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
+                                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
+                                                <Trash2 />
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {proofMethod === 'signature' && signature && (
+                                        <div className="mt-4 space-y-2">
+                                            <Label>MD Signature</Label>
+                                            <div className="p-2 border rounded-md bg-muted w-fit">
+                                                <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
+                                            </div>
+                                            <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                            <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
                         </div>
+                         {coverageType === 'joint' && (
+                            <div className="space-y-4">
+                                <FormField
+                                    control={form.control}
+                                    name="jointCallWith"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="font-headline">Joint Call With</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                            <SelectValue placeholder="Select role..." />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="HOS">HOS</SelectItem>
+                                            <SelectItem value="GM">GM</SelectItem>
+                                            <SelectItem value="PM">PM</SelectItem>
+                                            <SelectItem value="SFE">SFE</SelectItem>
+                                        </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                 <div className="space-y-2">
+                                    <Label>DSM Signature</Label>
+                                    {dsmSignature ? (
+                                        <div className="p-2 border rounded-md bg-muted w-fit">
+                                            <Image src={dsmSignature} alt="DSM signature" width={200} height={100} className="bg-white rounded" />
+                                        </div>
+                                    ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
+                                    <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('dsmSignature')}>
+                                        <Edit className="mr-2"/> {dsmSignature ? 'Edit' : 'Add'} Signature
+                                    </Button>
+                                    <FormMessage>{form.formState.errors.dsmSignature?.message}</FormMessage>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>{jointCallWith || 'Companion'} Signature</Label>
+                                    {jointCallSignature ? (
+                                        <div className="p-2 border rounded-md bg-muted w-fit">
+                                            <Image src={jointCallSignature} alt="Companion signature" width={200} height={100} className="bg-white rounded" />
+                                        </div>
+                                    ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
+                                    <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('jointCallSignature')}>
+                                        <Edit className="mr-2"/> {jointCallSignature ? 'Edit' : 'Add'} Signature
+                                    </Button>
+                                    <FormMessage>{form.formState.errors.jointCallSignature?.message}</FormMessage>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     
                     <Button type="submit" size="lg" className="w-full font-headline">
@@ -1029,30 +1033,12 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-        <Dialog open={isPhotoSourceDialogOpen} onOpenChange={setIsPhotoSourceDialogOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Add Photo Proof</DialogTitle>
-                    <DialogDescription>Choose how you want to provide a photo.</DialogDescription>
-                </DialogHeader>
-                <div className="grid grid-cols-1 gap-4 py-4 md:grid-cols-2">
-                     <Button type="button" variant="outline" className="h-24" onClick={handleOpenCamera}>
-                        <div className="flex flex-col items-center justify-center gap-2">
-                            <Camera className="w-8 h-8"/>
-                            <span>Capture Photo</span>
-                        </div>
-                    </Button>
-                    <Button type="button" variant="outline" className="h-24" onClick={handleOpenUpload}>
-                        <div className="flex flex-col items-center justify-center gap-2">
-                            <Upload className="w-8 h-8"/>
-                            <span>Upload Photo</span>
-                        </div>
-                    </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+        <SignaturePadFullScreen 
+            open={isSignaturePadOpen}
+            onClose={() => setIsSignaturePadOpen(false)}
+            onSave={handleSaveSignature}
+            value={signatureFieldToUpdate ? form.getValues(signatureFieldToUpdate) : null}
+        />
     </Card>
   )
 }
-
-    
