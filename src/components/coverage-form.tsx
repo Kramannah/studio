@@ -36,7 +36,7 @@ import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog"
 import { Autocomplete } from "./autocomplete"
-import { Label } from "./ui/label"
+import { Label } from "@/components/ui/label"
 
 
 const formSchema = z.object({
@@ -1043,5 +1043,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    
