@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -8,7 +9,7 @@ import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, is
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -322,6 +323,43 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         XLSX.writeFile(workbook, fileName);
       };
       
+    const handleSendEmail = () => {
+        const entriesToEmail = viewMode === 'list' ? filteredEntries : selectedDayEntries;
+        if (entriesToEmail.length === 0) return;
+
+        let dateRangeString;
+        if(viewMode === 'list'){
+            if (!dateRange || !dateRange.from) return;
+            dateRangeString = `${format(dateRange.from, 'PPP')} to ${dateRange.to ? format(dateRange.to, 'PPP') : format(dateRange.from, 'PPP')}`;
+        } else {
+            if (!selectedDate) return;
+            dateRangeString = format(selectedDate, 'PPP');
+        }
+
+        const subject = `Submitted Coverage Report: ${dateRangeString}`;
+        
+        let body = `Submitted Coverage Report\n`;
+        body += `Period: ${dateRangeString}\n\n`;
+
+        entriesToEmail.forEach(entry => {
+            body += `--- \n`;
+            body += `Doctor: ${entry.firstName} ${entry.lastName}\n`;
+            body += `Clinic: ${entry.clinic}\n`;
+            body += `Specialty: ${entry.specialty}\n`;
+            body += `Submitted At: ${format(parseISO(entry.submittedAt), 'PPP p')}\n`;
+            body += `Coverage Date: ${format(parseISO(entry.coverageDate), 'PPP')}\n`;
+            body += `Call Type: ${entry.callType}\n`;
+            body += `Coverage Type: ${entry.coverageType}\n`;
+            if (entry.coverageType === 'joint') {
+                body += `Joint Call With: ${entry.jointCallWith}\n`;
+            }
+            body += `---\n\n`;
+        });
+    
+        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailtoLink;
+    };
+
 
     if (entries.length === 0) {
         return (
@@ -382,7 +420,11 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                         <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
                         <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!dateRange || !dateRange.from}>
                             <Download className="mr-2" />
-                            Download Report
+                            Download
+                        </Button>
+                         <Button onClick={handleSendEmail} variant="outline" disabled={!dateRange || !dateRange.from}>
+                            <Send className="mr-2"/>
+                            Send via Email
                         </Button>
                     </div>
                 )}
@@ -390,7 +432,11 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                      <div className="flex items-center gap-2 pt-4">
                         <Button onClick={handleDownloadSubmitted} disabled={!selectedDate || selectedDayEntries.length === 0}>
                             <Download className="mr-2" />
-                            Download Report for {selectedDate ? format(selectedDate, 'PPP') : ''}
+                            Download for {selectedDate ? format(selectedDate, 'PPP') : ''}
+                        </Button>
+                        <Button onClick={handleSendEmail} variant="outline" disabled={!selectedDate || selectedDayEntries.length === 0}>
+                            <Send className="mr-2"/>
+                            Send for {selectedDate ? format(selectedDate, 'PPP') : ''}
                         </Button>
                      </div>
                  )}

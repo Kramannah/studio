@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes, isValid } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User } from "lucide-react";
+import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -199,6 +199,45 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         XLSX.writeFile(workbook, fileName);
     };
 
+    const handleSendEmail = () => {
+        if (!filterRange || !filterRange.from) return;
+    
+        const subject = `Call Summary Report: ${format(filterRange.from, 'PPP')} to ${filterRange.to ? format(filterRange.to, 'PPP') : format(filterRange.from, 'PPP')}`;
+        
+        let body = `Call Summary Report\n`;
+        body += `Period: ${format(filterRange.from, 'PPP')} to ${filterRange.to ? format(filterRange.to, 'PPP') : format(filterRange.from, 'PPP')}\n\n`;
+
+        body += `--- KEY METRICS ---\n`;
+        body += `Call Concentration: ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)\n`;
+        body += `Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)\n`;
+        body += `Avg Calls / Day: ${insights.avgCallsPerDay}\n`;
+        body += `Total Working Days: ${insights.totalWorkingDays}\n`;
+        body += `Inbase Days: ${insights.totalInbaseDays}\n`;
+        body += `Outbase Days: ${insights.totalOutbaseDays}\n\n`;
+
+        if (filteredTimeLogs.length > 0) {
+            body += `--- TIME LOGS ---\n`;
+            body += `User ID, Date, Time In, Time Out, Duration (min), Location\n`;
+            filteredTimeLogs.forEach(log => {
+                const duration = log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A';
+                body += `${log.userId}, ${format(parseISO(log.timeIn), "yyyy-MM-dd")}, ${format(parseISO(log.timeIn), "p")}, ${log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}, ${duration}, ${log.locationType}\n`;
+            });
+            body += '\n';
+        }
+
+        if (filteredNonCallDays.length > 0) {
+            body += `--- NON-CALL DAYS ---\n`;
+            body += `Date, Reason, Remarks\n`;
+            filteredNonCallDays.forEach(day => {
+                body += `${format(parseISO(day.date), "yyyy-MM-dd")}, ${day.reason}, ${day.remarks || 'N/A'}\n`;
+            });
+            body += '\n';
+        }
+    
+        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailtoLink;
+    };
+
     const handleDateInputChange = (field: 'from' | 'to', value: string) => {
         const date = new Date(value);
         if (isValid(date)) {
@@ -260,7 +299,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                             <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
                             <Button onClick={handleDownloadSummary} variant="outline" disabled={!filterRange || !filterRange.from}>
                                 <Download className="mr-2"/>
-                                Download Summary
+                                Download
+                            </Button>
+                             <Button onClick={handleSendEmail} variant="outline" disabled={!filterRange || !filterRange.from}>
+                                <Send className="mr-2"/>
+                                Send via Email
                             </Button>
                         </div>
                     </div>
@@ -385,7 +428,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                             </Table>
                         </div>
                     </CardContent>
-                </Card>
+                 </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle className="font-headline">Non-Call Day</CardTitle>
@@ -427,9 +470,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                 </Card>
             </div>
         </div>
-    )
+    );
 }
 
     
+
+
 
 
