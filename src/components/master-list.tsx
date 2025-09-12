@@ -112,44 +112,46 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         
         const json = XLSX.utils.sheet_to_json<any>(worksheet);
 
-        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName', 'specialty', 'clinic', 'frequency', 'hacme'];
+        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName'];
         
         const mappedData = json.map(row => ({
-            firstName: row.firstName,
-            lastName: row.lastName,
-            specialty: row.specialty,
-            clinic: row.clinic,
-            province: row.province,
-            municipality: row.municipality,
-            placeOfPractice: row.placeOfPractice,
-            frequency: row.frequency,
-            hacme: row.hacme,
+            firstName: row.firstName || '',
+            lastName: row.lastName || '',
+            specialty: row.specialty || '',
+            clinic: row.clinic || '',
+            province: row.province || '',
+            municipality: row.municipality || '',
+            placeOfPractice: row.placeOfPractice || '',
+            frequency: ['1x', '2x', '3x', '4x'].includes(row.frequency) ? row.frequency : '1x',
+            hacme: ['YES', 'NO'].includes(row.hacme) ? row.hacme : 'NO',
         }));
 
-        const isValid = mappedData.every(row => requiredFields.every(field => {
-            if(field === 'hacme') {
-                return row[field] === 'YES' || row[field] === 'NO';
-            }
-             if(field === 'frequency') {
-                return ['1x', '2x', '3x', '4x'].includes(row[field]);
-            }
-            return row[field] !== undefined && row[field] !== null;
+        const validDoctors = mappedData.filter(row => requiredFields.every(field => {
+            return row[field] !== undefined && row[field] !== null && row[field] !== '';
         }));
 
-
-        if (!isValid) {
+        if (validDoctors.length !== mappedData.length) {
+            const invalidCount = mappedData.length - validDoctors.length;
+            toast({
+                variant: "destructive",
+                title: "Incomplete Data",
+                description: `${invalidCount} doctor(s) were skipped due to missing first or last names.`,
+            });
+        }
+        
+        if (validDoctors.length === 0) {
           toast({
             variant: "destructive",
             title: "Upload Failed",
-            description: "The Excel file is missing required columns (firstName, lastName, specialty, clinic, frequency, hacme) or contains invalid data.",
+            description: "No valid doctor entries found in the file. Please ensure 'firstName' and 'lastName' are provided.",
           });
           return;
         }
 
-        onAddDoctorsBulk(mappedData);
+        onAddDoctorsBulk(validDoctors);
         toast({
           title: "Upload Successful",
-          description: `${mappedData.length} doctors have been added to the masterlist.`,
+          description: `${validDoctors.length} doctors have been added or updated in the masterlist.`,
         });
       } catch (error) {
         console.error("Failed to parse Excel file", error);
@@ -396,3 +398,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
