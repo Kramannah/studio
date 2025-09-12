@@ -200,15 +200,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                         }}
                         className="w-full p-4 border rounded-md"
                     />
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <Input
-                            placeholder="Search doctors to add to plan..."
-                            value={doctorFilter}
-                            onChange={(e) => setDoctorFilter(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
                 </div>
                 <div>
                     <div className="flex items-center justify-between mb-4">
@@ -234,10 +225,21 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[80vw] max-w-[60rem]">
                                     <div className="grid gap-4">
-                                        <h4 className="font-medium leading-none">Add Doctor to Plan</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            Select a doctor to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
-                                        </p>
+                                        <div className="space-y-2">
+                                            <h4 className="font-medium leading-none">Add Doctor to Plan</h4>
+                                            <p className="text-sm text-muted-foreground">
+                                                Select a doctor to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
+                                            </p>
+                                        </div>
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                                            <Input
+                                                placeholder="Search doctors to add to plan..."
+                                                value={doctorFilter}
+                                                onChange={(e) => setDoctorFilter(e.target.value)}
+                                                className="pl-10"
+                                            />
+                                        </div>
                                         <ScrollArea className="h-72">
                                             <div className="border rounded-md">
                                             <Table>
@@ -401,6 +403,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
