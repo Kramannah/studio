@@ -196,10 +196,12 @@ export function SignaturePadFullScreen({ open, onClose, onSave, value }: Signatu
                         className="w-full h-full"
                     />
                 </div>
-                <DialogFooter className="p-4 border-t flex-row justify-end gap-2">
-                    <Button variant="outline" onClick={onClose}><X className="mr-2" /> Close</Button>
+                <DialogFooter className="p-4 border-t flex-row justify-between">
                     <Button variant="secondary" onClick={() => setCurrentSignature(null)}><Eraser className="mr-2" /> Clear</Button>
-                    <Button onClick={handleSave}><Save className="mr-2" /> Save</Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={onClose}><X className="mr-2" /> Close</Button>
+                        <Button onClick={handleSave}><Save className="mr-2" /> Save</Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
