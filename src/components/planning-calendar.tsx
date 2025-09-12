@@ -132,7 +132,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
 
-    const isDateLockedForPlanning = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
+    const isDateInPast = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
 
     if (doctors.length === 0) {
         return (
@@ -144,17 +144,16 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateLockedForPlanning;
-    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || isDateLockedForPlanning;
+    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateInPast;
+    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry;
     
     const getAddVisitTitle = () => {
-        if (isDateLockedForPlanning) return "Cannot add visits for past dates.";
+        if (isDateInPast) return "Cannot add visits for past dates.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         return "Add a new visit";
     }
 
     const getAddNonCallTitle = () => {
-        if (isDateLockedForPlanning) return "Cannot log non-call days for past dates.";
         if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
         if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
@@ -403,6 +402,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
 
     
 
