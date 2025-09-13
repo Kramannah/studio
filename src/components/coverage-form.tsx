@@ -36,7 +36,7 @@ import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog"
 import { Autocomplete } from "./autocomplete"
-import { Label } from "@/components/ui/label"
+import { Label } from "./ui/label"
 
 
 const formSchema = z.object({
@@ -105,7 +105,7 @@ const formSchema = z.object({
 
 
 type CoverageFormProps = {
-  onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt'>) => void;
+  onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => void;
   onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
   isOnline: boolean;
   doctors: Doctor[];

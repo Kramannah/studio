@@ -25,11 +25,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TimeInDialog } from "@/components/time-in-dialog";
 import { TimeOutDialog } from "@/components/time-out-dialog";
+import { useAuth } from "@/hooks/use-auth";
+import { LoginPage } from "@/components/login-page";
 
 
 export default function Home() {
+  const { user, loading, logout } = useAuth();
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage, user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
   const { plans, addPlan, removePlan } = usePlans();
   const { nonCallDays, addNonCallDay } = useNonCallDays();
@@ -89,6 +92,18 @@ export default function Home() {
     handleTimeOut();
     setIsTimeOutDialogOpen(false);
   };
+  
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+            <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+        </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   if (!currentTimeLog) {
     return (
@@ -96,6 +111,10 @@ export default function Home() {
         <div className="flex flex-col min-h-screen bg-background text-foreground">
           <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
             <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">{user.email}</span>
+                <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
+            </div>
           </header>
           <main className="flex-1 flex items-center justify-center p-4 md:p-6">
             <Card className="w-full max-w-md">
@@ -134,6 +153,7 @@ export default function Home() {
               </div>
           </div>
           <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
               <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>

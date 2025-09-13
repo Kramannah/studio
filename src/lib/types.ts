@@ -2,6 +2,7 @@
 
 export interface CoverageEntry {
   id: string;
+  userId: string;
   firstName?: string;
   lastName?: string;
   specialty?: string;
