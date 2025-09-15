@@ -105,6 +105,12 @@ export const useTimeLog = () => {
 
   const handleTimeIn = useCallback(async (locationType: 'inbase' | 'outbase') => {
     if (!user || !db) return;
+    
+    if (currentTimeLog) {
+        toast({ title: "Already Timed In", description: "You already have an active session." });
+        return;
+    }
+      
     const newLogData: Omit<TimeLog, 'id'> = {
       userId: user.uid,
       timeIn: new Date().toISOString(),
@@ -122,7 +128,7 @@ export const useTimeLog = () => {
         console.error("Error during time in:", error);
         toast({ variant: 'destructive', title: 'Time In Failed', description: 'Could not save time-in record online.' });
     }
-  }, [toast, user, getCurrentLogLocalKey]);
+  }, [toast, user, getCurrentLogLocalKey, currentTimeLog]);
 
   const handleTimeOut = useCallback(async () => {
     if (!currentTimeLog || !db) return;
