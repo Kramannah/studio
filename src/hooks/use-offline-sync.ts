@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,22 +6,27 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, writeBatch, deleteDoc, doc, updateDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
+import { useAuth } from './use-auth';
 
 const OFFLINE_KEY_PREFIX = 'sfe-offline-coverage-offline';
 
 export const useOfflineSync = (updateSampleUsage?: (productName: string, quantity: number) => void, userId?: string) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
-  const getOfflineKey = useCallback(() => `${OFFLINE_KEY_PREFIX}_${userId}`, [userId]);
+  const getOfflineKey = useCallback(() => `${OFFLINE_KEY_PREFIX}_${user?.uid}`, [user]);
 
   const fetchMasterEntries = useCallback(async () => {
-    if (!db || !userId) return;
+    if (!db || !user) {
+      setMasterEntries([]);
+      return;
+    };
     try {
-        const q = query(collection(db, 'coverageEntries'), where("userId", "==", userId), orderBy('submittedAt', 'desc'));
+        const q = query(collection(db, 'coverageEntries'), where("userId", "==", user.uid), orderBy('submittedAt', 'desc'));
         const querySnapshot = await getDocs(q);
         const entries = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
         setMasterEntries(entries);
@@ -34,35 +38,45 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
             description: "Could not fetch submitted entries from Firestore."
         });
     }
-  }, [toast, userId]);
+  }, [toast, user]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-        if(userId) {
-            const offlineData = localStorage.getItem(getOfflineKey());
-            if (offlineData) {
-                try {
-                setOfflineEntries(JSON.parse(offlineData));
-                } catch (error) {
-                console.error("Failed to parse offline data:", error);
-                }
-            } else {
-                setOfflineEntries([]);
-            }
-            fetchMasterEntries();
-        } else {
-            // Clear data if no user
-            setOfflineEntries([]);
-            setMasterEntries([]);
-        }
+    const handleOnlineStatusChange = () => {
+      setIsOnline(navigator.onLine);
+    };
 
-      const onlineStatus = navigator.onLine;
-      setIsOnline(onlineStatus);
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnlineStatusChange);
+      window.removeEventListener('offline', handleOnlineStatusChange);
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (user) {
+        const offlineData = localStorage.getItem(getOfflineKey());
+        if (offlineData) {
+            try {
+              setOfflineEntries(JSON.parse(offlineData));
+            } catch (error) {
+              console.error("Failed to parse offline data:", error);
+            }
+        } else {
+            setOfflineEntries([]);
+        }
+        fetchMasterEntries();
+    } else {
+        // Clear data if no user
+        setOfflineEntries([]);
+        setMasterEntries([]);
     }
-  }, [fetchMasterEntries, userId, getOfflineKey]);
+  }, [user, fetchMasterEntries, getOfflineKey]);
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!navigator.onLine) {
+    if (!isOnline) {
         toast({ variant: 'destructive', title: 'You are offline', description: 'Please connect to the internet to sync.' });
         return;
     }
@@ -88,7 +102,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
         const batch = writeBatch(db);
         entriesToSync.forEach((entry: CoverageEntry) => {
             // Firestore will auto-generate an ID, so we don't pass our local one
-            const { id, ...entryData } = entry;
+            const { id, isOffline, ...entryData } = entry;
             const docRef = doc(collection(db, 'coverageEntries'));
             batch.set(docRef, entryData);
         });
@@ -117,47 +131,38 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
         setIsSyncing(false);
     }
     
-  }, [isSyncing, toast, updateSampleUsage, fetchMasterEntries, getOfflineKey]);
+  }, [isSyncing, toast, updateSampleUsage, fetchMasterEntries, getOfflineKey, isOnline]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
+    if (isOnline) {
       const offlineData = localStorage.getItem(getOfflineKey());
       if (offlineData && JSON.parse(offlineData).length > 0) {
         syncAllOfflineEntries();
       }
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [syncAllOfflineEntries, getOfflineKey]);
+    }
+  }, [isOnline, getOfflineKey, syncAllOfflineEntries]);
 
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => {
-    if (!userId) {
+    if (!user) {
         toast({ variant: 'destructive', title: 'Not logged in', description: 'You must be logged in to save entries.'});
         return;
     }
 
     const newEntry: Omit<CoverageEntry, 'id'> & { submittedAt: any } = {
       ...entry,
-      userId,
-      submittedAt: serverTimestamp(), // Use server timestamp for online entries
+      userId: user.uid,
+      submittedAt: serverTimestamp(),
     };
     
     if (isOnline && db) {
-        // If online, sync immediately
         setIsSyncing(true);
         toast({ title: "Submitting...", description: "Saving your entry directly." });
         
         try {
-            await addDoc(collection(db, "coverageEntries"), newEntry);
+            const { submittedAt, ...rest } = newEntry;
+            const dataToSave = { ...rest, submittedAt: new Date().toISOString() };
+            await addDoc(collection(db, "coverageEntries"), dataToSave);
             
             if (updateSampleUsage) {
                 if (newEntry.primarySampleName && newEntry.primaryProductQty) {
@@ -168,31 +173,29 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
                 }
             }
             toast({ title: "Entry Submitted", description: "Your coverage has been saved." });
-            await fetchMasterEntries(); // Refresh master list
+            await fetchMasterEntries();
         } catch (error) {
             console.error("Error saving entry to Firestore:", error);
             toast({ variant: 'destructive', title: 'Save Failed', description: 'Could not save entry online, saving locally.' });
-            // Fallback to offline if online save fails
             saveEntryOffline(entry);
         } finally {
             setIsSyncing(false);
         }
 
     } else {
-        // If offline, save to queue
         saveEntryOffline(entry);
     }
   };
 
   const saveEntryOffline = (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => {
-    if(!userId) return;
+    if(!user) return;
     const newEntry: CoverageEntry = {
         ...entry,
         id: crypto.randomUUID(),
-        userId,
-        submittedAt: new Date().toISOString(), // Use local time for offline
+        userId: user.uid,
+        submittedAt: new Date().toISOString(),
       };
-    const newOfflineEntries = [newEntry, ...offlineEntries];
+    const newOfflineEntries = [...offlineEntries, newEntry];
     setOfflineEntries(newOfflineEntries);
     localStorage.setItem(getOfflineKey(), JSON.stringify(newOfflineEntries));
     toast({ title: "Entry saved locally", description: "It will be synced when you're online." });
@@ -204,7 +207,6 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     try {
         await deleteDoc(doc(db, "coverageEntries", id));
         if (entryToDelete) {
-            // Note: Reversing sample usage would be complex. Not implemented for now.
             toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage for ${entryToDelete.firstName} ${entryToDelete.lastName} has been removed.` });
         }
         await fetchMasterEntries();
@@ -216,7 +218,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
 
   const updateMasterEntry = useCallback(async (entryToUpdate: Omit<CoverageEntry, 'submittedAt'>) => {
     if (!db || !entryToUpdate.id) return;
-    const { id, ...dataToUpdate} = entryToUpdate;
+    const { id, isOffline, ...dataToUpdate} = entryToUpdate;
 
     try {
         const docRef = doc(db, "coverageEntries", id);

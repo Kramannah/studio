@@ -25,6 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { format } from "date-fns"
+import type { NonCallDay } from "@/lib/types"
 
 const nonCallDayFormSchema = z.object({
   reason: z.string().min(1, "Please select a reason."),
@@ -34,7 +35,7 @@ const nonCallDayFormSchema = z.object({
 type NonCallDayDialogProps = {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (data: z.infer<typeof nonCallDayFormSchema>) => void;
+  onSave: (data: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
   selectedDate: Date;
 }
 

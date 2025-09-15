@@ -36,6 +36,7 @@ export interface CoverageEntry {
 
 export interface Doctor {
   id: string;
+  userId: string;
   firstName: string;
   lastName:string;
   specialty: string;
@@ -49,6 +50,7 @@ export interface Doctor {
 
 export interface Plan {
   id: string;
+  userId: string;
   doctorId: string;
   doctorFirstName: string;
   doctorLastName: string;
@@ -59,6 +61,7 @@ export interface Plan {
 
 export interface NonCallDay {
   id: string;
+  userId: string;
   date: string; // ISO string
   reason: string;
   remarks: string;

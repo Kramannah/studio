@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,38 +29,18 @@ import { LoginPage } from "@/components/login-page";
 
 
 export default function Home() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage, user?.uid);
-  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor } = useDoctors();
-  const { plans, addPlan, removePlan } = usePlans();
-  const { nonCallDays, addNonCallDay } = useNonCallDays();
-  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs, userId } = useTimeLog();
-  const [isOnline, setIsOnline] = useState(true);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage, user?.uid);
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
+  const { plans, addPlan, removePlan, loading: plansLoading } = usePlans();
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
+  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs, userId, loading: timeLogLoading } = useTimeLog();
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [isTimeInDialogOpen, setIsTimeInDialogOpen] = useState(false);
   const [isTimeOutDialogOpen, setIsTimeOutDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'onLine' in navigator) {
-      setIsOnline(navigator.onLine);
-    }
-    
-    const handleOnline = () => {
-        setIsOnline(true);
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -93,7 +72,9 @@ export default function Home() {
     setIsTimeOutDialogOpen(false);
   };
   
-  if (loading) {
+  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogLoading;
+
+  if (anyLoading) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <RefreshCw className="w-12 h-12 animate-spin text-primary" />

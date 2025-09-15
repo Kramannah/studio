@@ -28,7 +28,7 @@ type PlanningCalendarProps = {
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
   nonCallDays: NonCallDay[];
-  onAddNonCallDay: (entry: Omit<NonCallDay, 'id'>) => void;
+  onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
 };
 
 
