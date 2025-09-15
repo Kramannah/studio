@@ -6,8 +6,9 @@ import type { NonCallDay } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { useAuth } from './use-auth';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 
-const NON_CALL_DAYS_LOCAL_KEY = 'sfe-offline-coverage-non-call-days-local';
 
 export const useNonCallDays = () => {
   const { toast } = useToast();
@@ -15,46 +16,50 @@ export const useNonCallDays = () => {
   const [nonCallDays, setNonCallDays] = useState<NonCallDay[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const getLocalKey = useCallback(() => `${NON_CALL_DAYS_LOCAL_KEY}_${user?.uid}`, [user]);
-
-  useEffect(() => {
-    if (user) {
-      setLoading(true);
-      try {
-        const localData = localStorage.getItem(getLocalKey());
-        if (localData) {
-          setNonCallDays(JSON.parse(localData));
-        }
-      } catch (error) {
-        console.error("Error reading non-call days from local storage:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not load non-call days." });
-      } finally {
-        setLoading(false);
-      }
-    } else {
+  const fetchNonCallDays = useCallback(async () => {
+    if (!user) {
       setNonCallDays([]);
       setLoading(false);
+      return;
+    };
+    setLoading(true);
+    try {
+      const q = query(collection(db, "nonCallDays"), where("userId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      const fetchedDays: NonCallDay[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedDays.push({ id: doc.id, ...doc.data() } as NonCallDay);
+      });
+      setNonCallDays(fetchedDays);
+    } catch (error) {
+      console.error("Error fetching non-call days:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load non-call days." });
+    } finally {
+      setLoading(false);
     }
-  }, [user, getLocalKey, toast]);
+  }, [user, toast]);
 
-  const updateLocalStorage = (updatedDays: NonCallDay[]) => {
-    setNonCallDays(updatedDays);
-    localStorage.setItem(getLocalKey(), JSON.stringify(updatedDays));
-  };
+  useEffect(() => {
+    fetchNonCallDays();
+  }, [fetchNonCallDays]);
 
-  const addNonCallDay = useCallback((entry: Omit<NonCallDay, 'id' | 'userId'>) => {
+
+  const addNonCallDay = useCallback(async (entry: Omit<NonCallDay, 'id' | 'userId'>) => {
     if (!user) return;
     
-    const newEntry: NonCallDay = {
-      id: crypto.randomUUID(),
+    const newEntry = {
       userId: user.uid,
       ...entry,
     };
 
-    const updatedDays = [...nonCallDays, newEntry];
-    updateLocalStorage(updatedDays);
-    toast({ title: "Non-Call Day Logged", description: `Your entry for ${format(new Date(entry.date), 'PPP')} has been saved.` });
-  }, [nonCallDays, toast, user, getLocalKey]);
+    try {
+      const docRef = await addDoc(collection(db, "nonCallDays"), newEntry);
+      setNonCallDays(prev => [...prev, { id: docRef.id, ...newEntry }]);
+      toast({ title: "Non-Call Day Logged", description: `Your entry for ${format(new Date(entry.date), 'PPP')} has been saved.` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Could not save non-call day." });
+    }
+  }, [toast, user]);
 
   return { nonCallDays, addNonCallDay, loading };
 };

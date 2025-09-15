@@ -5,8 +5,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
-
-const DOCTORS_LOCAL_KEY = 'sfe-offline-coverage-doctors-local';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 export const useDoctors = () => {
   const { toast } = useToast();
@@ -14,80 +14,109 @@ export const useDoctors = () => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const getLocalKey = useCallback(() => `${DOCTORS_LOCAL_KEY}_${user?.uid}`, [user]);
-
-  useEffect(() => {
-    if (user) {
-      setLoading(true);
-      try {
-        const localData = localStorage.getItem(getLocalKey());
-        if (localData) {
-          setDoctors(JSON.parse(localData));
-        }
-      } catch (error) {
-        console.error("Error reading doctors from local storage:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not load local doctor masterlist." });
-      } finally {
-        setLoading(false);
-      }
-    } else {
+  const fetchDoctors = useCallback(async () => {
+    if (!user) {
       setDoctors([]);
       setLoading(false);
+      return;
     }
-  }, [user, getLocalKey, toast]);
-
-  const updateLocalStorage = (updatedDoctors: Doctor[]) => {
-    setDoctors(updatedDoctors);
-    localStorage.setItem(getLocalKey(), JSON.stringify(updatedDoctors));
-  };
-
-  const addDoctor = useCallback((doctorData: Omit<Doctor, 'id'>) => {
-    if (!user) return;
-    const newDoctor: Doctor = { ...doctorData, id: crypto.randomUUID(), userId: user.uid };
-    const updatedDoctors = [...doctors, newDoctor];
-    updateLocalStorage(updatedDoctors);
-    toast({ title: "Doctor Added", description: `${newDoctor.firstName} ${newDoctor.lastName} has been added.` });
-  }, [user, doctors, toast, getLocalKey]);
-
-  const addDoctorsBulk = useCallback((doctorsData: Omit<Doctor, 'id'>[]) => {
-    if (!user) return;
-
-    const existingDoctors = new Set(doctors.map(d => `${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
-    const uniqueNewDoctorsData = doctorsData.filter(d => !existingDoctors.has(`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
-
-    if (uniqueNewDoctorsData.length !== doctorsData.length) {
-        const duplicateCount = doctorsData.length - uniqueNewDoctorsData.length;
-        toast({
-            variant: "destructive",
-            title: "Duplicates Found",
-            description: `${duplicateCount} doctor(s) were skipped as they are already in the masterlist.`,
-        });
+    setLoading(true);
+    try {
+      const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      const fetchedDoctors: Doctor[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedDoctors.push({ id: doc.id, ...doc.data() } as Doctor);
+      });
+      setDoctors(fetchedDoctors);
+    } catch (error) {
+      console.error("Error fetching doctors:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch doctor masterlist." });
+    } finally {
+      setLoading(false);
     }
+  }, [user, toast]);
 
-    if (uniqueNewDoctorsData.length > 0) {
-      const newDoctors: Doctor[] = uniqueNewDoctorsData.map(d => ({ ...d, id: crypto.randomUUID(), userId: user.uid }));
-      const updatedDoctors = [...doctors, ...newDoctors];
-      updateLocalStorage(updatedDoctors);
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
+
+  const addDoctor = useCallback(async (doctorData: Omit<Doctor, 'id' | 'userId'>) => {
+    if (!user) return;
+    try {
+      const newDoctorData = { ...doctorData, userId: user.uid };
+      const docRef = await addDoc(collection(db, "doctors"), newDoctorData);
+      setDoctors(prev => [...prev, { id: docRef.id, ...newDoctorData }]);
+      toast({ title: "Doctor Added", description: `${doctorData.firstName} ${doctorData.lastName} has been added.` });
+    } catch (error) {
+       toast({ variant: "destructive", title: "Error", description: "Could not add doctor." });
+    }
+  }, [user, toast]);
+
+  const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id' | 'userId'>[]) => {
+    if (!user) return;
+
+    try {
+      const batch = writeBatch(db);
+      const newDoctors: Doctor[] = [];
+
+      const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      const existingDoctors = new Set(querySnapshot.docs.map(d => `${d.data().firstName.toLowerCase()} ${d.data().lastName.toLowerCase()}`));
+      
+      const uniqueNewDoctorsData = doctorsData.filter(d => !existingDoctors.has(`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
+
+      if (uniqueNewDoctorsData.length !== doctorsData.length) {
+          const duplicateCount = doctorsData.length - uniqueNewDoctorsData.length;
+          toast({
+              variant: "destructive",
+              title: "Duplicates Found",
+              description: `${duplicateCount} doctor(s) were skipped as they are already in the masterlist.`,
+          });
+      }
+      
+      uniqueNewDoctorsData.forEach(doctor => {
+        const docRef = doc(collection(db, "doctors"));
+        batch.set(docRef, { ...doctor, userId: user.uid });
+        newDoctors.push({ ...doctor, id: docRef.id, userId: user.uid });
+      });
+
+      await batch.commit();
+      setDoctors(prev => [...prev, ...newDoctors]);
       toast({ title: 'Upload Successful', description: `${newDoctors.length} doctors were added.` });
-    }
-  }, [doctors, user, toast, getLocalKey]);
 
-  const updateDoctor = useCallback((doctorData: Doctor) => {
-    if (!user) return;
-    const updatedDoctors = doctors.map(d => d.id === doctorData.id ? doctorData : d);
-    updateLocalStorage(updatedDoctors);
-    toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
-  }, [user, doctors, toast, getLocalKey]);
-
-  const deleteDoctor = useCallback((id: string) => {
-    if (!user) return;
-    const doctorToDelete = doctors.find(d => d.id === id);
-    const updatedDoctors = doctors.filter(d => d.id !== id);
-    updateLocalStorage(updatedDoctors);
-    if (doctorToDelete) {
-      toast({ variant: 'destructive', title: "Doctor Deleted", description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed.` });
+    } catch (error) {
+      console.error("Error adding doctors in bulk:", error);
+      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not add doctors to the masterlist.' });
     }
-  }, [user, doctors, toast, getLocalKey]);
+
+  }, [user, toast]);
+
+  const updateDoctor = useCallback(async (doctorData: Doctor) => {
+    if (!user) return;
+    try {
+      const doctorRef = doc(db, "doctors", doctorData.id);
+      await updateDoc(doctorRef, { ...doctorData });
+      setDoctors(prev => prev.map(d => d.id === doctorData.id ? doctorData : d));
+      toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
+    }
+  }, [user, toast]);
+
+  const deleteDoctor = useCallback(async (id: string) => {
+    if (!user) return;
+    try {
+      const doctorToDelete = doctors.find(d => d.id === id);
+      await deleteDoc(doc(db, "doctors", id));
+      setDoctors(prev => prev.filter(d => d.id !== id));
+      if (doctorToDelete) {
+        toast({ variant: 'destructive', title: "Doctor Deleted", description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed.` });
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not delete doctor.' });
+    }
+  }, [user, doctors, toast]);
 
   return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading };
 };
