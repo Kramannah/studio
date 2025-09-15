@@ -4,8 +4,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, writeBatch, deleteDoc, doc, updateDoc, query, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 const DOCTORS_KEY = 'sfe-offline-coverage-doctors';
@@ -18,68 +16,45 @@ export const useDoctors = () => {
 
   const getLocalKey = useCallback(() => `${DOCTORS_KEY}_${user?.uid}`, [user]);
 
-  const fetchDoctors = useCallback(async () => {
-    if (!user) {
+  useEffect(() => {
+    if (user) {
+        setLoading(true);
+        try {
+            const localData = localStorage.getItem(getLocalKey());
+            if (localData) {
+                setDoctors(JSON.parse(localData));
+            } else {
+                setDoctors([]);
+            }
+        } catch (error) {
+            console.error("Failed to load doctors from local storage", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not load doctor masterlist.' });
+        }
+        setLoading(false);
+    } else {
+        // Clear data if no user
         setDoctors([]);
         setLoading(false);
-        return;
     }
+  }, [user, getLocalKey, toast]);
 
-    setLoading(true);
-    const localData = localStorage.getItem(getLocalKey());
-    if (localData) {
-        setDoctors(JSON.parse(localData));
+  const updateLocalStorage = (updatedDoctors: Doctor[]) => {
+    setDoctors(updatedDoctors);
+    if (user) {
+        localStorage.setItem(getLocalKey(), JSON.stringify(updatedDoctors));
     }
+  };
 
-    if (navigator.onLine) {
-        try {
-            const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
-            const querySnapshot = await getDocs(q);
-            const firestoreDoctors = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Doctor));
-            setDoctors(firestoreDoctors);
-            localStorage.setItem(getLocalKey(), JSON.stringify(firestoreDoctors));
-        } catch (error) {
-            console.error("Error fetching doctors from Firestore:", error);
-            if (!localData) {
-              toast({
-                  variant: "destructive",
-                  title: "Error",
-                  description: "Could not fetch doctor masterlist."
-              });
-            }
-        }
-    } else {
-        if (!localData) {
-             toast({
-                title: "Offline",
-                description: "Displaying cached doctor list. Some data may be outdated."
-            });
-        }
-    }
-    setLoading(false);
-  }, [user, toast, getLocalKey]);
-
-  useEffect(() => {
-    fetchDoctors();
-  }, [fetchDoctors]);
-
-  const addDoctor = useCallback(async (doctorData: Omit<Doctor, 'id'>) => {
-    if(!user) return;
-    const newDoctorWithUser = { ...doctorData, userId: user.uid };
+  const addDoctor = useCallback((doctorData: Omit<Doctor, 'id'>) => {
+    if (!user) return;
+    const newDoctor: Doctor = { ...doctorData, userId: user.uid, id: crypto.randomUUID() };
     
-    try {
-        const docRef = await addDoc(collection(db, "doctors"), newDoctorWithUser);
-        const newDoctor = { ...newDoctorWithUser, id: docRef.id };
-        setDoctors(prev => [...prev, newDoctor]);
-        localStorage.setItem(getLocalKey(), JSON.stringify([...doctors, newDoctor]));
-        toast({ title: "Doctor Added", description: `${newDoctor.firstName} ${newDoctor.lastName} has been added.` });
-    } catch (error) {
-        console.error("Error adding doctor:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to add doctor.' });
-    }
+    const updatedDoctors = [...doctors, newDoctor];
+    updateLocalStorage(updatedDoctors);
+    toast({ title: "Doctor Added", description: `${newDoctor.firstName} ${newDoctor.lastName} has been added.` });
   }, [user, doctors, toast, getLocalKey]);
 
-  const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
+  const addDoctorsBulk = useCallback((doctorsData: Omit<Doctor, 'id'>[]) => {
     if (!user) return;
     
     setLoading(true);
@@ -97,52 +72,30 @@ export const useDoctors = () => {
     }
 
     if (uniqueNewDoctorsData.length > 0) {
-        try {
-            const batch = writeBatch(db);
-            uniqueNewDoctorsData.forEach(doctor => {
-                const docRef = doc(collection(db, "doctors"));
-                batch.set(docRef, { ...doctor, userId: user.uid });
-            });
-            await batch.commit();
-            await fetchDoctors(); // Refetch all to get new IDs
-            toast({ title: 'Upload Successful', description: `${uniqueNewDoctorsData.length} doctors were added.` });
-        } catch (error) {
-            console.error("Bulk add error:", error);
-            toast({ variant: 'destructive', title: 'Upload Failed', description: 'Could not save new doctors to the database.' });
-        }
+        const newDoctors: Doctor[] = uniqueNewDoctorsData.map(d => ({...d, userId: user.uid, id: crypto.randomUUID()}));
+        const updatedDoctors = [...doctors, ...newDoctors];
+        updateLocalStorage(updatedDoctors);
+        toast({ title: 'Upload Successful', description: `${uniqueNewDoctorsData.length} doctors were added.` });
     }
     setLoading(false);
-  }, [doctors, user, toast, fetchDoctors]);
+  }, [doctors, user, toast]);
 
 
-  const updateDoctor = useCallback(async (doctorData: Doctor) => {
+  const updateDoctor = useCallback((doctorData: Doctor) => {
     if (!user) return;
-    const { id, ...dataToUpdate } = doctorData;
-    
-    try {
-        const docRef = doc(db, "doctors", id);
-        await updateDoc(docRef, dataToUpdate);
-        await fetchDoctors();
-        toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
-    } catch (error) {
-        console.error("Error updating doctor:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to update doctor.' });
-    }
-  }, [user, toast, fetchDoctors]);
+    const updatedDoctors = doctors.map(d => d.id === doctorData.id ? doctorData : d);
+    updateLocalStorage(updatedDoctors);
+    toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
+  }, [user, doctors, toast]);
 
-  const deleteDoctor = useCallback(async (id: string) => {
+  const deleteDoctor = useCallback((id: string) => {
     const doctorToDelete = doctors.find(d => d.id === id);
-    try {
-        await deleteDoc(doc(db, "doctors", id));
-        await fetchDoctors();
-        if (doctorToDelete) {
-            toast({ variant: 'destructive', title: "Doctor Deleted", description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed.` });
-        }
-    } catch(error) {
-        console.error("Error deleting doctor:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete doctor.' });
+    const updatedDoctors = doctors.filter(d => d.id !== id);
+    updateLocalStorage(updatedDoctors);
+    if (doctorToDelete) {
+        toast({ variant: 'destructive', title: "Doctor Deleted", description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed.` });
     }
-  }, [doctors, toast, fetchDoctors]);
+  }, [doctors, toast]);
 
   return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading };
 };

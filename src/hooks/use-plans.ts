@@ -5,8 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Plan, Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { format, isSameWeek, startOfToday } from 'date-fns';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, deleteDoc, getDocs, query, where, doc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 const PLANS_KEY = 'sfe-offline-coverage-plans';
@@ -19,59 +17,43 @@ export const usePlans = () => {
 
   const getLocalKey = useCallback(() => `${PLANS_KEY}_${user?.uid}`, [user]);
 
-  const fetchPlans = useCallback(async () => {
-    if (!user) {
+  useEffect(() => {
+    if (user) {
+        setLoading(true);
+        try {
+            const localData = localStorage.getItem(getLocalKey());
+            if (localData) {
+                setPlans(JSON.parse(localData));
+            } else {
+                setPlans([]);
+            }
+        } catch (error) {
+            console.error("Failed to load plans from local storage", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not load visit plans.' });
+        }
+        setLoading(false);
+    } else {
         setPlans([]);
         setLoading(false);
-        return;
-    };
-
-    setLoading(true);
-    const localData = localStorage.getItem(getLocalKey());
-    if (localData) {
-        setPlans(JSON.parse(localData));
     }
+  }, [user, getLocalKey, toast]);
 
-    if (navigator.onLine) {
-        try {
-            const q = query(collection(db, "plans"), where("userId", "==", user.uid));
-            const querySnapshot = await getDocs(q);
-            const firestorePlans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan));
-            setPlans(firestorePlans);
-            localStorage.setItem(getLocalKey(), JSON.stringify(firestorePlans));
-        } catch (error) {
-            console.error("Error fetching plans from Firestore:", error);
-            if(!localData) {
-              toast({
-                  variant: "destructive",
-                  title: "Error",
-                  description: "Could not fetch visit plans."
-              });
-            }
-        }
-    } else {
-      if(!localData) {
-        toast({
-            title: "Offline",
-            description: "Displaying cached plans. Some data may be outdated."
-        });
-      }
+  const updateLocalStorage = (updatedPlans: Plan[]) => {
+    setPlans(updatedPlans);
+    if (user) {
+        localStorage.setItem(getLocalKey(), JSON.stringify(updatedPlans));
     }
-    setLoading(false);
-  }, [user, toast, getLocalKey]);
+  };
 
-  useEffect(() => {
-    fetchPlans();
-  }, [fetchPlans]);
-
-  const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
+  const addPlan = useCallback((doctor: Doctor, plannedDate: Date) => {
     if (!user) return;
 
     const today = startOfToday();
     const isCurrentWeek = isSameWeek(plannedDate, today, { weekStartsOn: 1 });
     const callType = isCurrentWeek ? 'unplanned' : 'planned';
 
-    const newPlanData: Omit<Plan, 'id'> = {
+    const newPlan: Plan = {
+      id: crypto.randomUUID(),
       userId: user.uid,
       doctorId: doctor.id,
       doctorFirstName: doctor.firstName,
@@ -80,37 +62,24 @@ export const usePlans = () => {
       callType: callType,
     };
     
-    try {
-        const docRef = await addDoc(collection(db, "plans"), newPlanData);
-        const newPlan = { ...newPlanData, id: docRef.id };
-        setPlans(prev => [...prev, newPlan]);
-        localStorage.setItem(getLocalKey(), JSON.stringify([...plans, newPlan]));
-        toast({ 
-            title: "Visit Added", 
-            description: `${doctor.firstName} ${doctor.lastName} scheduled for ${format(plannedDate, 'PPP')} as an ${callType} call.` 
-        });
-    } catch (error) {
-        console.error("Error adding plan:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to save plan.' });
-    }
-  }, [plans, toast, user, getLocalKey]);
+    const updatedPlans = [...plans, newPlan];
+    updateLocalStorage(updatedPlans);
+    toast({ 
+        title: "Visit Added", 
+        description: `${doctor.firstName} ${doctor.lastName} scheduled for ${format(plannedDate, 'PPP')} as an ${callType} call.` 
+    });
+  }, [plans, toast, user]);
   
-  const removePlan = useCallback(async (planId: string) => {
+  const removePlan = useCallback((planId: string) => {
     const planToRemove = plans.find(p => p.id === planId);
     
-    try {
-        await deleteDoc(doc(db, "plans", planId));
-        const updatedPlans = plans.filter(p => p.id !== planId);
-        setPlans(updatedPlans);
-        localStorage.setItem(getLocalKey(), JSON.stringify(updatedPlans));
-        if(planToRemove) {
-            toast({ variant: 'destructive', title: "Plan Removed", description: `Visit for ${planToRemove.doctorFirstName} ${planToRemove.doctorLastName} has been removed.` });
-        }
-    } catch(error) {
-        console.error("Error removing plan:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Failed to remove plan.' });
+    const updatedPlans = plans.filter(p => p.id !== planId);
+    updateLocalStorage(updatedPlans);
+    
+    if(planToRemove) {
+        toast({ variant: 'destructive', title: "Plan Removed", description: `Visit for ${planToRemove.doctorFirstName} ${planToRemove.doctorLastName} has been removed.` });
     }
-  }, [plans, toast, getLocalKey]);
+  }, [plans, toast]);
 
 
   return { plans, addPlan, removePlan, loading };
