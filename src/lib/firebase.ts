@@ -6,7 +6,7 @@ import { getAuth } from "firebase/auth";
 const firebaseConfig = {
   projectId: "hovidcoverage",
   appId: "1:321369261510:web:9c4b76565d68b8c9875ec7",
-  storageBucket: "hovidcoverage.firebasestorage.app",
+  storageBucket: "hovidcoverage.appspot.com",
   apiKey: "AIzaSyCqtWu5SXQmQllqN61DM80uquFa0K06QCE",
   authDomain: "hovidcoverage.firebaseapp.com",
   messagingSenderId: "321369261510",
