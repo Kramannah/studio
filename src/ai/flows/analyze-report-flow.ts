@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI flow for analyzing sales call reports.
@@ -12,7 +13,7 @@ import {z} from 'genkit';
 import type { CoverageEntry } from '@/lib/types';
 
 
-export const ReportAnalysisInputSchema = z.object({
+const ReportAnalysisInputSchema = z.object({
     doctorFirstName: z.string().describe("The first name of the doctor visited."),
     doctorLastName: z.string().describe("The last name of the doctor visited."),
     callObjective: z.string().optional().describe("The stated objective for the call."),
@@ -24,7 +25,7 @@ export const ReportAnalysisInputSchema = z.object({
 });
 export type ReportAnalysisInput = z.infer<typeof ReportAnalysisInputSchema>;
 
-export const ReportAnalysisOutputSchema = z.object({
+const ReportAnalysisOutputSchema = z.object({
   summary: z.string().describe("A brief, one-sentence summary of the sales call."),
   positiveFeedback: z.string().describe("Specific positive feedback on what went well during the call, based on the provided notes."),
   improvementSuggestions: z.string().describe("Constructive suggestions for what could be improved for the next visit with this doctor."),

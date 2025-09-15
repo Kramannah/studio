@@ -9,7 +9,7 @@ import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, is
 import Image from "next/image";
 import { useState, useMemo } from "react";
 import { DateRange } from "react-day-picker";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2 } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -36,10 +36,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "@/components/ui/dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { analyzeReport, ReportAnalysisInput, ReportAnalysisOutput } from "@/ai/flows/analyze-report-flow";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
@@ -58,7 +66,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void }) => {
+const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -141,6 +149,9 @@ const EntryRow = ({ entry, onDelete, onEdit }: { entry: CoverageEntry, onDelete:
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onAnalyze(entry)}>
+                                    <Sparkles className="mr-2"/> Analyze with AI
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}>
                                     <Edit className="mr-2"/> Edit
                                 </DropdownMenuItem>
@@ -220,6 +231,41 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [selectedRange, setSelectedRange] = useState<DateRange | undefined>();
+    const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
+    const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analyzedDoctor, setAnalyzedDoctor] = useState<string>('');
+
+    const handleAnalyze = async (entry: CoverageEntry) => {
+        setAnalyzedDoctor(`${entry.firstName} ${entry.lastName}`);
+        setIsAnalysisDialogOpen(true);
+        setIsAnalyzing(true);
+        setCurrentAnalysis(null);
+
+        try {
+            const input: ReportAnalysisInput = {
+                doctorFirstName: entry.firstName || '',
+                doctorLastName: entry.lastName || '',
+                callObjective: entry.callObjective,
+                topicsDiscussed: entry.topicsDiscussed,
+                doctorsIssue: entry.doctorsIssue,
+                planOfAction: entry.planOfAction,
+                whatWentWell: entry.whatWentWell,
+                areasForImprovement: entry.areasForImprovement,
+            };
+            const result = await analyzeReport(input);
+            setCurrentAnalysis(result);
+        } catch (error) {
+            console.error("AI Analysis failed", error);
+            setCurrentAnalysis({
+                summary: "An error occurred during analysis.",
+                positiveFeedback: "Could not retrieve feedback.",
+                improvementSuggestions: "Please try again later."
+            });
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
     
     const entriesByDate = useMemo(() => {
         return entries.reduce((acc, entry) => {
@@ -372,6 +418,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }
 
     return (
+      <>
         <Card>
             <CardHeader>
                 <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
@@ -457,7 +504,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                             
                                 {filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
                                     ))
                                 ) : (
                                     <TableBody>
@@ -522,7 +569,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                                     </TableHeader>
                                         {selectedDayEntries.length > 0 ? (
                                             selectedDayEntries.map((entry) => (
-                                                <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />
+                                                <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
                                             ))
                                         ) : (
                                             <TableBody>
@@ -540,6 +587,45 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                  )}
             </CardContent>
         </Card>
+        <Dialog open={isAnalysisDialogOpen} onOpenChange={setIsAnalysisDialogOpen}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="font-headline text-2xl flex items-center gap-2">
+                        <Sparkles className="text-primary"/>
+                        AI Analysis for Dr. {analyzedDoctor}
+                    </DialogTitle>
+                    <DialogDescription>
+                        This analysis was generated by AI and may contain inaccuracies. Please verify important information.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-6">
+                    {isAnalyzing ? (
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                            <span>Analyzing report...</span>
+                        </div>
+                    ) : currentAnalysis ? (
+                        <div className="space-y-4 text-sm">
+                            <div>
+                                <h3 className="font-bold text-base font-headline text-primary">Summary</h3>
+                                <p className="mt-1">{currentAnalysis.summary}</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-base font-headline text-primary">Positive Feedback</h3>
+                                <p className="mt-1">{currentAnalysis.positiveFeedback}</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-base font-headline text-primary">Improvement Suggestions</h3>
+                                <p className="mt-1">{currentAnalysis.improvementSuggestions}</p>
+                            </div>
+                        </div>
+                    ) : (
+                         <p>No analysis available.</p>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+      </>
     );
 }
 
