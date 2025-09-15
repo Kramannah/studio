@@ -58,7 +58,7 @@ export function LoginPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="email-signin">Email</Label>
-                            <Input id="email-signin" type="email" placeholder="m@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                            <Input id="email-signin" type="email" placeholder="medrep@hovidinc.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password-signin">Password</Label>
@@ -79,7 +79,7 @@ export function LoginPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
                         <Label htmlFor="email-signup">Email</Label>
-                        <Input id="email-signup" type="email" placeholder="m@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                        <Input id="email-signup" type="email" placeholder="medrep@hovidinc.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                         <Label htmlFor="password-signup">Password</Label>
