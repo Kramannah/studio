@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay, isValid } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo } from "react";
-import { DateRange } from "react-day-picker";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2 } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -228,7 +227,8 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
 
 export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [startDate, setStartDate] = useState<Date | undefined>();
+    const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -284,16 +284,16 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     const filteredEntries = useMemo(() => {
         const sortedEntries = [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
 
-        if (!dateRange || !dateRange.from) {
+        if (!startDate) {
             return sortedEntries;
         }
 
-        const from = startOfDay(dateRange.from);
-        const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(from);
+        const from = startOfDay(startDate);
+        const to = endDate ? endOfDay(endDate) : endOfDay(from);
 
         return sortedEntries.filter(entry => isWithinInterval(parseISO(entry.submittedAt), { start: from, end: to }));
 
-    }, [entries, dateRange]);
+    }, [entries, startDate, endDate]);
 
     const selectedDayEntries = useMemo(() => {
         if (!selectedDate) return [];
@@ -301,7 +301,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }, [entries, selectedDate]);
     
     const handleDownloadSubmitted = () => {
-        if (viewMode === 'list' && (!dateRange || !dateRange.from)) return;
+        if (viewMode === 'list' && !startDate) return;
         if (viewMode === 'calendar' && !selectedDate) return;
         
         const entriesToExport = viewMode === 'list' ? filteredEntries : selectedDayEntries;
@@ -350,7 +350,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         }));
     
         const dateIdentifier = viewMode === 'list' 
-            ? `${format(dateRange!.from!, 'yyyy-MM-dd')}_to_${format(dateRange!.to || dateRange!.from!, 'yyyy-MM-dd')}`
+            ? `${format(startDate!, 'yyyy-MM-dd')}_to_${format(endDate || startDate!, 'yyyy-MM-dd')}`
             : format(selectedDate!, 'yyyy-MM-dd');
 
         const fileName = `submitted_coverage_${dateIdentifier}.xlsx`;
@@ -363,8 +363,8 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
 
         let dateRangeString;
         if(viewMode === 'list'){
-            if (!dateRange || !dateRange.from) return;
-            dateRangeString = `${format(dateRange.from, 'PPP')} to ${dateRange.to ? format(dateRange.to, 'PPP') : format(dateRange.from, 'PPP')}`;
+            if (!startDate) return;
+            dateRangeString = `${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}`;
         } else {
             if (!selectedDate) return;
             dateRangeString = format(selectedDate, 'PPP');
@@ -430,49 +430,67 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 </div>
                 {viewMode === 'list' && (
                     <div className="flex flex-col items-stretch gap-2 pt-4 sm:flex-row sm:items-end">
-                        <div className="grid gap-2">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                <Button
-                                    id="date-submitted"
-                                    variant={"outline"}
-                                    className={cn(
-                                    "w-[300px] justify-start text-left font-normal",
-                                    !dateRange && "text-muted-foreground"
-                                    )}
-                                >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateRange?.from ? (
-                                    dateRange.to ? (
-                                        <>
-                                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                                        {format(dateRange.to, "LLL dd, y")}
-                                        </>
-                                    ) : (
-                                        format(dateRange.from, "LLL dd, y")
-                                    )
-                                    ) : (
-                                    <span>Pick a date range</span>
-                                    )}
-                                </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="end">
-                                <Calendar
-                                    initialFocus
-                                    mode="range"
-                                    defaultMonth={dateRange?.from}
-                                    selected={dateRange}
-                                    onSelect={setDateRange}
-                                    numberOfMonths={2}
-                                />
-                                </PopoverContent>
-                            </Popover>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="grid gap-2">
+                                <Label htmlFor="start-date-submitted">Start Date</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                    <Button
+                                        id="start-date-submitted"
+                                        variant={"outline"}
+                                        className={cn(
+                                        "w-[150px] justify-start text-left font-normal",
+                                        !startDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={startDate}
+                                        onSelect={setStartDate}
+                                        initialFocus
+                                    />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="end-date-submitted">End Date</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                    <Button
+                                        id="end-date-submitted"
+                                        variant={"outline"}
+                                        className={cn(
+                                        "w-[150px] justify-start text-left font-normal",
+                                        !endDate && "text-muted-foreground"
+                                        )}
+                                        disabled={!startDate}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                                    </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        selected={endDate}
+                                        onSelect={setEndDate}
+                                        disabled={(date) => startDate ? date < startDate : false}
+                                        initialFocus
+                                    />
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
-                        <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!dateRange || !dateRange.from}>
+                        <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!startDate}>
                             <Download className="mr-2" />
                             Download
                         </Button>
-                         <Button onClick={handleSendEmail} variant="outline" disabled={!dateRange || !dateRange.from}>
+                         <Button onClick={handleSendEmail} variant="outline" disabled={!startDate}>
                             <Send className="mr-2"/>
                             Send via Email
                         </Button>

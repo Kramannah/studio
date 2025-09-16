@@ -12,7 +12,6 @@ import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTrian
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
-import { DateRange } from "react-day-picker";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
@@ -32,8 +31,8 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
-    const [filterRange, setFilterRange] = useState<DateRange | undefined>();
-
+    const [startDate, setStartDate] = useState<Date | undefined>();
+    const [endDate, setEndDate] = useState<Date | undefined>();
 
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
@@ -50,11 +49,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
         const filteredEntries = entries.filter(e => {
-            if (!filterRange || !filterRange.from) {
+            if (!startDate) {
                 return isThisMonth(new Date(e.submittedAt));
             }
-            const from = startOfDay(filterRange.from);
-            const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
+            const from = startOfDay(startDate);
+            const to = endDate ? endOfDay(endDate) : endOfDay(from);
             return isWithinInterval(new Date(e.submittedAt), { start: from, end: to });
         });
         
@@ -117,30 +116,30 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             isDataAvailable: true,
         };
-    }, [entries, doctors, filterRange]);
+    }, [entries, doctors, startDate, endDate]);
     
     const filteredNonCallDays = useMemo(() => {
         const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        if (!filterRange || !filterRange.from) {
+        if (!startDate) {
             return sorted.filter(day => isThisMonth(parseISO(day.date)));
         }
-        const from = startOfDay(filterRange.from);
-        const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
+        const from = startOfDay(startDate);
+        const to = endDate ? endOfDay(endDate) : endOfDay(from);
         return sorted.filter(day => isWithinInterval(parseISO(day.date), { start: from, end: to }));
-    }, [nonCallDays, filterRange]);
+    }, [nonCallDays, startDate, endDate]);
 
     const filteredTimeLogs = useMemo(() => {
         const sorted = [...timeLogs].sort((a,b) => parseISO(b.timeIn).getTime() - parseISO(a.timeIn).getTime());
-        if (!filterRange || !filterRange.from) {
+        if (!startDate) {
              return sorted.filter(log => isThisMonth(parseISO(log.timeIn)));
         }
-        const from = startOfDay(filterRange.from);
-        const to = filterRange.to ? endOfDay(filterRange.to) : endOfDay(from);
+        const from = startOfDay(startDate);
+        const to = endDate ? endOfDay(endDate) : endOfDay(from);
         return sorted.filter(log => isWithinInterval(parseISO(log.timeIn), { start: from, end: to }));
-    }, [timeLogs, filterRange]);
+    }, [timeLogs, startDate, endDate]);
 
     const handleDownloadSummary = () => {
-        if (!filterRange || !filterRange.from) return;
+        if (!startDate) return;
 
         // Create a new workbook
         const workbook = XLSX.utils.book_new();
@@ -196,17 +195,17 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
 
-        const fileName = `call_summary_${format(filterRange.from, 'yyyy-MM-dd')}_to_${format(filterRange.to || filterRange.from, 'yyyy-MM-dd')}.xlsx`;
+        const fileName = `call_summary_${format(startDate, 'yyyy-MM-dd')}_to_${format(endDate || startDate, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
     };
 
     const handleSendEmail = () => {
-        if (!filterRange || !filterRange.from) return;
+        if (!startDate) return;
     
-        const subject = `Call Summary Report: ${format(filterRange.from, 'PPP')} to ${filterRange.to ? format(filterRange.to, 'PPP') : format(filterRange.from, 'PPP')}`;
+        const subject = `Call Summary Report: ${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}`;
         
         let body = `Call Summary Report\n`;
-        body += `Period: ${format(filterRange.from, 'PPP')} to ${filterRange.to ? format(filterRange.to, 'PPP') : format(filterRange.from, 'PPP')}\n\n`;
+        body += `Period: ${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}\n\n`;
 
         body += `--- KEY METRICS ---\n`;
         body += `Call Concentration: ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)\n`;
@@ -256,56 +255,74 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                     <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">
-                                {filterRange?.from ? "Summary for Selected Period" : "This Month's Summary"}
+                                {startDate ? "Summary for Selected Period" : "This Month's Summary"}
                             </CardTitle>
                             <CardDescription>
-                                {filterRange?.from ? `Showing data from ${format(filterRange.from, "PPP")} to ${filterRange.to ? format(filterRange.to, "PPP") : format(filterRange.from, "PPP")}` : "A quick overview of your performance for the current month."}
+                                {startDate ? `Showing data from ${format(startDate, "PPP")} to ${endDate ? format(endDate, "PPP") : format(startDate, "PPP")}` : "A quick overview of your performance for the current month."}
                             </CardDescription>
                         </div>
                         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
-                            <div className="grid gap-2">
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        id="date"
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-[300px] justify-start text-left font-normal",
-                                        !filterRange && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {filterRange?.from ? (
-                                        filterRange.to ? (
-                                            <>
-                                            {format(filterRange.from, "LLL dd, y")} -{" "}
-                                            {format(filterRange.to, "LLL dd, y")}
-                                            </>
-                                        ) : (
-                                            format(filterRange.from, "LLL dd, y")
-                                        )
-                                        ) : (
-                                        <span>Pick a date range</span>
-                                        )}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="end">
-                                    <Calendar
-                                        initialFocus
-                                        mode="range"
-                                        defaultMonth={filterRange?.from}
-                                        selected={filterRange}
-                                        onSelect={setFilterRange}
-                                        numberOfMonths={2}
-                                    />
-                                    </PopoverContent>
-                                </Popover>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="start-date-summary">Start Date</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                        <Button
+                                            id="start-date-summary"
+                                            variant={"outline"}
+                                            className={cn(
+                                            "w-[150px] justify-start text-left font-normal",
+                                            !startDate && "text-muted-foreground"
+                                            )}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={startDate}
+                                            onSelect={setStartDate}
+                                            initialFocus
+                                        />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="end-date-summary">End Date</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                        <Button
+                                            id="end-date-summary"
+                                            variant={"outline"}
+                                            className={cn(
+                                            "w-[150px] justify-start text-left font-normal",
+                                            !endDate && "text-muted-foreground"
+                                            )}
+                                            disabled={!startDate}
+                                        >
+                                            <CalendarIcon className="mr-2 h-4 w-4" />
+                                            {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={endDate}
+                                            onSelect={setEndDate}
+                                            disabled={(date) => startDate ? date < startDate : false}
+                                            initialFocus
+                                        />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
                             </div>
-                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!filterRange || !filterRange.from}>
+                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!startDate}>
                                 <Download className="mr-2"/>
                                 Download
                             </Button>
-                             <Button onClick={handleSendEmail} variant="outline" disabled={!filterRange || !filterRange.from}>
+                             <Button onClick={handleSendEmail} variant="outline" disabled={!startDate}>
                                 <Send className="mr-2"/>
                                 Send via Email
                             </Button>
