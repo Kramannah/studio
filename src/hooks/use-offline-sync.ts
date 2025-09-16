@@ -158,6 +158,13 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     for (const entry of offlineEntries) {
       try {
         const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
+
+        // Firestore does not support 'undefined' values.
+        if (dataToSync.coverageType !== 'joint') {
+            delete (dataToSync as Partial<CoverageEntry>).jointCallWith;
+            delete (dataToSync as Partial<CoverageEntry>).jointCallSignature;
+        }
+
         await addDoc(collection(db, 'coverageEntries'), dataToSync);
         remainingEntries.shift();
         successCount++;
