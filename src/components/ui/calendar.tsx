@@ -59,31 +59,36 @@ function Calendar({
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
         Day: ({ date, displayMonth, activeModifiers = {}, ...props }: DayProps) => {
           const { nonCall, weekend } = activeModifiers;
-          if (nonCall) {
-            return (
+          const DayButton = (
+            <button
+              className={cn(
+                buttonVariants({ variant: 'ghost' }),
+                'h-24 w-full p-0 font-normal relative'
+              )}
+            >
               <div
-                {...props}
                 className={cn(
-                  buttonVariants({ variant: "ghost" }),
-                  "h-24 w-full p-0 font-normal relative"
+                  'absolute inset-0',
+                  weekend && 'bg-yellow-400/20',
+                  nonCall && 'bg-yellow-400/20'
+                )}
+              />
+              <span
+                className={cn(
+                  'relative z-10',
+                  nonCall && 'text-red-500 line-through'
                 )}
               >
-                <div className="absolute inset-0 bg-yellow-400/20"></div>
-                <span className="relative z-10 text-red-500 line-through">
-                  {date.getDate()}
-                </span>
-              </div>
-            );
-          }
-          if(weekend) {
-            return (
-              <div {...props} className={cn(buttonVariants({ variant: "ghost" }), "h-24 w-full p-0 font-normal relative")}>
-                 <div className="absolute inset-0 bg-yellow-400/20"></div>
-                <span className="relative z-10">{date.getDate()}</span>
-              </div>
-            )
-          }
-          return <button {...props} >{date.getDate()}</button>;
+                {date.getDate()}
+              </span>
+            </button>
+          );
+          
+          return (
+            <div {...props} className={props.className}>
+                {DayButton}
+            </div>
+          )
         },
       }}
       {...props}
