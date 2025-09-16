@@ -145,18 +145,6 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         onTouchEnd={stopDrawing}
         className="w-full h-full bg-white rounded-md cursor-crosshair touch-none border"
       />
-      {value && (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={clearCanvas}
-          className="absolute top-2 right-2"
-        >
-          <Eraser className="h-4 w-4" />
-          <span className="sr-only">Clear signature</span>
-        </Button>
-      )}
     </div>
   );
 }
@@ -186,8 +174,13 @@ export function SignaturePadFullScreen({ open, onClose, onSave, value }: Signatu
     return (
         <Dialog open={open} onOpenChange={onClose}>
             <DialogContent className="p-0 border-0 w-screen h-screen max-w-full max-h-screen rounded-none flex flex-col">
-                <DialogHeader className="p-4 border-b">
+                <DialogHeader className="p-4 border-b flex-row items-center justify-between">
                     <DialogTitle>Signature</DialogTitle>
+                     <div className="flex gap-2">
+                        <Button variant="secondary" onClick={() => setCurrentSignature(null)}><Eraser className="mr-2" /> Clear</Button>
+                        <Button onClick={handleSave}><Save className="mr-2" /> Save</Button>
+                        <Button variant="outline" onClick={onClose} size="icon"><X/></Button>
+                    </div>
                 </DialogHeader>
                 <div className="flex-1 p-4">
                     <SignaturePad 
@@ -196,13 +189,6 @@ export function SignaturePadFullScreen({ open, onClose, onSave, value }: Signatu
                         className="w-full h-full"
                     />
                 </div>
-                <DialogFooter className="p-4 border-t flex-row justify-between">
-                    <Button variant="secondary" onClick={() => setCurrentSignature(null)}><Eraser className="mr-2" /> Clear</Button>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose}><X className="mr-2" /> Close</Button>
-                        <Button onClick={handleSave}><Save className="mr-2" /> Save</Button>
-                    </div>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
