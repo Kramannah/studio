@@ -230,7 +230,6 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-    const [selectedRange, setSelectedRange] = useState<DateRange | undefined>();
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -301,17 +300,6 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         return entries.filter(entry => isSameDay(parseISO(entry.submittedAt), selectedDate));
     }, [entries, selectedDate]);
     
-    const handleDateInputChange = (field: 'from' | 'to', value: string) => {
-        const date = new Date(value);
-        if (isValid(date)) {
-            setSelectedRange(prev => ({ ...prev, [field]: date }));
-        }
-    };
-    
-    const handleApplyFilter = () => {
-        setDateRange(selectedRange);
-    };
-
     const handleDownloadSubmitted = () => {
         if (viewMode === 'list' && (!dateRange || !dateRange.from)) return;
         if (viewMode === 'calendar' && !selectedDate) return;
@@ -442,29 +430,44 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                 </div>
                 {viewMode === 'list' && (
                     <div className="flex flex-col items-stretch gap-2 pt-4 sm:flex-row sm:items-end">
-                        <div className="flex gap-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="start-date-submitted">Start Date</Label>
-                                <Input 
-                                    id="start-date-submitted"
-                                    type="date"
-                                    value={selectedRange?.from ? format(selectedRange.from, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => handleDateInputChange('from', e.target.value)}
-                                    className="w-full"
+                        <div className="grid gap-2">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    id="date-submitted"
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-[300px] justify-start text-left font-normal",
+                                    !dateRange && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {dateRange?.from ? (
+                                    dateRange.to ? (
+                                        <>
+                                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                                        {format(dateRange.to, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(dateRange.from, "LLL dd, y")
+                                    )
+                                    ) : (
+                                    <span>Pick a date range</span>
+                                    )}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="end">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={dateRange?.from}
+                                    selected={dateRange}
+                                    onSelect={setDateRange}
+                                    numberOfMonths={2}
                                 />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="end-date-submitted">End Date</Label>
-                                <Input
-                                    id="end-date-submitted"
-                                    type="date"
-                                    value={selectedRange?.to ? format(selectedRange.to, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => handleDateInputChange('to', e.target.value)}
-                                    className="w-full"
-                                />
-                            </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
-                        <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
                         <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!dateRange || !dateRange.from}>
                             <Download className="mr-2" />
                             Download
@@ -628,7 +631,3 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
       </>
     );
 }
-
-    
-
-    

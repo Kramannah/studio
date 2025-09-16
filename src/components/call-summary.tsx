@@ -7,7 +7,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes, isValid } from "date-fns";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes, isValid, addDays } from "date-fns";
 import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx';
 import { DateRange } from "react-day-picker";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -31,7 +33,6 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
     const [filterRange, setFilterRange] = useState<DateRange | undefined>();
-    const [selectedRange, setSelectedRange] = useState<DateRange | undefined>();
 
 
     const insights = useMemo(() => {
@@ -238,18 +239,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         window.location.href = mailtoLink;
     };
 
-    const handleDateInputChange = (field: 'from' | 'to', value: string) => {
-        const date = new Date(value);
-        if (isValid(date)) {
-            setSelectedRange(prev => ({ ...prev, [field]: date }));
-        }
-    };
-    
-    const handleApplyFilter = () => {
-        setFilterRange(selectedRange);
-    };
-
-
     if (!insights.isDataAvailable && nonCallDays.length === 0 && timeLogs.length === 0) {
         return (
             <Card>
@@ -274,29 +263,44 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                             </CardDescription>
                         </div>
                         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
-                            <div className="flex gap-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="start-date">Start Date</Label>
-                                    <Input 
-                                        id="start-date"
-                                        type="date"
-                                        value={selectedRange?.from ? format(selectedRange.from, 'yyyy-MM-dd') : ''}
-                                        onChange={(e) => handleDateInputChange('from', e.target.value)}
-                                        className="w-full"
+                            <div className="grid gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                    <Button
+                                        id="date"
+                                        variant={"outline"}
+                                        className={cn(
+                                        "w-[300px] justify-start text-left font-normal",
+                                        !filterRange && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {filterRange?.from ? (
+                                        filterRange.to ? (
+                                            <>
+                                            {format(filterRange.from, "LLL dd, y")} -{" "}
+                                            {format(filterRange.to, "LLL dd, y")}
+                                            </>
+                                        ) : (
+                                            format(filterRange.from, "LLL dd, y")
+                                        )
+                                        ) : (
+                                        <span>Pick a date range</span>
+                                        )}
+                                    </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="end">
+                                    <Calendar
+                                        initialFocus
+                                        mode="range"
+                                        defaultMonth={filterRange?.from}
+                                        selected={filterRange}
+                                        onSelect={setFilterRange}
+                                        numberOfMonths={2}
                                     />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="end-date">End Date</Label>
-                                    <Input
-                                        id="end-date"
-                                        type="date"
-                                        value={selectedRange?.to ? format(selectedRange.to, 'yyyy-MM-dd') : ''}
-                                        onChange={(e) => handleDateInputChange('to', e.target.value)}
-                                        className="w-full"
-                                    />
-                                </div>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
-                            <Button onClick={handleApplyFilter} disabled={!selectedRange?.from}>Apply</Button>
                             <Button onClick={handleDownloadSummary} variant="outline" disabled={!filterRange || !filterRange.from}>
                                 <Download className="mr-2"/>
                                 Download
@@ -472,12 +476,3 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         </div>
     );
 }
-
-    
-
-
-
-
-
-
-    
