@@ -9,7 +9,7 @@ import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, CalendarOff, Search } from "lucide-react";
+import { PlusCircle, CalendarOff, Search } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -326,19 +326,12 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                 entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            const isDeleteDisabled = isCovered || (selectedDate ? isBefore(selectedDate, startOfToday()) : false);
                                             
                                             const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
                                             const visitCount = visitCountsThisMonth[doctorName] || 0;
                                             const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
                                             const balance = Math.max(0, targetCount - visitCount);
 
-                                            const getDeleteTitle = () => {
-                                                if (selectedDate && isBefore(selectedDate, startOfToday())) return "Cannot delete plans from past dates.";
-                                                if (isCovered) return "Cannot delete a covered plan.";
-                                                return "Delete plan";
-                                            };
-                                            
                                             return (
                                             <TableRow key={plan.id}>
                                                 <TableCell>
@@ -374,9 +367,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isDeleteDisabled} title={getDeleteTitle()}>
-                                                        <Trash2 className="w-4 h-4 text-destructive"/>
-                                                    </Button>
+                                                    {/* Action space, intentionally left empty */}
                                                 </TableCell>
                                             </TableRow>
                                         )})
@@ -418,3 +409,4 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     
 
     
+
