@@ -129,7 +129,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
     }, [nonCallDays, filterRange]);
 
     const filteredTimeLogs = useMemo(() => {
-        const sorted = [...timeLogs].sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+        const sorted = [...timeLogs].sort((a,b) => parseISO(b.timeIn).getTime() - parseISO(a.timeIn).getTime());
         if (!filterRange || !filterRange.from) {
              return sorted.filter(log => isThisMonth(parseISO(log.timeIn)));
         }
@@ -478,3 +478,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
 
 
 
+
+
+    
