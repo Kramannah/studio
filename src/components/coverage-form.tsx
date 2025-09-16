@@ -234,6 +234,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      toast({
+        title: 'Camera Access Granted',
+        description: 'You can now take a selfie.',
+      });
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
