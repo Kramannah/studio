@@ -31,8 +31,11 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [filterStartDate, setFilterStartDate] = useState<Date | undefined>();
+    const [filterEndDate, setFilterEndDate] = useState<Date | undefined>();
+    
+    const [appliedStartDate, setAppliedStartDate] = useState<Date | undefined>();
+    const [appliedEndDate, setAppliedEndDate] = useState<Date | undefined>();
 
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
@@ -49,11 +52,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
         const filteredEntries = entries.filter(e => {
-            if (!startDate) {
+            if (!appliedStartDate) {
                 return isThisMonth(new Date(e.submittedAt));
             }
-            const from = startOfDay(startDate);
-            const to = endDate ? endOfDay(endDate) : endOfDay(from);
+            const from = startOfDay(appliedStartDate);
+            const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
             return isWithinInterval(new Date(e.submittedAt), { start: from, end: to });
         });
         
@@ -116,30 +119,35 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             isDataAvailable: true,
         };
-    }, [entries, doctors, startDate, endDate]);
+    }, [entries, doctors, appliedStartDate, appliedEndDate]);
     
     const filteredNonCallDays = useMemo(() => {
         const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        if (!startDate) {
+        if (!appliedStartDate) {
             return sorted.filter(day => isThisMonth(parseISO(day.date)));
         }
-        const from = startOfDay(startDate);
-        const to = endDate ? endOfDay(endDate) : endOfDay(from);
+        const from = startOfDay(appliedStartDate);
+        const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
         return sorted.filter(day => isWithinInterval(parseISO(day.date), { start: from, end: to }));
-    }, [nonCallDays, startDate, endDate]);
+    }, [nonCallDays, appliedStartDate, appliedEndDate]);
 
     const filteredTimeLogs = useMemo(() => {
         const sorted = [...timeLogs].sort((a,b) => parseISO(b.timeIn).getTime() - parseISO(a.timeIn).getTime());
-        if (!startDate) {
+        if (!appliedStartDate) {
              return sorted.filter(log => isThisMonth(parseISO(log.timeIn)));
         }
-        const from = startOfDay(startDate);
-        const to = endDate ? endOfDay(endDate) : endOfDay(from);
+        const from = startOfDay(appliedStartDate);
+        const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
         return sorted.filter(log => isWithinInterval(parseISO(log.timeIn), { start: from, end: to }));
-    }, [timeLogs, startDate, endDate]);
+    }, [timeLogs, appliedStartDate, appliedEndDate]);
+    
+    const handleApplyFilter = () => {
+        setAppliedStartDate(filterStartDate);
+        setAppliedEndDate(filterEndDate);
+    };
 
     const handleDownloadSummary = () => {
-        if (!startDate) return;
+        if (!appliedStartDate) return;
 
         // Create a new workbook
         const workbook = XLSX.utils.book_new();
@@ -195,17 +203,17 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         }
 
 
-        const fileName = `call_summary_${format(startDate, 'yyyy-MM-dd')}_to_${format(endDate || startDate, 'yyyy-MM-dd')}.xlsx`;
+        const fileName = `call_summary_${format(appliedStartDate, 'yyyy-MM-dd')}_to_${format(appliedEndDate || appliedStartDate, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
     };
 
     const handleSendEmail = () => {
-        if (!startDate) return;
+        if (!appliedStartDate) return;
     
-        const subject = `Call Summary Report: ${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}`;
+        const subject = `Call Summary Report: ${format(appliedStartDate, 'PPP')} to ${appliedEndDate ? format(appliedEndDate, 'PPP') : format(appliedStartDate, 'PPP')}`;
         
         let body = `Call Summary Report\n`;
-        body += `Period: ${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}\n\n`;
+        body += `Period: ${format(appliedStartDate, 'PPP')} to ${appliedEndDate ? format(appliedEndDate, 'PPP') : format(appliedStartDate, 'PPP')}\n\n`;
 
         body += `--- KEY METRICS ---\n`;
         body += `Call Concentration: ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)\n`;
@@ -255,10 +263,10 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                     <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">
-                                {startDate ? "Summary for Selected Period" : "This Month's Summary"}
+                                {appliedStartDate ? "Summary for Selected Period" : "This Month's Summary"}
                             </CardTitle>
                             <CardDescription>
-                                {startDate ? `Showing data from ${format(startDate, "PPP")} to ${endDate ? format(endDate, "PPP") : format(startDate, "PPP")}` : "A quick overview of your performance for the current month."}
+                                {appliedStartDate ? `Showing data from ${format(appliedStartDate, "PPP")} to ${appliedEndDate ? format(appliedEndDate, "PPP") : format(appliedStartDate, "PPP")}` : "A quick overview of your performance for the current month."}
                             </CardDescription>
                         </div>
                         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
@@ -272,18 +280,18 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                             variant={"outline"}
                                             className={cn(
                                             "w-[150px] justify-start text-left font-normal",
-                                            !startDate && "text-muted-foreground"
+                                            !filterStartDate && "text-muted-foreground"
                                             )}
                                         >
                                             <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
+                                            {filterStartDate ? format(filterStartDate, "PPP") : <span>Pick a date</span>}
                                         </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
-                                            selected={startDate}
-                                            onSelect={setStartDate}
+                                            selected={filterStartDate}
+                                            onSelect={setFilterStartDate}
                                             initialFocus
                                         />
                                         </PopoverContent>
@@ -298,31 +306,34 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                                             variant={"outline"}
                                             className={cn(
                                             "w-[150px] justify-start text-left font-normal",
-                                            !endDate && "text-muted-foreground"
+                                            !filterEndDate && "text-muted-foreground"
                                             )}
-                                            disabled={!startDate}
+                                            disabled={!filterStartDate}
                                         >
                                             <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
+                                            {filterEndDate ? format(filterEndDate, "PPP") : <span>Pick a date</span>}
                                         </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
-                                            selected={endDate}
-                                            onSelect={setEndDate}
-                                            disabled={(date) => startDate ? date < startDate : false}
+                                            selected={filterEndDate}
+                                            onSelect={setFilterEndDate}
+                                            disabled={(date) => filterStartDate ? date < filterStartDate : false}
                                             initialFocus
                                         />
                                         </PopoverContent>
                                     </Popover>
                                 </div>
                             </div>
-                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!startDate}>
+                            <Button onClick={handleApplyFilter} disabled={!filterStartDate}>
+                                Apply
+                            </Button>
+                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!appliedStartDate}>
                                 <Download className="mr-2"/>
                                 Download
                             </Button>
-                             <Button onClick={handleSendEmail} variant="outline" disabled={!startDate}>
+                             <Button onClick={handleSendEmail} variant="outline" disabled={!appliedStartDate}>
                                 <Send className="mr-2"/>
                                 Send via Email
                             </Button>
