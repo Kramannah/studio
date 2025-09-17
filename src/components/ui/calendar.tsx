@@ -3,12 +3,42 @@
 
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker, DayProps } from "react-day-picker"
+import { DayPicker, DayProps, useDayRender } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
+
+const CustomDay = (props: DayProps) => {
+    const { buttonRef, activeModifiers, ...dayRender } = useDayRender(
+        props.date,
+        props.displayMonth,
+        props.buttonProps
+    );
+
+    const { nonCall, weekend } = activeModifiers;
+
+    if (dayRender.isHidden) {
+        return <></>
+    }
+
+    return (
+        <button
+            {...dayRender.buttonProps}
+            ref={buttonRef}
+            className={cn(
+                dayRender.buttonProps.className,
+                buttonVariants({ variant: "ghost" }),
+                "h-full w-full p-0 font-normal",
+                weekend && 'bg-yellow-400/20',
+                nonCall && 'bg-yellow-400/20 text-red-500 line-through'
+            )}
+        >
+            {dayRender.formattedDate}
+        </button>
+    )
+}
 
 function Calendar({
   className,
@@ -57,22 +87,7 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-        Day: ({ date, ...props }) => {
-            const { activeModifiers = {} } = props;
-            const { nonCall, weekend } = activeModifiers;
-            return (
-                <DayPicker.Day
-                    date={date}
-                    {...props}
-                    className={cn(
-                        props.className,
-                        "h-full w-full",
-                        weekend && 'bg-yellow-400/20',
-                        nonCall && 'bg-yellow-400/20 text-red-500 line-through'
-                    )}
-                />
-            )
-        },
+        Day: CustomDay
       }}
       {...props}
     />
