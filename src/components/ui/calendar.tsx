@@ -29,13 +29,14 @@ const CustomDay = (props: DayProps) => {
             ref={buttonRef}
             className={cn(
                 dayRender.buttonProps.className,
-                buttonVariants({ variant: "ghost" }),
                 "h-full w-full p-0 font-normal",
                 weekend && 'bg-yellow-400/20',
                 nonCall && 'bg-yellow-400/20 text-red-500 line-through'
             )}
         >
-            {dayRender.formattedDate}
+            <div className="flex items-center justify-center h-full w-full">
+                {dayRender.formattedDate}
+            </div>
         </button>
     )
 }
@@ -87,7 +88,7 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-        Day: CustomDay
+        Day: CustomDay,
       }}
       {...props}
     />
