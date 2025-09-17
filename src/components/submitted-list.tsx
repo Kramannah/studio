@@ -7,10 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay, isValid } from "date-fns";
 import Image from "next/image";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2 } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 
 import { Button } from "./ui/button";
@@ -226,6 +228,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
 
 
 export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
+    const listRef = useRef<HTMLDivElement>(null);
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
@@ -289,7 +292,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }, [entries, selectedDate]);
     
     
-    const handleDownload = () => {
+    const handleDownloadExcel = () => {
         const dataToExport = filteredEntries.map(entry => ({
             "Doctor Name": `${entry.firstName} ${entry.lastName}`,
             "Specialty": entry.specialty,
@@ -317,6 +320,35 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Submitted Coverage");
         XLSX.writeFile(workbook, `submitted_coverage_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
+    const handleDownloadPdf = () => {
+        if (!listRef.current) return;
+
+        html2canvas(listRef.current, { scale: 2 }).then((canvas) => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            let imgHeight = pdfWidth / ratio;
+            let heightLeft = imgHeight;
+            let position = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft >= 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+            
+            pdf.save(`submitted_coverage_report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+        });
     };
 
     const handleSendEmail = () => {
@@ -348,7 +380,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
 
     return (
       <>
-        <Card>
+        <Card ref={listRef}>
             <CardHeader>
                 <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -358,7 +390,15 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                         </CardDescription>
                     </div>
                      <div className="flex gap-2">
-                        <Button variant="outline" onClick={handleDownload}><Download className="mr-2"/> Download</Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline"><Download className="mr-2"/> Download</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                <DropdownMenuItem onClick={handleDownloadExcel}>Download as Excel</DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleDownloadPdf}>Download as PDF</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                     </div>
                 </div>

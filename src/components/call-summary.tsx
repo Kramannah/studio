@@ -3,19 +3,18 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, startOfDay, endOfDay, differenceInMinutes, isValid, addDays } from "date-fns";
+import { getYear, isThisMonth, parseISO, format } from "date-fns";
 import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Calendar } from "./ui/calendar";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -31,6 +30,7 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
+    const summaryRef = useRef<HTMLDivElement>(null);
 
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
@@ -114,7 +114,7 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         return sorted.filter(day => isThisMonth(parseISO(day.date)));
     }, [nonCallDays]);
 
-    const handleDownload = () => {
+    const handleDownloadExcel = () => {
         const filteredEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
         const dataToExport = filteredEntries.map(entry => ({
             "Doctor Name": `${entry.firstName} ${entry.lastName}`,
@@ -134,6 +134,36 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Monthly Call Summary");
         XLSX.writeFile(workbook, `monthly_call_summary_${format(new Date(), 'yyyy-MM')}.xlsx`);
+    };
+
+    const handleDownloadPdf = () => {
+        if (!summaryRef.current) return;
+        html2canvas(summaryRef.current, { scale: 2 }).then((canvas) => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            const width = pdfWidth;
+            const height = width / ratio;
+
+            let position = 0;
+            let heightLeft = height;
+
+            pdf.addImage(imgData, 'PNG', 0, position, width, height);
+            heightLeft -= pdfHeight;
+
+            while (heightLeft > 0) {
+                position = heightLeft - height;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, position, width, height);
+                heightLeft -= pdfHeight;
+            }
+
+            pdf.save(`call_summary_${format(new Date(), 'yyyy-MM')}.pdf`);
+        });
     };
 
     const handleSendEmail = () => {
@@ -170,7 +200,7 @@ This is an auto-generated email.
     }
     
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" ref={summaryRef}>
              <Card>
                 <CardHeader>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -179,7 +209,15 @@ This is an auto-generated email.
                             <CardDescription>A quick overview of your performance for the current month.</CardDescription>
                         </div>
                         <div className="flex gap-2 mt-4 md:mt-0">
-                            <Button variant="outline" onClick={handleDownload}><Download className="mr-2"/> Download</Button>
+                             <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline"><Download className="mr-2"/> Download</Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuItem onClick={handleDownloadExcel}>Download as Excel</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleDownloadPdf}>Download as PDF</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                             <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                         </div>
                     </div>
