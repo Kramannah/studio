@@ -73,13 +73,5 @@ export interface MarketingSample {
     materialName: string;
     allocationQuantity: number;
 }
-
-export interface TimeLog {
-    id: string;
-    userId: string;
-    timeIn: string; // ISO string
-    timeOut: string | null; // ISO string
-    locationType: 'inbase' | 'outbase';
-}
-
     
+

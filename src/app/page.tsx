@@ -19,11 +19,7 @@ import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, format } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingList } from "@/components/marketing-list";
-import { useTimeLog } from "@/hooks/use-time-log";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { TimeInDialog } from "@/components/time-in-dialog";
-import { TimeOutDialog } from "@/components/time-out-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
 
@@ -35,12 +31,9 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
-  const { timeLogs, currentTimeLog, handleTimeIn, handleTimeOut, clearTimeLogs, userId, loading: timeLogLoading } = useTimeLog();
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
-  const [isTimeInDialogOpen, setIsTimeInDialogOpen] = useState(false);
-  const [isTimeOutDialogOpen, setIsTimeOutDialogOpen] = useState(false);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -62,17 +55,8 @@ export default function Home() {
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
-  const handleTimeInSubmit = (locationType: 'inbase' | 'outbase') => {
-    handleTimeIn(locationType);
-    setIsTimeInDialogOpen(false);
-  };
-
-  const handleTimeOutSubmit = () => {
-    handleTimeOut();
-    setIsTimeOutDialogOpen(false);
-  };
   
-  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogLoading;
+  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading;
 
   if (anyLoading) {
     return (
@@ -86,52 +70,12 @@ export default function Home() {
     return <LoginPage />;
   }
 
-  if (!currentTimeLog) {
-    return (
-      <>
-        <div className="flex flex-col min-h-screen bg-background text-foreground">
-          <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
-            <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{user.email}</span>
-                <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
-            </div>
-          </header>
-          <main className="flex-1 flex items-center justify-center p-4 md:p-6">
-            <Card className="w-full max-w-md">
-              <CardHeader className="text-center">
-                <Clock className="w-12 h-12 mx-auto text-primary"/>
-                <CardTitle className="mt-4 font-headline">Ready to Start Your Day?</CardTitle>
-                <CardDescription>Click the button below to log your time-in and begin your tasks.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button size="lg" className="w-full font-headline" onClick={() => setIsTimeInDialogOpen(true)}>
-                  <LogIn className="mr-2" />
-                  Time In
-                </Button>
-              </CardContent>
-            </Card>
-          </main>
-        </div>
-        <TimeInDialog
-          isOpen={isTimeInDialogOpen}
-          onOpenChange={setIsTimeInDialogOpen}
-          onTimeIn={handleTimeInSubmit}
-          userId={userId}
-        />
-      </>
-    )
-  }
-
   return (
     <>
       <div className="flex flex-col min-h-screen bg-background text-foreground">
         <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
-            <div className="text-sm text-muted-foreground font-headline">
-                Timed in at: {format(parseISO(currentTimeLog.timeIn), "hh:mm a")}
-              </div>
           </div>
           <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
@@ -139,9 +83,9 @@ export default function Home() {
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
               </Badge>
-              <Button size="sm" variant="destructive" className="font-headline" onClick={() => setIsTimeOutDialogOpen(true)}>
+              <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
                 <LogOut className="mr-2"/>
-                Time Out
+                Logout
               </Button>
           </div>
         </header>
@@ -209,7 +153,7 @@ export default function Home() {
               />
             </TabsContent>
             <TabsContent value="summary" className="mt-6">
-              <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} clearTimeLogs={clearTimeLogs} />
+              <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} />
             </TabsContent>
             <TabsContent value="master" className="mt-6">
               <MasterList 
@@ -223,12 +167,6 @@ export default function Home() {
           </Tabs>
         </main>
       </div>
-       <TimeOutDialog
-          isOpen={isTimeOutDialogOpen && !!currentTimeLog}
-          onOpenChange={setIsTimeOutDialogOpen}
-          onTimeOut={handleTimeOutSubmit}
-          userId={userId}
-        />
     </>
   );
 }

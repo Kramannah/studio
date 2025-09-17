@@ -2,7 +2,7 @@
 
 "use client";
 
-import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
+import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,7 +30,7 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
     </Card>
 )
 
-export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTimeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], clearTimeLogs: () => void }) {
+export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
     const [filterStartDate, setFilterStartDate] = useState<Date | undefined>();
     const [filterEndDate, setFilterEndDate] = useState<Date | undefined>();
     
@@ -130,16 +130,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
         return sorted.filter(day => isWithinInterval(parseISO(day.date), { start: from, end: to }));
     }, [nonCallDays, appliedStartDate, appliedEndDate]);
-
-    const filteredTimeLogs = useMemo(() => {
-        const sorted = [...timeLogs].sort((a,b) => parseISO(b.timeIn).getTime() - parseISO(a.timeIn).getTime());
-        if (!appliedStartDate) {
-             return sorted.filter(log => isThisMonth(parseISO(log.timeIn)));
-        }
-        const from = startOfDay(appliedStartDate);
-        const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
-        return sorted.filter(log => isWithinInterval(parseISO(log.timeIn), { start: from, end: to }));
-    }, [timeLogs, appliedStartDate, appliedEndDate]);
     
     const handleApplyFilter = () => {
         setAppliedStartDate(filterStartDate);
@@ -185,23 +175,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         ];
         XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
 
-        // Time Logs Worksheet
-        if(filteredTimeLogs.length > 0) {
-            const timeLogData = filteredTimeLogs.map(log => ({
-                "User ID": log.userId,
-                "Date": format(parseISO(log.timeIn), "PPP"),
-                "Time In": format(parseISO(log.timeIn), "p"),
-                "Time Out": log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A',
-                "Duration (minutes)": log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A',
-                "Location Type": log.locationType
-            }));
-            const timeLogWorksheet = XLSX.utils.json_to_sheet(timeLogData);
-            timeLogWorksheet['!cols'] = [
-                { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
-            ];
-            XLSX.utils.book_append_sheet(workbook, timeLogWorksheet, "Time Logs");
-        }
-
 
         const fileName = `call_summary_${format(appliedStartDate, 'yyyy-MM-dd')}_to_${format(appliedEndDate || appliedStartDate, 'yyyy-MM-dd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
@@ -223,16 +196,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         body += `Inbase Days: ${insights.totalInbaseDays}\n`;
         body += `Outbase Days: ${insights.totalOutbaseDays}\n\n`;
 
-        if (filteredTimeLogs.length > 0) {
-            body += `--- TIME LOGS ---\n`;
-            body += `User ID, Date, Time In, Time Out, Duration (min), Location\n`;
-            filteredTimeLogs.forEach(log => {
-                const duration = log.timeOut ? differenceInMinutes(parseISO(log.timeOut), parseISO(log.timeIn)) : 'N/A';
-                body += `${log.userId}, ${format(parseISO(log.timeIn), "yyyy-MM-dd")}, ${format(parseISO(log.timeIn), "p")}, ${log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}, ${duration}, ${log.locationType}\n`;
-            });
-            body += '\n';
-        }
-
         if (filteredNonCallDays.length > 0) {
             body += `--- NON-CALL DAYS ---\n`;
             body += `Date, Reason, Remarks\n`;
@@ -246,7 +209,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
         window.location.href = mailtoLink;
     };
 
-    if (!insights.isDataAvailable && nonCallDays.length === 0 && timeLogs.length === 0) {
+    if (!insights.isDataAvailable && nonCallDays.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -410,97 +373,45 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, clearTime
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle className="font-headline">Time Log</CardTitle>
-                                <CardDescription>A log of all time-in and time-out events.</CardDescription>
-                            </div>
-                            <Button variant="destructive" size="sm" onClick={clearTimeLogs} disabled={timeLogs.length === 0}>
-                                <Trash2 className="mr-2"/> Clear History
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="border rounded-md">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>User ID</TableHead>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Time In</TableHead>
-                                        <TableHead>Time Out</TableHead>
-                                        <TableHead>Location</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredTimeLogs.length > 0 ? (
-                                        filteredTimeLogs.map((log) => (
-                                            <TableRow key={log.id}>
-                                                <TableCell className="font-mono text-xs">{log.userId}</TableCell>
-                                                <TableCell className="font-medium">{format(parseISO(log.timeIn), "PPP")}</TableCell>
-                                                <TableCell>{format(parseISO(log.timeIn), "p")}</TableCell>
-                                                <TableCell>{log.timeOut ? format(parseISO(log.timeOut), "p") : 'N/A'}</TableCell>
-                                                <TableCell className="capitalize">{log.locationType}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="h-24 text-center">
-                                                <div className="flex flex-col items-center justify-center gap-2">
-                                                    <Clock className="w-8 h-8 text-muted-foreground" />
-                                                    <p>No time logs have been recorded for the selected period.</p>
-                                                </div>
-                                            </TableCell>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Non-Call Day</CardTitle>
+                    <CardDescription>A log of all submitted non-call days.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="border rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Reason</TableHead>
+                                    <TableHead>Remarks</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredNonCallDays.length > 0 ? (
+                                    filteredNonCallDays.map((day) => (
+                                        <TableRow key={day.id}>
+                                            <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
+                                            <TableCell>{day.reason}</TableCell>
+                                            <TableCell>{day.remarks || 'N/A'}</TableCell>
                                         </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                 </Card>
-                 <Card>
-                    <CardHeader>
-                        <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                        <CardDescription>A log of all submitted non-call days.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="border rounded-md">
-                            <Table>
-                                <TableHeader>
+                                    ))
+                                ) : (
                                     <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Reason</TableHead>
-                                        <TableHead>Remarks</TableHead>
+                                        <TableCell colSpan={3} className="h-24 text-center">
+                                            <div className="flex flex-col items-center justify-center gap-2">
+                                                <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+                                                <p>No non-call days have been logged for the selected period.</p>
+                                            </div>
+                                        </TableCell>
                                     </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredNonCallDays.length > 0 ? (
-                                        filteredNonCallDays.map((day) => (
-                                            <TableRow key={day.id}>
-                                                <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
-                                                <TableCell>{day.reason}</TableCell>
-                                                <TableCell>{day.remarks || 'N/A'}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="h-24 text-center">
-                                                <div className="flex flex-col items-center justify-center gap-2">
-                                                    <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                    <p>No non-call days have been logged for the selected period.</p>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }
