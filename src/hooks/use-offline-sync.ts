@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
@@ -152,35 +152,37 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     }
 
     setIsSyncing(true);
-    let successCount = 0;
-    const remainingEntries = [...offlineEntries];
-
-    for (const entry of offlineEntries) {
-      try {
+    
+    const batch = writeBatch(db);
+    offlineEntries.forEach(entry => {
         const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
+        const entryRef = doc(collection(db, 'coverageEntries'));
+        
+        // Firestore does not support 'undefined' values, so clean the object
+        const cleanedData = Object.entries(dataToSync).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key as keyof typeof dataToSync] = value;
+            }
+            return acc;
+        }, {} as Partial<CoverageEntry>);
 
-        // Firestore does not support 'undefined' values.
-        if (dataToSync.coverageType !== 'joint') {
-            delete (dataToSync as Partial<CoverageEntry>).jointCallWith;
-            delete (dataToSync as Partial<CoverageEntry>).jointCallSignature;
+        batch.set(entryRef, cleanedData);
+    });
+
+    try {
+        await batch.commit();
+        const successCount = offlineEntries.length;
+        updateOfflineInStorage([]);
+        if(successCount > 0){
+            toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
+            fetchMasterEntries();
         }
-
-        await addDoc(collection(db, 'coverageEntries'), dataToSync);
-        remainingEntries.shift();
-        successCount++;
-      } catch (error) {
-        console.error('Failed to sync entry:', error);
-        toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to sync report for ${entry.firstName} ${entry.lastName}.` });
-        break; // Stop on first error to prevent data loss or ordering issues
-      }
+    } catch (error) {
+        console.error('Failed to sync entries:', error);
+        toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to sync all reports. Please try again.` });
+    } finally {
+        setIsSyncing(false);
     }
-
-    updateOfflineInStorage(remainingEntries);
-    if(successCount > 0){
-        toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
-        fetchMasterEntries();
-    }
-    setIsSyncing(false);
   }, [isOnline, user, offlineEntries, toast, fetchMasterEntries, getOfflineKey]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
