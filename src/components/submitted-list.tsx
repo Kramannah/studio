@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -229,12 +228,17 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
 
 export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
     const listRef = useRef<HTMLDivElement>(null);
-    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analyzedDoctor, setAnalyzedDoctor] = useState<string>('');
+    const [startDate, setStartDate] = useState<Date | undefined>();
+    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
+
+    const handleApplyRange = () => {
+        setAppliedRange({ start: startDate, end: endDate });
+    };
 
     const handleAnalyze = async (entry: CoverageEntry) => {
         setAnalyzedDoctor(`${entry.firstName} ${entry.lastName}`);
@@ -267,30 +271,20 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
         }
     };
     
-    const entriesByDate = useMemo(() => {
-        return entries.reduce((acc, entry) => {
-            const date = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
-            if (!acc[date]) {
-                acc[date] = [];
-            }
-            acc[date].push(entry);
-            return acc;
-        }, {} as Record<string, CoverageEntry[]>);
-    }, [entries]);
-
-    const submittedDays = useMemo(() => {
-        return Object.keys(entriesByDate).map(dateStr => parseISO(dateStr));
-    }, [entriesByDate]);
-
     const filteredEntries = useMemo(() => {
-        return [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
-    }, [entries]);
+        let sortedEntries = [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
 
-    const selectedDayEntries = useMemo(() => {
-        if (!selectedDate) return [];
-        return entries.filter(entry => isSameDay(parseISO(entry.submittedAt), selectedDate));
-    }, [entries, selectedDate]);
-    
+        if (!appliedRange.start || !appliedRange.end) {
+            return sortedEntries;
+        }
+
+        const start = appliedRange.start;
+        const end = appliedRange.end;
+        return sortedEntries.filter(e => {
+            const submittedDate = parseISO(e.submittedAt);
+            return isWithinInterval(submittedDate, { start, end });
+        });
+    }, [entries, appliedRange]);
     
     const handleDownloadExcel = () => {
         const dataToExport = filteredEntries.map(entry => ({
@@ -386,10 +380,58 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                     <div>
                         <CardTitle className="font-headline">Submitted Coverage</CardTitle>
                         <CardDescription>
-                            A log of all your submitted coverage reports.
+                            {appliedRange.start && appliedRange.end 
+                                ? `Showing reports from ${format(appliedRange.start, "PPP")} to ${format(appliedRange.end, "PPP")}.`
+                                : "A log of all your submitted coverage reports."
+                            }
                         </CardDescription>
                     </div>
-                     <div className="flex gap-2">
+                     <div className="flex flex-wrap items-center gap-2">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                variant={"outline"}
+                                className={cn(
+                                    "w-[140px] justify-start text-left font-normal",
+                                    !startDate && "text-muted-foreground"
+                                )}
+                                >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                mode="single"
+                                selected={startDate}
+                                onSelect={setStartDate}
+                                initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                variant={"outline"}
+                                className={cn(
+                                    "w-[140px] justify-start text-left font-normal",
+                                    !endDate && "text-muted-foreground"
+                                )}
+                                >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {endDate ? format(endDate, "PPP") : <span>End Date</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                mode="single"
+                                selected={endDate}
+                                onSelect={setEndDate}
+                                initialFocus
+                                />
+                            </PopoverContent>
+                        </Popover>
+                        <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline"><Download className="mr-2"/> Download</Button>
@@ -424,7 +466,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                                 <TableBody>
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-24 text-center">
-                                    No submitted entries found.
+                                    No submitted entries found for the selected date range.
                                     </TableCell>
                                 </TableRow>
                                 </TableBody>
@@ -475,3 +517,5 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
       </>
     );
 }
+
+    
