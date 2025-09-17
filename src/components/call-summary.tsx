@@ -7,7 +7,7 @@ import { useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format } from "date-fns";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval } from "date-fns";
 import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -15,6 +15,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Calendar } from "./ui/calendar";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -31,9 +33,30 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 
 export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
     const summaryRef = useRef<HTMLDivElement>(null);
+    const [startDate, setStartDate] = useState<Date | undefined>();
+    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
+
+    const handleApplyRange = () => {
+        setAppliedRange({ start: startDate, end: endDate });
+    };
+
+    const filteredEntriesForRange = useMemo(() => {
+        if (!appliedRange.start || !appliedRange.end) {
+            return entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+        }
+        const start = appliedRange.start;
+        const end = appliedRange.end;
+        return entries.filter(e => {
+            const submittedDate = parseISO(e.submittedAt);
+            return isWithinInterval(submittedDate, { start, end });
+        });
+    }, [entries, appliedRange]);
 
     const insights = useMemo(() => {
-        if (entries.length === 0 && doctors.length === 0) {
+        const filteredEntries = filteredEntriesForRange;
+        
+        if (filteredEntries.length === 0 && doctors.length === 0) {
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
                 coverageReach: { actual: 0, total: 0, percentage: 0 },
@@ -45,8 +68,6 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
                 isDataAvailable: false,
             };
         }
-
-        const filteredEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
         
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName.toLowerCase()} ${entry.lastName.toLowerCase()}`;
@@ -107,16 +128,22 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             isDataAvailable: true,
         };
-    }, [entries, doctors]);
+    }, [filteredEntriesForRange, doctors, entries]);
     
     const filteredNonCallDays = useMemo(() => {
-        const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return sorted.filter(day => isThisMonth(parseISO(day.date)));
-    }, [nonCallDays]);
+         if (!appliedRange.start || !appliedRange.end) {
+            return nonCallDays.filter(day => isThisMonth(parseISO(day.date)));
+        }
+        const start = appliedRange.start;
+        const end = appliedRange.end;
+        return nonCallDays.filter(day => {
+            const dayDate = parseISO(day.date);
+            return isWithinInterval(dayDate, { start, end });
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [nonCallDays, appliedRange]);
 
     const handleDownloadExcel = () => {
-        const filteredEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
-        const dataToExport = filteredEntries.map(entry => ({
+        const dataToExport = filteredEntriesForRange.map(entry => ({
             "Doctor Name": `${entry.firstName} ${entry.lastName}`,
             "Specialty": entry.specialty,
             "Clinic": entry.clinic,
@@ -132,8 +159,8 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Monthly Call Summary");
-        XLSX.writeFile(workbook, `monthly_call_summary_${format(new Date(), 'yyyy-MM')}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
+        XLSX.writeFile(workbook, `call_summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
     const handleDownloadPdf = () => {
@@ -167,12 +194,12 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
     };
 
     const handleSendEmail = () => {
-        const subject = `Call Summary Report for ${format(new Date(), 'MMMM yyyy')}`;
+        const subject = `Call Summary Report for ${appliedRange.start ? format(appliedRange.start, 'PPP') : ''} - ${appliedRange.end ? format(appliedRange.end, 'PPP') : ''}`;
         
         const body = `
 Hi Team,
 
-Please find the call summary report for the current month.
+Please find the call summary report for the selected period.
 
 Summary:
 - Call Concentration (3x/4x): ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)
@@ -189,7 +216,7 @@ This is an auto-generated email.
     };
     
 
-    if (!insights.isDataAvailable && nonCallDays.length === 0) {
+    if (entries.length === 0 && doctors.length === 0) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -205,10 +232,60 @@ This is an auto-generated email.
                 <CardHeader>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
-                            <CardTitle className="font-headline">This Month's Summary</CardTitle>
-                            <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                            <CardTitle className="font-headline">
+                                {appliedRange.start && appliedRange.end 
+                                    ? `Summary for ${format(appliedRange.start, "PPP")} to ${format(appliedRange.end, "PPP")}`
+                                    : "This Month's Summary"
+                                }
+                            </CardTitle>
+                            <CardDescription>A quick overview of your performance for the selected period.</CardDescription>
                         </div>
-                        <div className="flex gap-2 mt-4 md:mt-0">
+                        <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                        "w-[140px] justify-start text-left font-normal",
+                                        !startDate && "text-muted-foreground"
+                                    )}
+                                    >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                    mode="single"
+                                    selected={startDate}
+                                    onSelect={setStartDate}
+                                    initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                        "w-[140px] justify-start text-left font-normal",
+                                        !endDate && "text-muted-foreground"
+                                    )}
+                                    >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {endDate ? format(endDate, "PPP") : <span>End Date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                    mode="single"
+                                    selected={endDate}
+                                    onSelect={setEndDate}
+                                    initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                            <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
                              <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline"><Download className="mr-2"/> Download</Button>
@@ -295,7 +372,7 @@ This is an auto-generated email.
             <Card>
                 <CardHeader>
                     <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                    <CardDescription>A log of all submitted non-call days this month.</CardDescription>
+                    <CardDescription>A log of all submitted non-call days in the selected period.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="border rounded-md">
@@ -321,7 +398,7 @@ This is an auto-generated email.
                                         <TableCell colSpan={3} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                <p>No non-call days have been logged for this month.</p>
+                                                <p>No non-call days have been logged for this period.</p>
                                             </div>
                                         </TableCell>
                                     </TableRow>
