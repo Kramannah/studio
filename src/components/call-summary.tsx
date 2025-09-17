@@ -31,11 +31,6 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
 )
 
 export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
-    const [filterStartDate, setFilterStartDate] = useState<Date | undefined>();
-    const [filterEndDate, setFilterEndDate] = useState<Date | undefined>();
-    
-    const [appliedStartDate, setAppliedStartDate] = useState<Date | undefined>();
-    const [appliedEndDate, setAppliedEndDate] = useState<Date | undefined>();
 
     const insights = useMemo(() => {
         if (entries.length === 0 && doctors.length === 0) {
@@ -51,14 +46,7 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             };
         }
 
-        const filteredEntries = entries.filter(e => {
-            if (!appliedStartDate) {
-                return isThisMonth(new Date(e.submittedAt));
-            }
-            const from = startOfDay(appliedStartDate);
-            const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
-            return isWithinInterval(new Date(e.submittedAt), { start: from, end: to });
-        });
+        const filteredEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
         
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName.toLowerCase()} ${entry.lastName.toLowerCase()}`;
@@ -119,95 +107,13 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             isDataAvailable: true,
         };
-    }, [entries, doctors, appliedStartDate, appliedEndDate]);
+    }, [entries, doctors]);
     
     const filteredNonCallDays = useMemo(() => {
         const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        if (!appliedStartDate) {
-            return sorted.filter(day => isThisMonth(parseISO(day.date)));
-        }
-        const from = startOfDay(appliedStartDate);
-        const to = appliedEndDate ? endOfDay(appliedEndDate) : endOfDay(from);
-        return sorted.filter(day => isWithinInterval(parseISO(day.date), { start: from, end: to }));
-    }, [nonCallDays, appliedStartDate, appliedEndDate]);
+        return sorted.filter(day => isThisMonth(parseISO(day.date)));
+    }, [nonCallDays]);
     
-    const handleApplyFilter = () => {
-        setAppliedStartDate(filterStartDate);
-        setAppliedEndDate(filterEndDate);
-    };
-
-    const handleDownloadSummary = () => {
-        if (!appliedStartDate) return;
-
-        // Create a new workbook
-        const workbook = XLSX.utils.book_new();
-
-        // Call Summary Worksheet
-        const header = [
-            "Call Concentration", null, null,
-            "Call Reach", null, null,
-            "Avg Calls/Day"
-        ];
-        const subHeader = [
-            "Target", "Actual", "Achieved",
-            "Target", "Actual", "Achieved",
-            null
-        ];
-        const data = [
-            insights.completed3x.total,
-            insights.completed3x.actual,
-            `${insights.completed3x.percentage}%`,
-            insights.coverageReach.total,
-            insights.coverageReach.actual,
-            `${insights.coverageReach.percentage}%`,
-            insights.avgCallsPerDay
-        ];
-        const aoa = [header, subHeader, data];
-        const worksheet = XLSX.utils.aoa_to_sheet(aoa);
-        worksheet['!merges'] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, 
-            { s: { r: 0, c: 3 }, e: { r: 0, c: 5 } }
-        ];
-        worksheet['!cols'] = [
-            { wch: 15 }, { wch: 15 }, { wch: 15 },
-            { wch: 15 }, { wch: 15 }, { wch: 15 },
-            { wch: 15 }
-        ];
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
-
-
-        const fileName = `call_summary_${format(appliedStartDate, 'yyyy-MM-dd')}_to_${format(appliedEndDate || appliedStartDate, 'yyyy-MM-dd')}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
-    };
-
-    const handleSendEmail = () => {
-        if (!appliedStartDate) return;
-    
-        const subject = `Call Summary Report: ${format(appliedStartDate, 'PPP')} to ${appliedEndDate ? format(appliedEndDate, 'PPP') : format(appliedStartDate, 'PPP')}`;
-        
-        let body = `Call Summary Report\n`;
-        body += `Period: ${format(appliedStartDate, 'PPP')} to ${appliedEndDate ? format(appliedEndDate, 'PPP') : format(appliedStartDate, 'PPP')}\n\n`;
-
-        body += `--- KEY METRICS ---\n`;
-        body += `Call Concentration: ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)\n`;
-        body += `Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)\n`;
-        body += `Avg Calls / Day: ${insights.avgCallsPerDay}\n`;
-        body += `Total Working Days: ${insights.totalWorkingDays}\n`;
-        body += `Inbase Days: ${insights.totalInbaseDays}\n`;
-        body += `Outbase Days: ${insights.totalOutbaseDays}\n\n`;
-
-        if (filteredNonCallDays.length > 0) {
-            body += `--- NON-CALL DAYS ---\n`;
-            body += `Date, Reason, Remarks\n`;
-            filteredNonCallDays.forEach(day => {
-                body += `${format(parseISO(day.date), "yyyy-MM-dd")}, ${day.reason}, ${day.remarks || 'N/A'}\n`;
-            });
-            body += '\n';
-        }
-    
-        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.location.href = mailtoLink;
-    };
 
     if (!insights.isDataAvailable && nonCallDays.length === 0) {
         return (
@@ -223,85 +129,8 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         <div className="space-y-6">
              <Card>
                 <CardHeader>
-                    <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <CardTitle className="font-headline">
-                                {appliedStartDate ? "Summary for Selected Period" : "This Month's Summary"}
-                            </CardTitle>
-                            <CardDescription>
-                                {appliedStartDate ? `Showing data from ${format(appliedStartDate, "PPP")} to ${appliedEndDate ? format(appliedEndDate, "PPP") : format(appliedStartDate, "PPP")}` : "A quick overview of your performance for the current month."}
-                            </CardDescription>
-                        </div>
-                        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="start-date-summary">Start Date</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                        <Button
-                                            id="start-date-summary"
-                                            variant={"outline"}
-                                            className={cn(
-                                            "w-[150px] justify-start text-left font-normal",
-                                            !filterStartDate && "text-muted-foreground"
-                                            )}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {filterStartDate ? format(filterStartDate, "PPP") : <span>Pick a date</span>}
-                                        </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            mode="single"
-                                            selected={filterStartDate}
-                                            onSelect={setFilterStartDate}
-                                            initialFocus
-                                        />
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="end-date-summary">End Date</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                        <Button
-                                            id="end-date-summary"
-                                            variant={"outline"}
-                                            className={cn(
-                                            "w-[150px] justify-start text-left font-normal",
-                                            !filterEndDate && "text-muted-foreground"
-                                            )}
-                                            disabled={!filterStartDate}
-                                        >
-                                            <CalendarIcon className="mr-2 h-4 w-4" />
-                                            {filterEndDate ? format(filterEndDate, "PPP") : <span>Pick a date</span>}
-                                        </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            mode="single"
-                                            selected={filterEndDate}
-                                            onSelect={setFilterEndDate}
-                                            disabled={(date) => filterStartDate ? date < filterStartDate : false}
-                                            initialFocus
-                                        />
-                                        </PopoverContent>
-                                    </Popover>
-                                </div>
-                            </div>
-                            <Button onClick={handleApplyFilter} disabled={!filterStartDate}>
-                                Apply
-                            </Button>
-                            <Button onClick={handleDownloadSummary} variant="outline" disabled={!appliedStartDate}>
-                                <Download className="mr-2"/>
-                                Download
-                            </Button>
-                             <Button onClick={handleSendEmail} variant="outline" disabled={!appliedStartDate}>
-                                <Send className="mr-2"/>
-                                Send via Email
-                            </Button>
-                        </div>
-                    </div>
+                    <CardTitle className="font-headline">This Month's Summary</CardTitle>
+                    <CardDescription>A quick overview of your performance for the current month.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <StatCard 
@@ -376,7 +205,7 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             <Card>
                 <CardHeader>
                     <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                    <CardDescription>A log of all submitted non-call days.</CardDescription>
+                    <CardDescription>A log of all submitted non-call days this month.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="border rounded-md">
@@ -402,7 +231,7 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
                                         <TableCell colSpan={3} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                <p>No non-call days have been logged for the selected period.</p>
+                                                <p>No non-call days have been logged for this month.</p>
                                             </div>
                                         </TableCell>
                                     </TableRow>

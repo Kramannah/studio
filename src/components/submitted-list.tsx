@@ -227,8 +227,6 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
 
 export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -282,119 +280,15 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }, [entriesByDate]);
 
     const filteredEntries = useMemo(() => {
-        const sortedEntries = [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
-
-        if (!startDate) {
-            return sortedEntries;
-        }
-
-        const from = startOfDay(startDate);
-        const to = endDate ? endOfDay(endDate) : endOfDay(from);
-
-        return sortedEntries.filter(entry => isWithinInterval(parseISO(entry.submittedAt), { start: from, end: to }));
-
-    }, [entries, startDate, endDate]);
+        return [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
+    }, [entries]);
 
     const selectedDayEntries = useMemo(() => {
         if (!selectedDate) return [];
         return entries.filter(entry => isSameDay(parseISO(entry.submittedAt), selectedDate));
     }, [entries, selectedDate]);
     
-    const handleDownloadSubmitted = () => {
-        if (viewMode === 'list' && !startDate) return;
-        if (viewMode === 'calendar' && !selectedDate) return;
-        
-        const entriesToExport = viewMode === 'list' ? filteredEntries : selectedDayEntries;
-        
-        const dataToExport = entriesToExport.map(entry => {
-            const proofs = [];
-            if (entry.photos && entry.photos.length > 0) proofs.push("Photo");
-            if (entry.signature) proofs.push("Signature");
-            if (entry.dsmSignature) proofs.push("DSM Signature");
-            if (entry.jointCallSignature) proofs.push(`${entry.jointCallWith} Signature`);
-
-            
-            return {
-                'First Name': entry.firstName,
-                'Last Name': entry.lastName,
-                'Specialty': entry.specialty,
-                'Clinic': entry.clinic,
-                'HACME': entry.hacme,
-                'Call Type': entry.callType,
-                'Coverage Type': entry.coverageType,
-                'Joint Call With': entry.jointCallWith,
-                'Coverage Date': format(parseISO(entry.coverageDate), 'yyyy-MM-dd'),
-                'Submitted At': format(parseISO(entry.submittedAt), 'yyyy-MM-dd HH:mm:ss'),
-                'Proof of Coverage': proofs.length > 0 ? proofs.join(', ') : 'None',
-                'Call Objective': entry.callObjective,
-                'Primary Product': entry.primaryProduct,
-                'Primary Sample': entry.primarySampleName,
-                'Primary Quantity': entry.primaryProductQty,
-                'Secondary Product': entry.secondaryProduct,
-                'Secondary Sample': entry.secondarySampleName,
-                'Secondary Quantity': entry.secondaryProductQty,
-                'Topics Discussed': entry.topicsDiscussed,
-                'Doctors Issue': entry.doctorsIssue,
-                'Plan of Action': entry.planOfAction,
-                'What Went Well': entry.whatWentWell,
-                'Areas for Improvement': entry.areasForImprovement,
-            }
-        });
     
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Submitted Coverage');
-
-        worksheet['!cols'] = Object.keys(dataToExport[0] || {}).map(key => ({
-             wch: key.length > 20 ? key.length : 20 
-        }));
-    
-        const dateIdentifier = viewMode === 'list' 
-            ? `${format(startDate!, 'yyyy-MM-dd')}_to_${format(endDate || startDate!, 'yyyy-MM-dd')}`
-            : format(selectedDate!, 'yyyy-MM-dd');
-
-        const fileName = `submitted_coverage_${dateIdentifier}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
-      };
-      
-    const handleSendEmail = () => {
-        const entriesToEmail = viewMode === 'list' ? filteredEntries : selectedDayEntries;
-        if (entriesToEmail.length === 0) return;
-
-        let dateRangeString;
-        if(viewMode === 'list'){
-            if (!startDate) return;
-            dateRangeString = `${format(startDate, 'PPP')} to ${endDate ? format(endDate, 'PPP') : format(startDate, 'PPP')}`;
-        } else {
-            if (!selectedDate) return;
-            dateRangeString = format(selectedDate, 'PPP');
-        }
-
-        const subject = `Submitted Coverage Report: ${dateRangeString}`;
-        
-        let body = `Submitted Coverage Report\n`;
-        body += `Period: ${dateRangeString}\n\n`;
-
-        entriesToEmail.forEach(entry => {
-            body += `--- \n`;
-            body += `Doctor: ${entry.firstName} ${entry.lastName}\n`;
-            body += `Clinic: ${entry.clinic}\n`;
-            body += `Specialty: ${entry.specialty}\n`;
-            body += `Submitted At: ${format(parseISO(entry.submittedAt), 'PPP p')}\n`;
-            body += `Coverage Date: ${format(parseISO(entry.coverageDate), 'PPP')}\n`;
-            body += `Call Type: ${entry.callType}\n`;
-            body += `Coverage Type: ${entry.coverageType}\n`;
-            if (entry.coverageType === 'joint') {
-                body += `Joint Call With: ${entry.jointCallWith}\n`;
-            }
-            body += `---\n\n`;
-        });
-    
-        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.location.href = mailtoLink;
-    };
-
-
     if (entries.length === 0) {
         return (
             <Card>
@@ -413,199 +307,40 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                     <div>
                         <CardTitle className="font-headline">Submitted Coverage</CardTitle>
                         <CardDescription>
-                            {viewMode === 'list'
-                                ? 'Filter by date range and download reports.'
-                                : 'View submissions by date on the calendar.'
-                            }
+                            A log of all your submitted coverage reports.
                         </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant={viewMode === 'list' ? 'secondary' : 'outline'} onClick={() => setViewMode('list')}>
-                            <List className="mr-2"/> List View
-                        </Button>
-                        <Button variant={viewMode === 'calendar' ? 'secondary' : 'outline'} onClick={() => setViewMode('calendar')}>
-                            <CalendarViewIcon className="mr-2"/> Calendar View
-                        </Button>
-                    </div>
                 </div>
-                {viewMode === 'list' && (
-                    <div className="flex flex-col items-stretch gap-2 pt-4 sm:flex-row sm:items-end">
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="grid gap-2">
-                                <Label htmlFor="start-date-submitted">Start Date</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        id="start-date-submitted"
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-[150px] justify-start text-left font-normal",
-                                        !startDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={startDate}
-                                        onSelect={setStartDate}
-                                        initialFocus
-                                    />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="end-date-submitted">End Date</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        id="end-date-submitted"
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-[150px] justify-start text-left font-normal",
-                                        !endDate && "text-muted-foreground"
-                                        )}
-                                        disabled={!startDate}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={endDate}
-                                        onSelect={setEndDate}
-                                        disabled={(date) => startDate ? date < startDate : false}
-                                        initialFocus
-                                    />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                        </div>
-                        <Button onClick={handleDownloadSubmitted} variant="outline" disabled={!startDate}>
-                            <Download className="mr-2" />
-                            Download
-                        </Button>
-                         <Button onClick={handleSendEmail} variant="outline" disabled={!startDate}>
-                            <Send className="mr-2"/>
-                            Send via Email
-                        </Button>
-                    </div>
-                )}
-                 {viewMode === 'calendar' && (
-                     <div className="flex items-center gap-2 pt-4">
-                        <Button onClick={handleDownloadSubmitted} disabled={!selectedDate || selectedDayEntries.length === 0}>
-                            <Download className="mr-2" />
-                            Download for {selectedDate ? format(selectedDate, 'PPP') : ''}
-                        </Button>
-                        <Button onClick={handleSendEmail} variant="outline" disabled={!selectedDate || selectedDayEntries.length === 0}>
-                            <Send className="mr-2"/>
-                            Send for {selectedDate ? format(selectedDate, 'PPP') : ''}
-                        </Button>
-                     </div>
-                 )}
             </CardHeader>
             <CardContent>
-                {viewMode === 'list' && (
-                    <div className="border rounded-md">
-                        <Table>
-                            <TableHeader>
+                <div className="border rounded-md">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Provider</TableHead>
+                                <TableHead>Clinic</TableHead>
+                                <TableHead>Submitted On</TableHead>
+                                <TableHead>Attachments</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        
+                            {filteredEntries.length > 0 ? (
+                                filteredEntries.map((entry) => (
+                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
+                                ))
+                            ) : (
+                                <TableBody>
                                 <TableRow>
-                                    <TableHead>Provider</TableHead>
-                                    <TableHead>Clinic</TableHead>
-                                    <TableHead>Submitted On</TableHead>
-                                    <TableHead>Attachments</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
+                                    <TableCell colSpan={5} className="h-24 text-center">
+                                    No submitted entries found.
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            
-                                {filteredEntries.length > 0 ? (
-                                    filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
-                                    ))
-                                ) : (
-                                    <TableBody>
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
-                                        No submitted entries found for the selected date range.
-                                        </TableCell>
-                                    </TableRow>
-                                    </TableBody>
-                                )}
-                            
-                        </Table>
-                    </div>
-                 )}
-                 {viewMode === 'calendar' && (
-                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                        <div>
-                             <Calendar
-                                mode="single"
-                                selected={selectedDate}
-                                onSelect={setSelectedDate}
-                                modifiers={{ 
-                                    submitted: submittedDays
-                                }}
-                                modifiersStyles={{
-                                    submitted: { 
-                                        fontWeight: 'bold',
-                                        color: 'hsl(var(--primary-foreground))',
-                                        backgroundColor: 'hsl(var(--primary))',
-                                    },
-                                }}
-                                components={{
-                                    DayContent: ({ date, activeModifiers }) => {
-                                        const dateString = format(date, 'yyyy-MM-dd');
-                                        const count = entriesByDate[dateString]?.length;
-                                        return (
-                                            <div className="relative flex items-center justify-center w-full h-full">
-                                                {date.getDate()}
-                                                {count && (
-                                                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{count}</Badge>
-                                                )}
-                                            </div>
-                                        );
-                                    },
-                                }}
-                                className="w-full p-4 border rounded-md"
-                            />
-                        </div>
-                        <div>
-                            <h3 className="mb-4 text-xl font-semibold font-headline">
-                                Submissions for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
-                            </h3>
-                            <div className="border rounded-md">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Provider</TableHead>
-                                            <TableHead>Clinic</TableHead>
-                                            <TableHead>Attachments</TableHead>
-                                            <TableHead className="text-right">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                        {selectedDayEntries.length > 0 ? (
-                                            selectedDayEntries.map((entry) => (
-                                                <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
-                                            ))
-                                        ) : (
-                                            <TableBody>
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="h-24 text-center">
-                                                    No submissions for this date.
-                                                </TableCell>
-                                            </TableRow>
-                                            </TableBody>
-                                        )}
-                                </Table>
-                            </div>
-                        </div>
-                    </div>
-                 )}
+                                </TableBody>
+                            )}
+                        
+                    </Table>
+                </div>
             </CardContent>
         </Card>
         <Dialog open={isAnalysisDialogOpen} onOpenChange={setIsAnalysisDialogOpen}>
