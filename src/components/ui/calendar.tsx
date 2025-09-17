@@ -57,38 +57,21 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-        Day: ({ date, displayMonth, activeModifiers = {}, ...props }: DayProps) => {
-          const { nonCall, weekend } = activeModifiers;
-          const DayButton = (
-            <button
-              className={cn(
-                buttonVariants({ variant: 'ghost' }),
-                'h-24 w-full p-0 font-normal relative'
-              )}
-            >
-              <div
-                className={cn(
-                  'absolute inset-0',
-                  weekend && 'bg-yellow-400/20',
-                  nonCall && 'bg-yellow-400/20'
-                )}
-              />
-              <span
-                className={cn(
-                  'relative z-10',
-                  nonCall && 'text-red-500 line-through'
-                )}
-              >
-                {date.getDate()}
-              </span>
-            </button>
-          );
-          
-          return (
-            <div {...props} className={props.className}>
-                {DayButton}
-            </div>
-          )
+        Day: ({ date, ...props }) => {
+            const { activeModifiers = {} } = props;
+            const { nonCall, weekend } = activeModifiers;
+            return (
+                <DayPicker.Day
+                    date={date}
+                    {...props}
+                    className={cn(
+                        props.className,
+                        "h-full w-full",
+                        weekend && 'bg-yellow-400/20',
+                        nonCall && 'bg-yellow-400/20 text-red-500 line-through'
+                    )}
+                />
+            )
         },
       }}
       {...props}
