@@ -65,6 +65,7 @@ export interface NonCallDay {
   date: string; // ISO string
   reason: string;
   remarks: string;
+  dayType: 'wholeday' | 'halfday-am' | 'halfday-pm';
 }
 
 export interface MarketingSample {
@@ -74,4 +75,3 @@ export interface MarketingSample {
     allocationQuantity: number;
 }
     
-

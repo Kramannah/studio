@@ -29,6 +29,7 @@ import type { NonCallDay } from "@/lib/types"
 
 const nonCallDayFormSchema = z.object({
   reason: z.string().min(1, "Please select a reason."),
+  dayType: z.enum(['wholeday', 'halfday-am', 'halfday-pm']),
   remarks: z.string().optional(),
 })
 
@@ -55,6 +56,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
     defaultValues: {
       reason: "",
       remarks: "",
+      dayType: "wholeday",
     },
   })
 
@@ -80,6 +82,28 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+             <FormField
+              control={form.control}
+              name="dayType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-headline">Leave Type</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="wholeday">Whole Day</SelectItem>
+                      <SelectItem value="halfday-am">Half Day (AM)</SelectItem>
+                      <SelectItem value="halfday-pm">Half Day (PM)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="reason"

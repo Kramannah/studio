@@ -31,6 +31,12 @@ type PlanningCalendarProps = {
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
 };
 
+const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
+    'wholeday': 'Whole Day',
+    'halfday-am': 'AM',
+    'halfday-pm': 'PM',
+};
+
 
 export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -115,12 +121,13 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
     
-    const handleSaveNonCallDay = (data: {reason: string, remarks?: string}) => {
+    const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
             onAddNonCallDay({
                 date: selectedDate.toISOString(),
                 reason: data.reason,
                 remarks: data.remarks || "",
+                dayType: data.dayType,
             });
         }
     };
@@ -299,7 +306,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                         {selectedDayNonCallEntry ? (
                             <div className="p-4 text-center">
                                 <h4 className="font-semibold">{selectedDayNonCallEntry.reason}</h4>
-                                <p className="text-sm text-muted-foreground">{selectedDayNonCallEntry.remarks}</p>
+                                <p className="text-sm text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
                             </div>
                         ) : (
                             <Table>
@@ -409,4 +416,3 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     
 
     
-

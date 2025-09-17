@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format, isWithinInterval } from "date-fns";
-import { Target, CheckCircle2, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Users, Download, Calendar as CalendarIcon, Trash2, Clock, User, Send } from "lucide-react";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -30,6 +30,12 @@ const StatCard = ({ title, value, description, icon: Icon, color }: { title: str
         </CardContent>
     </Card>
 )
+
+const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
+    'wholeday': 'Whole Day',
+    'halfday-am': 'Half Day (AM)',
+    'halfday-pm': 'Half Day (PM)',
+};
 
 export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
     const summaryRef = useRef<HTMLDivElement>(null);
@@ -246,7 +252,7 @@ This is an auto-generated email.
                                     <Button
                                     variant={"outline"}
                                     className={cn(
-                                        "w-[140px] justify-start text-left font-normal",
+                                        "w-full justify-start text-left font-normal",
                                         !startDate && "text-muted-foreground"
                                     )}
                                     >
@@ -268,7 +274,7 @@ This is an auto-generated email.
                                     <Button
                                     variant={"outline"}
                                     className={cn(
-                                        "w-[140px] justify-start text-left font-normal",
+                                        "w-full justify-start text-left font-normal",
                                         !endDate && "text-muted-foreground"
                                     )}
                                     >
@@ -380,6 +386,7 @@ This is an auto-generated email.
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Date</TableHead>
+                                    <TableHead>Type</TableHead>
                                     <TableHead>Reason</TableHead>
                                     <TableHead>Remarks</TableHead>
                                 </TableRow>
@@ -389,13 +396,14 @@ This is an auto-generated email.
                                     filteredNonCallDays.map((day) => (
                                         <TableRow key={day.id}>
                                             <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
+                                            <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
                                             <TableCell>{day.reason}</TableCell>
                                             <TableCell>{day.remarks || 'N/A'}</TableCell>
                                         </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="h-24 text-center">
+                                        <TableCell colSpan={4} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <AlertTriangle className="w-8 h-8 text-muted-foreground" />
                                                 <p>No non-call days have been logged for this period.</p>
