@@ -7,13 +7,11 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
-import { useAuth } from './use-auth';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
 
-export const useOfflineSync = (updateSampleUsage?: (productName: string, quantity: number) => void) => {
+export const useOfflineSync = (updateSampleUsage?: (productName: string, quantity: number) => void, userId?: string) => {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -21,7 +19,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
   const [loading, setLoading] = useState(true);
 
 
-  const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${user?.uid}`, [user]);
+  const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
 
   useEffect(() => {
     // This code now runs only on the client
@@ -40,13 +38,13 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
   }, []);
 
   const fetchMasterEntries = useCallback(async () => {
-    if (!user || !isOnline) {
-      if(user) setLoading(false);
+    if (!userId || !isOnline) {
+      if(userId) setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "coverageEntries"), where("userId", "==", user.uid));
+      const q = query(collection(db, "coverageEntries"), where("userId", "==", userId));
       const querySnapshot = await getDocs(q);
       const entries: CoverageEntry[] = [];
       querySnapshot.forEach(doc => {
@@ -59,10 +57,10 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     } finally {
         setLoading(false);
     }
-  }, [user, isOnline, toast]);
+  }, [userId, isOnline, toast]);
   
   useEffect(() => {
-    if (user) {
+    if (userId) {
         setLoading(true);
         // Load offline entries from local storage
         try {
@@ -80,7 +78,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
       setMasterEntries([]);
       setLoading(false);
     }
-  }, [user, getOfflineKey, fetchMasterEntries]);
+  }, [userId, getOfflineKey, fetchMasterEntries]);
 
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
@@ -89,14 +87,14 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
   }
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => {
-    if (!user) {
+    if (!userId) {
         toast({ variant: 'destructive', title: 'Not logged in', description: 'You must be logged in to save entries.'});
         return;
     }
     
     const newEntryPayload = {
       ...entry,
-      userId: user.uid,
+      userId: userId,
       submittedAt: new Date().toISOString(),
     };
 
@@ -164,7 +162,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
   };
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!isOnline || !user || offlineEntries.length === 0) {
+    if (!isOnline || !userId || offlineEntries.length === 0) {
       if(offlineEntries.length === 0) toast({title: "No Entries to Sync"});
       if(!isOnline) toast({title: "Cannot Sync", description: "You are currently offline."});
       return;
@@ -209,7 +207,7 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, user, offlineEntries, toast, fetchMasterEntries, getOfflineKey]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, getOfflineKey]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
