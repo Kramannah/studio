@@ -113,6 +113,50 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         const sorted = [...nonCallDays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return sorted.filter(day => isThisMonth(parseISO(day.date)));
     }, [nonCallDays]);
+
+    const handleDownload = () => {
+        const filteredEntries = entries.filter(e => isThisMonth(new Date(e.submittedAt)));
+        const dataToExport = filteredEntries.map(entry => ({
+            "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+            "Specialty": entry.specialty,
+            "Clinic": entry.clinic,
+            "Coverage Date": format(parseISO(entry.coverageDate as string), "PPP"),
+            "Submitted At": format(parseISO(entry.submittedAt), "Pp"),
+            "Coverage Type": entry.coverageType,
+            "Call Type": entry.callType,
+            "Joint Call With": entry.jointCallWith || "N/A",
+            "Topics Discussed": entry.topicsDiscussed,
+            "Doctor's Issue": entry.doctorsIssue,
+            "Plan of Action": entry.planOfAction,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Monthly Call Summary");
+        XLSX.writeFile(workbook, `monthly_call_summary_${format(new Date(), 'yyyy-MM')}.xlsx`);
+    };
+
+    const handleSendEmail = () => {
+        const subject = `Call Summary Report for ${format(new Date(), 'MMMM yyyy')}`;
+        
+        const body = `
+Hi Team,
+
+Please find the call summary report for the current month.
+
+Summary:
+- Call Concentration (3x/4x): ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)
+- Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)
+- Average Calls Per Day: ${insights.avgCallsPerDay}
+- Total Working Days: ${insights.totalWorkingDays}
+- In-base Days: ${insights.totalInbaseDays}
+- Out-base Days: ${insights.totalOutbaseDays}
+
+This is an auto-generated email.
+        `.trim().replace(/\n/g, '%0D%0A');
+        
+        window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    };
     
 
     if (!insights.isDataAvailable && nonCallDays.length === 0) {
@@ -129,8 +173,16 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
         <div className="space-y-6">
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">This Month's Summary</CardTitle>
-                    <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <CardTitle className="font-headline">This Month's Summary</CardTitle>
+                            <CardDescription>A quick overview of your performance for the current month.</CardDescription>
+                        </div>
+                        <div className="flex gap-2 mt-4 md:mt-0">
+                            <Button variant="outline" onClick={handleDownload}><Download className="mr-2"/> Download</Button>
+                            <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                     <StatCard 

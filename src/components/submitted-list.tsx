@@ -289,6 +289,53 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
     }, [entries, selectedDate]);
     
     
+    const handleDownload = () => {
+        const dataToExport = filteredEntries.map(entry => ({
+            "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+            "Specialty": entry.specialty,
+            "Clinic": entry.clinic,
+            "Coverage Date": format(parseISO(entry.coverageDate as string), "PPP"),
+            "Submitted At": format(parseISO(entry.submittedAt), "Pp"),
+            "Coverage Type": entry.coverageType,
+            "Call Type": entry.callType,
+            "Joint Call With": entry.jointCallWith || "N/A",
+            "Call Objective": entry.callObjective,
+            "Primary Product": entry.primaryProduct,
+            "Primary Sample Name": entry.primarySampleName,
+            "Primary Sample Qty": entry.primaryProductQty,
+            "Secondary Product": entry.secondaryProduct,
+            "Secondary Sample Name": entry.secondarySampleName,
+            "Secondary Sample Qty": entry.secondaryProductQty,
+            "Topics Discussed": entry.topicsDiscussed,
+            "Doctor's Issue": entry.doctorsIssue,
+            "Plan of Action": entry.planOfAction,
+            "What Went Well": entry.whatWentWell,
+            "Areas for Improvement": entry.areasForImprovement,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Submitted Coverage");
+        XLSX.writeFile(workbook, `submitted_coverage_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
+    const handleSendEmail = () => {
+        const subject = `Submitted Coverage Report - ${format(new Date(), "PPP")}`;
+        let body = `Hi Team,\n\nPlease find the submitted coverage report.\n\nTotal entries: ${filteredEntries.length}\n\n`;
+        
+        filteredEntries.forEach((entry, index) => {
+            body += `--- Entry ${index + 1} ---\n`;
+            body += `Doctor: ${entry.firstName} ${entry.lastName}\n`;
+            body += `Clinic: ${entry.clinic}\n`;
+            body += `Submitted At: ${format(parseISO(entry.submittedAt), "Pp")}\n\n`;
+        });
+
+        body += `This is an auto-generated email.`;
+        
+        const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailtoLink;
+    };
+    
     if (entries.length === 0) {
         return (
             <Card>
@@ -309,6 +356,10 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                         <CardDescription>
                             A log of all your submitted coverage reports.
                         </CardDescription>
+                    </div>
+                     <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleDownload}><Download className="mr-2"/> Download</Button>
+                        <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                     </div>
                 </div>
             </CardHeader>
