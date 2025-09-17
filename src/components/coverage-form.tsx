@@ -43,8 +43,8 @@ const formSchema = z.object({
   id: z.string().optional(),
   callType: z.enum(["unplanned", "planned"]),
   plannedDoctorId: z.string().optional(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
+  firstName: z.string().min(1, "Doctor first name is required."),
+  lastName: z.string().min(1, "Doctor last name is required."),
   specialty: z.string().optional(),
   clinic: z.string().optional(),
   hacme: z.enum(["YES", "NO"]).optional(),
@@ -152,7 +152,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [autocompleteValue, setAutocompleteValue] = useState('');
-  const [isUnplannedManual, setIsUnplannedManual] = useState(false);
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [signatureFieldToUpdate, setSignatureFieldToUpdate] = useState<'signature' | 'dsmSignature' | 'jointCallSignature' | null>(null);
@@ -285,6 +284,9 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         hacme: initialDoctor.hacme,
         coverageDate: new Date(),
       });
+      if (!isPlanned) {
+        setAutocompleteValue(`${initialDoctor.firstName} ${initialDoctor.lastName}`);
+      }
     }
   }, [initialDoctor, entryToEdit, form, todaysPlans]);
   
@@ -319,7 +321,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       areasForImprovement: "",
     });
     setAutocompleteValue('');
-    setIsUnplannedManual(false);
     setProofMethod(null);
   }, [form]);
 
@@ -329,6 +330,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
             ...entryToEdit,
             coverageDate: entryToEdit.coverageDate ? parseISO(entryToEdit.coverageDate) : new Date(),
         });
+        setAutocompleteValue(`${entryToEdit.firstName} ${entryToEdit.lastName}`);
         if (entryToEdit.photos && entryToEdit.photos.length > 0) {
             setProofMethod("photo");
         } else if (entryToEdit.signature) {
@@ -352,15 +354,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         }
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
-        if (!isUnplannedManual) {
-            form.setValue("firstName", "");
-            form.setValue("lastName", "");
-            form.setValue("specialty", "");
-            form.setValue("clinic", "");
-            form.setValue("hacme", "NO");
-        }
     }
-  }, [callType, plannedDoctorId, doctors, form, entryToEdit, isUnplannedManual]);
+  }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
 
   useEffect(() => {
     return () => {
@@ -375,18 +370,16 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     form.setValue("clinic", doctor.clinic);
     form.setValue("hacme", doctor.hacme);
     setAutocompleteValue(`${doctor.firstName} ${doctor.lastName}`);
-    setIsUnplannedManual(true);
   };
   
   const handleAutocompleteChange = (value: string) => {
     setAutocompleteValue(value);
-    if (isUnplannedManual) {
-      setIsUnplannedManual(false);
-      form.setValue("firstName", "");
-      form.setValue("lastName", "");
-      form.setValue("specialty", "");
-      form.setValue("clinic", "");
-      form.setValue("hacme", "NO");
+    if(value === '') {
+        form.setValue("firstName", "");
+        form.setValue("lastName", "");
+        form.setValue("specialty", "");
+        form.setValue("clinic", "");
+        form.setValue("hacme", "NO");
     }
   };
 
@@ -518,7 +511,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                           firstName: '', lastName: '', specialty: '', clinic: '', hacme: 'NO'
                                       });
                                       setAutocompleteValue('');
-                                      setIsUnplannedManual(false);
                                   }}
                                   value={field.value}
                                   className="flex gap-4 pt-2"
@@ -584,7 +576,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                     
                     <div>
                         <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
-                         {callType === 'unplanned' && !isEditMode && (
+                         {(callType === 'unplanned' || isEditMode) && (
                           <div className="space-y-4 mb-4">
                             <FormItem>
                                 <FormLabel className="font-headline">Search Doctor</FormLabel>
@@ -593,8 +585,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                     value={autocompleteValue}
                                     onChange={handleAutocompleteChange}
                                     onSelect={handleAutocompleteSelect}
-                                    placeholder="Type to search for a doctor..."
+                                    placeholder="Type to search for a doctor from your masterlist..."
+                                    disabled={isEditMode}
                                 />
+                                <FormMessage>{form.formState.errors.firstName?.message}</FormMessage>
                             </FormItem>
                           </div>
                         )}
@@ -606,9 +600,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">First Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="John" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && isUnplannedManual) }/>
+                                        <Input placeholder="John" {...field} disabled/>
                                     </FormControl>
-                                    <FormMessage />
                                 </FormItem>
                                 )}
                             />
@@ -619,9 +612,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Last Name</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Doe" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && isUnplannedManual)} />
+                                        <Input placeholder="Doe" {...field} disabled/>
                                     </FormControl>
-                                    <FormMessage />
                                 </FormItem>
                                 )}
                             />
@@ -632,9 +624,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Specialty</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Cardiology" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && isUnplannedManual)}/>
+                                        <Input placeholder="Cardiology" {...field} disabled/>
                                     </FormControl>
-                                    <FormMessage />
                                 </FormItem>
                                 )}
                             />
@@ -645,9 +636,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                 <FormItem>
                                     <FormLabel className="font-headline">Clinic</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Community General Hospital" {...field} disabled={callType === 'planned' || isEditMode || (callType === 'unplanned' && isUnplannedManual)}/>
+                                        <Input placeholder="Community General Hospital" {...field} disabled/>
                                     </FormControl>
-                                    <FormMessage />
                                 </FormItem>
                                 )}
                             />
@@ -1047,3 +1037,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
