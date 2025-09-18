@@ -25,6 +25,7 @@ import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS } from "@/lib/admins";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TimeLogDialog } from "@/components/time-log-dialog";
 
 
 export default function Home() {
@@ -47,6 +48,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
+  const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
+  const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -91,6 +94,14 @@ export default function Home() {
     );
   }
 
+  const handleTimeIn = (photo: string, locationType: "inbase" | "outbase") => {
+    console.log("Time in:", { photo, locationType });
+  };
+  
+  const handleTimeOut = (photo: string) => {
+    console.log("Time out:", { photo });
+  };
+
   return (
     <>
       <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -104,6 +115,10 @@ export default function Home() {
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
               </Badge>
+              <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
+                  <LogIn className="mr-2"/>
+                  Time In
+              </Button>
               <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
                 <LogOut className="mr-2"/>
                 Logout
@@ -188,6 +203,13 @@ export default function Home() {
           </Tabs>
         </main>
       </div>
+      <TimeLogDialog 
+        isOpen={isTimeLogDialogOpen}
+        onOpenChange={setIsTimeLogDialogOpen}
+        mode={timeLogMode}
+        onTimeIn={handleTimeIn}
+        onTimeOut={handleTimeOut}
+      />
     </>
   );
 }
