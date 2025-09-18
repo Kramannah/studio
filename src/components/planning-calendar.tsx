@@ -29,6 +29,7 @@ type PlanningCalendarProps = {
   onLogCall: (doctor: Doctor) => void;
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
+  readOnly?: boolean;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -38,7 +39,7 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
 };
 
 
-export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay }: PlanningCalendarProps) {
+export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay, readOnly = false }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
@@ -141,7 +142,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 
     const isDateInPast = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
 
-    if (doctors.length === 0) {
+    if (doctors.length === 0 && !readOnly) {
         return (
             <Card>
                 <CardContent className="p-6 text-center">
@@ -151,16 +152,18 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateInPast;
-    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry;
+    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateInPast || readOnly;
+    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || readOnly;
     
     const getAddVisitTitle = () => {
+        if (readOnly) return "This is a read-only view.";
         if (isDateInPast) return "Cannot add visits for past dates.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         return "Add a new visit";
     }
 
     const getAddNonCallTitle = () => {
+        if (readOnly) return "This is a read-only view.";
         if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
         if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
@@ -350,8 +353,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         variant="link" 
                                                         className="p-0 h-auto font-medium text-left"
                                                         onClick={() => handleLogCallClick(plan)}
-                                                        disabled={!isTodaySelected || isCovered}
+                                                        disabled={!isTodaySelected || isCovered || readOnly}
                                                         title={
+                                                            readOnly ? "This is a read-only view." :
                                                             isCovered ? "Already covered today" :
                                                             !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                         }
@@ -404,21 +408,3 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    

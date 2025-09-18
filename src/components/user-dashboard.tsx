@@ -49,7 +49,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={userData.entries} onDelete={() => {}} onEdit={() => {}} />
+              <SubmittedList entries={userData.entries} onDelete={() => {}} onEdit={() => {}} readOnly={true} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 
@@ -61,6 +61,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
                     onLogCall={() => {}}
                     nonCallDays={userData.nonCallDays}
                     onAddNonCallDay={() => {}}
+                    readOnly={true}
                 />
             </TabsContent>
             <TabsContent value="master" className="mt-6">
@@ -71,6 +72,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
                     onAddDoctorsBulk={() => {}}
                     onUpdateDoctor={() => {}} 
                     onDeleteDoctor={() => {}} 
+                    readOnly={true}
                 />
             </TabsContent>
           </Tabs>

@@ -48,9 +48,10 @@ type MasterListProps = {
   onAddDoctorsBulk: (doctors: Omit<Doctor, 'id'>[]) => void;
   onUpdateDoctor: (doctor: Doctor) => void;
   onDeleteDoctor: (id: string) => void;
+  readOnly?: boolean;
 }
 
-export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor }: MasterListProps) {
+export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor, readOnly = false }: MasterListProps) {
   const [filter, setFilter] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | undefined>(undefined);
@@ -263,29 +264,33 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="font-headline">Doctor Masterlist</CardTitle>
-            <CardDescription>Add, edit, or remove doctors from your list.</CardDescription>
+            <CardDescription>
+              {readOnly ? "A read-only view of this user's masterlist." : "Add, edit, or remove doctors from your list."}
+            </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept=".xlsx, .xls"
-            />
-             <Button onClick={handleDownloadTemplate} variant="outline">
-              <Download className="mr-2" />
-              Download Template
-            </Button>
-            <Button onClick={handleUploadClick} variant="outline">
-              <Upload className="mr-2" />
-              Upload Masterlist
-            </Button>
-            <Button onClick={handleAddNew}>
-              <Plus className="mr-2" />
-              Add Doctor
-            </Button>
-          </div>
+          {!readOnly && (
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".xlsx, .xls"
+              />
+              <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
+                <Download className="mr-2" />
+                Download Template
+              </Button>
+              <Button onClick={handleUploadClick} variant="outline" disabled={readOnly}>
+                <Upload className="mr-2" />
+                Upload Masterlist
+              </Button>
+              <Button onClick={handleAddNew} disabled={readOnly}>
+                <Plus className="mr-2" />
+                Add Doctor
+              </Button>
+            </div>
+          )}
         </div>
         <div className="mt-4">
           <Input 
@@ -343,37 +348,39 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <AlertDialog>
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                          <MoreHorizontal />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => handleEdit(doctor)}>
-                                          <Edit className="mr-2" /> Edit
-                                        </DropdownMenuItem>
-                                        <AlertDialogTrigger asChild>
-                                          <DropdownMenuItem className="text-destructive focus:text-destructive">
-                                            <Trash2 className="mr-2" /> Delete
+                                  {!readOnly && (
+                                    <AlertDialog>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="icon">
+                                            <MoreHorizontal />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => handleEdit(doctor)}>
+                                            <Edit className="mr-2" /> Edit
                                           </DropdownMenuItem>
-                                        </AlertDialogTrigger>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          This action cannot be undone. This will permanently delete the doctor from your masterlist.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={() => onDeleteDoctor(doctor.id)}>Continue</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                            <DropdownMenuItem className="text-destructive focus:text-destructive">
+                                              <Trash2 className="mr-2" /> Delete
+                                            </DropdownMenuItem>
+                                          </AlertDialogTrigger>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the doctor from your masterlist.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => onDeleteDoctor(doctor.id)}>Continue</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  )}
                                 </TableCell>
                             </TableRow>
                           );
@@ -388,15 +395,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 </TableBody>
             </Table>
         </div>
-        <DoctorFormDialog 
+        {!readOnly && <DoctorFormDialog 
           isOpen={isFormOpen} 
           onOpenChange={setIsFormOpen}
           onSave={handleSaveDoctor}
           doctor={editingDoctor}
-        />
+        />}
       </CardContent>
     </Card>
   );
 }
-
-    

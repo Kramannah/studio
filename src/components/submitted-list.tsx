@@ -53,6 +53,7 @@ type SubmittedListProps = {
     entries: CoverageEntry[];
     onDelete: (id: string) => void;
     onEdit: (entry: CoverageEntry) => void;
+    readOnly?: boolean;
 };
 
 
@@ -66,7 +67,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void }) => {
+const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -96,11 +97,12 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
     };
 
     const isEditable = useMemo(() => {
+        if (readOnly) return false;
         const submittedDate = parseISO(entry.submittedAt);
         // The deadline is Sunday midnight of the submission week.
         const deadline = endOfWeek(submittedDate, { weekStartsOn: 1 }); // week starts on Monday
         return isBefore(new Date(), deadline);
-    }, [entry.submittedAt]);
+    }, [entry.submittedAt, readOnly]);
 
     return (
          <Collapsible asChild>
@@ -158,11 +160,11 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
                                 <DropdownMenuItem onClick={() => handleDownloadAttachments(entry)}>
                                     <FileArchive className="mr-2"/> Download Attachments
                                 </DropdownMenuItem>
-                                <AlertDialogTrigger asChild>
+                                {!readOnly && <AlertDialogTrigger asChild>
                                     <DropdownMenuItem className="text-destructive focus:text-destructive">
                                         <Trash2 className="mr-2"/> Delete
                                     </DropdownMenuItem>
-                                </AlertDialogTrigger>
+                                </AlertDialogTrigger>}
                             </DropdownMenuContent>
                         </DropdownMenu>
                         <AlertDialogContent>
@@ -226,7 +228,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze }: { entry: CoverageEntry
 }
 
 
-export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps) {
+export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: SubmittedListProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -460,7 +462,7 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
                         
                             {filteredEntries.length > 0 ? (
                                 filteredEntries.map((entry) => (
-                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze}/>
+                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly}/>
                                 ))
                             ) : (
                                 <TableBody>
@@ -517,5 +519,3 @@ export function SubmittedList({ entries, onDelete, onEdit }: SubmittedListProps)
       </>
     );
 }
-
-    
