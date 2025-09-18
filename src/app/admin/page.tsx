@@ -8,10 +8,14 @@ import { ADMIN_UIDS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
 import { LogOut, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import { AdminReportList } from '@/components/admin-report-list';
+import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
+import { RefreshCw } from 'lucide-react';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
+    const { entries, loading: entriesLoading, deleteEntry } = useAllCoverageEntries();
     const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
 
     useEffect(() => {
@@ -49,10 +53,13 @@ export default function AdminPage() {
                 </div>
             </header>
             <main className="flex-1 p-4 md:p-6">
-                <div className="text-center">
-                    <h2 className="text-2xl font-semibold">Welcome, Admin!</h2>
-                    <p className="text-muted-foreground">This is the placeholder for the admin dashboard content.</p>
-                </div>
+               {entriesLoading ? (
+                    <div className="flex items-center justify-center mt-10">
+                        <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <AdminReportList entries={entries} onDelete={deleteEntry} />
+                )}
             </main>
         </div>
     );
