@@ -12,7 +12,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -22,10 +22,23 @@ import { MarketingList } from "@/components/marketing-list";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
+import { ADMIN_UIDS } from "@/lib/admins";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
+  const router = useRouter();
+  const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
+
+  useEffect(() => {
+    if (!authLoading && isUserAdmin) {
+      router.push('/admin');
+    }
+  }, [authLoading, isUserAdmin, router]);
+
+
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage, user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
@@ -68,6 +81,14 @@ export default function Home() {
 
   if (!user) {
     return <LoginPage />;
+  }
+
+  if (isUserAdmin) {
+     return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+            <p>Redirecting to admin dashboard...</p>
+        </div>
+    );
   }
 
   return (
