@@ -87,7 +87,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
                                 <TableCell className="font-medium">{entry.firstName} {entry.lastName}</TableCell>
                                 <TableCell>{entry.clinic}</TableCell>
                                 <TableCell className="capitalize">{entry.coverageType}</TableCell>
-                                <TableCell>{format(parseISO(entry.submittedAt), "PPP")}</TableCell>
+                                <TableCell>{typeof entry.submittedAt === 'string' ? format(parseISO(entry.submittedAt), "PPP") : 'Invalid Date'}</TableCell>
                                 <TableCell className="text-right">
                                   <AlertDialog>
                                     <DropdownMenu>
