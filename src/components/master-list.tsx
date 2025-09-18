@@ -75,6 +75,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     );
   }, [doctors, filter]);
 
+  const frequencyCounts = useMemo(() => {
+    return doctors.reduce((acc, doctor) => {
+      acc[doctor.frequency] = (acc[doctor.frequency] || 0) + 1;
+      return acc;
+    }, {} as Record<'1x' | '2x' | '3x' | '4x', number>);
+  }, [doctors]);
+
   const handleSaveDoctor = (doctorData: Omit<Doctor, 'id'> | Doctor) => {
     if ('id' in doctorData) {
       onUpdateDoctor(doctorData);
@@ -264,8 +271,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="font-headline">Doctor Masterlist ({doctors.length})</CardTitle>
-            <CardDescription>
+            <CardDescription className="flex flex-wrap items-center gap-2">
               {readOnly ? "A read-only view of this user's masterlist." : "Add, edit, or remove doctors from your list."}
+               <span className="hidden sm:inline">-</span>
+               <div className="flex gap-2">
+                  {(Object.keys(frequencyCounts) as ('1x'|'2x'|'3x'|'4x')[]).map(key => (
+                    <Badge key={key} variant="secondary">{key}: {frequencyCounts[key] || 0}</Badge>
+                  ))}
+               </div>
             </CardDescription>
           </div>
           {!readOnly && (
@@ -405,3 +418,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
