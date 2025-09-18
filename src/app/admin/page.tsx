@@ -33,9 +33,13 @@ export default function AdminPage() {
 
     const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
 
-    const userIds = useMemo(() => {
-        const ids = new Set(allEntries.map(e => e.userId));
-        return Array.from(ids);
+    const userMap = useMemo(() => {
+        const ids = Array.from(new Set(allEntries.map(e => e.userId)));
+        const map = new Map<string, string>();
+        ids.forEach((id, index) => {
+            map.set(id, `User ${index + 1}`);
+        });
+        return map;
     }, [allEntries]);
 
     useEffect(() => {
@@ -95,8 +99,8 @@ export default function AdminPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Users</SelectItem>
-                                    {userIds.map(uid => (
-                                        <SelectItem key={uid} value={uid}>{uid}</SelectItem>
+                                    {Array.from(userMap.entries()).map(([uid, displayName]) => (
+                                        <SelectItem key={uid} value={uid}>{displayName} ({uid.substring(0, 10)}...)</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
