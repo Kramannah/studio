@@ -263,7 +263,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
       <CardHeader>
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle className="font-headline">Doctor Masterlist</CardTitle>
+            <CardTitle className="font-headline">Doctor Masterlist ({doctors.length})</CardTitle>
             <CardDescription>
               {readOnly ? "A read-only view of this user's masterlist." : "Add, edit, or remove doctors from your list."}
             </CardDescription>
