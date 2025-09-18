@@ -2,13 +2,13 @@
 
 "use client";
 
-import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
+import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send } from "lucide-react";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes } from "date-fns";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -37,7 +37,7 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-pm': 'Half Day (PM)',
 };
 
-export function CallSummary({ entries, doctors, nonCallDays }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[]}) {
+export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[]}) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
@@ -147,6 +147,18 @@ export function CallSummary({ entries, doctors, nonCallDays }: { entries: Covera
             return isWithinInterval(dayDate, { start, end });
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [nonCallDays, appliedRange]);
+
+    const filteredTimeLogs = useMemo(() => {
+        if (!appliedRange.start || !appliedRange.end) {
+            return timeLogs.filter(log => isThisMonth(parseISO(log.timeIn)));
+        }
+        const start = appliedRange.start;
+        const end = appliedRange.end;
+        return timeLogs.filter(log => {
+            const timeInDate = parseISO(log.timeIn);
+            return isWithinInterval(timeInDate, { start, end });
+        }).sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+    }, [timeLogs, appliedRange]);
 
     const handleDownloadExcel = () => {
         const dataToExport = filteredEntriesForRange.map(entry => ({
@@ -351,29 +363,76 @@ This is an auto-generated email.
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Monthly Performance</CardTitle>
-                    <CardDescription>Total calls over the last few months.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-80">
-                   <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={insights.monthlyPerformance}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis allowDecimals={false} />
-                            <Tooltip 
-                                contentStyle={{
-                                    backgroundColor: "hsl(var(--background))",
-                                    borderColor: "hsl(var(--border))"
-                                }}
-                            />
-                            <Legend />
-                            <Bar dataKey="calls" fill="hsl(var(--primary))" name="Total Calls" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline">Monthly Performance</CardTitle>
+                        <CardDescription>Total calls over the last few months.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={insights.monthlyPerformance}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis allowDecimals={false} />
+                                <Tooltip 
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--background))",
+                                        borderColor: "hsl(var(--border))"
+                                    }}
+                                />
+                                <Legend />
+                                <Bar dataKey="calls" fill="hsl(var(--primary))" name="Total Calls" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline">Time Log Summary</CardTitle>
+                        <CardDescription>A record of your time-in and time-out activity.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="border rounded-md">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead><LogIn className="inline-block mr-1"/>Time In</TableHead>
+                                        <TableHead><LogOut className="inline-block mr-1"/>Time Out</TableHead>
+                                        <TableHead>Duration</TableHead>
+                                        <TableHead>Location</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredTimeLogs.length > 0 ? (
+                                        filteredTimeLogs.map((log) => {
+                                            const timeIn = parseISO(log.timeIn);
+                                            const timeOut = log.timeOut ? parseISO(log.timeOut) : null;
+                                            const duration = timeOut ? `${differenceInMinutes(timeOut, timeIn)} mins` : 'Active';
+                                            
+                                            return (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="font-medium">{format(timeIn, "PPP")}</TableCell>
+                                                <TableCell>{format(timeIn, "p")}</TableCell>
+                                                <TableCell>{timeOut ? format(timeOut, "p") : 'N/A'}</TableCell>
+                                                <TableCell>{duration}</TableCell>
+                                                <TableCell className="capitalize">{log.locationType}</TableCell>
+                                            </TableRow>
+                                        )})
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="h-24 text-center">
+                                                No time logs for this period.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
             <Card>
                 <CardHeader>

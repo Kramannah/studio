@@ -24,8 +24,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS } from "@/lib/admins";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { TimeLogDialog } from "@/components/time-log-dialog";
+import { useTimeLogs } from "@/hooks/use-time-logs";
 
 
 export default function Home() {
@@ -38,6 +38,7 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
   const [activeTab, setActiveTab] = useState('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
@@ -65,7 +66,7 @@ export default function Home() {
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
   
-  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading;
+  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading;
 
   if (anyLoading) {
     return (
@@ -78,14 +79,6 @@ export default function Home() {
   if (!user) {
     return <LoginPage />;
   }
-
-  const handleTimeIn = (photo: string, locationType: "inbase" | "outbase") => {
-    console.log("Time in:", { photo, locationType });
-  };
-  
-  const handleTimeOut = (photo: string) => {
-    console.log("Time out:", { photo });
-  };
 
   return (
     <>
@@ -108,10 +101,17 @@ export default function Home() {
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
               </Badge>
-              <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
-                  <LogIn className="mr-2"/>
-                  Time In
-              </Button>
+              {!todaysTimeIn ? (
+                <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
+                    <LogIn className="mr-2"/>
+                    Time In
+                </Button>
+              ) : (
+                <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}>
+                    <LogOut className="mr-2"/>
+                    Time Out
+                </Button>
+              )}
               <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
                 <LogOut className="mr-2"/>
                 Logout
@@ -182,7 +182,7 @@ export default function Home() {
               />
             </TabsContent>
             <TabsContent value="summary" className="mt-6">
-              <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} />
+              <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />
             </TabsContent>
             <TabsContent value="master" className="mt-6">
               <MasterList 
@@ -200,8 +200,8 @@ export default function Home() {
         isOpen={isTimeLogDialogOpen}
         onOpenChange={setIsTimeLogDialogOpen}
         mode={timeLogMode}
-        onTimeIn={handleTimeIn}
-        onTimeOut={handleTimeOut}
+        onTimeIn={addTimeIn}
+        onTimeOut={addTimeOut}
       />
     </>
   );

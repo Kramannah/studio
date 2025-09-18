@@ -74,4 +74,14 @@ export interface MarketingSample {
     materialName: string;
     allocationQuantity: number;
 }
+
+export interface TimeLog {
+    id: string;
+    userId: string;
+    timeIn: string; // ISO string
+    timeOut?: string; // ISO string
+    locationType: 'inbase' | 'outbase';
+    timeInPhoto: string; // base64 encoded string
+    timeOutPhoto?: string; // base64 encoded string
+}
     
