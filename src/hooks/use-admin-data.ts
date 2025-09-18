@@ -34,7 +34,7 @@ export const useAdminData = () => {
         }
     }, [toast]);
 
-    constfetchAllData = useCallback(async () => {
+    const fetchAllData = useCallback(async () => {
         setLoading(true);
         await Promise.all([
             fetchData('coverageEntries', setAllEntries, 'submittedAt'),
