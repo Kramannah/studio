@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,8 +34,8 @@ export default function Home() {
   const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
 
 
-  const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry } = useOfflineSync(updateSampleUsage, user?.uid);
+  const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
@@ -66,7 +67,7 @@ export default function Home() {
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
 
   
-  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading;
+  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading || marketingSamplesLoading || entriesLoading;
 
   if (anyLoading) {
     return (
@@ -178,7 +179,17 @@ export default function Home() {
               <MarketingList 
                 samples={marketingSamples}
                 usedQuantities={usedQuantities}
-                onAddSamplesBulk={addMarketingSamplesBulk}
+                onAddSamplesBulk={async () => {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Permission Denied',
+                        description: 'Only admins can upload a masterlist.'
+                    });
+                    return false;
+                }}
+                loading={marketingSamplesLoading}
+                onRefresh={refetchMarketingSamples}
+                readOnly={true}
               />
             </TabsContent>
             <TabsContent value="summary" className="mt-6">

@@ -1,4 +1,5 @@
 
+
 export interface CoverageEntry {
   id: string;
   userId: string;
@@ -90,4 +91,5 @@ export interface AdminData {
     allPlans: Plan[];
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
+    allMarketingSamples: MarketingSample[];
 }

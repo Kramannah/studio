@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -14,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Upload, Download } from "lucide-react";
+import { Upload, Download, RefreshCw } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -22,13 +23,17 @@ import { cn } from "@/lib/utils";
 type MarketingListProps = {
   samples: MarketingSample[];
   usedQuantities: Record<string, number>;
-  onAddSamplesBulk: (samples: Omit<MarketingSample, 'id'>[]) => void;
+  onAddSamplesBulk: (samples: Omit<MarketingSample, 'id'>[]) => Promise<boolean>;
+  readOnly?: boolean;
+  loading?: boolean;
+  onRefresh?: () => void;
 }
 
-export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: MarketingListProps) {
+export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readOnly = false, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -44,9 +49,10 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setIsUploading(true);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -73,7 +79,11 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
           return;
         }
 
-        onAddSamplesBulk(mappedData);
+        const success = await onAddSamplesBulk(mappedData);
+        if (success && onRefresh) {
+            onRefresh();
+        }
+
       } catch (error) {
         console.error("Failed to parse Excel file", error);
         toast({
@@ -82,6 +92,7 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
           description: "There was an error processing the Excel file. Please ensure it is a valid .xlsx or .xls file.",
         });
       } finally {
+        setIsUploading(false);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -116,24 +127,33 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle className="font-headline">Marketing Samples Inventory</CardTitle>
-            <CardDescription>Upload and monitor your marketing promotional materials.</CardDescription>
+            <CardDescription>{readOnly ? 'A list of all available marketing materials and their balances.' : 'Upload and manage the company-wide marketing promotional materials.'}</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept=".xlsx, .xls"
-            />
-             <Button onClick={handleDownloadTemplate} variant="outline">
-              <Download className="mr-2" />
-              Download Template
-            </Button>
-            <Button onClick={handleUploadClick} variant="outline">
-              <Upload className="mr-2" />
-              Upload Masterlist
-            </Button>
+            {!readOnly && (
+                <>
+                    <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".xlsx, .xls"
+                    />
+                    <Button onClick={handleDownloadTemplate} variant="outline" disabled={isUploading}>
+                        <Download className="mr-2" />
+                        Download Template
+                    </Button>
+                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading}>
+                        {isUploading ? <RefreshCw className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
+                        {isUploading ? 'Uploading...' : 'Upload Masterlist'}
+                    </Button>
+                </>
+            )}
+            {onRefresh && (
+                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading}>
+                    <RefreshCw className={cn(loading && "animate-spin")} />
+                </Button>
+            )}
           </div>
         </div>
         <div className="mt-4">
@@ -158,7 +178,13 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {filteredSamples.length > 0 ? (
+                     {loading ? (
+                        <TableRow>
+                            <TableCell colSpan={5} className="h-24 text-center">
+                                <RefreshCw className="inline-block mr-2 animate-spin" /> Loading samples...
+                            </TableCell>
+                        </TableRow>
+                    ) : filteredSamples.length > 0 ? (
                         filteredSamples.map((sample) => {
                             const used = usedQuantities[sample.materialName] || 0;
                             const balance = sample.allocationQuantity - used;
@@ -177,7 +203,7 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk }: Mar
                     ) : (
                         <TableRow>
                             <TableCell colSpan={5} className="h-24 text-center">
-                                {samples.length > 0 ? "No samples match your filter." : "No marketing samples loaded. Upload a masterlist to begin."}
+                                {samples.length > 0 ? "No samples match your filter." : "No marketing samples loaded. An admin needs to upload a masterlist."}
                             </TableCell>
                         </TableRow>
                     )}

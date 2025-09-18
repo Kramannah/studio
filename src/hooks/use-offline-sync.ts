@@ -1,5 +1,6 @@
 
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -10,7 +11,7 @@ import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, w
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
 
-export const useOfflineSync = (updateSampleUsage?: (productName: string, quantity: number) => void, userId?: string) => {
+export const useOfflineSync = (userId?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -110,15 +111,6 @@ export const useOfflineSync = (updateSampleUsage?: (productName: string, quantit
         }
     } else {
         saveEntryOffline(newEntryPayload);
-    }
-
-    if (updateSampleUsage) {
-        if (newEntryPayload.primarySampleName && newEntryPayload.primaryProductQty) {
-            updateSampleUsage(newEntryPayload.primarySampleName, newEntryPayload.primaryProductQty);
-        }
-        if (newEntryPayload.secondarySampleName && newEntryPayload.secondaryProductQty) {
-            updateSampleUsage(newEntryPayload.secondarySampleName, newEntryPayload.secondaryProductQty);
-        }
     }
   };
 

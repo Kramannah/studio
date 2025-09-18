@@ -1,76 +1,99 @@
 
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-
-const SAMPLES_KEY = 'sfe-offline-coverage-marketing-samples';
-const USED_QUANTITIES_KEY = 'sfe-offline-coverage-used-quantities';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
+import { useAuth } from './use-auth';
+import { useOfflineSync } from './use-offline-sync';
 
 export const useMarketingSamples = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  
+  const { masterEntries, offlineEntries } = useOfflineSync(undefined, user?.uid);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const storedSamples = localStorage.getItem(SAMPLES_KEY);
-        if (storedSamples) {
-          setMarketingSamples(JSON.parse(storedSamples));
-        }
-        const storedUsedQuantities = localStorage.getItem(USED_QUANTITIES_KEY);
-        if (storedUsedQuantities) {
-          setUsedQuantities(JSON.parse(storedUsedQuantities));
-        }
-      } catch (error) {
-        console.error("Failed to parse marketing samples from localStorage", error);
-        toast({
-          variant: 'destructive',
-          title: 'Error loading data',
-          description: 'Could not load your marketing sample masterlist.',
-        });
-      }
+  const fetchMarketingSamples = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = query(collection(db, "marketingSamples"));
+      const querySnapshot = await getDocs(q);
+      const fetchedSamples: MarketingSample[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedSamples.push({ id: doc.id, ...doc.data() } as MarketingSample);
+      });
+      setMarketingSamples(fetchedSamples);
+    } catch (error) {
+      console.error("Error fetching marketing samples:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch marketing samples." });
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
-  const updateSamplesInStorage = (updatedSamples: MarketingSample[]) => {
-    localStorage.setItem(SAMPLES_KEY, JSON.stringify(updatedSamples));
-  };
-  
-  const updateUsedQuantitiesInStorage = (updatedQuantities: Record<string, number>) => {
-    localStorage.setItem(USED_QUANTITIES_KEY, JSON.stringify(updatedQuantities));
-  };
+  useEffect(() => {
+    fetchMarketingSamples();
+  }, [fetchMarketingSamples]);
 
-  const addMarketingSamplesBulk = useCallback((samplesData: Omit<MarketingSample, 'id'>[]) => {
-    const newSamples: MarketingSample[] = samplesData.map(d => ({
-        ...d,
-        id: crypto.randomUUID(),
-        allocationQuantity: Number(d.allocationQuantity) || 0
-    }));
 
-    setMarketingSamples(newSamples);
-    updateSamplesInStorage(newSamples);
-    
-    // Reset usage when new list is uploaded
-    setUsedQuantities({});
-    updateUsedQuantitiesInStorage({});
-
-    toast({
-        title: "Upload Successful",
-        description: `${newSamples.length} marketing samples have been loaded.`,
+  const usedQuantities = useMemo(() => {
+    const allEntries = [...masterEntries, ...offlineEntries];
+    const quantities: Record<string, number> = {};
+    allEntries.forEach(entry => {
+        if (entry.primarySampleName && entry.primaryProductQty) {
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+        }
+        if (entry.secondarySampleName && entry.secondaryProductQty) {
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+        }
     });
-  }, [toast]);
+    return quantities;
+  }, [masterEntries, offlineEntries]);
 
-  const updateSampleUsage = useCallback((productName: string, quantity: number) => {
-    setUsedQuantities(prev => {
-        const newUsedQuantities = { ...prev };
-        newUsedQuantities[productName] = (newUsedQuantities[productName] || 0) + quantity;
-        updateUsedQuantitiesInStorage(newUsedQuantities);
-        return newUsedQuantities;
-    });
-  }, []);
-
-  return { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage };
+  return { marketingSamples, usedQuantities, loading, refetch: fetchMarketingSamples };
 };
+
+export const useAdminMarketingSamples = () => {
+  const { toast } = useToast();
+  
+  const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
+    try {
+      const batch = writeBatch(db);
+      
+      const q = query(collection(db, "marketingSamples"));
+      const querySnapshot = await getDocs(q);
+      querySnapshot.forEach(doc => {
+          batch.delete(doc.ref);
+      });
+
+      samplesData.forEach(sample => {
+        const docRef = doc(collection(db, "marketingSamples"));
+        batch.set(docRef, { 
+            ...sample,
+            allocationQuantity: Number(sample.allocationQuantity) || 0
+        });
+      });
+
+      await batch.commit();
+
+      toast({
+          title: "Upload Successful",
+          description: `${samplesData.length} marketing samples have been uploaded and replaced the old list.`,
+      });
+
+      return true;
+
+    } catch (error) {
+      console.error("Error adding marketing samples in bulk:", error);
+      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not add marketing samples.' });
+      return false;
+    }
+
+  }, [toast]);
+  
+  return { addMarketingSamplesBulk };
+}

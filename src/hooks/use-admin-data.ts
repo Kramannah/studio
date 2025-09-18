@@ -1,8 +1,9 @@
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog } from '@/lib/types';
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
