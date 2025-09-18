@@ -19,10 +19,9 @@ interface UserDashboardProps {
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
     allMarketingSamples: MarketingSample[];
-    usedQuantities: Record<string, number>;
 }
 
-export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allMarketingSamples, usedQuantities }: UserDashboardProps) {
+export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allMarketingSamples }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
     const userData = useMemo(() => {
@@ -98,7 +97,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
                 <MarketingList 
                     samples={allMarketingSamples}
                     usedQuantities={userData.usedQuantities}
-                    onAddSamplesBulk={() => {}}
+                    onAddSamplesBulk={async () => false}
                     readOnly={true}
                 />
             </TabsContent>

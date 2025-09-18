@@ -2,46 +2,51 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { MarketingSample } from '@/lib/types';
+import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
-import { useAuth } from './use-auth';
-import { useOfflineSync } from './use-offline-sync';
 
 export const useMarketingSamples = () => {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
+  const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  const { masterEntries, offlineEntries } = useOfflineSync(undefined, user?.uid);
 
-  const fetchMarketingSamples = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, "marketingSamples"));
-      const querySnapshot = await getDocs(q);
+      // Fetch all marketing samples
+      const samplesQuery = query(collection(db, "marketingSamples"));
+      const samplesSnapshot = await getDocs(samplesQuery);
       const fetchedSamples: MarketingSample[] = [];
-      querySnapshot.forEach((doc) => {
+      samplesSnapshot.forEach((doc) => {
         fetchedSamples.push({ id: doc.id, ...doc.data() } as MarketingSample);
       });
       setMarketingSamples(fetchedSamples);
+
+      // Fetch all coverage entries to calculate usage
+      const entriesQuery = query(collection(db, "coverageEntries"));
+      const entriesSnapshot = await getDocs(entriesQuery);
+      const fetchedEntries: CoverageEntry[] = [];
+      entriesSnapshot.forEach((doc) => {
+        fetchedEntries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
+      });
+      setAllEntries(fetchedEntries);
+
     } catch (error) {
-      console.error("Error fetching marketing samples:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch marketing samples." });
+      console.error("Error fetching marketing data:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch marketing samples or usage data." });
     } finally {
       setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
-    fetchMarketingSamples();
-  }, [fetchMarketingSamples]);
-
+    fetchData();
+  }, [fetchData]);
 
   const usedQuantities = useMemo(() => {
-    const allEntries = [...masterEntries, ...offlineEntries];
     const quantities: Record<string, number> = {};
     allEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
@@ -52,10 +57,11 @@ export const useMarketingSamples = () => {
         }
     });
     return quantities;
-  }, [masterEntries, offlineEntries]);
+  }, [allEntries]);
 
-  return { marketingSamples, usedQuantities, loading, refetch: fetchMarketingSamples };
+  return { marketingSamples, usedQuantities, loading, refetch: fetchData };
 };
+
 
 export const useAdminMarketingSamples = () => {
   const { toast } = useToast();

@@ -147,7 +147,6 @@ export default function AdminPage() {
                                 allNonCallDays={allNonCallDays}
                                 allTimeLogs={allTimeLogs}
                                 allMarketingSamples={marketingSamples}
-                                usedQuantities={usedQuantities}
                             />
                         ) : (
                             <AdminReportList entries={allEntries} onDelete={deleteEntry} />
