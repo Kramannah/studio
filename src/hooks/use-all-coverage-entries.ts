@@ -24,7 +24,7 @@ export const useAllCoverageEntries = () => {
       setEntries(fetchedEntries);
     } catch (error) {
       console.error("Error fetching all coverage entries:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch coverage reports." });
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch coverage reports. Check Firestore rules." });
     } finally {
       setLoading(false);
     }

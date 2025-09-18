@@ -3,20 +3,40 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { AdminReportList } from '@/components/admin-report-list';
 import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import { RefreshCw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { UserDashboard } from '@/components/user-dashboard';
+import { useAdminData } from '@/hooks/use-admin-data';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
-    const { entries, loading: entriesLoading, deleteEntry } = useAllCoverageEntries();
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+    const { 
+        allEntries, 
+        allDoctors, 
+        allPlans, 
+        allNonCallDays, 
+        allTimeLogs, 
+        loading: dataLoading,
+        deleteEntry
+    } = useAdminData();
+
     const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
+
+    const userIds = useMemo(() => {
+        const ids = new Set(allEntries.map(e => e.userId));
+        return Array.from(ids);
+    }, [allEntries]);
 
     useEffect(() => {
         if (!loading && !isUserAdmin) {
@@ -31,10 +51,18 @@ export default function AdminPage() {
             </div>
         );
     }
+    
+    const handleUserSelect = (userId: string) => {
+        if (userId === "all") {
+            setSelectedUserId(null);
+        } else {
+            setSelectedUserId(userId);
+        }
+    }
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
-             <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
+             <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
                 <div className="flex items-center gap-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">Admin Dashboard</h1>
@@ -53,12 +81,49 @@ export default function AdminPage() {
                 </div>
             </header>
             <main className="flex-1 p-4 md:p-6">
-               {entriesLoading ? (
+                 <Card className="mb-6">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 font-headline">
+                            <Users />
+                            User Filter
+                        </CardTitle>
+                        <CardDescription>Select a user to view their detailed dashboard or view all reports.</CardDescription>
+                         <div className="flex items-center gap-2 pt-2">
+                            <Select onValueChange={handleUserSelect} value={selectedUserId || 'all'}>
+                                <SelectTrigger className="w-[350px]">
+                                    <SelectValue placeholder="Select a user..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Users</SelectItem>
+                                    {userIds.map(uid => (
+                                        <SelectItem key={uid} value={uid}>{uid}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {selectedUserId && (
+                                <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}>
+                                    <X className="w-5 h-5"/>
+                                </Button>
+                            )}
+                        </div>
+                    </CardHeader>
+                </Card>
+
+               {dataLoading ? (
                     <div className="flex items-center justify-center mt-10">
                         <RefreshCw className="w-12 h-12 animate-spin text-primary" />
                     </div>
+                ) : selectedUserId ? (
+                    <UserDashboard 
+                        userId={selectedUserId}
+                        allEntries={allEntries}
+                        allDoctors={allDoctors}
+                        allPlans={allPlans}
+                        allNonCallDays={allNonCallDays}
+                        allTimeLogs={allTimeLogs}
+                    />
                 ) : (
-                    <AdminReportList entries={entries} onDelete={deleteEntry} />
+                    <AdminReportList entries={allEntries} onDelete={deleteEntry} />
                 )}
             </main>
         </div>

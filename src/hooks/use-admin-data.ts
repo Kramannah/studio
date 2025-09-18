@@ -1,0 +1,65 @@
+
+"use client"
+
+import { useState, useEffect, useCallback } from 'react';
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog } from '@/lib/types';
+import { useToast } from "@/hooks/use-toast";
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+
+export const useAdminData = () => {
+    const { toast } = useToast();
+    const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
+    const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
+    const [allPlans, setAllPlans] = useState<Plan[]>([]);
+    const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
+    const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchData = useCallback(async (collectionName: string, setter: Function, orderByField?: string) => {
+        try {
+            const q = orderByField 
+                ? query(collection(db, collectionName), orderBy(orderByField, "desc"))
+                : query(collection(db, collectionName));
+
+            const querySnapshot = await getDocs(q);
+            const items: any[] = [];
+            querySnapshot.forEach((doc) => {
+                items.push({ id: doc.id, ...doc.data() });
+            });
+            setter(items);
+        } catch (error) {
+            console.error(`Error fetching ${collectionName}:`, error);
+            toast({ variant: "destructive", title: "Data Fetch Error", description: `Could not fetch ${collectionName}. Check Firestore rules.` });
+        }
+    }, [toast]);
+
+    constfetchAllData = useCallback(async () => {
+        setLoading(true);
+        await Promise.all([
+            fetchData('coverageEntries', setAllEntries, 'submittedAt'),
+            fetchData('doctors', setAllDoctors),
+            fetchData('plans', setAllPlans, 'plannedDate'),
+            fetchData('nonCallDays', setAllNonCallDays, 'date'),
+            fetchData('timeLogs', setAllTimeLogs, 'timeIn'),
+        ]);
+        setLoading(false);
+    }, [fetchData]);
+
+
+    useEffect(() => {
+        fetchAllData();
+    }, [fetchAllData]);
+
+    const deleteEntry = useCallback(async (id: string) => {
+        try {
+            await deleteDoc(doc(db, "coverageEntries", id));
+            setAllEntries(prev => prev.filter(e => e.id !== id));
+            toast({ variant: 'destructive', title: "Entry Deleted", description: `A coverage entry has been removed.` });
+        } catch (error) {
+            toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
+        }
+    }, [toast]);
+
+    return { allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, loading, fetchAllData, deleteEntry };
+};

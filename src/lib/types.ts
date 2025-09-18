@@ -1,5 +1,4 @@
 
-
 export interface CoverageEntry {
   id: string;
   userId: string;
@@ -84,4 +83,11 @@ export interface TimeLog {
     timeInPhoto: string; // base64 encoded string
     timeOutPhoto?: string; // base64 encoded string
 }
-    
+
+export interface AdminData {
+    allEntries: CoverageEntry[];
+    allDoctors: Doctor[];
+    allPlans: Plan[];
+    allNonCallDays: NonCallDay[];
+    allTimeLogs: TimeLog[];
+}
