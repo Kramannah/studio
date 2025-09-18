@@ -30,14 +30,7 @@ import { TimeLogDialog } from "@/components/time-log-dialog";
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
-  const router = useRouter();
   const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
-
-  useEffect(() => {
-    if (!authLoading && isUserAdmin) {
-      router.push('/admin');
-    }
-  }, [authLoading, isUserAdmin, router]);
 
 
   const { marketingSamples, addMarketingSamplesBulk, usedQuantities, updateSampleUsage } = useMarketingSamples();
@@ -86,14 +79,6 @@ export default function Home() {
     return <LoginPage />;
   }
 
-  if (isUserAdmin) {
-     return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <p>Redirecting to admin dashboard...</p>
-        </div>
-    );
-  }
-
   const handleTimeIn = (photo: string, locationType: "inbase" | "outbase") => {
     console.log("Time in:", { photo, locationType });
   };
@@ -111,6 +96,14 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+              {isUserAdmin && (
+                <Link href="/admin">
+                  <Button size="sm" variant="outline" className="font-headline">
+                    <ShieldCheck className="mr-2" />
+                    Admin
+                  </Button>
+                </Link>
+              )}
               <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                   {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                   <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
