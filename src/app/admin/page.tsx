@@ -41,13 +41,21 @@ export default function AdminPage() {
     const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
 
     const userMap = useMemo(() => {
-        const ids = Array.from(new Set(allEntries.map(e => e.userId)));
+        const allUserIds = [
+            ...allEntries.map(e => e.userId),
+            ...allDoctors.map(d => d.userId),
+            ...allPlans.map(p => p.userId),
+            ...allNonCallDays.map(n => n.userId),
+            ...allTimeLogs.map(t => t.userId)
+        ];
+        const uniqueIds = Array.from(new Set(allUserIds));
+        
         const map = new Map<string, string>();
-        ids.forEach((id, index) => {
+        uniqueIds.forEach((id, index) => {
             map.set(id, `User ${index + 1}`);
         });
         return map;
-    }, [allEntries]);
+    }, [allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
 
     useEffect(() => {
         if (!loading && !isUserAdmin) {
