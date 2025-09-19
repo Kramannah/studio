@@ -6,8 +6,8 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, getDoc, limit } from 'firebase/firestore';
-import { isToday, parseISO } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { isToday, parseISO, isValid } from 'date-fns';
 
 export const useTimeLogs = () => {
   const { toast } = useToast();
@@ -28,14 +28,20 @@ export const useTimeLogs = () => {
       const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"));
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
+      let foundTodaysTimeIn = false;
       querySnapshot.forEach((doc) => {
         const log = { id: doc.id, ...doc.data() } as TimeLog;
         fetchedLogs.push(log);
-        if (isToday(parseISO(log.timeIn)) && !log.timeOut) {
+        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+        if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
           setTodaysTimeIn(log);
+          foundTodaysTimeIn = true;
         }
       });
       setTimeLogs(fetchedLogs);
+      if (!foundTodaysTimeIn) {
+        setTodaysTimeIn(null);
+      }
     } catch (error) {
       console.error("Error fetching time logs:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not fetch time logs." });
@@ -50,9 +56,15 @@ export const useTimeLogs = () => {
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
+    
+    // Check if any log (timed-in or timed-out) exists for today
+    const hasLogForToday = timeLogs.some(log => {
+        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+        return isValid(timeInDate) && isToday(timeInDate);
+    });
 
-    if (todaysTimeIn) {
-        toast({ variant: "destructive", title: "Already Timed In", description: "You have already timed in for today." });
+    if (hasLogForToday) {
+        toast({ variant: "destructive", title: "Time In Not Allowed", description: "You can only time in once per day." });
         return;
     }
 
@@ -71,7 +83,7 @@ export const useTimeLogs = () => {
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Could not save time in." });
     }
-  }, [user, toast, todaysTimeIn]);
+  }, [user, toast, timeLogs]);
 
   const addTimeOut = useCallback(async (photo: string) => {
     if (!user) return;
