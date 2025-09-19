@@ -17,7 +17,7 @@ import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck } from "luc
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, format } from "date-fns";
+import { isToday, parseISO, format, isValid } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingList } from "@/components/marketing-list";
 import { Button } from "@/components/ui/button";
