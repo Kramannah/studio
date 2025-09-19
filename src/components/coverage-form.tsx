@@ -105,7 +105,7 @@ const formSchema = z.object({
 
 
 type CoverageFormProps = {
-  onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => void;
+  onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => Promise<boolean>;
   onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
   isOnline: boolean;
   doctors: Doctor[];
@@ -419,7 +419,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         });
         toast({ title: "Update Successful", description: "Your changes to the coverage report have been saved." });
         resetForm();
-        onFormSubmit?.(isOnline);
+        onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
         return;
     }
 
@@ -478,12 +478,12 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     
     const { plannedDoctorId, ...restOfValues } = finalValues;
 
-    onSave({
+    const savedOnline = await onSave({
       ...restOfValues,
       coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
     });
     resetForm();
-    onFormSubmit?.(isOnline);
+    onFormSubmit?.(savedOnline);
   }
 
   const isEditMode = !!entryToEdit;
@@ -1042,5 +1042,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    

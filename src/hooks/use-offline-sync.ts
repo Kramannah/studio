@@ -1,6 +1,5 @@
 
 
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -87,10 +86,10 @@ export const useOfflineSync = (userId?: string) => {
       localStorage.setItem(getOfflineKey(), JSON.stringify(updatedEntries));
   }
 
-  const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => {
+  const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId) {
         toast({ variant: 'destructive', title: 'Not logged in', description: 'You must be logged in to save entries.'});
-        return;
+        return false;
     }
     
     const newEntryPayload = {
@@ -105,12 +104,15 @@ export const useOfflineSync = (userId?: string) => {
             const docRef = await addDoc(collection(db, "coverageEntries"), dataToSync);
             setMasterEntries(prev => [{ ...dataToSync, id: docRef.id }, ...prev]);
             toast({ title: "Entry Saved", description: "Your coverage report has been saved to the server." });
+            return true;
         } catch(error) {
             console.error("Error saving entry online, saving locally instead:", error);
             saveEntryOffline(newEntryPayload);
+            return false;
         }
     } else {
         saveEntryOffline(newEntryPayload);
+        return false;
     }
   };
 

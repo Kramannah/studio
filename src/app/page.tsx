@@ -58,13 +58,16 @@ export default function Home() {
     setActiveTab('coverage');
   };
 
-  const handleFormSubmit = (online: boolean) => {
+  const handleFormSubmit = (savedOnline: boolean) => {
     setDoctorToLog(null);
     setEntryToEdit(null);
-    setActiveTab(online ? 'submitted' : 'offline');
+    setActiveTab(savedOnline ? 'submitted' : 'offline');
   };
 
-  const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
+  const todaysPlans = plans.filter(p => {
+    const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
+    return isValid(plannedDate) && isToday(plannedDate);
+  });
 
   
   const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading || marketingSamplesLoading || entriesLoading;

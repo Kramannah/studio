@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Plan, Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { format, isSameWeek, startOfToday } from 'date-fns';
+import { format, isSameWeek, startOfToday, parseISO, isValid } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
