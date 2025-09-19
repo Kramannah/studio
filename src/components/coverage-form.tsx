@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday } from "date-fns"
+import { format, isThisMonth, parseISO, isToday, isValid } from "date-fns"
 import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -326,9 +326,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
   useEffect(() => {
     if (entryToEdit) {
+        const coverageDate = typeof entryToEdit.coverageDate === 'string' ? parseISO(entryToEdit.coverageDate) : entryToEdit.coverageDate;
         form.reset({
             ...entryToEdit,
-            coverageDate: entryToEdit.coverageDate ? parseISO(entryToEdit.coverageDate) : new Date(),
+            coverageDate: isValid(coverageDate) ? coverageDate : new Date(),
         });
         setAutocompleteValue(`${entryToEdit.firstName} ${entryToEdit.lastName}`);
         if (entryToEdit.photos && entryToEdit.photos.length > 0) {
@@ -438,7 +439,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     const now = new Date();
     
     if (values.callType === 'unplanned' && now >= pilotTestingEndDate) {
-      const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => e.submittedAt && isToday(parseISO(e.submittedAt)));
+      const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => {
+        const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+        return isValid(submittedDate) && isToday(submittedDate);
+      });
       const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
 
       if (todaysUnplannedCalls >= MAX_UNPLANNED_CALLS) {
@@ -455,11 +459,12 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
       
       const allEntries = [...masterEntries, ...offlineEntries];
-      const coveragesThisMonth = allEntries.filter(entry => 
-        entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
-        entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-        entry.submittedAt && isThisMonth(parseISO(entry.submittedAt))
-      ).length;
+      const coveragesThisMonth = allEntries.filter(entry => {
+        const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+        return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
+               entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
+               isValid(submittedDate) && isThisMonth(submittedDate);
+      }).length;
 
       if (coveragesThisMonth >= frequency) {
         toast({

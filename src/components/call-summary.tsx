@@ -7,7 +7,7 @@ import { useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes } from "date-fns";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -49,13 +49,16 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
 
     const filteredEntriesForRange = useMemo(() => {
         if (!appliedRange.start || !appliedRange.end) {
-            return entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+            return entries.filter(e => {
+                const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+                return isValid(submittedDate) && isThisMonth(submittedDate);
+            });
         }
         const start = appliedRange.start;
         const end = appliedRange.end;
         return entries.filter(e => {
-            const submittedDate = parseISO(e.submittedAt);
-            return isWithinInterval(submittedDate, { start, end });
+            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
     }, [entries, appliedRange]);
 
@@ -95,7 +98,9 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
         const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const day = new Date(entry.submittedAt).toISOString().split('T')[0];
+            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (!isValid(submittedDate)) return acc;
+            const day = format(submittedDate, 'yyyy-MM-dd');
             acc[day] = (acc[day] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -104,11 +109,20 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
         const totalCalls = filteredEntries.length;
         const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
-        const inbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
-        const outbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => new Date(e.submittedAt).toISOString().split('T')[0]));
+        const inbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => {
+            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            return isValid(submittedDate) ? format(submittedDate, 'yyyy-MM-dd') : null;
+        }).filter(Boolean));
+
+        const outbaseDays = new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => {
+            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            return isValid(submittedDate) ? format(submittedDate, 'yyyy-MM-dd') : null;
+        }).filter(Boolean));
         
         const monthlyPerformance = entries.reduce((acc, entry) => {
-            const date = new Date(entry.submittedAt);
+            const date = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (!isValid(date)) return acc;
+
             const month = date.toLocaleString('default', { month: 'short' });
             const year = getYear(date);
             const monthKey = `${month} ${year}`;
@@ -138,42 +152,53 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
     
     const filteredNonCallDays = useMemo(() => {
          if (!appliedRange.start || !appliedRange.end) {
-            return nonCallDays.filter(day => isThisMonth(parseISO(day.date)));
+            return nonCallDays.filter(day => {
+                const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+                return isValid(dayDate) && isThisMonth(dayDate);
+            });
         }
         const start = appliedRange.start;
         const end = appliedRange.end;
         return nonCallDays.filter(day => {
-            const dayDate = parseISO(day.date);
-            return isWithinInterval(dayDate, { start, end });
+            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+            return isValid(dayDate) && isWithinInterval(dayDate, { start, end });
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [nonCallDays, appliedRange]);
 
     const filteredTimeLogs = useMemo(() => {
         if (!appliedRange.start || !appliedRange.end) {
-            return timeLogs.filter(log => isThisMonth(parseISO(log.timeIn)));
+            return timeLogs.filter(log => {
+                const logTimeIn = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+                return isValid(logTimeIn) && isThisMonth(logTimeIn);
+            });
         }
         const start = appliedRange.start;
         const end = appliedRange.end;
         return timeLogs.filter(log => {
-            const timeInDate = parseISO(log.timeIn);
-            return isWithinInterval(timeInDate, { start, end });
+            const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+            return isValid(timeInDate) && isWithinInterval(timeInDate, { start, end });
         }).sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
     }, [timeLogs, appliedRange]);
 
     const handleDownloadExcel = () => {
-        const dataToExport = filteredEntriesForRange.map(entry => ({
-            "Doctor Name": `${entry.firstName} ${entry.lastName}`,
-            "Specialty": entry.specialty,
-            "Clinic": entry.clinic,
-            "Coverage Date": format(parseISO(entry.coverageDate as string), "PPP"),
-            "Submitted At": format(parseISO(entry.submittedAt), "Pp"),
-            "Coverage Type": entry.coverageType,
-            "Call Type": entry.callType,
-            "Joint Call With": entry.jointCallWith || "N/A",
-            "Topics Discussed": entry.topicsDiscussed,
-            "Doctor's Issue": entry.doctorsIssue,
-            "Plan of Action": entry.planOfAction,
-        }));
+        const dataToExport = filteredEntriesForRange.map(entry => {
+            const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
+
+            return {
+                "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+                "Specialty": entry.specialty,
+                "Clinic": entry.clinic,
+                "Coverage Date": isValid(coverageDate) ? format(coverageDate, "PPP") : "Invalid Date",
+                "Submitted At": isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date",
+                "Coverage Type": entry.coverageType,
+                "Call Type": entry.callType,
+                "Joint Call With": entry.jointCallWith || "N/A",
+                "Topics Discussed": entry.topicsDiscussed,
+                "Doctor's Issue": entry.doctorsIssue,
+                "Plan of Action": entry.planOfAction,
+            }
+        });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
@@ -407,15 +432,15 @@ This is an auto-generated email.
                                 <TableBody>
                                     {filteredTimeLogs.length > 0 ? (
                                         filteredTimeLogs.map((log) => {
-                                            const timeIn = parseISO(log.timeIn);
-                                            const timeOut = log.timeOut ? parseISO(log.timeOut) : null;
-                                            const duration = timeOut ? `${differenceInMinutes(timeOut, timeIn)} mins` : 'Active';
+                                            const timeIn = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+                                            const timeOut = log.timeOut ? (typeof log.timeOut === 'string' ? parseISO(log.timeOut) : log.timeOut) : null;
+                                            const duration = isValid(timeIn) && isValid(timeOut) ? `${differenceInMinutes(timeOut, timeIn)} mins` : 'Active';
                                             
                                             return (
                                             <TableRow key={log.id}>
-                                                <TableCell className="font-medium">{format(timeIn, "PPP")}</TableCell>
-                                                <TableCell>{format(timeIn, "p")}</TableCell>
-                                                <TableCell>{timeOut ? format(timeOut, "p") : 'N/A'}</TableCell>
+                                                <TableCell className="font-medium">{isValid(timeIn) ? format(timeIn, "PPP") : 'Invalid Date'}</TableCell>
+                                                <TableCell>{isValid(timeIn) ? format(timeIn, "p") : 'N/A'}</TableCell>
+                                                <TableCell>{isValid(timeOut) ? format(timeOut, "p") : 'N/A'}</TableCell>
                                                 <TableCell>{duration}</TableCell>
                                                 <TableCell className="capitalize">{log.locationType}</TableCell>
                                             </TableRow>
@@ -452,14 +477,17 @@ This is an auto-generated email.
                             </TableHeader>
                             <TableBody>
                                 {filteredNonCallDays.length > 0 ? (
-                                    filteredNonCallDays.map((day) => (
-                                        <TableRow key={day.id}>
-                                            <TableCell className="font-medium">{format(parseISO(day.date), "PPP")}</TableCell>
-                                            <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
-                                            <TableCell>{day.reason}</TableCell>
-                                            <TableCell>{day.remarks || 'N/A'}</TableCell>
-                                        </TableRow>
-                                    ))
+                                    filteredNonCallDays.map((day) => {
+                                        const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+                                        return (
+                                            <TableRow key={day.id}>
+                                                <TableCell className="font-medium">{isValid(dayDate) ? format(dayDate, "PPP") : "Invalid Date"}</TableCell>
+                                                <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
+                                                <TableCell>{day.reason}</TableCell>
+                                                <TableCell>{day.remarks || 'N/A'}</TableCell>
+                                            </TableRow>
+                                        )
+                                    })
                                 ) : (
                                     <TableRow>
                                         <TableCell colSpan={4} className="h-24 text-center">

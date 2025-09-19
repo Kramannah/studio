@@ -98,11 +98,14 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: Cov
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
-        const submittedDate = parseISO(entry.submittedAt);
+        const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+        if (!isValid(submittedDate)) return false;
         // The deadline is Sunday midnight of the submission week.
         const deadline = endOfWeek(submittedDate, { weekStartsOn: 1 }); // week starts on Monday
         return isBefore(new Date(), deadline);
     }, [entry.submittedAt, readOnly]);
+
+    const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
 
     return (
          <Collapsible asChild>
@@ -115,7 +118,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: Cov
                     </div>
                 </TableCell>
                 <TableCell>{entry.clinic}</TableCell>
-                <TableCell>{format(parseISO(entry.submittedAt), "PPP")}</TableCell>
+                <TableCell>{isValid(submittedDate) ? format(submittedDate, "PPP") : 'Invalid Date'}</TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
                         {entry.photos && entry.photos.length > 0 && (
@@ -274,7 +277,13 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     };
     
     const filteredEntries = useMemo(() => {
-        let sortedEntries = [...entries].sort((a,b) => parseISO(b.submittedAt).getTime() - parseISO(a.submittedAt).getTime());
+        let sortedEntries = [...entries].sort((a, b) => {
+            const dateA = typeof a.submittedAt === 'string' ? parseISO(a.submittedAt) : a.submittedAt;
+            const dateB = typeof b.submittedAt === 'string' ? parseISO(b.submittedAt) : b.submittedAt;
+            if (!isValid(dateA)) return 1;
+            if (!isValid(dateB)) return -1;
+            return dateB.getTime() - dateA.getTime();
+        });
 
         if (!appliedRange.start || !appliedRange.end) {
             return sortedEntries;
@@ -283,34 +292,38 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
         const start = appliedRange.start;
         const end = appliedRange.end;
         return sortedEntries.filter(e => {
-            const submittedDate = parseISO(e.submittedAt);
-            return isWithinInterval(submittedDate, { start, end });
+            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
     }, [entries, appliedRange]);
     
     const handleDownloadExcel = () => {
-        const dataToExport = filteredEntries.map(entry => ({
-            "Doctor Name": `${entry.firstName} ${entry.lastName}`,
-            "Specialty": entry.specialty,
-            "Clinic": entry.clinic,
-            "Coverage Date": format(parseISO(entry.coverageDate as string), "PPP"),
-            "Submitted At": format(parseISO(entry.submittedAt), "Pp"),
-            "Coverage Type": entry.coverageType,
-            "Call Type": entry.callType,
-            "Joint Call With": entry.jointCallWith || "N/A",
-            "Call Objective": entry.callObjective,
-            "Primary Product": entry.primaryProduct,
-            "Primary Sample Name": entry.primarySampleName,
-            "Primary Sample Qty": entry.primaryProductQty,
-            "Secondary Product": entry.secondaryProduct,
-            "Secondary Sample Name": entry.secondarySampleName,
-            "Secondary Sample Qty": entry.secondaryProductQty,
-            "Topics Discussed": entry.topicsDiscussed,
-            "Doctor's Issue": entry.doctorsIssue,
-            "Plan of Action": entry.planOfAction,
-            "What Went Well": entry.whatWentWell,
-            "Areas for Improvement": entry.areasForImprovement,
-        }));
+        const dataToExport = filteredEntries.map(entry => {
+            const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
+            return {
+                "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+                "Specialty": entry.specialty,
+                "Clinic": entry.clinic,
+                "Coverage Date": isValid(coverageDate) ? format(coverageDate, "PPP") : "Invalid Date",
+                "Submitted At": isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date",
+                "Coverage Type": entry.coverageType,
+                "Call Type": entry.callType,
+                "Joint Call With": entry.jointCallWith || "N/A",
+                "Call Objective": entry.callObjective,
+                "Primary Product": entry.primaryProduct,
+                "Primary Sample Name": entry.primarySampleName,
+                "Primary Sample Qty": entry.primaryProductQty,
+                "Secondary Product": entry.secondaryProduct,
+                "Secondary Sample Name": entry.secondarySampleName,
+                "Secondary Sample Qty": entry.secondaryProductQty,
+                "Topics Discussed": entry.topicsDiscussed,
+                "Doctor's Issue": entry.doctorsIssue,
+                "Plan of Action": entry.planOfAction,
+                "What Went Well": entry.whatWentWell,
+                "Areas for Improvement": entry.areasForImprovement,
+            }
+        });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
@@ -352,10 +365,11 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
         let body = `Hi Team,\n\nPlease find the submitted coverage report.\n\nTotal entries: ${filteredEntries.length}\n\n`;
         
         filteredEntries.forEach((entry, index) => {
+            const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             body += `--- Entry ${index + 1} ---\n`;
             body += `Doctor: ${entry.firstName} ${entry.lastName}\n`;
             body += `Clinic: ${entry.clinic}\n`;
-            body += `Submitted At: ${format(parseISO(entry.submittedAt), "Pp")}\n\n`;
+            body += `Submitted At: ${isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date"}\n\n`;
         });
 
         body += `This is an auto-generated email.`;

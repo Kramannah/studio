@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
-import { isThisMonth, parseISO } from "date-fns";
+import { isThisMonth, parseISO, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { provinces } from "@/lib/philippine-locations";
@@ -59,7 +59,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
   const { toast } = useToast();
 
   const visitCountsThisMonth = useMemo(() => {
-    const thisMonthEntries = entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+    const thisMonthEntries = entries.filter(e => {
+        const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+        return isValid(submittedDate) && isThisMonth(submittedDate);
+    });
     return thisMonthEntries.reduce((acc, entry) => {
       const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
       acc[doctorName] = (acc[doctorName] || 0) + 1;

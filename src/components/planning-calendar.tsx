@@ -4,7 +4,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -46,7 +46,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     const [doctorFilter, setDoctorFilter] = useState("");
 
     const visitCountsThisMonth = useMemo(() => {
-        const thisMonthEntries = entries.filter(e => isThisMonth(parseISO(e.submittedAt)));
+        const thisMonthEntries = entries.filter(e => {
+            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            return isValid(submittedDate) && isThisMonth(submittedDate);
+        });
         return thisMonthEntries.reduce((acc, entry) => {
           const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
           acc[doctorName] = (acc[doctorName] || 0) + 1;
@@ -56,7 +59,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 
     const plansByDate = useMemo(() => {
         return plans.reduce((acc, plan) => {
-            const date = format(parseISO(plan.plannedDate), 'yyyy-MM-dd');
+            const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
+            if(!isValid(plannedDate)) return acc;
+            const date = format(plannedDate, 'yyyy-MM-dd');
             if (!acc[date]) {
                 acc[date] = [];
             }
@@ -67,7 +72,9 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     
     const nonCallDaysByDate = useMemo(() => {
         return nonCallDays.reduce((acc, entry) => {
-            const date = format(parseISO(entry.date), 'yyyy-MM-dd');
+            const nonCallDate = typeof entry.date === 'string' ? parseISO(entry.date) : entry.date;
+            if(!isValid(nonCallDate)) return acc;
+            const date = format(nonCallDate, 'yyyy-MM-dd');
             if (!acc[date]) {
                 acc[date] = [];
             }
@@ -78,12 +85,17 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
-        return plans.filter(plan => isSameDay(parseISO(plan.plannedDate), selectedDate));
+        return plans.filter(plan => {
+            const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
+            return isValid(plannedDate) && isSameDay(plannedDate, selectedDate);
+        });
     }, [plans, selectedDate]);
 
     const entriesByDate = useMemo(() => {
         return entries.reduce((acc, entry) => {
-            const date = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
+            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (!isValid(submittedDate)) return acc;
+            const date = format(submittedDate, 'yyyy-MM-dd');
             if(!acc[date]){
                 acc[date] = [];
             }
@@ -94,7 +106,10 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     
     const selectedDayNonCallEntry = useMemo(() => {
         if (!selectedDate) return undefined;
-        return nonCallDays.find(entry => isSameDay(parseISO(entry.date), selectedDate));
+        return nonCallDays.find(entry => {
+            const nonCallDate = typeof entry.date === 'string' ? parseISO(entry.date) : entry.date;
+            return isValid(nonCallDate) && isSameDay(nonCallDate, selectedDate);
+        });
     }, [nonCallDays, selectedDate]);
     
     const plannedDays = useMemo(() => {
