@@ -115,7 +115,7 @@ type CoverageFormProps = {
   todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
-  onFormSubmit?: () => void;
+  onFormSubmit?: (isOnline: boolean) => void;
 }
 
 const MAX_UNPLANNED_CALLS = 5;
@@ -419,7 +419,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         });
         toast({ title: "Update Successful", description: "Your changes to the coverage report have been saved." });
         resetForm();
-        onFormSubmit?.();
+        onFormSubmit?.(isOnline);
         return;
     }
 
@@ -483,7 +483,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
     });
     resetForm();
-    onFormSubmit?.();
+    onFormSubmit?.(isOnline);
   }
 
   const isEditMode = !!entryToEdit;

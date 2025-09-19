@@ -58,10 +58,10 @@ export default function Home() {
     setActiveTab('coverage');
   };
 
-  const handleFormSubmit = () => {
+  const handleFormSubmit = (online: boolean) => {
     setDoctorToLog(null);
     setEntryToEdit(null);
-    setActiveTab('submitted');
+    setActiveTab(online ? 'submitted' : 'offline');
   };
 
   const todaysPlans = plans.filter(p => isToday(parseISO(p.plannedDate)));
