@@ -57,7 +57,6 @@ export const useTimeLogs = () => {
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
     
-    // Check if any log (timed-in or timed-out) exists for today
     const hasLogForToday = timeLogs.some(log => {
         const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
         return isValid(timeInDate) && isToday(timeInDate);

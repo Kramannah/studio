@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -52,11 +51,12 @@ export const useAdminData = () => {
         fetchAllData();
     }, [fetchAllData]);
 
-    const deleteEntry = useCallback(async (id: string) => {
+    const deleteEntry = useCallback(async (id: string, callback?: () => void) => {
         try {
             await deleteDoc(doc(db, "coverageEntries", id));
             setAllEntries(prev => prev.filter(e => e.id !== id));
             toast({ variant: 'destructive', title: "Entry Deleted", description: `A coverage entry has been removed.` });
+            if(callback) callback();
         } catch (error) {
             toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
         }

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -32,7 +31,8 @@ export default function AdminPage() {
         allNonCallDays, 
         allTimeLogs, 
         loading: dataLoading,
-        deleteEntry
+        deleteEntry,
+        fetchAllData,
     } = useAdminData();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
