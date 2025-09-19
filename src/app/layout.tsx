@@ -6,6 +6,7 @@ import { AuthProvider } from '@/hooks/use-auth';
 export const metadata: Metadata = {
   title: 'SFE Offline coverage',
   description: 'A coverage logging application',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
