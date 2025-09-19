@@ -9,7 +9,6 @@ import { ADMIN_UIDS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
 import { LogOut, ShieldCheck, Users, X } from 'lucide-react';
 import Link from 'next/link';
-import { AdminReportList } from '@/components/admin-report-list';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +17,7 @@ import { useAdminData } from '@/hooks/use-admin-data';
 import { MarketingList } from '@/components/marketing-list';
 import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CallSummary } from '@/components/call-summary';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -157,7 +157,12 @@ export default function AdminPage() {
                                 allMarketingSamples={marketingSamples}
                             />
                         ) : (
-                            <AdminReportList entries={allEntries} onDelete={deleteEntry} />
+                           <CallSummary 
+                                entries={allEntries}
+                                doctors={allDoctors}
+                                nonCallDays={allNonCallDays}
+                                timeLogs={allTimeLogs}
+                           />
                         )}
                     </TabsContent>
                     <TabsContent value="marketing" className="mt-6">
