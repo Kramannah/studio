@@ -56,6 +56,8 @@ type SubmittedListProps = {
     readOnly?: boolean;
 };
 
+type ViewMode = 'list' | 'calendar';
+
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
@@ -241,6 +243,9 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
 
+    const [viewMode, setViewMode] = useState<ViewMode>('list');
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+
     const handleApplyRange = () => {
         setAppliedRange({ start: startDate, end: endDate });
     };
@@ -296,6 +301,29 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
             return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
     }, [entries, appliedRange]);
+
+    const entriesByDate = useMemo(() => {
+        return entries.reduce((acc, entry) => {
+            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (!isValid(submittedDate)) return acc;
+            const date = format(submittedDate, 'yyyy-MM-dd');
+            if(!acc[date]){
+                acc[date] = [];
+            }
+            acc[date].push(entry);
+            return acc;
+        }, {} as Record<string, CoverageEntry[]>);
+    }, [entries]);
+    
+    const selectedDayEntries = useMemo(() => {
+        if (!selectedDate) return [];
+        const dateString = format(selectedDate, 'yyyy-MM-dd');
+        return entriesByDate[dateString] || [];
+    }, [selectedDate, entriesByDate]);
+
+    const submittedDays = useMemo(() => {
+        return Object.keys(entriesByDate).map(dateStr => parseISO(dateStr));
+    }, [entriesByDate]);
     
     const handleDownloadExcel = () => {
         const dataToExport = filteredEntries.map(entry => {
@@ -390,7 +418,7 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
 
     return (
       <>
-        <Card ref={listRef}>
+        <Card>
             <CardHeader>
                 <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -403,6 +431,10 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                         </CardDescription>
                     </div>
                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1 p-1 border rounded-lg bg-muted">
+                            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')}><List/></Button>
+                            <Button variant={viewMode === 'calendar' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('calendar')}><CalendarViewIcon/></Button>
+                        </div>
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button
@@ -461,35 +493,107 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
-                <div className="border rounded-md">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provider</TableHead>
-                                <TableHead>Clinic</TableHead>
-                                <TableHead>Submitted On</TableHead>
-                                <TableHead>Attachments</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        
-                            {filteredEntries.length > 0 ? (
-                                filteredEntries.map((entry) => (
-                                    <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly}/>
-                                ))
-                            ) : (
-                                <TableBody>
+            <CardContent ref={listRef}>
+                {viewMode === 'list' && (
+                    <div className="border rounded-md">
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center">
-                                    No submitted entries found for the selected date range.
-                                    </TableCell>
+                                    <TableHead>Provider</TableHead>
+                                    <TableHead>Clinic</TableHead>
+                                    <TableHead>Submitted On</TableHead>
+                                    <TableHead>Attachments</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
-                                </TableBody>
-                            )}
-                        
-                    </Table>
-                </div>
+                            </TableHeader>
+                            
+                                {filteredEntries.length > 0 ? (
+                                    filteredEntries.map((entry) => (
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly}/>
+                                    ))
+                                ) : (
+                                    <TableBody>
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        No submitted entries found for the selected date range.
+                                        </TableCell>
+                                    </TableRow>
+                                    </TableBody>
+                                )}
+                            
+                        </Table>
+                    </div>
+                )}
+                {viewMode === 'calendar' && (
+                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                        <div className="space-y-4">
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                modifiers={{ submitted: submittedDays }}
+                                modifiersStyles={{
+                                    submitted: { 
+                                        border: '2px solid hsl(var(--primary))',
+                                        borderRadius: 'var(--radius)',
+                                    },
+                                }}
+                                components={{
+                                    DayContent: ({ date, activeModifiers }) => {
+                                        const dateString = format(date, 'yyyy-MM-dd');
+                                        const count = entriesByDate[dateString]?.length;
+                                        return (
+                                            <div className="relative flex items-center justify-center w-full h-full">
+                                                {date.getDate()}
+                                                {count && (
+                                                    <Badge variant="primary" className="absolute w-5 h-5 p-0 -top-1 -right-1 justify-center">{count}</Badge>
+                                                )}
+                                            </div>
+                                        );
+                                    },
+                                }}
+                                className="w-full p-4 border rounded-md"
+                            />
+                        </div>
+                        <div>
+                             <h3 className="text-xl font-semibold font-headline">
+                                Reports for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
+                            </h3>
+                            <div className="mt-4 border rounded-md">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Provider</TableHead>
+                                            <TableHead>Clinic</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {selectedDayEntries.length > 0 ? (
+                                            selectedDayEntries.map(entry => (
+                                                <TableRow key={entry.id}>
+                                                    <TableCell className="font-medium">{entry.firstName} {entry.lastName}</TableCell>
+                                                    <TableCell>{entry.clinic}</TableCell>
+                                                     <TableCell className="text-right">
+                                                        <Button variant="ghost" size="icon" onClick={() => onEdit(entry)}>
+                                                            <Edit className="w-4 h-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="h-24 text-center">
+                                                    No reports for this day.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
         <Dialog open={isAnalysisDialogOpen} onOpenChange={setIsAnalysisDialogOpen}>
