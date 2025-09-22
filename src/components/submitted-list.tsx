@@ -389,8 +389,13 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     };
 
     const handleSendEmail = () => {
-        const subject = `Submitted Coverage Report - ${format(new Date(), "PPP")}`;
-        let body = `Hi Team,\n\nPlease find the submitted coverage report.\n\nTotal entries: ${filteredEntries.length}\n\n`;
+        const dateRangeString = (appliedRange.start && appliedRange.end)
+            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}`
+            : "for All Time";
+
+        const subject = `Submitted Coverage Report - ${dateRangeString}`;
+        
+        let body = `Hi Team,\n\nPlease find the submitted coverage report for the selected period.\n\nTotal entries: ${filteredEntries.length}\n\n`;
         
         filteredEntries.forEach((entry, index) => {
             const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
@@ -399,8 +404,6 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
             body += `Clinic: ${entry.clinic}\n`;
             body += `Submitted At: ${isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date"}\n\n`;
         });
-
-        body += `This is an auto-generated email.`;
         
         const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         window.location.href = mailtoLink;
