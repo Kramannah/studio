@@ -237,7 +237,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
     };
 
     const handleSendEmail = () => {
-        const subject = `Call Summary Report for ${appliedRange.start ? format(appliedRange.start, 'PPP') : ''} - ${appliedRange.end ? format(appliedRange.end, 'PPP') : ''}`;
+        const dateRangeString = (appliedRange.start && appliedRange.end) 
+            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}` 
+            : "for This Month";
+
+        const subject = `Call Summary Report ${dateRangeString}`;
         
         const body = `
 Hi Team,
@@ -251,8 +255,6 @@ Summary:
 - Total Working Days: ${insights.totalWorkingDays}
 - In-base Days: ${insights.totalInbaseDays}
 - Out-base Days: ${insights.totalOutbaseDays}
-
-This is an auto-generated email.
         `.trim().replace(/\n/g, '%0D%0A');
         
         window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -506,3 +508,5 @@ This is an auto-generated email.
         </div>
     );
 }
+
+    
