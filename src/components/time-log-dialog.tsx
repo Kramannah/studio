@@ -89,7 +89,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   
   const handleRetake = () => {
     setPhoto(null);
-    setIsCameraActive(true); // Re-activate camera view, but don't auto-start
+    startCamera();
   }
 
   const handleSubmit = () => {

@@ -6,7 +6,7 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, getDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO, isValid } from 'date-fns';
 
 export const useTimeLogs = () => {
@@ -56,14 +56,9 @@ export const useTimeLogs = () => {
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
-    
-    const hasLogForToday = timeLogs.some(log => {
-        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
-        return isValid(timeInDate) && isToday(timeInDate);
-    });
 
-    if (hasLogForToday) {
-        toast({ variant: "destructive", title: "Time In Not Allowed", description: "You can only time in once per day." });
+    if (todaysTimeIn) {
+        toast({ variant: "destructive", title: "Already Timed In", description: "You have already timed in for today." });
         return;
     }
 
@@ -82,7 +77,7 @@ export const useTimeLogs = () => {
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Could not save time in." });
     }
-  }, [user, toast, timeLogs]);
+  }, [user, toast, todaysTimeIn]);
 
   const addTimeOut = useCallback(async (photo: string) => {
     if (!user) return;

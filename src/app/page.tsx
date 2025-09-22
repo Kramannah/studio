@@ -49,7 +49,7 @@ export default function Home() {
   useEffect(() => {
     if (isOnline) {
       syncAllOfflineEntries();
-      syncAllOfflinePlans();
+      if(syncAllOfflinePlans) syncAllOfflinePlans();
     }
   }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
 
