@@ -162,6 +162,7 @@ export default function AdminPage() {
                                 doctors={allDoctors}
                                 nonCallDays={allNonCallDays}
                                 timeLogs={allTimeLogs}
+                                isAdminView={true}
                            />
                         )}
                     </TabsContent>

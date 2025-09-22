@@ -12,11 +12,9 @@ import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Do
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
+import { Badge } from "./ui/badge";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -37,7 +35,7 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-pm': 'Half Day (PM)',
 };
 
-export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[]}) {
+export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
@@ -180,69 +178,18 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs }: { entri
         }).sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
     }, [timeLogs, appliedRange]);
 
-    const handleDownloadExcel = () => {
-        const dataToExport = filteredEntriesForRange.map(entry => {
-            const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
-            const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
-
-            return {
-                "Doctor Name": `${entry.firstName} ${entry.lastName}`,
-                "Specialty": entry.specialty,
-                "Clinic": entry.clinic,
-                "Coverage Date": isValid(coverageDate) ? format(coverageDate, "PPP") : "Invalid Date",
-                "Submitted At": isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date",
-                "Coverage Type": entry.coverageType,
-                "Call Type": entry.callType,
-                "Joint Call With": entry.jointCallWith || "N/A",
-                "Topics Discussed": entry.topicsDiscussed,
-                "Doctor's Issue": entry.doctorsIssue,
-                "Plan of Action": entry.planOfAction,
-            }
-        });
-
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Summary");
-        XLSX.writeFile(workbook, `call_summary_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-    };
-
-    const handleDownloadPdf = () => {
-        if (!summaryRef.current) return;
-        html2canvas(summaryRef.current, { scale: 2 }).then((canvas) => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const ratio = canvasWidth / canvasHeight;
-            const width = pdfWidth;
-            const height = width / ratio;
-
-            let position = 0;
-            let heightLeft = height;
-
-            pdf.addImage(imgData, 'PNG', 0, position, width, height);
-            heightLeft -= pdfHeight;
-
-            while (heightLeft > 0) {
-                position = heightLeft - height;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, width, height);
-                heightLeft -= pdfHeight;
-            }
-
-            pdf.save(`call_summary_${format(new Date(), 'yyyy-MM')}.pdf`);
-        });
+    const createEmailFile = (subject: string, body: string): string => {
+        const emlContent = `Subject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${body}`;
+        return `data:message/rfc822;base64,${btoa(emlContent)}`;
     };
 
     const handleSendEmail = () => {
-        const dateRangeString = (appliedRange.start && appliedRange.end) 
-            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}` 
+        const dateRangeString = (appliedRange.start && appliedRange.end)
+            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}`
             : "for This Month";
 
         const subject = `Call Summary Report ${dateRangeString}`;
-        
+
         const body = `
 Hi Team,
 
@@ -255,11 +202,16 @@ Summary:
 - Total Working Days: ${insights.totalWorkingDays}
 - In-base Days: ${insights.totalInbaseDays}
 - Out-base Days: ${insights.totalOutbaseDays}
-        `.trim().replace(/\n/g, '%0D%0A');
-        
-        window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        `.trim();
+
+        const emailFile = createEmailFile(subject, body);
+
+        const a = document.createElement('a');
+        a.href = emailFile;
+        a.download = `call_summary_${format(new Date(), 'yyyy-MM-dd')}.eml`;
+        a.click();
     };
-    
+
 
     if (entries.length === 0 && doctors.length === 0) {
         return (
@@ -331,16 +283,7 @@ Summary:
                                 </PopoverContent>
                             </Popover>
                             <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
-                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline"><Download className="mr-2"/> Download</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={handleDownloadExcel}>Download as Excel</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={handleDownloadPdf}>Download as PDF</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
+                             <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                         </div>
                     </div>
                 </CardHeader>
@@ -424,6 +367,7 @@ Summary:
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        {isAdminView && <TableHead>User ID</TableHead>}
                                         <TableHead>Date</TableHead>
                                         <TableHead><LogIn className="inline-block mr-1"/>Time In</TableHead>
                                         <TableHead><LogOut className="inline-block mr-1"/>Time Out</TableHead>
@@ -440,6 +384,11 @@ Summary:
                                             
                                             return (
                                             <TableRow key={log.id}>
+                                                {isAdminView && (
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className="font-mono text-xs">{log.userId.substring(0, 10)}...</Badge>
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="font-medium">{isValid(timeIn) ? format(timeIn, "PPP") : 'Invalid Date'}</TableCell>
                                                 <TableCell>{isValid(timeIn) ? format(timeIn, "p") : 'N/A'}</TableCell>
                                                 <TableCell>{isValid(timeOut) ? format(timeOut, "p") : 'N/A'}</TableCell>
@@ -449,7 +398,7 @@ Summary:
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="h-24 text-center">
+                                            <TableCell colSpan={isAdminView ? 6 : 5} className="h-24 text-center">
                                                 No time logs for this period.
                                             </TableCell>
                                         </TableRow>
@@ -471,6 +420,7 @@ Summary:
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    {isAdminView && <TableHead>User ID</TableHead>}
                                     <TableHead>Date</TableHead>
                                     <TableHead>Type</TableHead>
                                     <TableHead>Reason</TableHead>
@@ -483,6 +433,11 @@ Summary:
                                         const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
                                         return (
                                             <TableRow key={day.id}>
+                                                {isAdminView && (
+                                                    <TableCell>
+                                                        <Badge variant="secondary" className="font-mono text-xs">{day.userId.substring(0, 10)}...</Badge>
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="font-medium">{isValid(dayDate) ? format(dayDate, "PPP") : "Invalid Date"}</TableCell>
                                                 <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
                                                 <TableCell>{day.reason}</TableCell>
@@ -492,7 +447,7 @@ Summary:
                                     })
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="h-24 text-center">
+                                        <TableCell colSpan={isAdminView ? 5 : 4} className="h-24 text-center">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <AlertTriangle className="w-8 h-8 text-muted-foreground" />
                                                 <p>No non-call days have been logged for this period.</p>
