@@ -17,7 +17,7 @@ import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck } from "luc
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, format, isValid } from "date-fns";
+import { isToday, parseISO, isValid } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingList } from "@/components/marketing-list";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ export default function Home() {
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
-  const { plans, addPlan, removePlan, loading: plansLoading } = usePlans();
+  const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
   const [activeTab, setActiveTab] = useState('planning');
@@ -45,6 +45,13 @@ export default function Home() {
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
+
+  useEffect(() => {
+    if (isOnline) {
+      syncAllOfflineEntries();
+      syncAllOfflinePlans();
+    }
+  }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -125,7 +132,12 @@ export default function Home() {
         <main className="flex-1 p-4 md:p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="planning" className="font-headline">Call Planning</TabsTrigger>
+              <TabsTrigger value="planning" className="relative font-headline">
+                Call Planning
+                {offlinePlanCount > 0 && 
+                  <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlinePlanCount}</Badge>
+                }
+              </TabsTrigger>
               <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
               <TabsTrigger value="offline" className="relative font-headline">
                 Offline Call
