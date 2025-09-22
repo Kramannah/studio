@@ -19,6 +19,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -269,55 +270,65 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                             />
                                         </div>
                                         <ScrollArea className="h-72">
-                                            <div className="border rounded-md">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Doctor</TableHead>
-                                                        <TableHead>Location</TableHead>
-                                                        <TableHead className="text-center">Target</TableHead>
-                                                        <TableHead className="text-center">Balance</TableHead>
-                                                        <TableHead className="text-right">Action</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {filteredDoctors.length > 0 ? (
-                                                        filteredDoctors.map(doctor => {
-                                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                            const balance = Math.max(0, targetCount - visitCount);
-                                                            const isCompleted = balance === 0;
-
-                                                            return (
-                                                                <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
-                                                                    <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                                    <TableCell>
-                                                                        <div className="flex flex-col">
-                                                                            <span>{doctor.municipality}, {doctor.province}</span>
-                                                                            <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
-                                                                        </div>
-                                                                    </TableCell>
-                                                                    <TableCell className="text-center">{doctor.frequency}</TableCell>
-                                                                    <TableCell className="text-center">{balance}</TableCell>
-                                                                    <TableCell className="text-right">
-                                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} title="Add to plan">
-                                                                            <PlusCircle size={16}/>
-                                                                        </Button>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            )
-                                                        })
-                                                    ) : (
+                                            <TooltipProvider>
+                                                <div className="border rounded-md">
+                                                <Table>
+                                                    <TableHeader>
                                                         <TableRow>
-                                                            <TableCell colSpan={5} className="h-24 text-center">
-                                                                No doctors found.
-                                                            </TableCell>
+                                                            <TableHead>Doctor</TableHead>
+                                                            <TableHead>Location</TableHead>
+                                                            <TableHead className="text-center">Target</TableHead>
+                                                            <TableHead className="text-center">Balance</TableHead>
+                                                            <TableHead className="text-right">Action</TableHead>
                                                         </TableRow>
-                                                    )}
-                                                </TableBody>
-                                            </Table>
-                                            </div>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {filteredDoctors.length > 0 ? (
+                                                            filteredDoctors.map(doctor => {
+                                                                const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                                const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                                                const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                                const balance = Math.max(0, targetCount - visitCount);
+                                                                const isCompleted = balance === 0;
+                                                                const isAlreadyPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+
+                                                                return (
+                                                                    <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
+                                                                        <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
+                                                                        <TableCell>
+                                                                            <div className="flex flex-col">
+                                                                                <span>{doctor.municipality}, {doctor.province}</span>
+                                                                                <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
+                                                                            </div>
+                                                                        </TableCell>
+                                                                        <TableCell className="text-center">{doctor.frequency}</TableCell>
+                                                                        <TableCell className="text-center">{balance}</TableCell>
+                                                                        <TableCell className="text-right">
+                                                                            <Tooltip>
+                                                                                <TooltipTrigger asChild>
+                                                                                    <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} disabled={isAlreadyPlanned}>
+                                                                                        <PlusCircle size={16}/>
+                                                                                    </Button>
+                                                                                </TooltipTrigger>
+                                                                                <TooltipContent>
+                                                                                    {isAlreadyPlanned ? <p>Already planned for this day.</p> : <p>Add to plan</p>}
+                                                                                </TooltipContent>
+                                                                            </Tooltip>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )
+                                                            })
+                                                        ) : (
+                                                            <TableRow>
+                                                                <TableCell colSpan={5} className="h-24 text-center">
+                                                                    No doctors found.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                                </div>
+                                            </TooltipProvider>
                                         </ScrollArea>
                                     </div>
                                 </PopoverContent>
@@ -423,3 +434,5 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         </Card>
     );
 }
+
+    
