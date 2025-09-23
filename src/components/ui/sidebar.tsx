@@ -498,32 +498,49 @@ const SidebarMenu = React.forwardRef<
 ))
 SidebarMenu.displayName = "SidebarMenu"
 
+type SidebarMenuItemContextValue = {
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+const SidebarMenuItemContext = React.createContext<SidebarMenuItemContextValue | null>(null);
+
+const useSidebarMenuItem = () => {
+  const context = React.useContext(SidebarMenuItemContext);
+  if (!context) {
+    throw new Error("useSidebarMenuItem must be used within a SidebarMenuItem.");
+  }
+  return context;
+};
+
 const SidebarMenuItem = React.forwardRef<
   HTMLLIElement,
   React.ComponentProps<"li">
 >(({ className, ...props }, ref) => {
-  const { state } = useSidebar()
-  const [open, setOpen] = React.useState(false)
-  const isCollapsed = state === "collapsed"
+  const { state } = useSidebar();
+  const [open, setOpen] = React.useState(false);
+  const isCollapsed = state === "collapsed";
 
   React.useEffect(() => {
     if (isCollapsed) {
-      setOpen(false)
+      setOpen(false);
     }
-  }, [isCollapsed])
+  }, [isCollapsed]);
+
+  const contextValue = React.useMemo(() => ({ open, setOpen }), [open]);
 
   return (
-    <li
-      ref={ref}
-      data-sidebar="menu-item"
-      data-state={open ? "open" : "closed"}
-      onMouseEnter={() => !isCollapsed && setOpen(true)}
-      onMouseLeave={() => !isCollapsed && setOpen(false)}
-      className={cn("group/menu-item relative", className)}
-      {...props}
-    />
-  )
-})
+    <SidebarMenuItemContext.Provider value={contextValue}>
+      <li
+        ref={ref}
+        data-sidebar="menu-item"
+        data-state={open ? "open" : "closed"}
+        className={cn("group/menu-item relative", className)}
+        {...props}
+      />
+    </SidebarMenuItemContext.Provider>
+  );
+});
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
 const sidebarMenuButtonVariants = cva(
@@ -564,12 +581,23 @@ const SidebarMenuButton = React.forwardRef<
       size = "default",
       tooltip,
       className,
+      onClick,
       ...props
     },
     ref
   ) => {
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
+    const { setOpen } = useSidebarMenuItem();
+
+
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+      setOpen(prev => !prev);
+      if (onClick) {
+        onClick(e);
+      }
+    };
+
 
     const button = (
       <Comp
@@ -578,6 +606,7 @@ const SidebarMenuButton = React.forwardRef<
         data-size={size}
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        onClick={handleClick}
         {...props}
       />
     )

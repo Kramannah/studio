@@ -12,7 +12,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck, Book, Calendar, ClipboardList, Users, Package, BarChart, HardDrive, FilePlus, ClipboardCheck, Notebook } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -216,7 +216,7 @@ export default function Home() {
             <SidebarContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => {}} isActive={activeView !== 'exams'}>
+                  <SidebarMenuButton isActive={activeView !== 'exams'}>
                     <Notebook />
                     CRM
                   </SidebarMenuButton>
