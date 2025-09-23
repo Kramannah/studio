@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth } from "date-fns"
+import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay } from "date-fns"
 import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -410,6 +410,26 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const isEditMode = !!entryToEdit;
+    const allEntries = [...masterEntries, ...offlineEntries];
+    const newCoverageDate = values.coverageDate || new Date();
+
+    if (!isEditMode) {
+      const alreadyCoveredToday = allEntries.some(entry => {
+          const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
+          return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
+                 entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
+                 isValid(entryCoverageDate) && isSameDay(entryCoverageDate, newCoverageDate);
+      });
+
+      if (alreadyCoveredToday) {
+          toast({
+              variant: "destructive",
+              title: "Duplicate Coverage",
+              description: `A coverage report for Dr. ${values.firstName} ${values.lastName} has already been submitted for ${format(newCoverageDate, 'PPP')}.`,
+          });
+          return;
+      }
+    }
 
     if (isEditMode) {
         onUpdate({
@@ -457,9 +477,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
     if (doctorInMasterlist) {
       const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
-      const newCoverageDate = values.coverageDate || new Date();
       
-      const allEntries = [...masterEntries, ...offlineEntries];
       const coveragesInMonth = allEntries.filter(entry => {
         const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
         return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
@@ -1043,5 +1061,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    
