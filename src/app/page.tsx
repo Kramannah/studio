@@ -171,6 +171,8 @@ export default function Home() {
     }
   }
 
+  const isCrmActive = activeView !== 'exams';
+
   return (
     <SidebarProvider>
       <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -216,7 +218,7 @@ export default function Home() {
             <SidebarContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton isActive={activeView !== 'exams'}>
+                  <SidebarMenuButton hasSubmenu isActive={isCrmActive}>
                     <Notebook />
                     CRM
                   </SidebarMenuButton>

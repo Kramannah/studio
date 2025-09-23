@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -571,6 +572,7 @@ const SidebarMenuButton = React.forwardRef<
     asChild?: boolean
     isActive?: boolean
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
+    hasSubmenu?: boolean;
   } & VariantProps<typeof sidebarMenuButtonVariants>
 >(
   (
@@ -582,6 +584,7 @@ const SidebarMenuButton = React.forwardRef<
       tooltip,
       className,
       onClick,
+      hasSubmenu = false,
       ...props
     },
     ref
@@ -592,7 +595,9 @@ const SidebarMenuButton = React.forwardRef<
 
 
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-      setOpen(prev => !prev);
+      if (hasSubmenu) {
+        setOpen(prev => !prev);
+      }
       if (onClick) {
         onClick(e);
       }
