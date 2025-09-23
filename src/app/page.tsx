@@ -2,7 +2,6 @@
 
 'use client';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CoverageForm } from '@/components/coverage-form';
 import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
@@ -13,7 +12,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, Clock, LogIn, LogOut, ShieldCheck, Book, Calendar, ClipboardList, Users, Package, BarChart, HardDrive, FilePlus, ClipboardCheck, Notebook } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -27,7 +26,10 @@ import { ADMIN_UIDS } from "@/lib/admins";
 import Link from "next/link";
 import { TimeLogDialog } from "@/components/time-log-dialog";
 import { useTimeLogs } from "@/hooks/use-time-logs";
+import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master' | 'exams';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -40,7 +42,7 @@ export default function Home() {
   const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
-  const [activeTab, setActiveTab] = useState('planning');
+  const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
@@ -56,19 +58,19 @@ export default function Home() {
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
     setEntryToEdit(null);
-    setActiveTab('coverage');
+    setActiveView('coverage');
   };
 
   const handleEditEntry = (entry: CoverageEntry, isOffline: boolean = false) => {
     setEntryToEdit({ ...entry, isOffline });
     setDoctorToLog(null);
-    setActiveTab('coverage');
+    setActiveView('coverage');
   };
 
   const handleFormSubmit = (savedOnline: boolean) => {
     setDoctorToLog(null);
     setEntryToEdit(null);
-    setActiveTab(savedOnline ? 'submitted' : 'offline');
+    setActiveView(savedOnline ? 'submitted' : 'offline');
   };
 
   const todaysPlans = plans.filter(p => {
@@ -79,80 +81,26 @@ export default function Home() {
   
   const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading || marketingSamplesLoading || entriesLoading;
 
-  if (anyLoading) {
-    return (
+  if (anyLoading && !user) {
+    return <LoginPage />;
+  }
+
+  if (anyLoading && user) {
+     return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <RefreshCw className="w-12 h-12 animate-spin text-primary" />
         </div>
     )
   }
-
+  
   if (!user) {
     return <LoginPage />;
   }
 
-  return (
-    <>
-      <div className="flex flex-col min-h-screen bg-background text-foreground">
-        <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline coverage</h1>
-          </div>
-          <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
-              {isUserAdmin && (
-                <Link href="/admin">
-                  <Button size="sm" variant="outline" className="font-headline">
-                    <ShieldCheck className="mr-2" />
-                    Admin
-                  </Button>
-                </Link>
-              )}
-              <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
-                  {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
-                  <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
-              </Badge>
-              {!todaysTimeIn ? (
-                <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
-                    <LogIn className="mr-2"/>
-                    Time In
-                </Button>
-              ) : (
-                <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}>
-                    <LogOut className="mr-2"/>
-                    Time Out
-                </Button>
-              )}
-              <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
-                <LogOut className="mr-2"/>
-                Logout
-              </Button>
-          </div>
-        </header>
-        <main className="flex-1 p-4 md:p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="planning" className="relative font-headline">
-                Call Planning
-                {offlinePlanCount > 0 && 
-                  <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlinePlanCount}</Badge>
-                }
-              </TabsTrigger>
-              <TabsTrigger value="coverage" className="font-headline">Call Reporting</TabsTrigger>
-              <TabsTrigger value="offline" className="relative font-headline">
-                Offline Call
-                {offlineEntries.length > 0 && 
-                  <Badge className="absolute w-5 h-5 p-0 text-xs -top-2 -right-2 " variant="destructive">{offlineEntries.length}</Badge>
-                }
-              </TabsTrigger>
-              <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
-              <TabsTrigger value="marketing" className="font-headline">Marketing Samples</TabsTrigger>
-              <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
-              <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="planning" className="mt-6">
-              <PlanningCalendar 
+  const renderContent = () => {
+    switch (activeView) {
+      case 'planning':
+        return <PlanningCalendar 
                 doctors={doctors} 
                 plans={plans}
                 entries={masterEntries}
@@ -161,10 +109,9 @@ export default function Home() {
                 onLogCall={handleLogPlannedCall}
                 nonCallDays={nonCallDays}
                 onAddNonCallDay={addNonCallDay}
-              />
-            </TabsContent>
-            <TabsContent value="coverage" className="mt-6">
-              <CoverageForm 
+              />;
+      case 'coverage':
+        return <CoverageForm 
                 onSave={saveEntry}
                 onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry}
                 isOnline={isOnline} 
@@ -176,51 +123,154 @@ export default function Home() {
                 todaysPlans={todaysPlans}
                 offlineEntries={offlineEntries}
                 entryToEdit={entryToEdit}
-              />
-            </TabsContent>
-            <TabsContent value="offline" className="mt-6">
-              <OfflineList 
+              />;
+      case 'offline':
+        return <OfflineList 
                 entries={offlineEntries} 
                 isSyncing={isSyncing} 
                 syncAll={syncAllOfflineEntries} 
                 isOnline={isOnline}
                 onEdit={(entry) => handleEditEntry(entry, true)}
-              />
-            </TabsContent>
-            <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />
-            </TabsContent>
-            <TabsContent value="marketing" className="mt-6">
-              <MarketingList 
+              />;
+      case 'submitted':
+        return <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+      case 'marketing':
+        return <MarketingList 
                 samples={marketingSamples}
                 usedQuantities={usedQuantities}
                 onAddSamplesBulk={async () => {
-                    toast({
-                        variant: 'destructive',
-                        title: 'Permission Denied',
-                        description: 'Only admins can upload a masterlist.'
-                    });
+                    alert('Only admins can upload a masterlist.');
                     return false;
                 }}
                 loading={marketingSamplesLoading}
                 onRefresh={refetchMarketingSamples}
                 readOnly={true}
-              />
-            </TabsContent>
-            <TabsContent value="summary" className="mt-6">
-              <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />
-            </TabsContent>
-            <TabsContent value="master" className="mt-6">
-              <MasterList 
+              />;
+      case 'summary':
+        return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
+      case 'master':
+        return <MasterList 
                 doctors={doctors}
                 entries={masterEntries}
                 onAddDoctor={addDoctor}
                 onAddDoctorsBulk={addDoctorsBulk}
                 onUpdateDoctor={updateDoctor} 
-                onDeleteDoctor={deleteDoctor} />
-            </TabsContent>
-          </Tabs>
-        </main>
+                onDeleteDoctor={deleteDoctor} />;
+      case 'exams':
+        return <Card>
+                <CardHeader>
+                  <CardTitle>Exams</CardTitle>
+                  <CardDescription>This section is under construction.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p>Check back later for exam features!</p>
+                </CardContent>
+              </Card>;
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <SidebarProvider>
+      <div className="flex flex-col min-h-screen bg-background text-foreground">
+         <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="md:hidden"/>
+              <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
+            </div>
+            <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+                {isUserAdmin && (
+                  <Link href="/admin">
+                    <Button size="sm" variant="outline" className="font-headline">
+                      <ShieldCheck className="mr-2" />
+                      Admin
+                    </Button>
+                  </Link>
+                )}
+                <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
+                    {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
+                    <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
+                </Badge>
+                {!todaysTimeIn ? (
+                  <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
+                      <LogIn className="mr-2"/>
+                      Time In
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}>
+                      <LogOut className="mr-2"/>
+                      Time Out
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
+                  <LogOut className="mr-2"/>
+                  Logout
+                </Button>
+            </div>
+        </header>
+
+        <div className="flex flex-1">
+          <Sidebar>
+            <SidebarContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => {}} isActive={activeView !== 'exams'}>
+                    <Notebook />
+                    CRM
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('planning')} isActive={activeView === 'planning'}>Call Planning</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('coverage')} isActive={activeView === 'coverage'}>Call Reporting</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                       <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('offline')} isActive={activeView === 'offline'}>
+                          Offline Calls
+                          {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                       <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                       <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+                 <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setActiveView('exams')} isActive={activeView === 'exams'}>
+                    <ClipboardCheck />
+                    Exams
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarContent>
+            <SidebarFooter>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                   <SidebarMenuButton onClick={logout}>
+                    <LogOut />
+                    Logout
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarFooter>
+          </Sidebar>
+
+          <main className="flex-1 p-4 md:p-6">
+            {renderContent()}
+          </main>
+        </div>
       </div>
       <TimeLogDialog 
         isOpen={isTimeLogDialogOpen}
@@ -229,6 +279,6 @@ export default function Home() {
         onTimeIn={addTimeIn}
         onTimeOut={addTimeOut}
       />
-    </>
+    </SidebarProvider>
   );
 }
