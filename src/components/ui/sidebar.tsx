@@ -502,6 +502,7 @@ SidebarMenu.displayName = "SidebarMenu"
 type SidebarMenuItemContextValue = {
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isActive: boolean;
 };
 
 const SidebarMenuItemContext = React.createContext<SidebarMenuItemContextValue | null>(null);
@@ -516,11 +517,17 @@ const useSidebarMenuItem = () => {
 
 const SidebarMenuItem = React.forwardRef<
   HTMLLIElement,
-  React.ComponentProps<"li">
->(({ className, ...props }, ref) => {
+  React.ComponentProps<"li"> & { isActive?: boolean }
+>(({ className, isActive = false, ...props }, ref) => {
   const { state } = useSidebar();
   const [open, setOpen] = React.useState(false);
   const isCollapsed = state === "collapsed";
+  
+  React.useEffect(() => {
+    if (isActive) {
+      setOpen(true);
+    }
+  }, [isActive]);
 
   React.useEffect(() => {
     if (isCollapsed) {
@@ -528,7 +535,7 @@ const SidebarMenuItem = React.forwardRef<
     }
   }, [isCollapsed]);
 
-  const contextValue = React.useMemo(() => ({ open, setOpen }), [open]);
+  const contextValue = React.useMemo(() => ({ open, setOpen, isActive }), [open, isActive]);
 
   return (
     <SidebarMenuItemContext.Provider value={contextValue}>
@@ -734,19 +741,23 @@ SidebarMenuSkeleton.displayName = "SidebarMenuSkeleton"
 const SidebarMenuSub = React.forwardRef<
   HTMLUListElement,
   React.ComponentProps<"ul">
->(({ className, ...props }, ref) => (
-  <ul
-    ref={ref}
-    data-sidebar="menu-sub"
-    className={cn(
-      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5",
-      "group-data-[collapsible=icon]:hidden",
-      "data-[state=closed]:hidden",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  const { open } = useSidebarMenuItem();
+  return (
+    <ul
+      ref={ref}
+      data-sidebar="menu-sub"
+      data-state={open ? "open" : "closed"}
+      className={cn(
+        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5",
+        "group-data-[collapsible=icon]:hidden",
+        "data-[state=closed]:hidden",
+        className
+      )}
+      {...props}
+    />
+  )
+})
 SidebarMenuSub.displayName = "SidebarMenuSub"
 
 const SidebarMenuSubItem = React.forwardRef<

@@ -217,8 +217,8 @@ export default function Home() {
           <Sidebar>
             <SidebarContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton hasSubmenu isActive={isCrmActive}>
+                <SidebarMenuItem isActive={isCrmActive}>
+                  <SidebarMenuButton hasSubmenu>
                     <Notebook />
                     CRM
                   </SidebarMenuButton>
