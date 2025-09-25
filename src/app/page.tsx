@@ -12,7 +12,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -29,7 +29,7 @@ import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master' | 'exams';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master' | 'exams' | 'in-field-coaching';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -166,12 +166,30 @@ export default function Home() {
                   <p>Check back later for exam features!</p>
                 </CardContent>
               </Card>;
+      case 'in-field-coaching':
+        return <Card>
+                <CardHeader>
+                  <CardTitle>In-Field Coaching</CardTitle>
+                  <CardDescription>This section is under construction.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p>Check back later for In-Field Coaching features!</p>
+                </CardContent>
+              </Card>;
       default:
         return null;
     }
   }
 
-  const isCrmActive = activeView !== 'exams';
+  const isCrmActive = [
+    'planning', 
+    'coverage', 
+    'offline', 
+    'submitted', 
+    'marketing', 
+    'summary', 
+    'master'
+  ].includes(activeView);
 
   return (
     <SidebarProvider>
@@ -248,6 +266,12 @@ export default function Home() {
                         <SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                   </SidebarMenuSub>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setActiveView('in-field-coaching')} isActive={activeView === 'in-field-coaching'}>
+                    <Users />
+                    In-Field Coaching
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
                  <SidebarMenuItem>
                   <SidebarMenuButton onClick={() => setActiveView('exams')} isActive={activeView === 'exams'}>
