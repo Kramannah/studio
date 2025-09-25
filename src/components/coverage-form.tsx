@@ -37,6 +37,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog"
 import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
+import { ScrollArea } from "./ui/scroll-area"
 
 
 const formSchema = z.object({
@@ -486,530 +487,534 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const isEditMode = !!entryToEdit;
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
         <CardHeader>
             <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage Event' : 'Log New Coverage Event'}</CardTitle>
             <CardDescription>{isEditMode ? 'Update the details for this coverage event below.' : 'Select the call type and fill in the details below.'}</CardDescription>
         </CardHeader>
-        <CardContent>
-            <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                {!isEditMode && (
-                  <div className="space-y-4">
-                      <FormField
-                          control={form.control}
-                          name="callType"
-                          render={({ field }) => (
-                              <FormItem>
-                              <FormLabel className="text-base font-semibold font-headline">Call Type</FormLabel>
-                              <FormControl>
-                                  <RadioGroup
-                                  onValueChange={(value) => {
-                                      field.onChange(value);
-                                      form.reset({ 
-                                          ...form.getValues(),
-                                          callType: value as 'planned' | 'unplanned',
-                                          plannedDoctorId: undefined,
-                                          firstName: '', lastName: '', specialty: '', clinic: '', hacme: 'NO'
-                                      });
-                                      setAutocompleteValue('');
-                                  }}
-                                  value={field.value}
-                                  className="flex gap-4 pt-2"
-                                  >
-                                  <FormItem className="flex items-center space-x-3 space-y-0">
-                                      <FormControl>
-                                      <RadioGroupItem value="unplanned" />
-                                      </FormControl>
-                                      <FormLabel className="font-normal text-sm">
-                                      Unplanned Call
-                                      </FormLabel>
-                                  </FormItem>
-                                  <FormItem className="flex items-center space-x-3 space-y-0">
-                                      <FormControl>
-                                      <RadioGroupItem value="planned" />
-                                      </FormControl>
-                                      <FormLabel className="font-normal text-sm">
-                                      Planned Call
-                                      </FormLabel>
-                                  </FormItem>
-                                  </RadioGroup>
-                              </FormControl>
-                              <FormMessage />
-                              </FormItem>
-                          )}
-                          />
-
-                      {callType === 'planned' && (
-                          <FormField
-                              control={form.control}
-                              name="plannedDoctorId"
-                              render={({ field }) => (
-                                  <FormItem>
-                                  <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
-                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                      <FormControl>
-                                          <SelectTrigger>
-                                          <SelectValue placeholder="Select a doctor from today's plan..." />
-                                          </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                          {todaysPlans.length > 0 ? (
-                                              todaysPlans.map(plan => (
-                                                  <SelectItem key={plan.id} value={plan.doctorId}>
-                                                      {plan.doctorFirstName} {plan.doctorLastName}
-                                                  </SelectItem>
-                                              ))
-                                          ) : (
-                                              <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
-                                          )}
-                                      </SelectContent>
-                                  </Select>
-                                  <FormMessage />
-                                  </FormItem>
-                              )}
-                          />
-                      )}
-                  </div>
-                )}
-
-
-                <div className={cn((callType === 'planned' && !plannedDoctorId && !isEditMode) && 'hidden', 'space-y-6')}>
-                    
-                    <div>
-                        <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
-                         {(callType === 'unplanned' || isEditMode) && (
-                          <div className="space-y-4 mb-4">
-                            <FormItem>
-                                <FormLabel className="font-headline">Search Doctor</FormLabel>
-                                <Autocomplete
-                                    doctors={doctors}
-                                    value={autocompleteValue}
-                                    onChange={handleAutocompleteChange}
-                                    onSelect={handleAutocompleteSelect}
-                                    placeholder="Type to search for a doctor from your masterlist..."
-                                    disabled={isEditMode}
-                                />
-                                <FormMessage>{form.formState.errors.firstName?.message}</FormMessage>
-                            </FormItem>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <FormField
-                                control={form.control}
-                                name="firstName"
-                                render={({ field }) => (
+        <CardContent className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="p-1 pr-6">
+              <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  {!isEditMode && (
+                    <div className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="callType"
+                            render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className="font-headline">First Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="John" {...field} disabled/>
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="lastName"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Last Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Doe" {...field} disabled/>
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="specialty"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Specialty</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Cardiology" {...field} disabled/>
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="clinic"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Clinic</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Community General Hospital" {...field} disabled/>
-                                    </FormControl>
-                                </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="coverageType"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Type of Coverage</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger>
-                                        <SelectValue placeholder="Select type" />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="inbase">Inbase</SelectItem>
-                                        <SelectItem value="outbase">Outbase</SelectItem>
-                                        <SelectItem value="joint">Joint Call</SelectItem>
-                                    </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="hacme"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">HACME</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled>
-                                    <FormControl>
-                                        <SelectTrigger>
-                                        <SelectValue placeholder="Select..." />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="YES">YES</SelectItem>
-                                        <SelectItem value="NO">NO</SelectItem>
-                                    </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                        </div>
-                    </div>
-
-                    <Accordion type="multiple" defaultValue={['pre-call', 'post-call']} className="w-full">
-                        <AccordionItem value="pre-call">
-                            <AccordionTrigger className="text-lg font-semibold font-headline">Pre-call Planning</AccordionTrigger>
-                            <AccordionContent className="pt-4">
-                                <div className="space-y-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="callObjective"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">Call Objective</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="e.g. Discuss new product benefits" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="primaryProduct"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                <FormLabel className="font-headline">Primary Product</FormLabel>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                        <SelectValue placeholder="Select..." />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {productList.map(product => (
-                                                        <SelectItem key={product} value={product}>{product}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="secondaryProduct"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                                <Select onValueChange={field.onChange} value={field.value}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                        <SelectValue placeholder="Select..." />
-                                                        </SelectTrigger>
-                                                    </FormControl>
-                                                    <SelectContent>
-                                                        {productList.map(product => (
-                                                        <SelectItem key={product} value={product}>{product}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="primarySampleName"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="font-headline">Primary Samples</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value} disabled={!primaryProduct}>
-                                                        <FormControl>
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select sample..." />
-                                                            </SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            {primarySampleOptions.map(sample => (
-                                                                <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="primaryProductQty"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                <FormLabel className="font-headline">Quantity</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" placeholder="0" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="secondarySampleName"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="font-headline">Secondary Samples</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value} disabled={!secondaryProduct}>
-                                                        <FormControl>
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select sample..." />
-                                                            </SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            {secondarySampleOptions.map(sample => (
-                                                                <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="secondaryProductQty"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                <FormLabel className="font-headline">Quantity</FormLabel>
-                                                <FormControl>
-                                                    <Input type="number" placeholder="0" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                        <AccordionItem value="post-call">
-                            <AccordionTrigger className="text-lg font-semibold font-headline">Post-call Analysis</AccordionTrigger>
-                            <AccordionContent className="pt-4">
-                                <div className="space-y-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="topicsDiscussed"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">Topics Discussed</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="doctorsIssue"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">Doctor's Issue / Concern</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="planOfAction"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">Plan of Action</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="whatWentWell"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">What went well?</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="areasForImprovement"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                            <FormLabel className="font-headline">Areas for Improvement</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="..." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    </Accordion>
-                    
-                    <div className="space-y-6">
-                        <div>
-                            <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
-                            <Card className="mt-2">
-                                <CardContent className="p-4">
+                                <FormLabel className="text-base font-semibold font-headline">Call Type</FormLabel>
+                                <FormControl>
                                     <RadioGroup
-                                        value={proofMethod || ""}
-                                        onValueChange={handleProofMethodChange}
-                                        className="flex gap-4 pt-2"
+                                    onValueChange={(value) => {
+                                        field.onChange(value);
+                                        form.reset({ 
+                                            ...form.getValues(),
+                                            callType: value as 'planned' | 'unplanned',
+                                            plannedDoctorId: undefined,
+                                            firstName: '', lastName: '', specialty: '', clinic: '', hacme: 'NO'
+                                        });
+                                        setAutocompleteValue('');
+                                    }}
+                                    value={field.value}
+                                    className="flex gap-4 pt-2"
                                     >
-                                        <FormItem className="flex items-center space-x-3 space-y-0">
-                                            <FormControl>
-                                                <RadioGroupItem value="photo" />
-                                            </FormControl>
-                                            <FormLabel className="font-normal text-sm">Selfie Photo</FormLabel>
-                                        </FormItem>
-                                        <FormItem className="flex items-center space-x-3 space-y-0">
-                                            <FormControl>
-                                                <RadioGroupItem value="signature" />
-                                            </FormControl>
-                                            <FormLabel className="font-normal text-sm">MD Signature</FormLabel>
-                                        </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                        <RadioGroupItem value="unplanned" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal text-sm">
+                                        Unplanned Call
+                                        </FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                        <RadioGroupItem value="planned" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal text-sm">
+                                        Planned Call
+                                        </FormLabel>
+                                    </FormItem>
                                     </RadioGroup>
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
 
-                                    {proofMethod === 'photo' && photos && photos.length > 0 && (
-                                        <div className="relative w-full max-w-xs mx-auto mt-4">
-                                            <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
-                                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
-                                                <Trash2 />
-                                            </Button>
-                                        </div>
-                                    )}
-
-                                    {proofMethod === 'signature' && signature && (
-                                        <div className="mt-4 space-y-2">
-                                            <Label>MD Signature</Label>
-                                            <div className="p-2 border rounded-md bg-muted w-fit">
-                                                <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
-                                            </div>
-                                            <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                            <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
-                        </div>
-                         {coverageType === 'joint' && (
-                            <div className="space-y-4">
-                                <FormField
-                                    control={form.control}
-                                    name="jointCallWith"
-                                    render={({ field }) => (
+                        {callType === 'planned' && (
+                            <FormField
+                                control={form.control}
+                                name="plannedDoctorId"
+                                render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="font-headline">Joint Call With</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                                         <FormControl>
                                             <SelectTrigger>
-                                            <SelectValue placeholder="Select role..." />
+                                            <SelectValue placeholder="Select a doctor from today's plan..." />
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="HOS">HOS</SelectItem>
-                                            <SelectItem value="GM">GM</SelectItem>
-                                            <SelectItem value="PM">PM</SelectItem>
-                                            <SelectItem value="SFE">SFE</SelectItem>
+                                            {todaysPlans.length > 0 ? (
+                                                todaysPlans.map(plan => (
+                                                    <SelectItem key={plan.id} value={plan.doctorId}>
+                                                        {plan.doctorFirstName} {plan.doctorLastName}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                <div className="p-4 text-sm text-center text-muted-foreground">No doctors planned for today.</div>
+                                            )}
                                         </SelectContent>
-                                        </Select>
-                                        <FormMessage />
+                                    </Select>
+                                    <FormMessage />
                                     </FormItem>
-                                    )}
-                                />
-                                 <div className="space-y-2">
-                                    <Label>DSM Signature</Label>
-                                    {dsmSignature ? (
-                                        <div className="p-2 border rounded-md bg-muted w-fit">
-                                            <Image src={dsmSignature} alt="DSM signature" width={200} height={100} className="bg-white rounded" />
-                                        </div>
-                                    ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
-                                    <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('dsmSignature')}>
-                                        <Edit className="mr-2"/> {dsmSignature ? 'Edit' : 'Add'} Signature
-                                    </Button>
-                                    <FormMessage>{form.formState.errors.dsmSignature?.message}</FormMessage>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>{jointCallWith || 'Companion'} Signature</Label>
-                                    {jointCallSignature ? (
-                                        <div className="p-2 border rounded-md bg-muted w-fit">
-                                            <Image src={jointCallSignature} alt="Companion signature" width={200} height={100} className="bg-white rounded" />
-                                        </div>
-                                    ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
-                                    <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('jointCallSignature')}>
-                                        <Edit className="mr-2"/> {jointCallSignature ? 'Edit' : 'Add'} Signature
-                                    </Button>
-                                    <FormMessage>{form.formState.errors.jointCallSignature?.message}</FormMessage>
-                                </div>
-                            </div>
+                                )}
+                            />
                         )}
                     </div>
-                    
-                    <Button type="submit" size="lg" className="w-full font-headline">
-                        <Save className="mr-2" />
-                        {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
-                    </Button>
-                </div>
-            </form>
-            </Form>
+                  )}
+
+
+                  <div className={cn((callType === 'planned' && !plannedDoctorId && !isEditMode) && 'hidden', 'space-y-6')}>
+                      
+                      <div>
+                          <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
+                          {(callType === 'unplanned' || isEditMode) && (
+                            <div className="space-y-4 mb-4">
+                              <FormItem>
+                                  <FormLabel className="font-headline">Search Doctor</FormLabel>
+                                  <Autocomplete
+                                      doctors={doctors}
+                                      value={autocompleteValue}
+                                      onChange={handleAutocompleteChange}
+                                      onSelect={handleAutocompleteSelect}
+                                      placeholder="Type to search for a doctor from your masterlist..."
+                                      disabled={isEditMode}
+                                  />
+                                  <FormMessage>{form.formState.errors.firstName?.message}</FormMessage>
+                              </FormItem>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                              <FormField
+                                  control={form.control}
+                                  name="firstName"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">First Name</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="John" {...field} disabled/>
+                                      </FormControl>
+                                  </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="lastName"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">Last Name</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="Doe" {...field} disabled/>
+                                      </FormControl>
+                                  </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="specialty"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">Specialty</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="Cardiology" {...field} disabled/>
+                                      </FormControl>
+                                  </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="clinic"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">Clinic</FormLabel>
+                                      <FormControl>
+                                          <Input placeholder="Community General Hospital" {...field} disabled/>
+                                      </FormControl>
+                                  </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="coverageType"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">Type of Coverage</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Select type" />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          <SelectItem value="inbase">Inbase</SelectItem>
+                                          <SelectItem value="outbase">Outbase</SelectItem>
+                                          <SelectItem value="joint">Joint Call</SelectItem>
+                                      </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                              />
+                              <FormField
+                                  control={form.control}
+                                  name="hacme"
+                                  render={({ field }) => (
+                                  <FormItem>
+                                      <FormLabel className="font-headline">HACME</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value} disabled>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Select..." />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          <SelectItem value="YES">YES</SelectItem>
+                                          <SelectItem value="NO">NO</SelectItem>
+                                      </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                              />
+                          </div>
+                      </div>
+
+                      <Accordion type="multiple" defaultValue={['pre-call', 'post-call']} className="w-full">
+                          <AccordionItem value="pre-call">
+                              <AccordionTrigger className="text-lg font-semibold font-headline">Pre-call Planning</AccordionTrigger>
+                              <AccordionContent className="pt-4">
+                                  <div className="space-y-4">
+                                      <FormField
+                                          control={form.control}
+                                          name="callObjective"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">Call Objective</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="e.g. Discuss new product benefits" {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                      <div className="grid grid-cols-2 gap-4">
+                                          <FormField
+                                              control={form.control}
+                                              name="primaryProduct"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                  <FormLabel className="font-headline">Primary Product</FormLabel>
+                                                  <Select onValueChange={field.onChange} value={field.value}>
+                                                      <FormControl>
+                                                          <SelectTrigger>
+                                                          <SelectValue placeholder="Select..." />
+                                                          </SelectTrigger>
+                                                      </FormControl>
+                                                      <SelectContent>
+                                                          {productList.map(product => (
+                                                          <SelectItem key={product} value={product}>{product}</SelectItem>
+                                                          ))}
+                                                      </SelectContent>
+                                                  </Select>
+                                                  <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                          <FormField
+                                              control={form.control}
+                                              name="secondaryProduct"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                  <FormLabel className="font-headline">Secondary Product</FormLabel>
+                                                  <Select onValueChange={field.onChange} value={field.value}>
+                                                      <FormControl>
+                                                          <SelectTrigger>
+                                                          <SelectValue placeholder="Select..." />
+                                                          </SelectTrigger>
+                                                      </FormControl>
+                                                      <SelectContent>
+                                                          {productList.map(product => (
+                                                          <SelectItem key={product} value={product}>{product}</SelectItem>
+                                                          ))}
+                                                      </SelectContent>
+                                                  </Select>
+                                                  <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-4">
+                                          <FormField
+                                              control={form.control}
+                                              name="primarySampleName"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormLabel className="font-headline">Primary Samples</FormLabel>
+                                                      <Select onValueChange={field.onChange} value={field.value} disabled={!primaryProduct}>
+                                                          <FormControl>
+                                                              <SelectTrigger>
+                                                                  <SelectValue placeholder="Select sample..." />
+                                                              </SelectTrigger>
+                                                          </FormControl>
+                                                          <SelectContent>
+                                                              {primarySampleOptions.map(sample => (
+                                                                  <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
+                                                              ))}
+                                                          </SelectContent>
+                                                      </Select>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                          <FormField
+                                              control={form.control}
+                                              name="primaryProductQty"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                  <FormLabel className="font-headline">Quantity</FormLabel>
+                                                  <FormControl>
+                                                      <Input type="number" placeholder="0" {...field} />
+                                                  </FormControl>
+                                                  <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-4">
+                                          <FormField
+                                              control={form.control}
+                                              name="secondarySampleName"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormLabel className="font-headline">Secondary Samples</FormLabel>
+                                                      <Select onValueChange={field.onChange} value={field.value} disabled={!secondaryProduct}>
+                                                          <FormControl>
+                                                              <SelectTrigger>
+                                                                  <SelectValue placeholder="Select sample..." />
+                                                              </SelectTrigger>
+                                                          </FormControl>
+                                                          <SelectContent>
+                                                              {secondarySampleOptions.map(sample => (
+                                                                  <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
+                                                              ))}
+                                                          </SelectContent>
+                                                      </Select>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                          <FormField
+                                              control={form.control}
+                                              name="secondaryProductQty"
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                  <FormLabel className="font-headline">Quantity</FormLabel>
+                                                  <FormControl>
+                                                      <Input type="number" placeholder="0" {...field} />
+                                                  </FormControl>
+                                                  <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                      </div>
+                                  </div>
+                              </AccordionContent>
+                          </AccordionItem>
+                          <AccordionItem value="post-call">
+                              <AccordionTrigger className="text-lg font-semibold font-headline">Post-call Analysis</AccordionTrigger>
+                              <AccordionContent className="pt-4">
+                                  <div className="space-y-4">
+                                      <FormField
+                                          control={form.control}
+                                          name="topicsDiscussed"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">Topics Discussed</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="..." {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                      <FormField
+                                          control={form.control}
+                                          name="doctorsIssue"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">Doctor's Issue / Concern</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="..." {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                      <FormField
+                                          control={form.control}
+                                          name="planOfAction"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">Plan of Action</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="..." {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                      <FormField
+                                          control={form.control}
+                                          name="whatWentWell"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">What went well?</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="..." {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                      <FormField
+                                          control={form.control}
+                                          name="areasForImprovement"
+                                          render={({ field }) => (
+                                              <FormItem>
+                                              <FormLabel className="font-headline">Areas for Improvement</FormLabel>
+                                              <FormControl>
+                                                  <Textarea placeholder="..." {...field} />
+                                              </FormControl>
+                                              <FormMessage />
+                                              </FormItem>
+                                          )}
+                                      />
+                                  </div>
+                              </AccordionContent>
+                          </AccordionItem>
+                      </Accordion>
+                      
+                      <div className="space-y-6">
+                          <div>
+                              <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
+                              <Card className="mt-2">
+                                  <CardContent className="p-4">
+                                      <RadioGroup
+                                          value={proofMethod || ""}
+                                          onValueChange={handleProofMethodChange}
+                                          className="flex gap-4 pt-2"
+                                      >
+                                          <FormItem className="flex items-center space-x-3 space-y-0">
+                                              <FormControl>
+                                                  <RadioGroupItem value="photo" />
+                                              </FormControl>
+                                              <FormLabel className="font-normal text-sm">Selfie Photo</FormLabel>
+                                          </FormItem>
+                                          <FormItem className="flex items-center space-x-3 space-y-0">
+                                              <FormControl>
+                                                  <RadioGroupItem value="signature" />
+                                              </FormControl>
+                                              <FormLabel className="font-normal text-sm">MD Signature</FormLabel>
+                                          </FormItem>
+                                      </RadioGroup>
+
+                                      {proofMethod === 'photo' && photos && photos.length > 0 && (
+                                          <div className="relative w-full max-w-xs mx-auto mt-4">
+                                              <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
+                                              <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
+                                                  <Trash2 />
+                                              </Button>
+                                          </div>
+                                      )}
+
+                                      {proofMethod === 'signature' && signature && (
+                                          <div className="mt-4 space-y-2">
+                                              <Label>MD Signature</Label>
+                                              <div className="p-2 border rounded-md bg-muted w-fit">
+                                                  <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
+                                              </div>
+                                              <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
+                                          </div>
+                                      )}
+                                  </CardContent>
+                              </Card>
+                              <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
+                          </div>
+                          {coverageType === 'joint' && (
+                              <div className="space-y-4">
+                                  <FormField
+                                      control={form.control}
+                                      name="jointCallWith"
+                                      render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel className="font-headline">Joint Call With</FormLabel>
+                                          <Select onValueChange={field.onChange} value={field.value}>
+                                          <FormControl>
+                                              <SelectTrigger>
+                                              <SelectValue placeholder="Select role..." />
+                                              </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                              <SelectItem value="HOS">HOS</SelectItem>
+                                              <SelectItem value="GM">GM</SelectItem>
+                                              <SelectItem value="PM">PM</SelectItem>
+                                              <SelectItem value="SFE">SFE</SelectItem>
+                                          </SelectContent>
+                                          </Select>
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                  />
+                                  <div className="space-y-2">
+                                      <Label>DSM Signature</Label>
+                                      {dsmSignature ? (
+                                          <div className="p-2 border rounded-md bg-muted w-fit">
+                                              <Image src={dsmSignature} alt="DSM signature" width={200} height={100} className="bg-white rounded" />
+                                          </div>
+                                      ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
+                                      <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('dsmSignature')}>
+                                          <Edit className="mr-2"/> {dsmSignature ? 'Edit' : 'Add'} Signature
+                                      </Button>
+                                      <FormMessage>{form.formState.errors.dsmSignature?.message}</FormMessage>
+                                  </div>
+                                  <div className="space-y-2">
+                                      <Label>{jointCallWith || 'Companion'} Signature</Label>
+                                      {jointCallSignature ? (
+                                          <div className="p-2 border rounded-md bg-muted w-fit">
+                                              <Image src={jointCallSignature} alt="Companion signature" width={200} height={100} className="bg-white rounded" />
+                                          </div>
+                                      ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
+                                      <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('jointCallSignature')}>
+                                          <Edit className="mr-2"/> {jointCallSignature ? 'Edit' : 'Add'} Signature
+                                      </Button>
+                                      <FormMessage>{form.formState.errors.jointCallSignature?.message}</FormMessage>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                      
+                      <Button type="submit" size="lg" className="w-full font-headline">
+                          <Save className="mr-2" />
+                          {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
+                      </Button>
+                  </div>
+              </form>
+              </Form>
+            </div>
+          </ScrollArea>
         </CardContent>
          <Dialog open={isCameraOpen} onOpenChange={handleCloseCamera}>
             <DialogContent>
