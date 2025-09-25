@@ -118,8 +118,6 @@ type CoverageFormProps = {
   onFormSubmit?: (isOnline: boolean) => void;
 }
 
-const MAX_UNPLANNED_CALLS = 5;
-
 const productList = [
   "Anti-Fungals-Difluvid",
   "Anti-Fungals-Inox",
@@ -453,26 +451,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     if (doctorInMasterlist) {
         finalValues.hacme = doctorInMasterlist.hacme;
         form.setValue('hacme', doctorInMasterlist.hacme); // Ensure form state is updated too
-    }
-
-    const pilotTestingEndDate = new Date('2024-09-14T00:00:00'); // End of Sept 13
-    const now = new Date();
-    
-    if (values.callType === 'unplanned' && now >= pilotTestingEndDate) {
-      const allTodaysEntries = [...masterEntries, ...offlineEntries].filter(e => {
-        const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-        return isValid(submittedDate) && isToday(submittedDate);
-      });
-      const todaysUnplannedCalls = allTodaysEntries.filter(e => e.callType === 'unplanned').length;
-
-      if (todaysUnplannedCalls >= MAX_UNPLANNED_CALLS) {
-          toast({
-              variant: "destructive",
-              title: "Unplanned Call Limit Reached",
-              description: `You can only submit a maximum of ${MAX_UNPLANNED_CALLS} unplanned calls per day.`,
-          });
-          return;
-      }
     }
 
     if (doctorInMasterlist) {
