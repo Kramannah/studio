@@ -97,6 +97,14 @@ export default function Home() {
     return <LoginPage />;
   }
 
+  const handleCrmClick = () => {
+    // Only change view if one of the sub-items is not already active
+    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
+    if (!crmViews.includes(activeView)) {
+      setActiveView('planning');
+    }
+  };
+
   const renderContent = () => {
     switch (activeView) {
       case 'planning':
@@ -200,15 +208,6 @@ export default function Home() {
               <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
             </div>
             <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
-                {isUserAdmin && (
-                  <Link href="/admin">
-                    <Button size="sm" variant="outline" className="font-headline">
-                      <ShieldCheck className="mr-2" />
-                      Admin
-                    </Button>
-                  </Link>
-                )}
                 <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                     {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                     <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
@@ -224,10 +223,6 @@ export default function Home() {
                       Time Out
                   </Button>
                 )}
-                <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
-                  <LogOut className="mr-2"/>
-                  Logout
-                </Button>
             </div>
         </header>
 
@@ -236,7 +231,7 @@ export default function Home() {
             <SidebarContent>
               <SidebarMenu>
                 <SidebarMenuItem isActive={isCrmActive}>
-                  <SidebarMenuButton hasSubmenu>
+                  <SidebarMenuButton onClick={handleCrmClick} hasSubmenu>
                     <Notebook />
                     CRM
                   </SidebarMenuButton>
@@ -282,6 +277,17 @@ export default function Home() {
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter>
+                <div className="flex items-center gap-2 p-2">
+                     <span className="text-sm text-muted-foreground truncate">{user.email}</span>
+                </div>
+                 {isUserAdmin && (
+                  <Link href="/admin" className="w-full">
+                    <Button size="sm" variant="outline" className="w-full font-headline">
+                      <ShieldCheck className="mr-2" />
+                      Admin
+                    </Button>
+                  </Link>
+                )}
               <SidebarMenu>
                 <SidebarMenuItem>
                    <SidebarMenuButton onClick={logout}>

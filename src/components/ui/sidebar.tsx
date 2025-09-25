@@ -216,7 +216,7 @@ const Sidebar = React.forwardRef<
     return (
       <div
         ref={ref}
-        className="group peer text-sidebar-foreground md:block"
+        className="group peer text-sidebar-foreground"
         data-state={state}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-variant={variant}
@@ -598,7 +598,7 @@ const SidebarMenuButton = React.forwardRef<
   ) => {
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
-    const { setOpen } = useSidebarMenuItem();
+    const { open, setOpen, isActive: isMenuItemActive } = useSidebarMenuItem();
 
 
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -616,7 +616,8 @@ const SidebarMenuButton = React.forwardRef<
         ref={ref}
         data-sidebar="menu-button"
         data-size={size}
-        data-active={isActive}
+        data-active={isMenuItemActive || isActive}
+        data-state={open ? "open" : "closed"}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
         onClick={handleClick}
         {...props}
