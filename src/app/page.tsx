@@ -196,7 +196,7 @@ export default function Home() {
       <div className="flex flex-col min-h-screen bg-background text-foreground">
          <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
             <div className="flex items-center gap-4">
-              <SidebarTrigger className="md:hidden"/>
+              <SidebarTrigger/>
               <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
             </div>
             <div className="flex items-center gap-4">
