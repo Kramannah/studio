@@ -293,8 +293,10 @@ export default function Home() {
             </SidebarFooter>
           </Sidebar>
 
-          <main className="flex-1 p-4 md:p-6">
-            {renderContent()}
+          <main className="flex-1 w-full p-4 md:p-6">
+            <div className="w-full max-w-7xl mx-auto">
+              {renderContent()}
+            </div>
           </main>
         </div>
       </div>
