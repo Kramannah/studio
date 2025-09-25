@@ -294,7 +294,7 @@ export default function Home() {
           </Sidebar>
 
           <main className="flex-1 w-full p-4 md:p-6">
-            <div className="w-full max-w-7xl mx-auto">
+            <div className="w-full">
               {renderContent()}
             </div>
           </main>
