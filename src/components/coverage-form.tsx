@@ -597,7 +597,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                               </FormItem>
                             </div>
                           )}
-                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                               <FormField
                                   control={form.control}
                                   name="firstName"
