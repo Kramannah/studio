@@ -56,7 +56,6 @@ export interface Plan {
   doctorLastName: string;
   plannedDate: string; // ISO string
   submittedAt?: string; 
-  callType?: 'planned' | 'unplanned';
 }
 
 export interface NonCallDay {
@@ -93,3 +92,5 @@ export interface AdminData {
     allTimeLogs: TimeLog[];
     allMarketingSamples: MarketingSample[];
 }
+
+    

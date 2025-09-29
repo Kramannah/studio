@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { format, isSameWeek, startOfToday } from 'date-fns';
@@ -82,17 +82,12 @@ export const usePlans = () => {
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user) return;
 
-    const today = startOfToday();
-    const isCurrentWeek = isSameWeek(plannedDate, today, { weekStartsOn: 1 });
-    const callType = isCurrentWeek ? 'unplanned' : 'planned';
-
     const newPlanData = {
       userId: user.uid,
       doctorId: doctor.id,
       doctorFirstName: doctor.firstName,
       doctorLastName: doctor.lastName,
       plannedDate: plannedDate.toISOString(),
-      callType: callType,
     };
     
     if (isOnline) {
@@ -134,15 +129,19 @@ export const usePlans = () => {
         updateOfflineInStorage(offlinePlans.filter(p => p.id !== planId));
         toast({ variant: 'destructive', title: "Plan Removed", description: `Local plan for ${planToRemove.doctorFirstName} ${planToRemove.doctorLastName} removed.` });
     } else {
-        try {
-            await deleteDoc(doc(db, "plans", planId));
-            setMasterPlans(prev => prev.filter(p => p.id !== planId));
-            toast({ variant: 'destructive', title: "Plan Removed", description: `Visit for ${planToRemove.doctorFirstName} ${planToRemove.doctorLastName} has been removed from server.` });
-        } catch (error) {
-            toast({ variant: 'destructive', title: "Error", description: "Could not remove the plan from server." });
+        if (isOnline) {
+            try {
+                await deleteDoc(doc(db, "plans", planId));
+                setMasterPlans(prev => prev.filter(p => p.id !== planId));
+                toast({ variant: 'destructive', title: "Plan Removed", description: `Visit for ${planToRemove.doctorFirstName} ${planToRemove.doctorLastName} has been removed from server.` });
+            } catch (error) {
+                toast({ variant: 'destructive', title: "Error", description: "Could not remove the plan from server." });
+            }
+        } else {
+            toast({ variant: 'destructive', title: "Currently Offline", description: "Cannot remove a synced plan while offline." });
         }
     }
-  }, [masterPlans, offlinePlans, toast, user]);
+  }, [masterPlans, offlinePlans, toast, user, isOnline]);
 
   const syncAllOfflinePlans = useCallback(async () => {
     if (!isOnline || !user || offlinePlans.length === 0) {
@@ -160,7 +159,9 @@ export const usePlans = () => {
         await batch.commit();
         const successCount = offlinePlans.length;
         updateOfflineInStorage([]);
-        toast({ title: 'Plan Sync Complete', description: `${successCount} plans synced successfully.` });
+        if(successCount > 0) {
+            toast({ title: 'Plan Sync Complete', description: `${successCount} plans synced successfully.` });
+        }
         fetchMasterPlans();
     } catch (error) {
         console.error('Failed to sync plans:', error);
@@ -172,3 +173,5 @@ export const usePlans = () => {
 
   return { plans: allPlans, addPlan, removePlan, loading, syncAllOfflinePlans, offlinePlanCount: offlinePlans.length };
 };
+
+    

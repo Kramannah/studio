@@ -295,7 +295,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       firstName: "",
       lastName: "",
       specialty: "",
-      clinic: "",
+clinic: "",
       hacme: "NO",
       coverageType: "inbase",
       coverageDate: new Date(),
@@ -413,6 +413,32 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     const newCoverageDate = values.coverageDate || new Date();
 
     if (!isEditMode) {
+      const doctorInMasterlist = doctors.find(
+        (d) =>
+          d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
+          d.lastName.toLowerCase() === values.lastName?.toLowerCase()
+      );
+      
+      if (doctorInMasterlist) {
+          const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
+          
+          const coveragesInMonth = allEntries.filter(entry => {
+            const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
+            return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
+                   entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
+                   isValid(entryCoverageDate) && isSameMonth(entryCoverageDate, newCoverageDate);
+          }).length;
+    
+          if (coveragesInMonth >= frequency) {
+            toast({
+              variant: "destructive",
+              title: "Submission Limit Reached",
+              description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM yyyy')}.`,
+            });
+            return; 
+          }
+      }
+
       const alreadyCoveredToday = allEntries.some(entry => {
           const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
           return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
@@ -441,40 +467,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
         return;
     }
-
-    const doctorInMasterlist = doctors.find(
-      (d) =>
-        d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
-        d.lastName.toLowerCase() === values.lastName?.toLowerCase()
-    );
-
-    let finalValues = { ...values };
-    if (doctorInMasterlist) {
-        finalValues.hacme = doctorInMasterlist.hacme;
-        form.setValue('hacme', doctorInMasterlist.hacme); // Ensure form state is updated too
-    }
-
-    if (doctorInMasterlist) {
-      const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
-      
-      const coveragesInMonth = allEntries.filter(entry => {
-        const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
-        return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
-               entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-               isValid(entryCoverageDate) && isSameMonth(entryCoverageDate, newCoverageDate);
-      }).length;
-
-      if (coveragesInMonth >= frequency) {
-        toast({
-          variant: "destructive",
-          title: "Submission Limit Reached",
-          description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM yyyy')}.`,
-        });
-        return; 
-      }
-    }
     
-    const { plannedDoctorId, ...restOfValues } = finalValues;
+    const { plannedDoctorId, ...restOfValues } = values;
 
     const savedOnline = await onSave({
       ...restOfValues,
@@ -1044,3 +1038,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    

@@ -347,7 +347,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                     <TableRow>
                                         <TableHead>Doctor</TableHead>
                                         <TableHead>Location</TableHead>
-                                        <TableHead className="text-center">Type</TableHead>
                                         <TableHead className="text-center">Target</TableHead>
                                         <TableHead className="text-center">Balance</TableHead>
                                         <TableHead>Status</TableHead>
@@ -395,9 +394,6 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                         <span className="text-xs text-muted-foreground">{doctor.province}</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant={plan.callType === 'planned' ? 'default' : 'outline'} className="capitalize">{plan.callType}</Badge>
-                                                </TableCell>
                                                  <TableCell className="text-center">{doctor.frequency}</TableCell>
                                                  <TableCell className="text-center">{balance}</TableCell>
                                                  <TableCell>
@@ -414,7 +410,7 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                         )})
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={7} className="h-24 text-center">
+                                            <TableCell colSpan={6} className="h-24 text-center">
                                                 {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
                                             </TableCell>
                                         </TableRow>
@@ -435,6 +431,4 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
     );
 }
 
-
-    
     
