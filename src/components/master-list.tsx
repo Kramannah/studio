@@ -125,21 +125,28 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
 
         const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName'];
         
-        const mappedData = json.map(row => ({
-            firstName: row.firstName || '',
-            lastName: row.lastName || '',
-            specialty: row.specialty || '',
-            clinic: row.clinic || '',
-            province: row.province || '',
-            municipality: row.municipality || '',
-            placeOfPractice: row.placeOfPractice || '',
-            frequency: ['1x', '2x', '3x', '4x'].includes(row.frequency) ? row.frequency : '1x',
-            hacme: ['YES', 'NO'].includes(row.hacme) ? row.hacme : 'NO',
-        }));
+        const mappedData = json.map(row => {
+            const frequencyValue = row.frequency ? String(row.frequency).toLowerCase() : '';
+            const hacmeValue = row.hacme ? String(row.hacme).toUpperCase() : 'NO';
+            
+            return {
+                firstName: row.firstName || '',
+                lastName: row.lastName || '',
+                specialty: row.specialty || '',
+                clinic: row.clinic || '',
+                province: row.province || '',
+                municipality: row.municipality || '',
+                placeOfPractice: row.placeOfPractice || '',
+                frequency: ['1x', '2x', '3x', '4x'].includes(frequencyValue) ? frequencyValue as '1x' | '2x' | '3x' | '4x' : '1x',
+                hacme: ['YES', 'NO'].includes(hacmeValue) ? hacmeValue as 'YES' | 'NO' : 'NO',
+            }
+        });
 
         const validDoctors = mappedData.filter(row => requiredFields.every(field => {
-            return row[field] !== undefined && row[field] !== null && row[field] !== '';
+            const value = row[field as keyof typeof row];
+            return value !== undefined && value !== null && String(value).trim() !== '';
         }));
+
 
         if (validDoctors.length !== mappedData.length) {
             const invalidCount = mappedData.length - validDoctors.length;

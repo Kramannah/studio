@@ -62,32 +62,56 @@ export const useDoctors = () => {
 
       const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
       const querySnapshot = await getDocs(q);
-      const existingDoctors = new Set(querySnapshot.docs.map(d => `${d.data().firstName.toLowerCase()} ${d.data().lastName.toLowerCase()}`));
-      
-      const uniqueNewDoctorsData = doctorsData.filter(d => !existingDoctors.has(`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`));
+      const existingDoctorsMap = new Map(querySnapshot.docs.map(d => [`${d.data().firstName.toLowerCase()} ${d.data().lastName.toLowerCase()}`, d.id]));
 
-      if (uniqueNewDoctorsData.length !== doctorsData.length) {
-          const duplicateCount = doctorsData.length - uniqueNewDoctorsData.length;
-          toast({
-              variant: "destructive",
-              title: "Duplicates Found",
-              description: `${duplicateCount} doctor(s) were skipped as they are already in the masterlist.`,
-          });
-      }
+      const doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[] = [];
+      const doctorsToUpdate: Doctor[] = [];
+
+      doctorsData.forEach(doctor => {
+        const key = `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`;
+        if (existingDoctorsMap.has(key)) {
+            const existingId = existingDoctorsMap.get(key)!;
+            doctorsToUpdate.push({ ...doctor, id: existingId, userId: user.uid });
+        } else {
+            doctorsToAdd.push(doctor);
+        }
+      });
       
-      uniqueNewDoctorsData.forEach(doctor => {
+      doctorsToAdd.forEach(doctor => {
         const docRef = doc(collection(db, "doctors"));
         batch.set(docRef, { ...doctor, userId: user.uid });
         newDoctors.push({ ...doctor, id: docRef.id, userId: user.uid });
       });
 
+      doctorsToUpdate.forEach(doctor => {
+        const docRef = doc(db, "doctors", doctor.id);
+        batch.update(docRef, { ...doctor, userId: user.uid });
+      });
+
+
       await batch.commit();
-      setDoctors(prev => [...prev, ...newDoctors]);
-      toast({ title: 'Upload Successful', description: `${newDoctors.length} doctors were added.` });
+
+      setDoctors(prev => {
+          const updatedList = prev.map(existingDoc => {
+              const update = doctorsToUpdate.find(d => d.id === existingDoc.id);
+              return update ? update : existingDoc;
+          });
+          return [...updatedList, ...newDoctors];
+      });
+      
+      let toastDescription = "";
+      if (doctorsToAdd.length > 0) {
+        toastDescription += `${doctorsToAdd.length} new doctors added. `;
+      }
+      if (doctorsToUpdate.length > 0) {
+        toastDescription += `${doctorsToUpdate.length} existing doctors updated.`
+      }
+
+      toast({ title: 'Upload Successful', description: toastDescription.trim() });
 
     } catch (error) {
       console.error("Error adding doctors in bulk:", error);
-      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not add doctors to the masterlist.' });
+      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not add or update doctors in the masterlist.' });
     }
 
   }, [user, toast]);
