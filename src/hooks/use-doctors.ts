@@ -142,5 +142,25 @@ export const useDoctors = () => {
     }
   }, [user, doctors, toast]);
 
-  return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading };
+  const deleteDoctorsBulk = useCallback(async (ids: string[]) => {
+    if (!user || ids.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        const docRef = doc(db, "doctors", id);
+        batch.delete(docRef);
+      });
+      await batch.commit();
+
+      setDoctors(prev => prev.filter(d => !ids.includes(d.id)));
+      toast({ variant: 'destructive', title: "Doctors Deleted", description: `${ids.length} doctor(s) have been removed from your masterlist.` });
+    } catch (error) {
+      console.error("Error deleting doctors in bulk:", error);
+      toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: 'Could not delete the selected doctors.' });
+    }
+  }, [user, toast]);
+
+  return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading };
 };
+
+    

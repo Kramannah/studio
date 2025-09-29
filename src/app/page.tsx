@@ -38,7 +38,7 @@ export default function Home() {
 
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
-  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, loading: doctorsLoading } = useDoctors();
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
@@ -163,7 +163,8 @@ export default function Home() {
                 onAddDoctor={addDoctor}
                 onAddDoctorsBulk={addDoctorsBulk}
                 onUpdateDoctor={updateDoctor} 
-                onDeleteDoctor={deleteDoctor} />;
+                onDeleteDoctor={deleteDoctor} 
+                onDeleteDoctorsBulk={deleteDoctorsBulk}/>;
       case 'exams':
         return <Card>
                 <CardHeader>
@@ -300,7 +301,7 @@ export default function Home() {
           </Sidebar>
 
           <main className="flex-1 w-full">
-            <div className="w-full h-full">
+            <div className="w-full h-full p-4 md:p-6">
               {renderContent()}
             </div>
           </main>
@@ -316,3 +317,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    

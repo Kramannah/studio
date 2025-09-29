@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Plus, MoreHorizontal, Trash2, Edit, Upload, Download } from "lucide-react";
@@ -39,6 +39,7 @@ import { isThisMonth, parseISO, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { provinces } from "@/lib/philippine-locations";
+import { Checkbox } from "./ui/checkbox";
 
 
 type MasterListProps = {
@@ -48,13 +49,15 @@ type MasterListProps = {
   onAddDoctorsBulk: (doctors: Omit<Doctor, 'id'>[]) => void;
   onUpdateDoctor: (doctor: Doctor) => void;
   onDeleteDoctor: (id: string) => void;
+  onDeleteDoctorsBulk: (ids: string[]) => void;
   readOnly?: boolean;
 }
 
-export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor, readOnly = false }: MasterListProps) {
+export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, onUpdateDoctor, onDeleteDoctor, onDeleteDoctorsBulk, readOnly = false }: MasterListProps) {
   const [filter, setFilter] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | undefined>(undefined);
+  const [selectedDoctorIds, setSelectedDoctorIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -77,6 +80,30 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
       doctor.specialty.toLowerCase().includes(filter.toLowerCase())
     );
   }, [doctors, filter]);
+
+  useEffect(() => {
+    setSelectedDoctorIds([]);
+  }, [doctors]);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedDoctorIds(filteredDoctors.map(d => d.id));
+    } else {
+      setSelectedDoctorIds([]);
+    }
+  }
+
+  const handleSelectDoctor = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedDoctorIds(prev => [...prev, id]);
+    } else {
+      setSelectedDoctorIds(prev => prev.filter(doctorId => doctorId !== id));
+    }
+  }
+
+  const handleDeleteSelected = () => {
+    onDeleteDoctorsBulk(selectedDoctorIds);
+  }
 
   const frequencyCounts = useMemo(() => {
     return doctors.reduce((acc, doctor) => {
@@ -300,13 +327,35 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 className="hidden"
                 accept=".xlsx, .xls"
               />
+               {selectedDoctorIds.length > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={readOnly}>
+                      <Trash2 className="mr-2" />
+                      Delete Selected ({selectedDoctorIds.length})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete {selectedDoctorIds.length} doctor(s) from your masterlist. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteSelected}>Continue</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
               <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
                 <Download className="mr-2" />
-                Download Template
+                Template
               </Button>
               <Button onClick={handleUploadClick} variant="outline" disabled={readOnly}>
                 <Upload className="mr-2" />
-                Upload Masterlist
+                Upload
               </Button>
               <Button onClick={handleAddNew} disabled={readOnly}>
                 <Plus className="mr-2" />
@@ -329,6 +378,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             <Table>
                 <TableHeader>
                     <TableRow>
+                        {!readOnly && (
+                          <TableHead className="w-[50px]">
+                            <Checkbox 
+                              checked={selectedDoctorIds.length === filteredDoctors.length && filteredDoctors.length > 0}
+                              onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                            />
+                          </TableHead>
+                        )}
                         <TableHead>Name</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
@@ -350,7 +407,15 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                           const isCovered = visitCount > 0;
                           
                           return (
-                            <TableRow key={doctor.id} data-completed={isCompleted} className={cn(isCompleted && "bg-primary/10 hover:bg-primary/20")}>
+                            <TableRow key={doctor.id} data-completed={isCompleted} className={cn(isCompleted && "bg-primary/10 hover:bg-primary/20", selectedDoctorIds.includes(doctor.id) && "bg-secondary/50")}>
+                                {!readOnly && (
+                                  <TableCell>
+                                    <Checkbox 
+                                      checked={selectedDoctorIds.includes(doctor.id)}
+                                      onCheckedChange={(checked) => handleSelectDoctor(doctor.id, Boolean(checked))}
+                                    />
+                                  </TableCell>
+                                )}
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
@@ -410,7 +475,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={9} className="h-24 text-center">
+                            <TableCell colSpan={readOnly ? 9 : 10} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>
