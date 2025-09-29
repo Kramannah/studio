@@ -345,13 +345,13 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-[25%]">Doctor</TableHead>
-                                        <TableHead className="w-[25%]">Location</TableHead>
-                                        <TableHead className="w-[10%] text-center">Type</TableHead>
-                                        <TableHead className="w-[10%] text-center">Target</TableHead>
-                                        <TableHead className="w-[10%] text-center">Balance</TableHead>
-                                        <TableHead className="w-[10%]">Status</TableHead>
-                                        <TableHead className="w-[10%] text-right">Actions</TableHead>
+                                        <TableHead>Doctor</TableHead>
+                                        <TableHead>Location</TableHead>
+                                        <TableHead className="text-center">Type</TableHead>
+                                        <TableHead className="text-center">Target</TableHead>
+                                        <TableHead className="text-center">Balance</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -436,4 +436,5 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 }
 
 
+    
     
