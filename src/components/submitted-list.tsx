@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay, isValid } from "date-fns";
 import Image from "next/image";
-import { useState, useMemo, useRef } from "react";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2 } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -48,6 +48,7 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { analyzeReport, ReportAnalysisInput, ReportAnalysisOutput } from "@/ai/flows/analyze-report-flow";
+import { Checkbox } from "./ui/checkbox";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
@@ -69,7 +70,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean }) => {
+const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -112,7 +113,14 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: Cov
     return (
          <Collapsible asChild>
             <TableBody>
-            <TableRow>
+            <TableRow data-state={isSelected ? "selected" : "unselected"}>
+                <TableCell>
+                    <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => onSelect(entry.id, Boolean(checked))}
+                        aria-label="Select row"
+                    />
+                </TableCell>
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
                         <span>{entry.firstName} {entry.lastName}</span>
@@ -194,7 +202,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly }: { entry: Cov
             </TableRow>
             <CollapsibleContent asChild>
                 <TableRow>
-                    <TableCell colSpan={5} className="p-0">
+                    <TableCell colSpan={6} className="p-0">
                         <div className="p-6 bg-muted/50">
                              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                                 <div className="space-y-4">
@@ -242,12 +250,14 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     const [startDate, setStartDate] = useState<Date | undefined>();
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
+    const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
 
     const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
     const handleApplyRange = () => {
         setAppliedRange({ start: startDate, end: endDate });
+        setSelectedEntryIds([]);
     };
 
     const handleAnalyze = async (entry: CoverageEntry) => {
@@ -294,13 +304,68 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
             return sortedEntries;
         }
 
-        const start = appliedRange.start;
-        const end = appliedRange.end;
+        const start = startOfDay(appliedRange.start);
+        const end = endOfDay(appliedRange.end);
         return sortedEntries.filter(e => {
             const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
             return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
     }, [entries, appliedRange]);
+    
+    useEffect(() => {
+        setSelectedEntryIds([]);
+    }, [entries]);
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedEntryIds(filteredEntries.map(e => e.id));
+        } else {
+            setSelectedEntryIds([]);
+        }
+    };
+
+    const handleSelectEntry = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedEntryIds(prev => [...prev, id]);
+        } else {
+            setSelectedEntryIds(prev => prev.filter(entryId => entryId !== id));
+        }
+    };
+
+    const handleBulkDownloadAttachments = async () => {
+        const zip = new JSZip();
+        const selectedEntries = entries.filter(e => selectedEntryIds.includes(e.id));
+        
+        selectedEntries.forEach(entry => {
+            const folderName = `${entry.firstName}_${entry.lastName}_${format(parseISO(entry.submittedAt), 'yyyyMMdd')}`;
+            const folder = zip.folder(folderName);
+            
+            if (!folder) return;
+
+            if (entry.photos && entry.photos.length > 0) {
+                const photoData = entry.photos[0].split(',')[1];
+                folder.file("photo.png", photoData, { base64: true });
+            }
+            
+            if (entry.signature) {
+                const signatureData = entry.signature.split(',')[1];
+                folder.file("signature.png", signatureData, { base64: true });
+            }
+            
+            if (entry.dsmSignature) {
+                const dsmSignatureData = entry.dsmSignature.split(',')[1];
+                folder.file("dsm_signature.png", dsmSignatureData, { base64: true });
+            }
+            if (entry.jointCallSignature) {
+                const jointCallSignatureData = entry.jointCallSignature.split(',')[1];
+                folder.file(`${entry.jointCallWith}_signature.png`, jointCallSignatureData, { base64: true });
+            }
+        });
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        saveAs(zipBlob, `bulk_attachments_${format(new Date(), 'yyyy-MM-dd')}.zip`);
+    };
+
 
     const entriesByDate = useMemo(() => {
         return entries.reduce((acc, entry) => {
@@ -483,6 +548,12 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                             </PopoverContent>
                         </Popover>
                         <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
+                        {selectedEntryIds.length > 0 && viewMode === 'list' && (
+                             <Button onClick={handleBulkDownloadAttachments} variant="secondary">
+                                <Package className="mr-2" />
+                                Download Attachments ({selectedEntryIds.length})
+                             </Button>
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline"><Download className="mr-2"/> Download</Button>
@@ -502,6 +573,13 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-[50px]">
+                                        <Checkbox 
+                                            checked={selectedEntryIds.length === filteredEntries.length && filteredEntries.length > 0}
+                                            onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                                            aria-label="Select all"
+                                        />
+                                    </TableHead>
                                     <TableHead>Provider</TableHead>
                                     <TableHead>Clinic</TableHead>
                                     <TableHead>Submitted On</TableHead>
@@ -512,12 +590,12 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                             
                                 {filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly}/>
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} />
                                     ))
                                 ) : (
                                     <TableBody>
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={6} className="h-24 text-center">
                                         No submitted entries found for the selected date range.
                                         </TableCell>
                                     </TableRow>
@@ -640,3 +718,5 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
       </>
     );
 }
+
+    
