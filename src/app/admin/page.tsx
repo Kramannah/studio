@@ -17,6 +17,7 @@ import { MarketingList } from '@/components/marketing-list';
 import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CallSummary } from '@/components/call-summary';
+import { USER_DATA_MAP } from '@/lib/user-data';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -51,8 +52,13 @@ export default function AdminPage() {
         const uniqueIds = Array.from(new Set(allUserIds));
         
         const map = new Map<string, string>();
-        uniqueIds.forEach((id, index) => {
-            map.set(id, `User ${index + 1}`);
+        uniqueIds.forEach((id) => {
+            const userData = USER_DATA_MAP[id];
+            if (userData) {
+                map.set(id, `${userData.code}_${userData.lastName}, ${userData.firstName}`);
+            } else {
+                map.set(id, `User ${id.substring(0, 6)}...`);
+            }
         });
         return map;
     }, [allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
@@ -129,7 +135,7 @@ export default function AdminPage() {
                                         <SelectContent>
                                             <SelectItem value="all">All Users</SelectItem>
                                             {Array.from(userMap.entries()).map(([uid, displayName]) => (
-                                                <SelectItem key={uid} value={uid}>{displayName} ({uid.substring(0, 10)}...)</SelectItem>
+                                                <SelectItem key={uid} value={uid}>{displayName}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
