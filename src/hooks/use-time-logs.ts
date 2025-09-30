@@ -25,19 +25,27 @@ export const useTimeLogs = () => {
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"));
+      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid));
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
       let foundTodaysTimeIn = false;
       querySnapshot.forEach((doc) => {
         const log = { id: doc.id, ...doc.data() } as TimeLog;
         fetchedLogs.push(log);
+      });
+      
+      // Sort on the client side
+      fetchedLogs.sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+
+      fetchedLogs.forEach(log => {
         const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
         if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
           setTodaysTimeIn(log);
           foundTodaysTimeIn = true;
         }
       });
+
+
       setTimeLogs(fetchedLogs);
       if (!foundTodaysTimeIn) {
         setTodaysTimeIn(null);
