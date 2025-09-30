@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut } from "lucide-react";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -67,6 +67,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return {
                 completed3x: { actual: 0, total: 0, percentage: 0 },
                 coverageReach: { actual: 0, total: 0, percentage: 0 },
+                callRate: { actual: 0, total: 0, percentage: 0 },
                 avgCallsPerDay: 0,
                 totalWorkingDays: 0,
                 totalInbaseDays: 0,
@@ -135,10 +136,17 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         }, [] as {name: string, calls: number, date: Date}[]);
 
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
+
+        const totalTargetCalls = doctors.reduce((acc, doc) => {
+            const frequency = parseInt(doc.frequency.replace('x', ''), 10) || 0;
+            return acc + frequency;
+        }, 0);
+        const callRatePercentage = totalTargetCalls > 0 ? Math.round((totalCalls / totalTargetCalls) * 100) : 0;
         
         return {
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
+            callRate: { actual: totalCalls, total: totalTargetCalls, percentage: callRatePercentage },
             avgCallsPerDay,
             totalWorkingDays,
             totalInbaseDays: inbaseDays.size,
@@ -198,6 +206,7 @@ Please find the call summary report for the selected period.
 Summary:
 - Call Concentration (3x/4x): ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)
 - Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)
+- Call Rate: ${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)
 - Average Calls Per Day: ${insights.avgCallsPerDay}
 - Total Working Days: ${insights.totalWorkingDays}
 - In-base Days: ${insights.totalInbaseDays}
@@ -287,7 +296,14 @@ Summary:
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <StatCard 
+                        title="Call Rate" 
+                        value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
+                        description="Total submitted vs. total monthly target." 
+                        icon={Percent}
+                        color="text-orange-500"
+                    />
                     <StatCard 
                         title="Call Concentration" 
                         value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
