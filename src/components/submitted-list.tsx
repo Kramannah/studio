@@ -336,31 +336,46 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
         const zip = new JSZip();
         const selectedEntries = entries.filter(e => selectedEntryIds.includes(e.id));
         
+        const entriesGroupedByDate: Record<string, CoverageEntry[]> = {};
         selectedEntries.forEach(entry => {
-            const folderName = `${entry.firstName}_${entry.lastName}_${format(parseISO(entry.submittedAt), 'yyyyMMdd')}`;
-            const folder = zip.folder(folderName);
-            
-            if (!folder) return;
-
-            if (entry.photos && entry.photos.length > 0) {
-                const photoData = entry.photos[0].split(',')[1];
-                folder.file("photo.png", photoData, { base64: true });
+            const dateString = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
+            if (!entriesGroupedByDate[dateString]) {
+                entriesGroupedByDate[dateString] = [];
             }
-            
-            if (entry.signature) {
-                const signatureData = entry.signature.split(',')[1];
-                folder.file("signature.png", signatureData, { base64: true });
-            }
-            
-            if (entry.dsmSignature) {
-                const dsmSignatureData = entry.dsmSignature.split(',')[1];
-                folder.file("dsm_signature.png", dsmSignatureData, { base64: true });
-            }
-            if (entry.jointCallSignature) {
-                const jointCallSignatureData = entry.jointCallSignature.split(',')[1];
-                folder.file(`${entry.jointCallWith}_signature.png`, jointCallSignatureData, { base64: true });
-            }
+            entriesGroupedByDate[dateString].push(entry);
         });
+
+        for (const dateString in entriesGroupedByDate) {
+            const dateFolder = zip.folder(dateString);
+            if (!dateFolder) continue;
+
+            entriesGroupedByDate[dateString].forEach(entry => {
+                const folderName = `${entry.firstName}_${entry.lastName}_${format(parseISO(entry.submittedAt), 'HHmmss')}`;
+                const entryFolder = dateFolder.folder(folderName);
+
+                if (!entryFolder) return;
+    
+                if (entry.photos && entry.photos.length > 0) {
+                    const photoData = entry.photos[0].split(',')[1];
+                    entryFolder.file("photo.png", photoData, { base64: true });
+                }
+                
+                if (entry.signature) {
+                    const signatureData = entry.signature.split(',')[1];
+                    entryFolder.file("signature.png", signatureData, { base64: true });
+                }
+                
+                if (entry.dsmSignature) {
+                    const dsmSignatureData = entry.dsmSignature.split(',')[1];
+                    entryFolder.file("dsm_signature.png", dsmSignatureData, { base64: true });
+                }
+                if (entry.jointCallSignature) {
+                    const jointCallSignatureData = entry.jointCallSignature.split(',')[1];
+                    entryFolder.file(`${entry.jointCallWith}_signature.png`, jointCallSignatureData, { base64: true });
+                }
+            });
+        }
+
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `bulk_attachments_${format(new Date(), 'yyyy-MM-dd')}.zip`);
@@ -719,4 +734,3 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     );
 }
 
-    
