@@ -13,11 +13,11 @@ import { MarketingList } from "./marketing-list";
 
 interface UserDashboardProps {
     userId: string;
-    allEntries: CoverageEntry[];
-    allDoctors: Doctor[];
-    allPlans: Plan[];
-    allNonCallDays: NonCallDay[];
-    allTimeLogs: TimeLog[];
+    allEntries?: CoverageEntry[];
+    allDoctors?: Doctor[];
+    allPlans?: Plan[];
+    allNonCallDays?: NonCallDay[];
+    allTimeLogs?: TimeLog[];
     allMarketingSamples: MarketingSample[];
 }
 
@@ -25,7 +25,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
     const [activeTab, setActiveTab] = useState('summary');
 
     const userData = useMemo(() => {
-        const userEntries = allEntries.filter(e => e.userId === userId);
+        const userEntries = (allEntries || []).filter(e => e.userId === userId);
         const userUsedQuantities: Record<string, number> = {};
 
         userEntries.forEach(entry => {
@@ -40,10 +40,10 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
 
         return {
             entries: userEntries,
-            doctors: allDoctors.filter(d => d.userId === userId),
-            plans: allPlans.filter(p => p.userId === userId),
-            nonCallDays: allNonCallDays.filter(ncd => ncd.userId === userId),
-            timeLogs: allTimeLogs.filter(tl => tl.userId === userId),
+            doctors: (allDoctors || []).filter(d => d.userId === userId),
+            plans: (allPlans || []).filter(p => p.userId === userId),
+            nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === userId),
+            timeLogs: (allTimeLogs || []).filter(tl => tl.userId === userId),
             usedQuantities: userUsedQuantities,
         }
     }, [userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
@@ -89,7 +89,8 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
                     onAddDoctor={() => {}}
                     onAddDoctorsBulk={() => {}}
                     onUpdateDoctor={() => {}} 
-                    onDeleteDoctor={() => {}} 
+                    onDeleteDoctor={() => {}}
+                    onDeleteDoctorsBulk={() => {}}
                     readOnly={true}
                 />
             </TabsContent>

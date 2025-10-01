@@ -35,7 +35,6 @@ export default function AdminPage() {
         allNonCallDays, 
         allTimeLogs, 
         loading: dataLoading,
-        deleteEntry,
         fetchAllData,
         updateNonCallDayStatus,
     } = useAdminData();
@@ -50,11 +49,11 @@ export default function AdminPage() {
     const managedUserIds = useMemo(() => {
         if (isUserAdmin) {
             const allUserIds = [
-                ...(allEntries || []).map(e => e.userId),
-                ...(allDoctors || []).map(d => d.userId),
-                ...(allPlans || []).map(p => p.userId),
-                ...(allNonCallDays || []).map(n => n.userId),
-                ...(allTimeLogs || []).map(t => t.userId)
+                ...((allEntries || []).map(e => e.userId)),
+                ...((allDoctors || []).map(d => d.userId)),
+                ...((allPlans || []).map(p => p.userId)),
+                ...((allNonCallDays || []).map(n => n.userId)),
+                ...((allTimeLogs || []).map(t => t.userId))
             ];
             return Array.from(new Set(allUserIds));
         }
