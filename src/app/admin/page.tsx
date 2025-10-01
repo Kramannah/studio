@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -88,43 +87,6 @@ export default function AdminPage() {
         }
         return [];
     }, [allNonCallDays, isUserAdmin, isUserManager, managedUserIds]);
-
-    
-    useEffect(() => {
-        if (isUserAdmin && activeTab === 'marketing' && !isUserAdmin) {
-            setActiveTab('reports');
-        }
-    }, [isUserAdmin, activeTab]);
-
-    useEffect(() => {
-        if (!loading && !hasAdminAccess) {
-            router.push('/');
-        }
-    }, [user, loading, hasAdminAccess, router]);
-    
-    const handleAddSamples = async (samples: any) => {
-        const success = await addMarketingSamplesBulk(samples);
-        if (success) {
-            refetchMarketingSamples();
-        }
-        return success;
-    }
-
-    if (loading || !hasAdminAccess) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <p>Loading or redirecting...</p>
-            </div>
-        );
-    }
-    
-    const handleUserSelect = (userId: string) => {
-        if (userId === "all") {
-            setSelectedUserId(null);
-        } else {
-            setSelectedUserId(userId);
-        }
-    }
     
     const teamData = useMemo(() => {
         if (isUserAdmin) {
@@ -143,6 +105,43 @@ export default function AdminPage() {
         };
     }, [isUserAdmin, managedUserIds, allEntries, allDoctors, allNonCallDays, allTimeLogs]);
 
+    useEffect(() => {
+        if (!loading && !hasAdminAccess) {
+            router.push('/');
+        }
+    }, [user, loading, hasAdminAccess, router]);
+
+    useEffect(() => {
+        // Redirect managers away from marketing tab if they somehow land on it
+        if (isUserManager && activeTab === 'marketing') {
+            setActiveTab('reports');
+        }
+    }, [isUserManager, activeTab]);
+    
+    const handleAddSamples = async (samples: any) => {
+        const success = await addMarketingSamplesBulk(samples);
+        if (success) {
+            refetchMarketingSamples();
+        }
+        return success;
+    }
+
+    if (loading || dataLoading || !hasAdminAccess) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+                <p className="ml-4">Loading Dashboard...</p>
+            </div>
+        );
+    }
+    
+    const handleUserSelect = (userId: string) => {
+        if (userId === "all") {
+            setSelectedUserId(null);
+        } else {
+            setSelectedUserId(userId);
+        }
+    }
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -220,14 +219,14 @@ export default function AdminPage() {
                                 allPlans={allPlans}
                                 allNonCallDays={allNonCallDays}
                                 allTimeLogs={allTimeLogs}
-                                allMarketingSamples={marketingSamples}
+                                allMarketingSamples={marketingSamples || []}
                             />
                         ) : (
                            <CallSummary 
-                                entries={teamData.entries}
-                                doctors={teamData.doctors}
-                                nonCallDays={teamData.nonCallDays}
-                                timeLogs={teamData.timeLogs}
+                                entries={teamData.entries || []}
+                                doctors={teamData.doctors || []}
+                                nonCallDays={teamData.nonCallDays || []}
+                                timeLogs={teamData.timeLogs || []}
                                 isAdminView={true}
                            />
                         )}
@@ -242,10 +241,10 @@ export default function AdminPage() {
                     {isUserAdmin && (
                         <TabsContent value="marketing" className="mt-6">
                             <MarketingList
-                                samples={marketingSamples}
-                                usedQuantities={usedQuantities}
+                                samples={marketingSamples || []}
+                                usedQuantities={usedQuantities || {}}
                                 onAddSamplesBulk={handleAddSamples}
-                                readOnly={!isUserAdmin} // Only super admins can manage samples
+                                readOnly={!isUserAdmin}
                                 loading={marketingSamplesLoading}
                                 onRefresh={refetchMarketingSamples}
                             />
@@ -256,4 +255,3 @@ export default function AdminPage() {
         </div>
     );
 }
-
