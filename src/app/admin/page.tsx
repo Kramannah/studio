@@ -125,11 +125,23 @@ export default function AdminPage() {
             setSelectedUserId(userId);
         }
     }
-
-    const displayedEntries = isUserAdmin ? allEntries : (allEntries || []).filter(e => managedUserIds.includes(e.userId));
-    const displayedDoctors = isUserAdmin ? allDoctors : (allDoctors || []).filter(d => managedUserIds.includes(d.userId));
-    const displayedNonCallDays = isUserAdmin ? allNonCallDays : (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId));
-    const displayedTimeLogs = isUserAdmin ? allTimeLogs : (allTimeLogs || []).filter(tl => managedUserIds.includes(tl.userId));
+    
+    const teamData = useMemo(() => {
+        if (isUserAdmin) {
+            return {
+                entries: allEntries,
+                doctors: allDoctors,
+                nonCallDays: allNonCallDays,
+                timeLogs: allTimeLogs,
+            };
+        }
+        return {
+            entries: (allEntries || []).filter(e => managedUserIds.includes(e.userId)),
+            doctors: (allDoctors || []).filter(d => managedUserIds.includes(d.userId)),
+            nonCallDays: (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId)),
+            timeLogs: (allTimeLogs || []).filter(tl => managedUserIds.includes(tl.userId)),
+        };
+    }, [isUserAdmin, managedUserIds, allEntries, allDoctors, allNonCallDays, allTimeLogs]);
 
 
     return (
@@ -212,17 +224,17 @@ export default function AdminPage() {
                             />
                         ) : (
                            <CallSummary 
-                                entries={displayedEntries}
-                                doctors={displayedDoctors}
-                                nonCallDays={displayedNonCallDays}
-                                timeLogs={displayedTimeLogs}
+                                entries={teamData.entries}
+                                doctors={teamData.doctors}
+                                nonCallDays={teamData.nonCallDays}
+                                timeLogs={teamData.timeLogs}
                                 isAdminView={true}
                            />
                         )}
                     </TabsContent>
                     <TabsContent value="approvals" className="mt-6">
                         <NonCallDayApprovals 
-                            nonCallDays={isUserAdmin ? allNonCallDays : (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId))}
+                            nonCallDays={(allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId))}
                             onUpdateStatus={updateNonCallDayStatus}
                             userMap={USER_DATA_MAP}
                         />
