@@ -23,5 +23,5 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "AhkYw50sBueJFvRO8glPlpE4QWt2",
         "wHns6CCKRde4YMf8VZhxLJfAa6H3",
         "ledPtMmuniSwpkYZ5YAXOSREoxl2",
-    ]
+    ],
 };

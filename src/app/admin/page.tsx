@@ -77,8 +77,7 @@ export default function AdminPage() {
     }, [managedUserIds]);
 
     const pendingApprovals = useMemo(() => {
-        if (!allNonCallDays) return [];
-        const allPending = allNonCallDays.filter(ncd => ncd.status === 'pending');
+        const allPending = (allNonCallDays || []).filter(ncd => ncd.status === 'pending');
         if(isUserAdmin) {
             return allPending;
         }
@@ -97,6 +96,7 @@ export default function AdminPage() {
                 timeLogs: allTimeLogs,
             };
         }
+        // For managers, this is the data for the "All Users" view (CallSummary)
         return {
             entries: (allEntries || []).filter(e => managedUserIds.includes(e.userId)),
             doctors: (allDoctors || []).filter(d => managedUserIds.includes(d.userId)),
@@ -153,7 +153,7 @@ export default function AdminPage() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
+                    {user && <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>}
                      {isUserAdmin && (
                         <Link href="/">
                             <Button size="sm" variant="outline" className="font-headline">
