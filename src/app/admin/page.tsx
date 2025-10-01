@@ -88,15 +88,16 @@ export default function AdminPage() {
     }, [allNonCallDays, isUserAdmin, isUserManager, managedUserIds]);
     
     const teamData = useMemo(() => {
+        // For managers, this is the data for the "All Users" view (CallSummary)
+        // For admins, it's all data.
         if (isUserAdmin) {
-            return {
-                entries: allEntries,
-                doctors: allDoctors,
-                nonCallDays: allNonCallDays,
-                timeLogs: allTimeLogs,
+             return {
+                entries: allEntries || [],
+                doctors: allDoctors || [],
+                nonCallDays: allNonCallDays || [],
+                timeLogs: allTimeLogs || [],
             };
         }
-        // For managers, this is the data for the "All Users" view (CallSummary)
         return {
             entries: (allEntries || []).filter(e => managedUserIds.includes(e.userId)),
             doctors: (allDoctors || []).filter(d => managedUserIds.includes(d.userId)),
@@ -169,7 +170,7 @@ export default function AdminPage() {
             </header>
             <main className="flex-1 p-4 md:p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList>
+                     <TabsList>
                         <TabsTrigger value="reports">User Reports</TabsTrigger>
                         <TabsTrigger value="approvals" className="relative">
                             <Bell className="mr-2"/>
@@ -223,10 +224,10 @@ export default function AdminPage() {
                             />
                         ) : (
                            <CallSummary 
-                                entries={teamData.entries || []}
-                                doctors={teamData.doctors || []}
-                                nonCallDays={teamData.nonCallDays || []}
-                                timeLogs={teamData.timeLogs || []}
+                                entries={teamData.entries}
+                                doctors={teamData.doctors}
+                                nonCallDays={teamData.nonCallDays}
+                                timeLogs={teamData.timeLogs}
                                 isAdminView={true}
                            />
                         )}
