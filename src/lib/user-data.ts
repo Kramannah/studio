@@ -100,6 +100,11 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Mary Rose",
         lastName: "Villanueva",
     },
+    "UmyUP0VwccRKLfrej67idFukFz42": {
+        code: "DSM",
+        firstName: "Azarel",
+        lastName: "Daquioag"
+    },
     "SgOR5cjCC6dZ0oABv4nXdntu6pI3": {
         code: "ADMIN",
         firstName: "Admin",
