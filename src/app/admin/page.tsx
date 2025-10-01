@@ -74,7 +74,7 @@ export default function AdminPage() {
         return map;
     }, [managedUserIds]);
 
-    const filteredData = useMemo(() => {
+    const filteredDataForManager = useMemo(() => {
         if (!isUserManager) return { allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs };
 
         return {
@@ -115,6 +115,12 @@ export default function AdminPage() {
             setSelectedUserId(userId);
         }
     }
+
+    const displayedEntries = isUserManager ? filteredDataForManager.allEntries : allEntries;
+    const displayedDoctors = isUserManager ? filteredDataForManager.allDoctors : allDoctors;
+    const displayedNonCallDays = isUserManager ? filteredDataForManager.allNonCallDays : allNonCallDays;
+    const displayedTimeLogs = isUserManager ? filteredDataForManager.allTimeLogs : allTimeLogs;
+
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -182,19 +188,19 @@ export default function AdminPage() {
                         ) : selectedUserId ? (
                             <UserDashboard 
                                 userId={selectedUserId}
-                                allEntries={filteredData.allEntries}
-                                allDoctors={filteredData.allDoctors}
-                                allPlans={filteredData.allPlans}
-                                allNonCallDays={filteredData.allNonCallDays}
-                                allTimeLogs={filteredData.allTimeLogs}
+                                allEntries={allEntries}
+                                allDoctors={allDoctors}
+                                allPlans={allPlans}
+                                allNonCallDays={allNonCallDays}
+                                allTimeLogs={allTimeLogs}
                                 allMarketingSamples={marketingSamples}
                             />
                         ) : (
                            <CallSummary 
-                                entries={filteredData.allEntries}
-                                doctors={filteredData.allDoctors}
-                                nonCallDays={filteredData.allNonCallDays}
-                                timeLogs={filteredData.allTimeLogs}
+                                entries={displayedEntries}
+                                doctors={displayedDoctors}
+                                nonCallDays={displayedNonCallDays}
+                                timeLogs={displayedTimeLogs}
                                 isAdminView={true}
                            />
                         )}
