@@ -13,7 +13,7 @@ import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -22,18 +22,22 @@ import { MarketingList } from "@/components/marketing-list";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
-import { ADMIN_UIDS } from "@/lib/admins";
+import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
 import { TimeLogDialog } from "@/components/time-log-dialog";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useRouter } from 'next/navigation';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master' | 'exams' | 'in-field-coaching';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
-  const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
+  const router = useRouter();
+  const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+  const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+  const hasAdminAccess = isUserAdmin || isUserManager;
 
 
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
@@ -54,6 +58,13 @@ export default function Home() {
       if(syncAllOfflinePlans) syncAllOfflinePlans();
     }
   }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
+  
+  useEffect(() => {
+    // If the user is a manager, redirect them straight to the admin page.
+    if (!authLoading && isUserManager) {
+      router.push('/admin');
+    }
+  }, [authLoading, isUserManager, router]);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -93,8 +104,11 @@ export default function Home() {
     )
   }
   
-  if (!user) {
-    return <LoginPage />;
+  if (!user || isUserManager) {
+    // Show login page if no user, or a loading/redirecting message for managers.
+    return isUserManager 
+      ? <div className="flex items-center justify-center min-h-screen bg-background"><p>Redirecting to manager dashboard...</p></div>
+      : <LoginPage />;
   }
 
   const handleCrmClick = () => {
@@ -281,11 +295,11 @@ export default function Home() {
                 <div className="flex items-center gap-2 p-2">
                      <span className="text-sm text-muted-foreground truncate">{user.email}</span>
                 </div>
-                 {isUserAdmin && (
+                 {hasAdminAccess && (
                   <Link href="/admin" className="w-full">
                     <Button size="sm" variant="outline" className="w-full font-headline">
                       <ShieldCheck className="mr-2" />
-                      Admin
+                      {isUserAdmin ? 'Admin' : 'Manager View'}
                     </Button>
                   </Link>
                 )}
@@ -317,5 +331,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    

@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ADMIN_UIDS } from '@/lib/admins';
+import { ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
 import { LogOut, ShieldCheck, Users, X } from 'lucide-react';
 import Link from 'next/link';
@@ -39,20 +39,31 @@ export default function AdminPage() {
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
     const { addMarketingSamplesBulk } = useAdminMarketingSamples();
 
-    const isUserAdmin = user && ADMIN_UIDS.includes(user.uid);
+    const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+    const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+    const hasAdminAccess = isUserAdmin || isUserManager;
+
+    const managedUserIds = useMemo(() => {
+        if (isUserAdmin) {
+            const allUserIds = [
+                ...allEntries.map(e => e.userId),
+                ...allDoctors.map(d => d.userId),
+                ...allPlans.map(p => p.userId),
+                ...allNonCallDays.map(n => n.userId),
+                ...allTimeLogs.map(t => t.userId)
+            ];
+            return Array.from(new Set(allUserIds));
+        }
+        if (isUserManager && user) {
+            return MANAGER_TEAMS[user.uid] || [];
+        }
+        return [];
+    }, [isUserAdmin, isUserManager, user, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+
 
     const userMap = useMemo(() => {
-        const allUserIds = [
-            ...allEntries.map(e => e.userId),
-            ...allDoctors.map(d => d.userId),
-            ...allPlans.map(p => p.userId),
-            ...allNonCallDays.map(n => n.userId),
-            ...allTimeLogs.map(t => t.userId)
-        ];
-        const uniqueIds = Array.from(new Set(allUserIds));
-        
         const map = new Map<string, string>();
-        uniqueIds.forEach((id) => {
+        managedUserIds.forEach((id) => {
             const userData = USER_DATA_MAP[id];
             if (userData) {
                 map.set(id, `${userData.code}_${userData.lastName}, ${userData.firstName}`);
@@ -61,13 +72,25 @@ export default function AdminPage() {
             }
         });
         return map;
-    }, [allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+    }, [managedUserIds]);
+
+    const filteredData = useMemo(() => {
+        if (!isUserManager) return { allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs };
+
+        return {
+            allEntries: allEntries.filter(e => managedUserIds.includes(e.userId)),
+            allDoctors: allDoctors.filter(d => managedUserIds.includes(d.userId)),
+            allPlans: allPlans.filter(p => managedUserIds.includes(p.userId)),
+            allNonCallDays: allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId)),
+            allTimeLogs: allTimeLogs.filter(tl => managedUserIds.includes(tl.userId)),
+        }
+    }, [isUserManager, managedUserIds, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
 
     useEffect(() => {
-        if (!loading && !isUserAdmin) {
+        if (!loading && !hasAdminAccess) {
             router.push('/');
         }
-    }, [user, loading, isUserAdmin, router]);
+    }, [user, loading, hasAdminAccess, router]);
     
     const handleAddSamples = async (samples: any) => {
         const success = await addMarketingSamplesBulk(samples);
@@ -77,7 +100,7 @@ export default function AdminPage() {
         return success;
     }
 
-    if (loading || !isUserAdmin) {
+    if (loading || !hasAdminAccess) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <p>Loading or redirecting...</p>
@@ -98,15 +121,19 @@ export default function AdminPage() {
              <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
                 <div className="flex items-center gap-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
-                    <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">Admin Dashboard</h1>
+                    <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">
+                        {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
+                    </h1>
                 </div>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>
-                     <Link href="/">
-                        <Button size="sm" variant="outline" className="font-headline">
-                            User View
-                        </Button>
-                    </Link>
+                     {isUserAdmin && (
+                        <Link href="/">
+                            <Button size="sm" variant="outline" className="font-headline">
+                                User View
+                            </Button>
+                        </Link>
+                     )}
                     <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
                         <LogOut className="mr-2"/>
                         Logout
@@ -155,19 +182,19 @@ export default function AdminPage() {
                         ) : selectedUserId ? (
                             <UserDashboard 
                                 userId={selectedUserId}
-                                allEntries={allEntries}
-                                allDoctors={allDoctors}
-                                allPlans={allPlans}
-                                allNonCallDays={allNonCallDays}
-                                allTimeLogs={allTimeLogs}
+                                allEntries={filteredData.allEntries}
+                                allDoctors={filteredData.allDoctors}
+                                allPlans={filteredData.allPlans}
+                                allNonCallDays={filteredData.allNonCallDays}
+                                allTimeLogs={filteredData.allTimeLogs}
                                 allMarketingSamples={marketingSamples}
                             />
                         ) : (
                            <CallSummary 
-                                entries={allEntries}
-                                doctors={allDoctors}
-                                nonCallDays={allNonCallDays}
-                                timeLogs={allTimeLogs}
+                                entries={filteredData.allEntries}
+                                doctors={filteredData.allDoctors}
+                                nonCallDays={filteredData.allNonCallDays}
+                                timeLogs={filteredData.allTimeLogs}
                                 isAdminView={true}
                            />
                         )}
@@ -177,7 +204,7 @@ export default function AdminPage() {
                             samples={marketingSamples}
                             usedQuantities={usedQuantities}
                             onAddSamplesBulk={handleAddSamples}
-                            readOnly={false}
+                            readOnly={!isUserAdmin} // Only super admins can manage samples
                             loading={marketingSamplesLoading}
                             onRefresh={refetchMarketingSamples}
                         />
