@@ -9,7 +9,7 @@ import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -19,7 +19,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -29,7 +29,7 @@ type PlanningCalendarProps = {
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
   nonCallDays: NonCallDay[];
-  onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
+  onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
 };
 
@@ -38,6 +38,18 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-am': 'AM',
     'halfday-pm': 'PM',
 };
+
+const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
+    switch (status) {
+        case 'approved':
+            return <CheckCircle className="w-4 h-4 text-primary" />;
+        case 'rejected':
+            return <XCircle className="w-4 h-4 text-destructive" />;
+        case 'pending':
+        default:
+            return <Clock className="w-4 h-4 text-yellow-500" />;
+    }
+}
 
 
 export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay, readOnly = false }: PlanningCalendarProps) {
@@ -168,13 +180,13 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || !!selectedDayNonCallEntry || isDateInPast || readOnly;
+    const isAddVisitDisabled = !selectedDate || (!!selectedDayNonCallEntry && selectedDayNonCallEntry.status === 'approved') || isDateInPast || readOnly;
     const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || readOnly;
     
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (isDateInPast) return "Cannot add visits for past dates.";
-        if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
+        if (!!selectedDayNonCallEntry && selectedDayNonCallEntry.status === 'approved') return "Cannot add visit on an approved non-call day.";
         return "Add a new visit";
     }
 
@@ -337,9 +349,24 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                     </div>
                      <div className="border rounded-md">
                         {selectedDayNonCallEntry ? (
-                            <div className="p-4 text-center">
-                                <h4 className="font-semibold">{selectedDayNonCallEntry.reason}</h4>
-                                <p className="text-sm text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
+                            <div className="flex items-center justify-between p-4">
+                                <div className="flex flex-col">
+                                    <h4 className="font-semibold">{selectedDayNonCallEntry.reason}</h4>
+                                    <p className="text-sm text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
+                                </div>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Badge variant={selectedDayNonCallEntry.status === 'approved' ? 'secondary' : selectedDayNonCallEntry.status === 'rejected' ? 'destructive' : 'outline'} className="capitalize">
+                                                <StatusIcon status={selectedDayNonCallEntry.status} />
+                                                <span className="ml-2">{selectedDayNonCallEntry.status}</span>
+                                            </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Your non-call day request is {selectedDayNonCallEntry.status}.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         ) : (
                             <Table>

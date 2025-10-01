@@ -65,6 +65,7 @@ export interface NonCallDay {
   reason: string;
   remarks: string;
   dayType: 'wholeday' | 'halfday-am' | 'halfday-pm';
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 export interface MarketingSample {

@@ -44,18 +44,19 @@ export const useNonCallDays = () => {
   }, [fetchNonCallDays]);
 
 
-  const addNonCallDay = useCallback(async (entry: Omit<NonCallDay, 'id' | 'userId'>) => {
+  const addNonCallDay = useCallback(async (entry: Omit<NonCallDay, 'id' | 'userId' | 'status'>) => {
     if (!user) return;
     
     const newEntry = {
       userId: user.uid,
       ...entry,
+      status: 'pending' as const,
     };
 
     try {
       const docRef = await addDoc(collection(db, "nonCallDays"), newEntry);
       setNonCallDays(prev => [...prev, { id: docRef.id, ...newEntry }]);
-      toast({ title: "Non-Call Day Logged", description: `Your entry for ${format(new Date(entry.date), 'PPP')} has been saved.` });
+      toast({ title: "Non-Call Day Logged", description: `Your request for ${format(new Date(entry.date), 'PPP')} has been submitted for approval.` });
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Could not save non-call day." });
     }
@@ -63,3 +64,5 @@ export const useNonCallDays = () => {
 
   return { nonCallDays, addNonCallDay, loading };
 };
+
+    

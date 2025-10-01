@@ -36,7 +36,7 @@ const nonCallDayFormSchema = z.object({
 type NonCallDayDialogProps = {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (data: Omit<NonCallDay, 'id' | 'userId' | 'date'>) => void;
+  onSave: (data: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   selectedDate: Date;
 }
 
@@ -77,7 +77,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
         <DialogHeader>
           <DialogTitle className="font-headline">Log Non-Call Day</DialogTitle>
           <DialogDescription>
-            File for a non-call day for {format(selectedDate, "PPP")}.
+            Submit a request for a non-call day on {format(selectedDate, "PPP")}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -140,7 +140,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               )}
             />
             <DialogFooter>
-              <Button type="submit">Save Entry</Button>
+              <Button type="submit">Submit for Approval</Button>
             </DialogFooter>
           </form>
         </Form>

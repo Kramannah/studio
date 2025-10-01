@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +19,8 @@ import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marke
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CallSummary } from '@/components/call-summary';
 import { USER_DATA_MAP } from '@/lib/user-data';
+import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
+import { Badge } from '@/components/ui/badge';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -34,6 +37,7 @@ export default function AdminPage() {
         loading: dataLoading,
         deleteEntry,
         fetchAllData,
+        updateNonCallDayStatus,
     } = useAdminData();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
@@ -74,17 +78,17 @@ export default function AdminPage() {
         return map;
     }, [managedUserIds]);
 
-    const filteredDataForManager = useMemo(() => {
-        if (!isUserManager) return { allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs };
-
-        return {
-            allEntries: allEntries.filter(e => managedUserIds.includes(e.userId)),
-            allDoctors: allDoctors.filter(d => managedUserIds.includes(d.userId)),
-            allPlans: allPlans.filter(p => managedUserIds.includes(p.userId)),
-            allNonCallDays: allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId)),
-            allTimeLogs: allTimeLogs.filter(tl => managedUserIds.includes(tl.userId)),
+    const pendingApprovals = useMemo(() => {
+        const allPending = allNonCallDays.filter(ncd => ncd.status === 'pending');
+        if(isUserAdmin) {
+            return allPending;
         }
-    }, [isUserManager, managedUserIds, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+        if(isUserManager) {
+            return allPending.filter(ncd => managedUserIds.includes(ncd.userId));
+        }
+        return [];
+    }, [allNonCallDays, isUserAdmin, isUserManager, managedUserIds]);
+
     
     useEffect(() => {
         if (isUserAdmin && activeTab === 'marketing' && !isUserAdmin) {
@@ -122,10 +126,10 @@ export default function AdminPage() {
         }
     }
 
-    const displayedEntries = isUserManager ? filteredDataForManager.allEntries : allEntries;
-    const displayedDoctors = isUserManager ? filteredDataForManager.allDoctors : allDoctors;
-    const displayedNonCallDays = isUserManager ? filteredDataForManager.allNonCallDays : allNonCallDays;
-    const displayedTimeLogs = isUserManager ? filteredDataForManager.allTimeLogs : allTimeLogs;
+    const displayedEntries = isUserAdmin ? allEntries : allEntries.filter(e => managedUserIds.includes(e.userId));
+    const displayedDoctors = isUserAdmin ? allDoctors : allDoctors.filter(d => managedUserIds.includes(d.userId));
+    const displayedNonCallDays = isUserAdmin ? allNonCallDays : allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId));
+    const displayedTimeLogs = isUserAdmin ? allTimeLogs : allTimeLogs.filter(tl => managedUserIds.includes(tl.userId));
 
 
     return (
@@ -156,6 +160,11 @@ export default function AdminPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList>
                         <TabsTrigger value="reports">User Reports</TabsTrigger>
+                        <TabsTrigger value="approvals" className="relative">
+                            <Bell className="mr-2"/>
+                            Approvals
+                            {pendingApprovals.length > 0 && <Badge className="absolute -right-2 -top-2" variant="destructive">{pendingApprovals.length}</Badge>}
+                        </TabsTrigger>
                         {isUserAdmin && <TabsTrigger value="marketing">Marketing Samples</TabsTrigger>}
                     </TabsList>
                     <TabsContent value="reports" className="mt-6">
@@ -211,6 +220,13 @@ export default function AdminPage() {
                            />
                         )}
                     </TabsContent>
+                    <TabsContent value="approvals" className="mt-6">
+                        <NonCallDayApprovals 
+                            nonCallDays={isUserAdmin ? allNonCallDays : allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId))}
+                            onUpdateStatus={updateNonCallDayStatus}
+                            userMap={USER_DATA_MAP}
+                        />
+                    </TabsContent>
                     {isUserAdmin && (
                         <TabsContent value="marketing" className="mt-6">
                             <MarketingList
@@ -228,3 +244,4 @@ export default function AdminPage() {
         </div>
     );
 }
+

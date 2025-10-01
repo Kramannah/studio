@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
 export const useAdminData = () => {
     const { toast } = useToast();
@@ -62,5 +62,17 @@ export const useAdminData = () => {
         }
     }, [toast]);
 
-    return { allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, loading, fetchAllData, deleteEntry };
+    const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
+        try {
+            const nonCallDayRef = doc(db, 'nonCallDays', id);
+            await updateDoc(nonCallDayRef, { status });
+            setAllNonCallDays(prev => prev.map(ncd => ncd.id === id ? { ...ncd, status } : ncd));
+            toast({ title: 'Status Updated', description: `The non-call day has been ${status}.` });
+        } catch (error) {
+            console.error("Error updating status:", error);
+            toast({ variant: "destructive", title: "Update Failed", description: "Could not update the non-call day status." });
+        }
+    }, [toast]);
+
+    return { allEntries, allDoctors, allPlans, allNonCallDays, loading, fetchAllData, deleteEntry, updateNonCallDayStatus };
 };
