@@ -85,6 +85,12 @@ export default function AdminPage() {
             allTimeLogs: allTimeLogs.filter(tl => managedUserIds.includes(tl.userId)),
         }
     }, [isUserManager, managedUserIds, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+    
+    useEffect(() => {
+        if (isUserAdmin && activeTab === 'marketing' && !isUserAdmin) {
+            setActiveTab('reports');
+        }
+    }, [isUserAdmin, activeTab]);
 
     useEffect(() => {
         if (!loading && !hasAdminAccess) {
@@ -150,7 +156,7 @@ export default function AdminPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList>
                         <TabsTrigger value="reports">User Reports</TabsTrigger>
-                        <TabsTrigger value="marketing">Marketing Samples</TabsTrigger>
+                        {isUserAdmin && <TabsTrigger value="marketing">Marketing Samples</TabsTrigger>}
                     </TabsList>
                     <TabsContent value="reports" className="mt-6">
                         <Card className="mb-6">
@@ -205,16 +211,18 @@ export default function AdminPage() {
                            />
                         )}
                     </TabsContent>
-                    <TabsContent value="marketing" className="mt-6">
-                        <MarketingList
-                            samples={marketingSamples}
-                            usedQuantities={usedQuantities}
-                            onAddSamplesBulk={handleAddSamples}
-                            readOnly={!isUserAdmin} // Only super admins can manage samples
-                            loading={marketingSamplesLoading}
-                            onRefresh={refetchMarketingSamples}
-                        />
-                    </TabsContent>
+                    {isUserAdmin && (
+                        <TabsContent value="marketing" className="mt-6">
+                            <MarketingList
+                                samples={marketingSamples}
+                                usedQuantities={usedQuantities}
+                                onAddSamplesBulk={handleAddSamples}
+                                readOnly={!isUserAdmin} // Only super admins can manage samples
+                                loading={marketingSamplesLoading}
+                                onRefresh={refetchMarketingSamples}
+                            />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </main>
         </div>
