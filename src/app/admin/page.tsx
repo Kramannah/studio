@@ -50,11 +50,11 @@ export default function AdminPage() {
     const managedUserIds = useMemo(() => {
         if (isUserAdmin) {
             const allUserIds = [
-                ...allEntries.map(e => e.userId),
-                ...allDoctors.map(d => d.userId),
-                ...allPlans.map(p => p.userId),
-                ...allNonCallDays.map(n => n.userId),
-                ...allTimeLogs.map(t => t.userId)
+                ...(allEntries || []).map(e => e.userId),
+                ...(allDoctors || []).map(d => d.userId),
+                ...(allPlans || []).map(p => p.userId),
+                ...(allNonCallDays || []).map(n => n.userId),
+                ...(allTimeLogs || []).map(t => t.userId)
             ];
             return Array.from(new Set(allUserIds));
         }
@@ -79,6 +79,7 @@ export default function AdminPage() {
     }, [managedUserIds]);
 
     const pendingApprovals = useMemo(() => {
+        if (!allNonCallDays) return [];
         const allPending = allNonCallDays.filter(ncd => ncd.status === 'pending');
         if(isUserAdmin) {
             return allPending;
@@ -126,10 +127,10 @@ export default function AdminPage() {
         }
     }
 
-    const displayedEntries = isUserAdmin ? allEntries : allEntries.filter(e => managedUserIds.includes(e.userId));
-    const displayedDoctors = isUserAdmin ? allDoctors : allDoctors.filter(d => managedUserIds.includes(d.userId));
-    const displayedNonCallDays = isUserAdmin ? allNonCallDays : allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId));
-    const displayedTimeLogs = isUserAdmin ? allTimeLogs : allTimeLogs.filter(tl => managedUserIds.includes(tl.userId));
+    const displayedEntries = isUserAdmin ? allEntries : (allEntries || []).filter(e => managedUserIds.includes(e.userId));
+    const displayedDoctors = isUserAdmin ? allDoctors : (allDoctors || []).filter(d => managedUserIds.includes(d.userId));
+    const displayedNonCallDays = isUserAdmin ? allNonCallDays : (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId));
+    const displayedTimeLogs = isUserAdmin ? allTimeLogs : (allTimeLogs || []).filter(tl => managedUserIds.includes(tl.userId));
 
 
     return (
@@ -222,7 +223,7 @@ export default function AdminPage() {
                     </TabsContent>
                     <TabsContent value="approvals" className="mt-6">
                         <NonCallDayApprovals 
-                            nonCallDays={isUserAdmin ? allNonCallDays : allNonCallDays.filter(ncd => managedUserIds.includes(ncd.userId))}
+                            nonCallDays={isUserAdmin ? allNonCallDays : (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId))}
                             onUpdateStatus={updateNonCallDayStatus}
                             userMap={USER_DATA_MAP}
                         />
