@@ -239,25 +239,22 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     if (isCameraOpen) {
       const getCameraPermission = async () => {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
           setHasCameraPermission(true);
-  
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
         } catch (error) {
-          console.error('Error accessing camera:', error);
+          console.error("Error accessing camera:", error);
           setHasCameraPermission(false);
           toast({
-            variant: 'destructive',
-            title: 'Camera Access Denied',
-            description: 'Please enable camera permissions in your browser settings to use this app.',
+            variant: "destructive",
+            title: "Camera Access Denied",
+            description: "Please enable camera permissions in your browser settings to use this feature.",
           });
         }
       };
       getCameraPermission();
-    } else {
-      stopCamera();
     }
     return () => {
       stopCamera();
@@ -1021,9 +1018,9 @@ clinic: "",
                 </div>
                  {!hasCameraPermission && (
                     <Alert variant="destructive">
-                        <AlertTitle>Camera Access Denied</AlertTitle>
+                        <AlertTitle>Camera Access Required</AlertTitle>
                         <AlertDescription>
-                            Please enable camera permissions in your browser settings.
+                            Please allow camera access to use this feature.
                         </AlertDescription>
                     </Alert>
                 )}

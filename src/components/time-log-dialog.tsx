@@ -50,9 +50,8 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     if (isOpen) {
       const getCameraPermission = async () => {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
           setHasCameraPermission(true);
-  
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
@@ -97,7 +96,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   const handleRetake = () => {
     setPhoto(null);
     if(isOpen) {
-        // Re-request camera permission if needed
         const getCameraPermission = async () => {
             try {
               const stream = await navigator.mediaDevices.getUserMedia({video: true});
@@ -133,8 +131,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     onOpenChange(false);
   }
 
-  const isCameraActive = !!(videoRef.current?.srcObject);
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
@@ -153,7 +149,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
             ) : (
                 <>
                     <video ref={videoRef} className="h-full w-full" autoPlay muted playsInline />
-                    {!isCameraActive && !hasCameraPermission && (
+                     {!hasCameraPermission && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
                              <Alert variant="destructive">
                                 <AlertTitle>Camera Access Required</AlertTitle>
@@ -161,12 +157,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
                                     Please allow camera access to use this feature.
                                 </AlertDescription>
                             </Alert>
-                        </div>
-                    )}
-                     {!isCameraActive && hasCameraPermission && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                           <Video className="w-16 h-16 text-muted-foreground mb-4" />
-                           <p className="text-muted-foreground">Starting camera...</p>
                         </div>
                     )}
               </>
@@ -178,12 +168,10 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
                   Retake Photo
                 </Button>
             ) : (
-                isCameraActive && (
-                    <Button onClick={handleCapture} disabled={!hasCameraPermission}>
-                      <Camera className="mr-2" />
-                      Capture Photo
-                    </Button>
-                )
+                <Button onClick={handleCapture} disabled={!hasCameraPermission}>
+                    <Camera className="mr-2" />
+                    Capture Photo
+                </Button>
             )}
           </div>
           {mode === "time-in" && (
