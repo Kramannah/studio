@@ -39,7 +39,6 @@ import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
-import { managers } from "@/lib/managers"
 
 
 const formSchema = z.object({
@@ -137,6 +136,14 @@ const productList = [
   "Tocovid-Tocovid 50mg",
   "Tocovid-Tocovid D'Repair",
   "Tocovid-Tocovid Vitality",
+];
+
+const jointCallRoles = [
+    "DSM",
+    "General Manager",
+    "Head of Sales",
+    "SFE",
+    "Product Manager"
 ];
 
 
@@ -962,12 +969,12 @@ clinic: "",
                                           <Select onValueChange={field.onChange} value={field.value}>
                                           <FormControl>
                                               <SelectTrigger>
-                                              <SelectValue placeholder="Select manager..." />
+                                              <SelectValue placeholder="Select companion..." />
                                               </SelectTrigger>
                                           </FormControl>
                                           <SelectContent>
-                                              {managers.map(manager => (
-                                                <SelectItem key={manager.uid} value={manager.name}>{manager.name}</SelectItem>
+                                              {jointCallRoles.map(role => (
+                                                <SelectItem key={role} value={role}>{role}</SelectItem>
                                               ))}
                                           </SelectContent>
                                           </Select>
