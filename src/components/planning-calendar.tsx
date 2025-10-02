@@ -33,8 +33,8 @@ type PlanningCalendarProps = {
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
-  planningRequests: PlanningPermissionRequest[];
-  onPermissionRequest: (weekStartDate: Date, reason: string) => Promise<boolean>;
+  planningRequests?: PlanningPermissionRequest[];
+  onPermissionRequest?: (weekStartDate: Date, reason: string) => Promise<boolean>;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -190,7 +190,7 @@ export function PlanningCalendar({
     const isPastDate = selectedDate ? isBefore(selectedDate, today) : false;
 
     const currentWeekRequest = useMemo(() => {
-        if (!selectedDate) return null;
+        if (!selectedDate || !planningRequests) return null;
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
         return planningRequests.find(req => isValid(parseISO(req.weekStartDate)) && isSameDay(parseISO(req.weekStartDate), weekStart));
     }, [planningRequests, selectedDate]);
@@ -204,12 +204,12 @@ export function PlanningCalendar({
     }, [selectedDate, isCurrentWeek, isPastDate, currentWeekRequest]);
 
     const showRequestButton = useMemo(() => {
-        if (readOnly || !selectedDate) return false;
+        if (readOnly || !selectedDate || !onPermissionRequest) return false;
         return isCurrentWeek && !isPastDate && (!currentWeekRequest || currentWeekRequest.status === 'rejected');
-    }, [readOnly, selectedDate, isCurrentWeek, isPastDate, currentWeekRequest]);
+    }, [readOnly, selectedDate, isCurrentWeek, isPastDate, currentWeekRequest, onPermissionRequest]);
     
     const handlePermissionRequest = async (reason: string) => {
-        if(selectedDate) {
+        if(selectedDate && onPermissionRequest) {
             const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
             return await onPermissionRequest(weekStart, reason);
         }
