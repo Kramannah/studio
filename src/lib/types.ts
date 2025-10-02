@@ -14,7 +14,7 @@ export interface CoverageEntry {
   photos?: string[]; // base64 encoded strings
   signature?: string | null; // base64 encoded string
   dsmSignature?: string | null; // base64 encoded string
-  jointCallWith?: 'HOS' | 'GM' | 'PM' | 'SFE';
+  jointCallWith?: string;
   jointCallSignature?: string | null;
   submittedAt: string; // Storing as ISO string
   callObjective?: string;

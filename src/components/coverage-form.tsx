@@ -39,6 +39,7 @@ import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
+import { managers } from "@/lib/managers"
 
 
 const formSchema = z.object({
@@ -55,7 +56,7 @@ const formSchema = z.object({
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable().optional(),
   dsmSignature: z.string().nullable().optional(),
-  jointCallWith: z.enum(["HOS", "GM", "PM", "SFE"]).optional(),
+  jointCallWith: z.string().optional(),
   jointCallSignature: z.string().nullable().optional(),
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
@@ -91,7 +92,7 @@ const formSchema = z.object({
         if (!data.jointCallWith) {
              ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Please select the role of the person you are with.",
+                message: "Please select the person you are with.",
                 path: ["jointCallWith"],
             });
         }
@@ -172,6 +173,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       signature: null,
       dsmSignature: null,
       jointCallSignature: null,
+      jointCallWith: "",
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
@@ -971,14 +973,13 @@ clinic: "",
                                           <Select onValueChange={field.onChange} value={field.value}>
                                           <FormControl>
                                               <SelectTrigger>
-                                              <SelectValue placeholder="Select role..." />
+                                              <SelectValue placeholder="Select manager..." />
                                               </SelectTrigger>
                                           </FormControl>
                                           <SelectContent>
-                                              <SelectItem value="HOS">HOS</SelectItem>
-                                              <SelectItem value="GM">GM</SelectItem>
-                                              <SelectItem value="PM">PM</SelectItem>
-                                              <SelectItem value="SFE">SFE</SelectItem>
+                                              {managers.map(manager => (
+                                                <SelectItem key={manager.uid} value={manager.name}>{manager.name}</SelectItem>
+                                              ))}
                                           </SelectContent>
                                           </Select>
                                           <FormMessage />
