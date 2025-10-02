@@ -1,15 +1,15 @@
 
 "use client"
 
-import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
+import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, ShieldQuestion } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -20,6 +20,8 @@ import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "./ui/tooltip";
+import { PlanningPermissionDialog } from "./planning-permission-dialog";
+
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -31,6 +33,8 @@ type PlanningCalendarProps = {
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
+  planningRequests: PlanningPermissionRequest[];
+  onPermissionRequest: (weekStartDate: Date, reason: string) => Promise<boolean>;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -52,10 +56,23 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
 }
 
 
-export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemovePlan, onLogCall, nonCallDays, onAddNonCallDay, readOnly = false }: PlanningCalendarProps) {
+export function PlanningCalendar({ 
+    doctors, 
+    plans, 
+    entries, 
+    onAddPlan, 
+    onRemovePlan, 
+    onLogCall, 
+    nonCallDays, 
+    onAddNonCallDay, 
+    readOnly = false,
+    planningRequests,
+    onPermissionRequest
+}: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
+    const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
 
     const visitCountsThisMonth = useMemo(() => {
@@ -168,7 +185,36 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         }
     }
 
-    const isDateInPast = selectedDate ? isBefore(selectedDate, startOfToday()) : false;
+    const today = startOfToday();
+    const isCurrentWeek = selectedDate ? isSameWeek(selectedDate, today, { weekStartsOn: 1 }) : false;
+    const isPastDate = selectedDate ? isBefore(selectedDate, today) : false;
+
+    const currentWeekRequest = useMemo(() => {
+        if (!selectedDate) return null;
+        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        return planningRequests.find(req => isValid(parseISO(req.weekStartDate)) && isSameDay(parseISO(req.weekStartDate), weekStart));
+    }, [planningRequests, selectedDate]);
+
+    const canPlanCalls = useMemo(() => {
+        if (!selectedDate) return false;
+        // Can always plan for future weeks
+        if (!isCurrentWeek && !isPastDate) return true;
+        // Can plan for current week only if request is approved
+        return isCurrentWeek && currentWeekRequest?.status === 'approved';
+    }, [selectedDate, isCurrentWeek, isPastDate, currentWeekRequest]);
+
+    const showRequestButton = useMemo(() => {
+        if (readOnly || !selectedDate) return false;
+        return isCurrentWeek && !isPastDate && (!currentWeekRequest || currentWeekRequest.status === 'rejected');
+    }, [readOnly, selectedDate, isCurrentWeek, isPastDate, currentWeekRequest]);
+    
+    const handlePermissionRequest = async (reason: string) => {
+        if(selectedDate) {
+            const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+            return await onPermissionRequest(weekStart, reason);
+        }
+        return false;
+    };
 
     if (doctors.length === 0 && !readOnly) {
         return (
@@ -180,13 +226,16 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
         );
     }
 
-    const isAddVisitDisabled = !selectedDate || (!!selectedDayNonCallEntry && selectedDayNonCallEntry.status === 'approved') || isDateInPast || readOnly;
-    const isAddNonCallDisabled = !selectedDate || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry || readOnly;
+    const isAddVisitDisabled = readOnly || !canPlanCalls || !!selectedDayNonCallEntry;
+    const isAddNonCallDisabled = readOnly || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry;
     
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
-        if (isDateInPast) return "Cannot add visits for past dates.";
-        if (!!selectedDayNonCallEntry && selectedDayNonCallEntry.status === 'approved') return "Cannot add visit on an approved non-call day.";
+        if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
+        if (!canPlanCalls) {
+             if (isCurrentWeek) return "You need manager approval to plan calls for the current week.";
+             if (isPastDate) return "Cannot add visits for past dates.";
+        }
         return "Add a new visit";
     }
 
@@ -243,11 +292,16 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                     />
                 </div>
                 <div>
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                         <h3 className="text-xl font-semibold font-headline">
                             Plans for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
                         </h3>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                            {showRequestButton && (
+                                <Button variant="outline" onClick={() => setIsPermissionDialogOpen(true)}>
+                                    <ShieldQuestion className="mr-2"/> Request Permission
+                                </Button>
+                            )}
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
@@ -318,9 +372,11 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                                                                         <TableCell className="text-right">
                                                                             <Tooltip>
                                                                                 <TooltipTrigger asChild>
-                                                                                    <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} disabled={isAlreadyPlanned}>
-                                                                                        <PlusCircle size={16}/>
-                                                                                    </Button>
+                                                                                    <span>
+                                                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} disabled={isAlreadyPlanned}>
+                                                                                            <PlusCircle size={16}/>
+                                                                                        </Button>
+                                                                                    </span>
                                                                                 </TooltipTrigger>
                                                                                 <TooltipContent>
                                                                                     {isAlreadyPlanned ? <p>Already planned for this day.</p> : <p>Add to plan</p>}
@@ -388,8 +444,8 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
 
                                             const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
                                             const isCovered = dayEntries.some(entry => 
-                                                entry.firstName.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
-                                                entry.lastName.toLowerCase() === plan.doctorLastName.toLowerCase()
+                                                entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
+                                                entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             
@@ -448,12 +504,18 @@ export function PlanningCalendar({ doctors, plans, entries, onAddPlan, onRemoveP
                     </div>
                 </div>
             </CardContent>
-             {selectedDate && <NonCallDayDialog 
+            {selectedDate && <NonCallDayDialog 
                 isOpen={isNonCallDialogOpen}
                 onOpenChange={setIsNonCallDialogOpen}
                 onSave={handleSaveNonCallDay}
                 selectedDate={selectedDate}
-             />}
+            />}
+            {selectedDate && <PlanningPermissionDialog
+                isOpen={isPermissionDialogOpen}
+                onOpenChange={setIsPermissionDialogOpen}
+                onConfirm={handlePermissionRequest}
+                weekStartDate={startOfWeek(selectedDate, { weekStartsOn: 1})}
+            />}
         </Card>
     );
 }
