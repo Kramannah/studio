@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent } from "lucide-react";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent, Briefcase, Pill } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -73,6 +73,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
                 totalInbaseDays: 0,
                 totalOutbaseDays: 0,
                 monthlyPerformance: [],
+                topProducts: [],
+                topSpecialties: [],
                 isDataAvailable: false,
             };
         }
@@ -142,7 +144,28 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc + frequency;
         }, 0);
         const callRatePercentage = totalTargetCalls > 0 ? Math.round((totalCalls / totalTargetCalls) * 100) : 0;
-        
+
+        const productCounts = filteredEntries.reduce((acc, entry) => {
+            if (entry.primaryProduct) acc[entry.primaryProduct] = (acc[entry.primaryProduct] || 0) + 1;
+            if (entry.secondaryProduct) acc[entry.secondaryProduct] = (acc[entry.secondaryProduct] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const topProducts = Object.entries(productCounts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
+        const specialtyCounts = filteredEntries.reduce((acc, entry) => {
+            if (entry.specialty) acc[entry.specialty] = (acc[entry.specialty] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const topSpecialties = Object.entries(specialtyCounts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
         return {
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
@@ -152,6 +175,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             totalInbaseDays: inbaseDays.size,
             totalOutbaseDays: outbaseDays.size,
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
+            topProducts,
+            topSpecialties,
             isDataAvailable: true,
         };
     }, [filteredEntriesForRange, doctors, entries]);
@@ -350,7 +375,51 @@ Summary:
             </Card>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-2"><Pill />Top Products Discussed</CardTitle>
+                        <CardDescription>Top 5 products mentioned in calls for the selected period.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={insights.topProducts} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" allowDecimals={false} />
+                                <YAxis type="category" dataKey="name" width={150} interval={0} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--background))",
+                                        borderColor: "hsl(var(--border))"
+                                    }}
+                                />
+                                <Bar dataKey="count" fill="hsl(var(--chart-2))" name="Mentions" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
                 <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-2"><Briefcase />Top Specialties Visited</CardTitle>
+                        <CardDescription>Top 5 doctor specialties visited for the selected period.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={insights.topSpecialties} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" allowDecimals={false} />
+                                <YAxis type="category" dataKey="name" width={120} interval={0} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "hsl(var(--background))",
+                                        borderColor: "hsl(var(--border))"
+                                    }}
+                                />
+                                <Bar dataKey="count" fill="hsl(var(--chart-4))" name="Visits" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle className="font-headline">Monthly Performance</CardTitle>
                         <CardDescription>Total calls over the last few months.</CardDescription>
@@ -424,58 +493,57 @@ Summary:
                         </div>
                     </CardContent>
                 </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Non-Call Day</CardTitle>
-                    <CardDescription>A log of all submitted non-call days in the selected period.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="border rounded-md">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    {isAdminView && <TableHead>User ID</TableHead>}
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Type</TableHead>
-                                    <TableHead>Reason</TableHead>
-                                    <TableHead>Remarks</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredNonCallDays.length > 0 ? (
-                                    filteredNonCallDays.map((day) => {
-                                        const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
-                                        return (
-                                            <TableRow key={day.id}>
-                                                {isAdminView && (
-                                                    <TableCell>
-                                                        <Badge variant="secondary" className="font-mono text-xs">{day.userId.substring(0, 10)}...</Badge>
-                                                    </TableCell>
-                                                )}
-                                                <TableCell className="font-medium">{isValid(dayDate) ? format(dayDate, "PPP") : "Invalid Date"}</TableCell>
-                                                <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
-                                                <TableCell>{day.reason}</TableCell>
-                                                <TableCell>{day.remarks || 'N/A'}</TableCell>
-                                            </TableRow>
-                                        )
-                                    })
-                                ) : (
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="font-headline">Non-Call Day</CardTitle>
+                        <CardDescription>A log of all submitted non-call days in the selected period.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="border rounded-md">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={isAdminView ? 5 : 4} className="h-24 text-center">
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-                                                <p>No non-call days have been logged for this period.</p>
-                                            </div>
-                                        </TableCell>
+                                        {isAdminView && <TableHead>User ID</TableHead>}
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Reason</TableHead>
+                                        <TableHead>Remarks</TableHead>
                                     </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredNonCallDays.length > 0 ? (
+                                        filteredNonCallDays.map((day) => {
+                                            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+                                            return (
+                                                <TableRow key={day.id}>
+                                                    {isAdminView && (
+                                                        <TableCell>
+                                                            <Badge variant="secondary" className="font-mono text-xs">{day.userId.substring(0, 10)}...</Badge>
+                                                        </TableCell>
+                                                    )}
+                                                    <TableCell className="font-medium">{isValid(dayDate) ? format(dayDate, "PPP") : "Invalid Date"}</TableCell>
+                                                    <TableCell>{dayTypeLabels[day.dayType] || 'N/A'}</TableCell>
+                                                    <TableCell>{day.reason}</TableCell>
+                                                    <TableCell>{day.remarks || 'N/A'}</TableCell>
+                                                </TableRow>
+                                            )
+                                        })
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={isAdminView ? 5 : 4} className="h-24 text-center">
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+                                                    <p>No non-call days have been logged for this period.</p>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
