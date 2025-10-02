@@ -55,7 +55,6 @@ const formSchema = z.object({
   coverageDate: z.date().optional(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable().optional(),
-  dsmSignature: z.string().nullable().optional(),
   jointCallWith: z.string().optional(),
   jointCallSignature: z.string().nullable().optional(),
   callObjective: z.string().optional(),
@@ -82,13 +81,6 @@ const formSchema = z.object({
         });
     }
     if (data.coverageType === 'joint') {
-        if (!data.dsmSignature) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "A DSM signature is required for joint calls.",
-                path: ["dsmSignature"],
-            });
-        }
         if (!data.jointCallWith) {
              ctx.addIssue({
                 code: z.ZodIssueCode.custom,
@@ -156,7 +148,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
-  const [signatureFieldToUpdate, setSignatureFieldToUpdate] = useState<'signature' | 'dsmSignature' | 'jointCallSignature' | null>(null);
+  const [signatureFieldToUpdate, setSignatureFieldToUpdate] = useState<'signature' | 'jointCallSignature' | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -171,7 +163,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       coverageDate: new Date(),
       photos: [],
       signature: null,
-      dsmSignature: null,
       jointCallSignature: null,
       jointCallWith: "",
       callObjective: "",
@@ -200,7 +191,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const primaryProduct = form.watch("primaryProduct");
   const secondaryProduct = form.watch("secondaryProduct");
   const signature = form.watch("signature");
-  const dsmSignature = form.watch("dsmSignature");
   const jointCallSignature = form.watch("jointCallSignature");
 
   const primarySampleOptions = useMemo(() => {
@@ -316,7 +306,6 @@ clinic: "",
       coverageDate: new Date(),
       photos: [],
       signature: null,
-      dsmSignature: null,
       jointCallWith: undefined,
       jointCallSignature: null,
       callObjective: "",
@@ -409,7 +398,7 @@ clinic: "",
     }
   }
 
-  const openSignaturePad = (fieldName: 'signature' | 'dsmSignature' | 'jointCallSignature') => {
+  const openSignaturePad = (fieldName: 'signature' | 'jointCallSignature') => {
     setSignatureFieldToUpdate(fieldName);
     setIsSignaturePadOpen(true);
   }
@@ -986,18 +975,6 @@ clinic: "",
                                       </FormItem>
                                       )}
                                   />
-                                  <div className="space-y-2">
-                                      <Label>DSM Signature</Label>
-                                      {dsmSignature ? (
-                                          <div className="p-2 border rounded-md bg-muted w-fit">
-                                              <Image src={dsmSignature} alt="DSM signature" width={200} height={100} className="bg-white rounded" />
-                                          </div>
-                                      ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
-                                      <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('dsmSignature')}>
-                                          <Edit className="mr-2"/> {dsmSignature ? 'Edit' : 'Add'} Signature
-                                      </Button>
-                                      <FormMessage>{form.formState.errors.dsmSignature?.message}</FormMessage>
-                                  </div>
                                   <div className="space-y-2">
                                       <Label>{jointCallWith || 'Companion'} Signature</Label>
                                       {jointCallSignature ? (

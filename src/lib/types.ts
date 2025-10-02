@@ -13,7 +13,6 @@ export interface CoverageEntry {
   coverageDate?: string; // Storing as ISO string
   photos?: string[]; // base64 encoded strings
   signature?: string | null; // base64 encoded string
-  dsmSignature?: string | null; // base64 encoded string
   jointCallWith?: string;
   jointCallSignature?: string | null;
   submittedAt: string; // Storing as ISO string
