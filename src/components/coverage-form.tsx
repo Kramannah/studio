@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 
 
 const formSchema = z.object({
@@ -150,6 +151,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState(true);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
@@ -217,41 +219,52 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     form.setValue("secondarySampleName", undefined);
   }, [secondaryProduct, form]);
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
+  }, []);
+
+  const handleOpenCamera = () => {
+      setIsCameraOpen(true);
   };
   
-  const handleOpenCamera = async () => {
-    setIsCameraOpen(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      toast({
-        title: 'Camera Access Granted',
-        description: 'You can now take a selfie.',
-      });
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Camera Access Denied',
-        description: 'Please enable camera permissions in your browser settings.',
-      });
-      setIsCameraOpen(false); // Close dialog if permission is denied
-    }
-  };
-
-
   const handleCloseCamera = () => {
     stopCamera();
     setIsCameraOpen(false);
   };
+
+  useEffect(() => {
+    if (isCameraOpen) {
+      const getCameraPermission = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          setHasCameraPermission(true);
+  
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error('Error accessing camera:', error);
+          setHasCameraPermission(false);
+          toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings to use this app.',
+          });
+        }
+      };
+      getCameraPermission();
+    } else {
+      stopCamera();
+    }
+    return () => {
+      stopCamera();
+    }
+  }, [isCameraOpen, stopCamera, toast]);
+
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -361,7 +374,7 @@ clinic: "",
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [stopCamera]);
 
   const handleAutocompleteSelect = (doctor: Doctor) => {
     form.setValue("firstName", doctor.firstName);
@@ -1016,13 +1029,21 @@ clinic: "",
                     <DialogTitle>Capture Photo</DialogTitle>
                 </DialogHeader>
                 <div className="relative">
-                    <video ref={videoRef} className="w-full rounded-md" autoPlay muted playsInline />
+                    <video ref={videoRef} className="w-full rounded-md aspect-video" autoPlay muted playsInline />
                     <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={handleCloseCamera}>
                         <X />
                     </Button>
                 </div>
+                 {!hasCameraPermission && (
+                    <Alert variant="destructive">
+                        <AlertTitle>Camera Access Denied</AlertTitle>
+                        <AlertDescription>
+                            Please enable camera permissions in your browser settings.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <DialogFooter>
-                    <Button onClick={handleCapture} className="w-full">
+                    <Button onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
                         <Camera className="mr-2" />
                         Capture
                     </Button>
@@ -1038,5 +1059,3 @@ clinic: "",
     </Card>
   )
 }
-
-    

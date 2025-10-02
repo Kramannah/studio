@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,43 +32,50 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   const [photo, setPhoto] = useState<string | null>(null)
   const [locationType, setLocationType] = useState<"inbase" | "outbase">("inbase")
   const [hasCameraPermission, setHasCameraPermission] = useState(true)
-  const [isCameraActive, setIsCameraActive] = useState(false)
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach(track => track.stop())
-      videoRef.current.srcObject = null
-      setIsCameraActive(false);
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
     }
-  }
+  }, []);
 
-  const startCamera = async () => {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-        }
-        setIsCameraActive(true);
-    } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
-    }
-  }
-
-  const resetState = () => {
+  const resetState = useCallback(() => {
     setPhoto(null);
-    setIsCameraActive(false);
     setHasCameraPermission(true);
-  }
+  }, []);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      const getCameraPermission = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          setHasCameraPermission(true);
+  
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error('Error accessing camera:', error);
+          setHasCameraPermission(false);
+          toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings to use this app.',
+          });
+        }
+      };
+      getCameraPermission();
+    } else {
       stopCamera();
       resetState();
     }
-  }, [isOpen]);
+
+    return () => {
+        stopCamera();
+    }
+  }, [isOpen, stopCamera, resetState, toast]);
 
 
   const handleCapture = () => {
@@ -89,7 +96,23 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   
   const handleRetake = () => {
     setPhoto(null);
-    startCamera();
+    if(isOpen) {
+        // Re-request camera permission if needed
+        const getCameraPermission = async () => {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({video: true});
+              setHasCameraPermission(true);
+      
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+              }
+            } catch (error) {
+              console.error('Error accessing camera:', error);
+              setHasCameraPermission(false);
+            }
+        };
+        getCameraPermission();
+    }
   }
 
   const handleSubmit = () => {
@@ -110,6 +133,8 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     onOpenChange(false);
   }
 
+  const isCameraActive = !!(videoRef.current?.srcObject);
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
@@ -125,28 +150,26 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
           <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-muted">
             {photo ? (
               <Image src={photo} alt="Captured proof" layout="fill" objectFit="cover" />
-            ) : isCameraActive ? (
+            ) : (
                 <>
                     <video ref={videoRef} className="h-full w-full" autoPlay muted playsInline />
-                    {!hasCameraPermission && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-black/50 text-white">
-                         <Alert variant="destructive">
-                            <AlertTitle>Camera Access Denied</AlertTitle>
-                            <AlertDescription>
-                                Please enable camera permissions in your browser settings to use this feature.
-                            </AlertDescription>
-                        </Alert>
-                    </div>
+                    {!isCameraActive && !hasCameraPermission && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                             <Alert variant="destructive">
+                                <AlertTitle>Camera Access Required</AlertTitle>
+                                <AlertDescription>
+                                    Please allow camera access to use this feature.
+                                </AlertDescription>
+                            </Alert>
+                        </div>
+                    )}
+                     {!isCameraActive && hasCameraPermission && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                           <Video className="w-16 h-16 text-muted-foreground mb-4" />
+                           <p className="text-muted-foreground">Starting camera...</p>
+                        </div>
                     )}
               </>
-            ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                    <Video className="w-16 h-16 text-muted-foreground mb-4" />
-                    <Button onClick={startCamera}>
-                        <Camera className="mr-2" />
-                        Start Camera
-                    </Button>
-                </div>
             )}
           </div>
           <div className="flex justify-center">
