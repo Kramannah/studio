@@ -13,7 +13,7 @@ export interface CoverageEntry {
   coverageDate?: string; // Storing as ISO string
   photos?: string[]; // base64 encoded strings
   signature?: string | null; // base64 encoded string
-  dsmSignature?: string | null; // base64 encoded string for DSM
+  dsmSignature?: string | null; // base64 encoded string
   jointCallWith?: 'HOS' | 'GM' | 'PM' | 'SFE';
   jointCallSignature?: string | null;
   submittedAt: string; // Storing as ISO string
@@ -55,6 +55,7 @@ export interface Plan {
   doctorFirstName: string;
   doctorLastName: string;
   plannedDate: string; // ISO string
+  callType: 'planned' | 'unplanned';
   submittedAt?: string; 
 }
 
@@ -66,6 +67,15 @@ export interface NonCallDay {
   remarks: string;
   dayType: 'wholeday' | 'halfday-am' | 'halfday-pm';
   status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface PlanningPermissionRequest {
+  id: string;
+  userId: string;
+  weekStartDate: string; // ISO string for the Monday of the week
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedAt: string; // ISO string
 }
 
 export interface MarketingSample {
@@ -92,6 +102,5 @@ export interface AdminData {
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
     allMarketingSamples: MarketingSample[];
+    allPlanningRequests: PlanningPermissionRequest[];
 }
-
-    
