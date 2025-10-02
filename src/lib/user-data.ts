@@ -30,7 +30,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "John Martin G.",
         lastName: "Ponce",
     },
-    "mUP19b2ISPc4Qnl1e0MHbCKAAKH3": {
+    "mUP19b2ISPc4Qnl1e0MHbCkAAKH3": {
         code: "MQ-04",
         firstName: "Cynthia May",
         lastName: "Cain",
@@ -94,5 +94,10 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "ADMIN",
         firstName: "Admin",
         lastName: "User"
+    },
+    "tb73WEIzndUrPEaD1q4H0VQfQaD3": {
+        code: "DSM",
+        firstName: "Erica",
+        lastName: "Gonzales"
     }
 };
