@@ -44,6 +44,15 @@ export const useAdminData = () => {
                     fallbackItems.push({ id: doc.id, ...doc.data() });
                  });
                  // This will be unsorted, but better than nothing.
+                 if (orderByField && fallbackItems.length > 0) {
+                     fallbackItems.sort((a,b) => {
+                         const valA = a[orderByField];
+                         const valB = b[orderByField];
+                         if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                         return 0;
+                     });
+                 }
                  setter(fallbackItems);
             }
         }
