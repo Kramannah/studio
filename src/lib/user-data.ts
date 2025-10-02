@@ -99,5 +99,10 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "DSM",
         firstName: "Erica",
         lastName: "Gonzales"
+    },
+    "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1": {
+        code: "DSM",
+        firstName: "Eula",
+        lastName: "Candawan"
     }
 };
