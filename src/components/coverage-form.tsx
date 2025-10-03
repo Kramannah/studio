@@ -227,24 +227,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
   }, []);
 
-  const handleOpenCamera = async () => {
-    try {
-      // Ask for permission first
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      // If permission is granted, proceed
-      setProofMethod('photo');
-      form.setValue('signature', null);
-      setIsCameraOpen(true);
-      // We need to stop the tracks when we are done with this temporary check
-      stream.getTracks().forEach(track => track.stop());
-    } catch (error) {
-      console.error("Camera access denied:", error);
-      toast({
-        variant: "destructive",
-        title: "Camera Access Denied",
-        description: "Please enable camera permissions in your browser settings to use this feature.",
-      });
-    }
+  const handleOpenCamera = () => {
+    setProofMethod('photo');
+    form.setValue('signature', null);
+    setIsCameraOpen(true);
   };
   
   const handleCloseCamera = () => {
@@ -264,14 +250,21 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
           } catch (error) {
             console.error("Error accessing camera:", error);
             setHasCameraPermission(false);
+            toast({
+                variant: 'destructive',
+                title: 'Camera Access Denied',
+                description: 'Please enable camera permissions in your browser settings to use this app.',
+            });
           }
         };
         getCameraPermission();
+    } else {
+        stopCamera();
     }
     return () => {
       stopCamera();
     }
-  }, [isCameraOpen, stopCamera]);
+  }, [isCameraOpen, stopCamera, toast]);
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -393,12 +386,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         form.setValue("plannedDoctorId", undefined);
     }
   }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
-
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, [stopCamera]);
 
   const handleAutocompleteSelect = (doctor: Doctor) => {
     form.setValue("firstName", doctor.firstName);
@@ -1039,9 +1026,9 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                      {!hasCameraPermission && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
                              <Alert variant="destructive">
-                                <AlertTitle>Camera Access Denied</AlertTitle>
+                                <AlertTitle>Camera Access Required</AlertTitle>
                                 <AlertDescription>
-                                    Please enable camera permissions in your browser to use this feature.
+                                    Please allow camera access to use this feature.
                                 </AlertDescription>
                             </Alert>
                         </div>
@@ -1067,5 +1054,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
 
     
