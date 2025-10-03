@@ -90,8 +90,6 @@ export interface TimeLog {
     timeIn: string; // ISO string
     timeOut?: string; // ISO string
     locationType: 'inbase' | 'outbase';
-    timeInPhoto: string; // base64 encoded string
-    timeOutPhoto?: string; // base64 encoded string
 }
 
 export interface AdminData {

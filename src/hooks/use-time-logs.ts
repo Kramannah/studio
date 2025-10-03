@@ -62,7 +62,7 @@ export const useTimeLogs = () => {
     fetchTimeLogs();
   }, [fetchTimeLogs]);
 
-  const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
+  const addTimeIn = useCallback(async (locationType: 'inbase' | 'outbase') => {
     if (!user) return;
 
     if (todaysTimeIn) {
@@ -74,20 +74,19 @@ export const useTimeLogs = () => {
       userId: user.uid,
       timeIn: new Date().toISOString(),
       locationType,
-      timeInPhoto: photo,
     };
     try {
       const docRef = await addDoc(collection(db, "timeLogs"), newTimeLog);
       const createdLog = { id: docRef.id, ...newTimeLog };
       setTimeLogs(prev => [createdLog, ...prev]);
-      setTodaysTimeIn(createdLog);
+      setTodaysTimeIn(createdLog as TimeLog);
       toast({ title: "Time In Successful", description: `You have successfully timed in at ${new Date().toLocaleTimeString()}` });
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Could not save time in." });
     }
   }, [user, toast, todaysTimeIn]);
 
-  const addTimeOut = useCallback(async (photo: string) => {
+  const addTimeOut = useCallback(async () => {
     if (!user) return;
     
     if (!todaysTimeIn) {
@@ -98,7 +97,6 @@ export const useTimeLogs = () => {
     const timeLogRef = doc(db, "timeLogs", todaysTimeIn.id);
     const timeOutData = {
         timeOut: new Date().toISOString(),
-        timeOutPhoto: photo,
     };
     try {
         await updateDoc(timeLogRef, timeOutData);
