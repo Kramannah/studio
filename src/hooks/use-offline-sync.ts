@@ -156,16 +156,17 @@ export const useOfflineSync = (userId?: string) => {
   };
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!isOnline || !userId || offlineEntries.length === 0) {
-      if(offlineEntries.length === 0) toast({title: "No Entries to Sync"});
-      if(!isOnline) toast({title: "Cannot Sync", description: "You are currently offline."});
+    if (!isOnline || !userId || offlineEntries.length === 0 || isSyncing) {
+      if (offlineEntries.length === 0 && !isSyncing) toast({ title: "No Entries to Sync" });
+      if (!isOnline && !isSyncing) toast({ title: "Cannot Sync", description: "You are currently offline." });
       return;
     }
 
     setIsSyncing(true);
-    
+    const entriesToSync = [...offlineEntries];
+
     const batch = writeBatch(db);
-    offlineEntries.forEach(entry => {
+    entriesToSync.forEach(entry => {
         const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
         const entryRef = doc(collection(db, 'coverageEntries'));
         
@@ -189,11 +190,17 @@ export const useOfflineSync = (userId?: string) => {
 
     try {
         await batch.commit();
-        const successCount = offlineEntries.length;
-        updateOfflineInStorage([]);
+        const successCount = entriesToSync.length;
+        
+        // Remove only the synced entries from local storage
+        const remainingEntries = offlineEntries.filter(
+            offlineEntry => !entriesToSync.some(syncedEntry => syncedEntry.id === offlineEntry.id)
+        );
+        updateOfflineInStorage(remainingEntries);
+
         if(successCount > 0){
             toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
-            fetchMasterEntries();
+            await fetchMasterEntries();
         }
     } catch (error) {
         console.error('Failed to sync entries:', error);
@@ -201,7 +208,7 @@ export const useOfflineSync = (userId?: string) => {
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, getOfflineKey]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
