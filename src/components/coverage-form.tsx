@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay } from "date-fns"
-import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit } from "lucide-react"
+import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -150,6 +150,7 @@ const jointCallRoles = [
 export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState(true);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -227,6 +228,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   }, []);
 
   const handleOpenCamera = () => {
+      setProofMethod('photo');
+      form.setValue('signature', null);
       setIsCameraOpen(true);
   };
   
@@ -237,30 +240,24 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
 
   useEffect(() => {
     if (isCameraOpen) {
-      const getCameraPermission = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          setHasCameraPermission(true);
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
+        const getCameraPermission = async () => {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            setHasCameraPermission(true);
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+            }
+          } catch (error) {
+            console.error("Error accessing camera:", error);
+            setHasCameraPermission(false);
           }
-        } catch (error) {
-          console.error("Error accessing camera:", error);
-          setHasCameraPermission(false);
-          toast({
-            variant: "destructive",
-            title: "Camera Access Denied",
-            description: "Please enable camera permissions in your browser settings to use this feature.",
-          });
-        }
-      };
-      getCameraPermission();
+        };
+        getCameraPermission();
     }
     return () => {
       stopCamera();
     }
-  }, [isCameraOpen, stopCamera, toast]);
-
+  }, [isCameraOpen, stopCamera]);
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -275,6 +272,24 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
         form.setValue('photos', [dataUrl]);
       }
       handleCloseCamera();
+    }
+  };
+
+  const handleUploadClick = () => {
+    setProofMethod('photo');
+    form.setValue('signature', null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        form.setValue('photos', [dataUrl]);
+      };
+      reader.readAsDataURL(file);
     }
   };
   
@@ -304,7 +319,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       firstName: "",
       lastName: "",
       specialty: "",
-clinic: "",
+      clinic: "",
       hacme: "NO",
       coverageType: "inbase",
       coverageDate: new Date(),
@@ -391,15 +406,10 @@ clinic: "",
     }
   };
 
-  const handleProofMethodChange = (value: 'photo' | 'signature') => {
+  const handleProofMethodChange = (value: 'signature') => {
     setProofMethod(value);
-    if (value === 'photo') {
-        form.setValue('signature', null);
-        handleOpenCamera();
-    } else {
-        form.setValue('photos', []);
-        openSignaturePad('signature');
-    }
+    form.setValue('photos', []);
+    openSignaturePad('signature');
   }
 
   const openSignaturePad = (fieldName: 'signature' | 'jointCallSignature') => {
@@ -914,24 +924,24 @@ clinic: "",
                               <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
                               <Card className="mt-2">
                                   <CardContent className="p-4">
-                                      <RadioGroup
-                                          value={proofMethod || ""}
-                                          onValueChange={handleProofMethodChange}
-                                          className="flex gap-4 pt-2"
-                                      >
-                                          <FormItem className="flex items-center space-x-3 space-y-0">
-                                              <FormControl>
-                                                  <RadioGroupItem value="photo" />
-                                              </FormControl>
-                                              <FormLabel className="font-normal text-sm">Selfie Photo</FormLabel>
-                                          </FormItem>
-                                          <FormItem className="flex items-center space-x-3 space-y-0">
-                                              <FormControl>
-                                                  <RadioGroupItem value="signature" />
-                                              </FormControl>
-                                              <FormLabel className="font-normal text-sm">MD Signature</FormLabel>
-                                          </FormItem>
-                                      </RadioGroup>
+                                       <div className="flex gap-2">
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                onChange={handleFileChange}
+                                                className="hidden"
+                                                accept="image/*"
+                                            />
+                                            <Button type="button" variant="outline" onClick={handleOpenCamera}>
+                                                <Camera className="mr-2" /> Take Photo
+                                            </Button>
+                                            <Button type="button" variant="outline" onClick={handleUploadClick}>
+                                                <Upload className="mr-2" /> Upload Photo
+                                            </Button>
+                                            <Button type="button" variant="outline" onClick={() => handleProofMethodChange('signature')}>
+                                                <Edit className="mr-2" /> MD Signature
+                                            </Button>
+                                        </div>
 
                                       {proofMethod === 'photo' && photos && photos.length > 0 && (
                                           <div className="relative w-full max-w-xs mx-auto mt-4">
@@ -1012,18 +1022,20 @@ clinic: "",
                 </DialogHeader>
                 <div className="relative">
                     <video ref={videoRef} className="w-full rounded-md aspect-video" autoPlay muted playsInline />
+                     {!hasCameraPermission && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                             <Alert variant="destructive">
+                                <AlertTitle>Camera Access Denied</AlertTitle>
+                                <AlertDescription>
+                                    Please enable camera permissions in your browser to use this feature.
+                                </AlertDescription>
+                            </Alert>
+                        </div>
+                    )}
                     <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={handleCloseCamera}>
                         <X />
                     </Button>
                 </div>
-                 {!hasCameraPermission && (
-                    <Alert variant="destructive">
-                        <AlertTitle>Camera Access Required</AlertTitle>
-                        <AlertDescription>
-                            Please allow camera access to use this feature.
-                        </AlertDescription>
-                    </Alert>
-                )}
                 <DialogFooter>
                     <Button onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
                         <Camera className="mr-2" />
