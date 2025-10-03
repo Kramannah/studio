@@ -84,20 +84,15 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   };
 
-  const todaysPlans = plans.filter(p => {
-    const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
-    return isValid(plannedDate) && isToday(plannedDate);
-  });
-
+  const todaysPlans = useMemo(() => {
+    return plans.filter(p => {
+        const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
+        return isValid(plannedDate) && isToday(plannedDate);
+    });
+  },[plans]);
   
-  const anyLoading = authLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading || marketingSamplesLoading || entriesLoading;
-
-  if (anyLoading && !user) {
-    return <LoginPage />;
-  }
-
-  if (anyLoading && user) {
-     return (
+  if (authLoading) {
+    return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <RefreshCw className="w-12 h-12 animate-spin text-primary" />
         </div>
@@ -227,7 +222,11 @@ export default function Home() {
                     {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                     <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
                 </Badge>
-                {!todaysTimeIn ? (
+                {timeLogsLoading ? (
+                    <Button size="sm" variant="outline" className="font-headline" disabled>
+                        <RefreshCw className="mr-2 animate-spin"/> Loading...
+                    </Button>
+                ) : !todaysTimeIn ? (
                   <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
                       <LogIn className="mr-2"/>
                       Time In
