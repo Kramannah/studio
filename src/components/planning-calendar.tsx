@@ -227,7 +227,7 @@ export function PlanningCalendar({
     }
 
     const isAddVisitDisabled = readOnly || !canPlanCalls || !!selectedDayNonCallEntry;
-    const isAddNonCallDisabled = readOnly || selectedDayPlans.length > 0 || !!selectedDayNonCallEntry;
+    const isAddNonCallDisabled = readOnly || !!selectedDayNonCallEntry;
     
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
@@ -241,7 +241,6 @@ export function PlanningCalendar({
 
     const getAddNonCallTitle = () => {
         if (readOnly) return "This is a read-only view.";
-        if (selectedDayPlans.length > 0) return "Cannot log non-call day on a date with planned visits.";
         if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
     }
@@ -519,3 +518,4 @@ export function PlanningCalendar({
         </Card>
     );
 }
+
