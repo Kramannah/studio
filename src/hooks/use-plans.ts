@@ -3,7 +3,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
+import type { Plan, Doctor } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { format, isSameWeek, startOfToday } from 'date-fns';
 import { useAuth } from './use-auth';
@@ -17,7 +17,6 @@ export const usePlans = () => {
   const { user } = useAuth();
   const [offlinePlans, setOfflinePlans] = useState<Plan[]>([]);
   const [masterPlans, setMasterPlans] = useState<Plan[]>([]);
-  const [planningRequests, setPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
 
@@ -35,32 +34,23 @@ export const usePlans = () => {
     };
   }, []);
 
-  const fetchPlansAndRequests = useCallback(async () => {
+  const fetchMasterPlans = useCallback(async () => {
     if (!user || !isOnline) {
         if(user) setLoading(false);
         return;
     }
     setLoading(true);
     try {
-      const plansQuery = query(collection(db, "plans"), where("userId", "==", user.uid));
-      const plansSnapshot = await getDocs(plansQuery);
+      const q = query(collection(db, "plans"), where("userId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
       const fetchedPlans: Plan[] = [];
-      plansSnapshot.forEach((doc) => {
+      querySnapshot.forEach((doc) => {
         fetchedPlans.push({ id: doc.id, ...doc.data() } as Plan);
       });
       setMasterPlans(fetchedPlans);
-      
-      const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
-      const requestsSnapshot = await getDocs(requestsQuery);
-      const fetchedRequests: PlanningPermissionRequest[] = [];
-      requestsSnapshot.forEach((doc) => {
-        fetchedRequests.push({ id: doc.id, ...doc.data() } as PlanningPermissionRequest);
-      });
-      setPlanningRequests(fetchedRequests);
-
     } catch (error) {
-      console.error("Error fetching master plans/requests:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not load visit plans or requests." });
+      console.error("Error fetching master plans:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load visit plans." });
     } finally {
         setLoading(false);
     }
@@ -77,14 +67,13 @@ export const usePlans = () => {
         } catch (error) {
             console.error("Failed to parse offline plans from local storage:", error);
         }
-        fetchPlansAndRequests();
+        fetchMasterPlans();
     } else {
         setOfflinePlans([]);
         setMasterPlans([]);
-        setPlanningRequests([]);
         setLoading(false);
     }
-  }, [user, getOfflineKey, fetchPlansAndRequests]);
+  }, [user, getOfflineKey, fetchMasterPlans]);
 
   const updateOfflineInStorage = (updatedPlans: Plan[]) => {
       setOfflinePlans(updatedPlans);
@@ -160,29 +149,6 @@ export const usePlans = () => {
     }
   }, [masterPlans, offlinePlans, toast, user, isOnline]);
 
-  const requestPlanningPermission = useCallback(async (weekStartDate: Date, reason: string) => {
-    if (!user) return false;
-
-    const newRequest: Omit<PlanningPermissionRequest, 'id'> = {
-        userId: user.uid,
-        weekStartDate: weekStartDate.toISOString(),
-        reason,
-        status: 'pending',
-        requestedAt: new Date().toISOString(),
-    };
-
-    try {
-        const docRef = await addDoc(collection(db, "planningRequests"), newRequest);
-        setPlanningRequests(prev => [...prev, { id: docRef.id, ...newRequest }]);
-        toast({ title: "Request Submitted", description: "Your request to plan calls for this week has been submitted for approval." });
-        return true;
-    } catch(error) {
-        console.error("Error submitting planning permission request", error);
-        toast({ variant: "destructive", title: "Request Failed", description: "Could not submit your request. Please try again." });
-        return false;
-    }
-  }, [user, toast]);
-
   const syncAllOfflinePlans = useCallback(async () => {
     if (!isOnline || !user || offlinePlans.length === 0) {
       return;
@@ -202,14 +168,14 @@ export const usePlans = () => {
         if(successCount > 0) {
             toast({ title: 'Plan Sync Complete', description: `${successCount} plans synced successfully.` });
         }
-        fetchPlansAndRequests();
+        fetchMasterPlans();
     } catch (error) {
         console.error('Failed to sync plans:', error);
         toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to sync plans.` });
     }
-  }, [isOnline, user, offlinePlans, toast, fetchPlansAndRequests, getOfflineKey]);
+  }, [isOnline, user, offlinePlans, toast, fetchMasterPlans, getOfflineKey]);
 
   const allPlans = useMemo(() => [...masterPlans, ...offlinePlans], [masterPlans, offlinePlans]);
 
-  return { plans: allPlans, planningRequests, addPlan, removePlan, requestPlanningPermission, loading, syncAllOfflinePlans, offlinePlanCount: offlinePlans.length };
+  return { plans: allPlans, addPlan, removePlan, loading, syncAllOfflinePlans, offlinePlanCount: offlinePlans.length };
 };
