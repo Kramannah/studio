@@ -227,10 +227,24 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
   }, []);
 
-  const handleOpenCamera = () => {
+  const handleOpenCamera = async () => {
+    try {
+      // Ask for permission first
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // If permission is granted, proceed
       setProofMethod('photo');
       form.setValue('signature', null);
       setIsCameraOpen(true);
+      // We need to stop the tracks when we are done with this temporary check
+      stream.getTracks().forEach(track => track.stop());
+    } catch (error) {
+      console.error("Camera access denied:", error);
+      toast({
+        variant: "destructive",
+        title: "Camera Access Denied",
+        description: "Please enable camera permissions in your browser settings to use this feature.",
+      });
+    }
   };
   
   const handleCloseCamera = () => {
@@ -1053,3 +1067,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
