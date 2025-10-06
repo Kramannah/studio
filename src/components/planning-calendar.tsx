@@ -213,10 +213,10 @@ export function PlanningCalendar({
         if (!selectedDate) return false;
         
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const today = startOfToday();
+        const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
         
-        // Always allow planning for future weeks
-        if (isAfter(weekStartOfSelected, today) || isSameDay(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
+        // Always allow planning for future weeks or the current week
+        if (!isBefore(weekStartOfSelected, weekStartOfToday)) {
             return true;
         }
         
@@ -264,11 +264,12 @@ export function PlanningCalendar({
         );
     }
     
-    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry;
+    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry || !canPlanPlannedCalls;
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
+        if (!canPlanPlannedCalls) return "Planning for this week is locked.";
         return "Add a new visit";
     }
 
@@ -329,9 +330,9 @@ export function PlanningCalendar({
                              {selectedDate && (
                                 <div className="flex items-center justify-between">
                                      <div className="flex items-center gap-2">
-                                        {canPlanPlannedCalls || isSameWeek(selectedDate, new Date(), {weekStartsOn: 1}) ? <Unlock className="w-5 h-5 text-primary"/> : <Lock className="w-5 h-5 text-destructive" />}
+                                        {canPlanPlannedCalls ? <Unlock className="w-5 h-5 text-primary"/> : <Lock className="w-5 h-5 text-destructive" />}
                                         <span className="font-semibold capitalize">
-                                            {canPlanPlannedCalls || isSameWeek(selectedDate, new Date(), {weekStartsOn: 1}) ? 'Open for Planning' : 'Locked for Planning'}
+                                            {canPlanPlannedCalls ? 'Open for Planning' : 'Locked for Planning'}
                                             {currentWeekRequest && ` (${currentWeekRequest.status})`}
                                         </span>
                                     </div>
@@ -520,6 +521,7 @@ export function PlanningCalendar({
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             const isPastDate = selectedDate && isBefore(selectedDate, startOfToday());
+                                            const isRemovalDisabled = readOnly || !canPlanPlannedCalls;
 
 
                                             return (
@@ -561,8 +563,8 @@ export function PlanningCalendar({
                                                             variant="ghost" 
                                                             size="icon" 
                                                             onClick={() => onRemovePlan(plan.id)}
-                                                            disabled={isPastDate}
-                                                            title={isPastDate ? "Cannot delete plans for past dates." : "Remove plan"}
+                                                            disabled={isRemovalDisabled}
+                                                            title={isRemovalDisabled ? "Cannot delete plans for a locked week." : "Remove plan"}
                                                          >
                                                              <XCircle size={16} className="text-destructive"/>
                                                          </Button>
