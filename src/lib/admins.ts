@@ -10,11 +10,6 @@ export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3"];
 export const MANAGER_TEAMS: Record<string, string[]> = {
     // Example Manager UID -> Team Member UIDs
     // "manager_uid_1": ["user_uid_1", "user_uid_2"],
-    "cm4yqA8NfBadUBtffEzcEJRV9873": [
-        "mZJZjTMVinNRegZFQG9FZzRjpiA2",
-        "Jqy9ONMiwSP7BZM61X7x8PKI8lz1",
-        "xNTJrZ5xXwRliGvpCVXaxDwDpl32",
-    ],
     "UmyUP0VwccRKLfrej67idFukFz42": [
         "pvzNDFxH4tf7JejE7YxMK4Rq3hj2",
         "l5GMEE0OxpMOObd5qguyJtrVUi42",
