@@ -197,11 +197,11 @@ export function PlanningCalendar({
 
     const canPlanCalls = useMemo(() => {
         if (!selectedDate) return false;
-        // Can always plan for future weeks
-        if (!isCurrentWeek && !isPastDate) return true;
-        // Can plan for current week only if request is approved
-        return isCurrentWeek && currentWeekRequest?.status === 'approved';
-    }, [selectedDate, isCurrentWeek, isPastDate, currentWeekRequest]);
+        // Cannot plan for past dates.
+        if (isPastDate) return false;
+        // Can always plan for future weeks or current week.
+        return true;
+    }, [selectedDate, isPastDate]);
 
     const showRequestButton = useMemo(() => {
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
@@ -227,13 +227,11 @@ export function PlanningCalendar({
     }
 
     const isAddVisitDisabled = readOnly || !canPlanCalls || !!selectedDayNonCallEntry;
-    const isAddNonCallDisabled = readOnly || !!selectedDayNonCallEntry;
     
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         if (!canPlanCalls) {
-             if (isCurrentWeek) return "You need manager approval to plan calls for the current week.";
              if (isPastDate) return "Cannot add visits for past dates.";
         }
         return "Add a new visit";
@@ -304,7 +302,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={isAddNonCallDisabled}
+                                disabled={readOnly || !!selectedDayNonCallEntry}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -429,8 +427,7 @@ export function PlanningCalendar({
                                     <TableRow>
                                         <TableHead>Doctor</TableHead>
                                         <TableHead>Location</TableHead>
-                                        <TableHead className="text-center">Target</TableHead>
-                                        <TableHead className="text-center">Balance</TableHead>
+                                        <TableHead>Call Type</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -447,11 +444,6 @@ export function PlanningCalendar({
                                                 entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            
-                                            const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                            const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                            const balance = Math.max(0, targetCount - visitCount);
 
                                             return (
                                             <TableRow key={plan.id}>
@@ -476,8 +468,9 @@ export function PlanningCalendar({
                                                         <span className="text-xs text-muted-foreground">{doctor.province}</span>
                                                     </div>
                                                 </TableCell>
-                                                 <TableCell className="text-center">{doctor.frequency}</TableCell>
-                                                 <TableCell className="text-center">{balance}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={plan.callType === 'planned' ? 'secondary' : 'outline'} className="capitalize">{plan.callType}</Badge>
+                                                </TableCell>
                                                  <TableCell>
                                                     {isCovered ? (
                                                         <Badge variant="secondary" className="text-primary">Covered</Badge>
@@ -519,3 +512,4 @@ export function PlanningCalendar({
     );
 }
 
+    
