@@ -234,21 +234,22 @@ export function PlanningCalendar({
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
 
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const today = startOfToday();
+        const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
 
         // Don't show for future weeks
-        if (isAfter(weekStartOfSelected, today) && !isSameDay(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
+        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
             return false;
         }
 
         // Show if it's a past week and no approved/pending request exists
-        if (isBefore(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
+        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
            return !currentWeekRequest || currentWeekRequest.status === 'rejected';
         }
 
         return false;
 
-    }, [readOnly, selectedDate, today, currentWeekRequest, onPermissionRequest]);
+    }, [readOnly, selectedDate, currentWeekRequest, onPermissionRequest]);
+
 
     const handlePermissionRequest = async (reason: string) => {
         if(selectedDate && onPermissionRequest) {
@@ -268,7 +269,7 @@ export function PlanningCalendar({
         );
     }
     
-    const isAddVisitDisabled = readOnly;
+    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry;
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
@@ -278,6 +279,7 @@ export function PlanningCalendar({
 
     const getAddNonCallTitle = () => {
         if (readOnly) return "This is a read-only view.";
+        if (selectedDayPlans.length > 0) return "Cannot log non-call day with planned visits.";
         return "Log a non-call day";
     }
 
@@ -359,7 +361,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly}
+                                disabled={readOnly || selectedDayPlans.length > 0}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -594,7 +596,3 @@ export function PlanningCalendar({
         </Card>
     );
 }
-
-    
-
-    
