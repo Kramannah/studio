@@ -171,19 +171,19 @@ export const useOfflineSync = (userId?: string) => {
         const entryRef = doc(collection(db, 'coverageEntries'));
         
         // Firestore does not support 'undefined' values, so clean the object
-        const cleanedData = Object.entries(dataToSync).reduce((acc, [key, value]) => {
-            if (value !== undefined) {
-                // Firestore doesn't like 'jointCallWith' being present if not a joint call
-                if (key === 'jointCallWith' && dataToSync.coverageType !== 'joint') {
-                    return acc;
-                }
-                if (key === 'jointCallSignature' && dataToSync.coverageType !== 'joint') {
-                    return acc;
-                }
-                acc[key as keyof typeof dataToSync] = value;
+        const cleanedData: Partial<CoverageEntry> = {};
+        for (const key in dataToSync) {
+            const typedKey = key as keyof typeof dataToSync;
+            if (dataToSync[typedKey] !== undefined) {
+                cleanedData[typedKey] = dataToSync[typedKey];
             }
-            return acc;
-        }, {} as Partial<CoverageEntry>);
+        }
+        
+        // Ensure joint call fields are only present for joint calls
+        if (cleanedData.coverageType !== 'joint') {
+            delete cleanedData.jointCallWith;
+            delete cleanedData.jointCallSignature;
+        }
 
         batch.set(entryRef, cleanedData);
     });
