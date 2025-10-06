@@ -180,7 +180,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      callType: "unplanned",
+      callType: "planned",
       firstName: "",
       lastName: "",
       specialty: "",
@@ -279,7 +279,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   
   const resetForm = useCallback(() => {
     form.reset({
-      callType: "unplanned",
+      callType: "planned",
       firstName: "",
       lastName: "",
       specialty: "",
@@ -492,18 +492,18 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                     >
                                     <FormItem className="flex items-center space-x-3 space-y-0">
                                         <FormControl>
-                                        <RadioGroupItem value="unplanned" />
-                                        </FormControl>
-                                        <FormLabel className="font-normal text-sm">
-                                        Unplanned Call
-                                        </FormLabel>
-                                    </FormItem>
-                                    <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
                                         <RadioGroupItem value="planned" />
                                         </FormControl>
                                         <FormLabel className="font-normal text-sm">
                                         Planned Call
+                                        </FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                        <FormControl>
+                                        <RadioGroupItem value="unplanned" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal text-sm">
+                                        Unplanned Call
                                         </FormLabel>
                                     </FormItem>
                                     </RadioGroup>
