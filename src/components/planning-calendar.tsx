@@ -5,7 +5,7 @@ import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek, isAfter } from "date-fns";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -21,6 +21,7 @@ import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
+import { Checkbox } from "./ui/checkbox";
 
 
 type PlanningCalendarProps = {
@@ -74,6 +75,16 @@ export function PlanningCalendar({
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
+    const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
+
+
+    useEffect(() => {
+        if (!isPopoverOpen) {
+            setSelectedDoctorIdsForPlan([]);
+            setDoctorFilter("");
+        }
+    }, [isPopoverOpen]);
+
 
     const visitCountsThisMonth = useMemo(() => {
         const thisMonthEntries = entries.filter(e => {
@@ -159,13 +170,15 @@ export function PlanningCalendar({
         );
     }, [doctors, doctorFilter]);
 
-    const handleAddPlan = (doctor: Doctor) => {
-        if(selectedDate) {
-            onAddPlan(doctor, selectedDate);
+    const handleAddSelectedPlans = () => {
+        if (selectedDate && selectedDoctorIdsForPlan.length > 0) {
+            const doctorsToAdd = doctors.filter(d => selectedDoctorIdsForPlan.includes(d.id));
+            doctorsToAdd.forEach(doctor => {
+                onAddPlan(doctor, selectedDate);
+            });
             setIsPopoverOpen(false);
-            setDoctorFilter("");
         }
-    }
+    };
     
     const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
@@ -186,7 +199,6 @@ export function PlanningCalendar({
     }
 
     const today = startOfToday();
-    const isPastDate = selectedDate ? isBefore(selectedDate, today) : false;
     
     const currentWeekRequest = useMemo(() => {
         if (!selectedDate || !planningRequests) return null;
@@ -201,34 +213,40 @@ export function PlanningCalendar({
         if (!selectedDate) return false;
         
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const weekStartOfToday = startOfWeek(today, { weekStartsOn: 1 });
-
-        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
+        const today = startOfToday();
+        
+        // Always allow planning for future weeks
+        if (isAfter(weekStartOfSelected, today) || isSameDay(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
             return true;
         }
         
+        // For past weeks, only allow if approved
         if (currentWeekRequest?.status === 'approved') {
             return true;
         }
 
         return false;
 
-    }, [selectedDate, today, currentWeekRequest]);
+    }, [selectedDate, currentWeekRequest]);
     
 
     const showRequestButton = useMemo(() => {
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
 
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const weekStartOfToday = startOfWeek(today, { weekStartsOn: 1 });
+        const today = startOfToday();
 
         // Don't show for future weeks
-        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
+        if (isAfter(weekStartOfSelected, today) && !isSameDay(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
             return false;
         }
 
-        // Show if no request exists, or if the existing one was rejected
-        return !currentWeekRequest || currentWeekRequest.status === 'rejected';
+        // Show if it's a past week and no approved/pending request exists
+        if (isBefore(weekStartOfSelected, startOfWeek(today, { weekStartsOn: 1 }))) {
+           return !currentWeekRequest || currentWeekRequest.status === 'rejected';
+        }
+
+        return false;
 
     }, [readOnly, selectedDate, today, currentWeekRequest, onPermissionRequest]);
 
@@ -250,12 +268,11 @@ export function PlanningCalendar({
         );
     }
     
-    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry;
+    const isAddVisitDisabled = readOnly;
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
-        if (!canPlanPlannedCalls && !isSameWeek(selectedDate || new Date(), new Date(), {weekStartsOn: 1})) return "Cannot add visits for past dates without approved permission.";
         return "Add a new visit";
     }
 
@@ -271,7 +288,7 @@ export function PlanningCalendar({
                 <CardTitle className="font-headline">Call Planning Calendar</CardTitle>
                 <CardDescription>Plan your upcoming doctor visits. Select a date to view or add plans.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-8">
+            <CardContent className="flex flex-col gap-8">
                 <div className="space-y-4">
                      <Calendar
                         mode="single"
@@ -360,7 +377,7 @@ export function PlanningCalendar({
                                         <div className="space-y-2">
                                             <h4 className="font-medium leading-none">Add Doctor to Plan</h4>
                                             <p className="text-sm text-muted-foreground">
-                                                Select a doctor to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
+                                                Select doctors to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
                                             </p>
                                         </div>
                                         <div className="relative">
@@ -378,11 +395,22 @@ export function PlanningCalendar({
                                                 <Table>
                                                     <TableHeader>
                                                         <TableRow>
+                                                            <TableHead className="w-12">
+                                                                <Checkbox 
+                                                                    checked={selectedDoctorIdsForPlan.length === filteredDoctors.length && filteredDoctors.length > 0}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            setSelectedDoctorIdsForPlan(filteredDoctors.map(d => d.id));
+                                                                        } else {
+                                                                            setSelectedDoctorIdsForPlan([]);
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </TableHead>
                                                             <TableHead>Doctor</TableHead>
                                                             <TableHead>Location</TableHead>
                                                             <TableHead className="text-center">Target</TableHead>
                                                             <TableHead className="text-center">Balance</TableHead>
-                                                            <TableHead className="text-right">Action</TableHead>
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
@@ -396,7 +424,24 @@ export function PlanningCalendar({
                                                                 const isAlreadyPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
 
                                                                 return (
-                                                                    <TableRow key={doctor.id} className={cn(isCompleted && "bg-primary/10")}>
+                                                                    <TableRow 
+                                                                        key={doctor.id} 
+                                                                        className={cn(isCompleted && "bg-primary/10", isAlreadyPlanned && "bg-muted/50 opacity-60")}
+                                                                        data-selected={selectedDoctorIdsForPlan.includes(doctor.id)}
+                                                                    >
+                                                                        <TableCell>
+                                                                            <Checkbox 
+                                                                                checked={selectedDoctorIdsForPlan.includes(doctor.id)}
+                                                                                onCheckedChange={(checked) => {
+                                                                                    if (checked) {
+                                                                                        setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
+                                                                                    } else {
+                                                                                        setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
+                                                                                    }
+                                                                                }}
+                                                                                disabled={isAlreadyPlanned}
+                                                                            />
+                                                                        </TableCell>
                                                                         <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                                                         <TableCell>
                                                                             <div className="flex flex-col">
@@ -405,21 +450,7 @@ export function PlanningCalendar({
                                                                             </div>
                                                                         </TableCell>
                                                                         <TableCell className="text-center">{doctor.frequency}</TableCell>
-                                                                        <TableCell className="text-center">{balance}</TableCell>
-                                                                        <TableCell className="text-right">
-                                                                            <Tooltip>
-                                                                                <TooltipTrigger asChild>
-                                                                                    <span>
-                                                                                        <Button size="sm" variant="ghost" onClick={() => handleAddPlan(doctor)} disabled={isAlreadyPlanned}>
-                                                                                            <PlusCircle size={16}/>
-                                                                                        </Button>
-                                                                                    </span>
-                                                                                </TooltipTrigger>
-                                                                                <TooltipContent>
-                                                                                    {isAlreadyPlanned ? <p>Already planned for this day.</p> : <p>Add to plan</p>}
-                                                                                </TooltipContent>
-                                                                            </Tooltip>
-                                                                        </TableCell>
+                                                                        <TableCell className="text-center">{isAlreadyPlanned ? 'Planned' : balance}</TableCell>
                                                                     </TableRow>
                                                                 )
                                                             })
@@ -435,6 +466,14 @@ export function PlanningCalendar({
                                                 </div>
                                             </TooltipProvider>
                                         </ScrollArea>
+                                        <div className="flex justify-end">
+                                            <Button
+                                                onClick={handleAddSelectedPlans}
+                                                disabled={selectedDoctorIdsForPlan.length === 0}
+                                            >
+                                                Add Selected to Plan ({selectedDoctorIdsForPlan.length})
+                                            </Button>
+                                        </div>
                                     </div>
                                 </PopoverContent>
                             </Popover>
@@ -555,5 +594,7 @@ export function PlanningCalendar({
         </Card>
     );
 }
+
+    
 
     
