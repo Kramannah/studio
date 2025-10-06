@@ -227,44 +227,41 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
   }, []);
 
-  const handleOpenCamera = () => {
+  const handleOpenCamera = async () => {
     setProofMethod('photo');
     form.setValue('signature', null);
-    setIsCameraOpen(true);
+    form.setValue('photos', []);
+    
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+        }
+        setIsCameraOpen(true);
+    } catch (error) {
+        console.error("Error accessing camera:", error);
+        setHasCameraPermission(false);
+        toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings to use this app.',
+        });
+        setIsCameraOpen(false);
+    }
   };
   
   const handleCloseCamera = () => {
     stopCamera();
     setIsCameraOpen(false);
   };
-
+  
   useEffect(() => {
-    if (isCameraOpen) {
-        const getCameraPermission = async () => {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            setHasCameraPermission(true);
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-            }
-          } catch (error) {
-            console.error("Error accessing camera:", error);
-            setHasCameraPermission(false);
-            toast({
-                variant: 'destructive',
-                title: 'Camera Access Denied',
-                description: 'Please enable camera permissions in your browser settings to use this app.',
-            });
-          }
-        };
-        getCameraPermission();
-    } else {
+      return () => {
         stopCamera();
-    }
-    return () => {
-      stopCamera();
-    }
-  }, [isCameraOpen, stopCamera, toast]);
+      };
+  }, [stopCamera]);
+
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -410,6 +407,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const handleProofMethodChange = (value: 'signature') => {
     setProofMethod(value);
     form.setValue('photos', []);
+    setIsCameraOpen(false);
     openSignaturePad('signature');
   }
 
@@ -925,42 +923,64 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                               <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
                               <Card className="mt-2">
                                   <CardContent className="p-4">
-                                       <div className="flex gap-2">
-                                            <input
-                                                type="file"
-                                                ref={fileInputRef}
-                                                onChange={handleFileChange}
-                                                className="hidden"
-                                                accept="image/*"
-                                            />
-                                            <Button type="button" variant="outline" onClick={handleOpenCamera}>
-                                                <Camera className="mr-2" /> Take Photo
-                                            </Button>
-                                            <Button type="button" variant="outline" onClick={handleUploadClick}>
-                                                <Upload className="mr-2" /> Upload Photo
-                                            </Button>
-                                            <Button type="button" variant="outline" onClick={() => handleProofMethodChange('signature')}>
-                                                <Edit className="mr-2" /> MD Signature
-                                            </Button>
-                                        </div>
-
-                                      {proofMethod === 'photo' && photos && photos.length > 0 && (
-                                          <div className="relative w-full max-w-xs mx-auto mt-4">
+                                      {isCameraOpen ? (
+                                           <div className="space-y-2">
+                                                <div className="relative">
+                                                    <video ref={videoRef} className="w-full rounded-md aspect-video" autoPlay muted playsInline />
+                                                    {!hasCameraPermission && (
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                                                            <Alert variant="destructive">
+                                                                <AlertTitle>Camera Access Required</AlertTitle>
+                                                                <AlertDescription>
+                                                                    Please allow camera access to use this feature.
+                                                                </AlertDescription>
+                                                            </Alert>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button type="button" onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
+                                                        <Camera className="mr-2" /> Capture
+                                                    </Button>
+                                                     <Button type="button" variant="ghost" onClick={handleCloseCamera}>
+                                                        Cancel
+                                                    </Button>
+                                                </div>
+                                           </div>
+                                      ) : photos && photos.length > 0 ? (
+                                           <div className="relative w-full max-w-xs mx-auto">
                                               <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
                                               <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
                                                   <Trash2 />
                                               </Button>
                                           </div>
-                                      )}
-
-                                      {proofMethod === 'signature' && signature && (
-                                          <div className="mt-4 space-y-2">
-                                              <Label>MD Signature</Label>
-                                              <div className="p-2 border rounded-md bg-muted w-fit">
-                                                  <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
-                                              </div>
-                                              <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
-                                          </div>
+                                      ) : signature && proofMethod === 'signature' ? (
+                                            <div className="space-y-2">
+                                                <Label>MD Signature</Label>
+                                                <div className="p-2 border rounded-md bg-muted w-fit">
+                                                    <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
+                                                </div>
+                                                <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
+                                            </div>
+                                      ) : (
+                                          <div className="flex gap-2">
+                                                <input
+                                                    type="file"
+                                                    ref={fileInputRef}
+                                                    onChange={handleFileChange}
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                />
+                                                <Button type="button" variant="outline" onClick={handleOpenCamera}>
+                                                    <Camera className="mr-2" /> Take Photo
+                                                </Button>
+                                                <Button type="button" variant="outline" onClick={handleUploadClick}>
+                                                    <Upload className="mr-2" /> Upload Photo
+                                                </Button>
+                                                <Button type="button" variant="outline" onClick={() => handleProofMethodChange('signature')}>
+                                                    <Edit className="mr-2" /> MD Signature
+                                                </Button>
+                                            </div>
                                       )}
                                   </CardContent>
                               </Card>
@@ -1016,35 +1036,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
             </div>
           </ScrollArea>
         </CardContent>
-         <Dialog open={isCameraOpen} onOpenChange={handleCloseCamera}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Capture Photo</DialogTitle>
-                </DialogHeader>
-                <div className="relative">
-                    <video ref={videoRef} className="w-full rounded-md aspect-video" autoPlay muted playsInline />
-                     {!hasCameraPermission && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                             <Alert variant="destructive">
-                                <AlertTitle>Camera Access Required</AlertTitle>
-                                <AlertDescription>
-                                    Please allow camera access to use this feature.
-                                </AlertDescription>
-                            </Alert>
-                        </div>
-                    )}
-                    <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={handleCloseCamera}>
-                        <X />
-                    </Button>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
-                        <Camera className="mr-2" />
-                        Capture
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
         <SignaturePadFullScreen 
             open={isSignaturePadOpen}
             onClose={() => setIsSignaturePadOpen(false)}
@@ -1054,6 +1045,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
 
     
 
