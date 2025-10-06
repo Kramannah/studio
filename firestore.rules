@@ -2,100 +2,64 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // A user is an admin if their UID is in the ADMIN_UIDS list.
+    
+    // Helper functions for role checks
     function isAdmin() {
-      return request.auth.uid in [
-        "SgOR5cjCC6dZ0oABv4nXdntu6pI3"
-      ];
+      // The list of Admin UIDs.
+      let adminUIDs = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3"];
+      return request.auth.uid in adminUIDs;
     }
-    
-    // A user is a manager if their UID is a key in the MANAGER_TEAMS map.
+
     function isManager() {
-        return request.auth.uid in [
-            "UmyUP0VwccRKLfrej67idFukFz42",
-            "tb73WEIzndUrPEaD1q4H0VQfQaD3",
-            "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1"
-        ];
+        // The list of Manager UIDs
+        let managerUIDs = ["UmyUP0VwccRKLfrej67idFukFz42", "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1"];
+        return request.auth.uid in managerUIDs;
     }
 
-    // This is a map of manager UIDs to the list of user UIDs they manage.
-    // This MUST be kept in sync with src/lib/admins.ts
-    function getManagerTeams() {
-      return {
-        "UmyUP0VwccRKLfrej67idFukFz42": [
-            "pvzNDFxH4tf7JejE7YxMK4Rq3hj2",
-            "l5GMEE0OxpMOObd5qguyJtrVUi42",
-            "sN4SztOibRSTg1H7SEeAwiEpDgm1",
-            "uDhb49uS55XJm8cp6bqL2adjfwh2",
-            "AhkYw50sBueJFvRO8glPlpE4QWt2",
-            "wHns6CCKRde4YMf8VZhxLJfAa6H3",
-            "ledPtMmuniSwpkYZ5YAXOSREoxl2"
-        ],
-        "tb73WEIzndUrPEaD1q4H0VQfQaD3": [
-            "8QiLTKzhovh43RX2arJ4xNAgoRj2",
-            "mUP19b2ISPc4Qnl1e0MHbCkAAKH3",
-            "e4U1TKIhzURRt3YdqKWQgkDQApv2",
-            "cm4yqA8NfBadUBtffEzcEJRV9873"
-        ],
-        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1": [
-            "JvBQZydSDxNkZRP2vNofGXMGbGk1",
-            "JvY6C2uEdPeEqoWLuqB4eYfbZqj2",
-            "mZJZjTMVinNRegZFQG9FZzRjpiA2",
-            "Jqy9ONMiwSP7BZM61X7x8PKI8lz1",
-            "xNTJrZ5xXwRliGvpCVXaxDwDpl32"
-        ]
-      };
-    }
-    
-    // Check if the requesting user is the manager of the user who owns the document.
-    function isManagerOf(targetUserId) {
-      let managerTeams = getManagerTeams();
-      // Check if the current user is a manager and if the target user is in their list.
-      return isManager() && targetUserId in managerTeams[request.auth.uid];
+    // Match all collections
+    match /{collection}/{docId} {
+      // Deny all reads and writes by default
+      allow read, write: if false;
     }
 
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
-    }
-    
-    match /coverageEntries/{entryId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if isOwner(resource.data.userId) || isAdmin() || isManagerOf(resource.data.userId);
-    }
-
+    // Rules for 'doctors' collection
     match /doctors/{doctorId} {
-      allow read, create, update, delete: if request.auth != null && (isOwner(request.resource.data.userId) || isOwner(resource.data.userId));
+      allow read, create, update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    match /plans/{planId} {
-      allow read, create, delete: if request.auth != null && (isOwner(request.resource.data.userId) || isOwner(resource.data.userId));
+    // Rules for 'coverageEntries' collection
+    match /coverageEntries/{entryId} {
+      allow read, create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
     
+    // Rules for 'plans' collection
+    match /plans/{planId} {
+      allow read, create, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // Rules for 'nonCallDays' collection
+    match /nonCallDays/{dayId} {
+      allow read, create: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow update: if request.auth != null && (isAdmin() || isManager());
+    }
+    
+    // Rules for 'timeLogs' collection
+    match /timeLogs/{logId} {
+        allow read, create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Rules for 'marketingSamples' collection
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
-        allow write: if isAdmin();
+        allow write: if request.auth != null && isAdmin();
     }
     
-    match /timeLogs/{logId} {
-      allow create: if request.auth != null && isOwner(request.resource.data.userId);
-      allow read, update: if isOwner(resource.data.userId) || isAdmin() || isManagerOf(resource.data.userId);
-    }
-    
-    match /nonCallDays/{dayId} {
-      allow create: if request.auth != null && isOwner(request.resource.data.userId);
-      allow read: if isOwner(resource.data.userId) || isAdmin() || isManagerOf(resource.data.userId);
-      allow update: if isAdmin() || isManagerOf(resource.data.userId);
-    }
-
-    match /planningRequests/{reqId} {
-       allow create: if request.auth != null && isOwner(request.resource.data.userId);
-       allow read: if isOwner(resource.data.userId) || isAdmin() || isManagerOf(resource.data.userId);
-       allow update: if isAdmin() || isManagerOf(resource.data.userId);
+    // Rules for 'planningRequests' collection
+    match /planningRequests/{requestId} {
+        allow read, create: if request.auth != null && resource.data.userId == request.auth.uid;
+        allow update: if request.auth != null && (isAdmin() || isManager());
     }
   }
 }
