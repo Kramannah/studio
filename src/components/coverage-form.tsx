@@ -146,7 +146,7 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
-const compressImage = (dataUrl: string, quality = 0.7, maxWidth = 800): Promise<string> => {
+const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = dataUrl;
