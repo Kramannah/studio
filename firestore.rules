@@ -7,35 +7,73 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
-    match /coverageEntries/{entryId} {
-      allow read, write: if isOwner(resource.data.userId);
+    // A list of admin UIDs that have full read/write access.
+    function isAdmin() {
+      return request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3"];
     }
-    
+
+    // A map of manager UIDs to their team member UIDs.
+    function getManagerTeams() {
+      return {
+        "UmyUP0VwccRKLfrej67idFukFz42": ["pvzNDFxH4tf7JejE7YxMK4Rq3hj2", "l5GMEE0OxpMOObd5qguyJtrVUi42", "sN4SztOibRSTg1H7SEeAwiEpDgm1", "uDhb49uS55XJm8cp6bqL2adjfwh2", "AhkYw50sBueJFvRO8glPlpE4QWt2", "wHns6CCKRde4YMf8VZhxLJfAa6H3", "ledPtMmuniSwpkYZ5YAXOSREoxl2"],
+        "tb73WEIzndUrPEaD1q4H0VQfQaD3": ["8QiLTKzhovh43RX2arJ4xNAgoRj2", "mUP19b2ISPc4Qnl1e0MHbCkAAKH3", "e4U1TKIhzURRt3YdqKWQgkDQApv2", "cm4yqA8NfBadUBtffEzcEJRV9873"],
+        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1": ["JvBQZydSDxNkZRP2vNofGXMGbGk1", "JvY6C2uEdPeEqoWLuqB4eYfbZqj2", "mZJZjTMVinNRegZFQG9FZzRjpiA2", "Jqy9ONMiwSP7BZM61X7x8PKI8lz1", "xNTJrZ5xXwRliGvpCVXaxDwDpl32"]
+      };
+    }
+
+    function isManager() {
+      return request.auth.uid in getManagerTeams();
+    }
+
+    function isManagerOrAdmin() {
+      return isManager() || isAdmin();
+    }
+
+    match /coverageEntries/{entryId} {
+      allow read, create, update: if request.auth != null && isOwner(request.resource.data.userId);
+      // Allow admins and managers to read all entries
+      allow list, get: if isManagerOrAdmin();
+      // Allow owners to delete their own entries
+      allow delete: if request.auth != null && isOwner(resource.data.userId);
+    }
+
     match /doctors/{doctorId} {
-        allow read, write: if isOwner(resource.data.userId);
+      allow read, create, update, delete: if request.auth != null && isOwner(request.resource.data.userId);
+      // Allow admins and managers to read all doctor lists
+      allow list, get: if isManagerOrAdmin();
     }
 
     match /plans/{planId} {
-        allow read, write: if isOwner(resource.data.userId);
+      allow read, create, update, delete: if request.auth != null && isOwner(request.resource.data.userId);
+       // Allow admins and managers to read all plans
+      allow list, get: if isManagerOrAdmin();
     }
     
     match /nonCallDays/{dayId} {
-        allow read, write: if isOwner(resource.data.userId);
-        allow update: if request.auth.uid in get(/databases/$(database)/documents/managers/--permissions--).data.approvers;
-    }
-    
-    match /timeLogs/{logId} {
-      allow read, write: if isOwner(resource.data.userId);
-    }
-
-    match /marketingSamples/{sampleId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth.uid in get(/databases/$(database)/documents/managers/--permissions--).data.admins;
+      allow read, create: if request.auth != null && isOwner(request.resource.data.userId);
+      // Allow owners to update their own pending requests, and managers/admins to update any request status
+      allow update: if (request.auth != null && isOwner(resource.data.userId) && resource.data.status == 'pending') || (isManagerOrAdmin());
+      allow list, get: if isManagerOrAdmin();
     }
 
     match /planningRequests/{requestId} {
-        allow read, write: if isOwner(resource.data.userId);
-        allow update: if request.auth.uid in get(/databases/$(database)/documents/managers/--permissions--).data.approvers;
+      allow read, create: if request.auth != null && isOwner(request.resource.data.userId);
+      // Allow admins and managers to update the status of any request
+      allow update: if isManagerOrAdmin();
+      allow list, get: if isManagerOrAdmin();
     }
+
+    match /marketingSamples/{sampleId} {
+        // Anyone can read the list of marketing samples
+        allow read: if request.auth != null;
+        // Only admins can create, update, or delete the masterlist
+        allow write: if isAdmin();
+    }
+
+    match /timeLogs/{logId} {
+      allow read, create, update, delete: if request.auth != null && isOwner(request.resource.data.userId);
+      allow list, get: if isManagerOrAdmin();
+    }
+
   }
 }
