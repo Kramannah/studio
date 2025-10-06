@@ -221,9 +221,10 @@ export function PlanningCalendar({
     const showRequestButton = useMemo(() => {
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const isFutureWeek = isBefore(startOfWeek(today, { weekStartsOn: 1 }), weekStart);
         
-        if (isFutureWeek) return false;
+        if (isBefore(startOfWeek(today, { weekStartsOn: 1 }), weekStart)) { // Future week
+            return false;
+        }
 
         return !currentWeekRequest || currentWeekRequest.status === 'rejected';
 
@@ -268,7 +269,7 @@ export function PlanningCalendar({
                 <CardTitle className="font-headline">Call Planning Calendar</CardTitle>
                 <CardDescription>Plan your upcoming doctor visits. Select a date to view or add plans.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-8 md:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-8">
                 <div className="space-y-4">
                      <Calendar
                         mode="single"
@@ -303,7 +304,7 @@ export function PlanningCalendar({
                                 );
                             },
                         }}
-                        className="w-full p-4 border rounded-md"
+                        className="w-full p-4 mx-auto border rounded-md sm:w-auto"
                     />
                     <Card>
                         <CardHeader>
@@ -344,7 +345,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly}
+                                disabled={readOnly || !!selectedDayNonCallEntry}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -557,5 +558,7 @@ export function PlanningCalendar({
         </Card>
     );
 }
+
+    
 
     
