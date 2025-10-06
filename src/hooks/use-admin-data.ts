@@ -19,40 +19,26 @@ export const useAdminData = () => {
 
     const fetchData = useCallback(async (collectionName: string, setter: Function, orderByField?: string, sortDirection: 'asc' | 'desc' = 'desc') => {
         try {
-            const q = orderByField 
-                ? query(collection(db, collectionName), orderBy(orderByField, sortDirection))
-                : query(collection(db, collectionName));
-
+            const q = query(collection(db, collectionName));
             const querySnapshot = await getDocs(q);
             const items: any[] = [];
             querySnapshot.forEach((doc) => {
                 items.push({ id: doc.id, ...doc.data() });
             });
+
+             if (orderByField && items.length > 0) {
+                 items.sort((a,b) => {
+                     const valA = a[orderByField];
+                     const valB = b[orderByField];
+                     if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                     if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                     return 0;
+                 });
+             }
             setter(items);
         } catch (error) {
             console.error(`Error fetching ${collectionName}:`, error);
-            if ((error as any)?.code !== 'failed-precondition') {
-                 toast({ variant: "destructive", title: "Data Fetch Error", description: `Could not fetch ${collectionName}. Check Firestore rules.` });
-            } else {
-                 console.warn(`Query for ${collectionName} requires an index. Consider client-side sorting or creating the index in Firebase.`);
-                 // Attempt to fetch without ordering
-                 const fallbackQuery = query(collection(db, collectionName));
-                 const fallbackSnapshot = await getDocs(fallbackQuery);
-                 const fallbackItems: any[] = [];
-                 fallbackSnapshot.forEach((doc) => {
-                    fallbackItems.push({ id: doc.id, ...doc.data() });
-                 });
-                 if (orderByField && fallbackItems.length > 0) {
-                     fallbackItems.sort((a,b) => {
-                         const valA = a[orderByField];
-                         const valB = b[orderByField];
-                         if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-                         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-                         return 0;
-                     });
-                 }
-                 setter(fallbackItems);
-            }
+            toast({ variant: "destructive", title: "Data Fetch Error", description: `Could not fetch ${collectionName}. Check Firestore rules.` });
         }
     }, [toast]);
 
