@@ -71,7 +71,7 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
                 autoComplete="off"
                 disabled={disabled}
                 onClick={() => {
-                  if (value && filteredDoctors.length > 0) setOpen(true)
+                  if (value && filteredDoctors.length > 0 && !open) setOpen(true)
                 }}
             />
         </div>
