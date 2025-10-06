@@ -146,6 +146,28 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
+const compressImage = (dataUrl: string, quality = 0.7, maxWidth = 800): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new window.Image();
+        img.src = dataUrl;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const aspect = img.height / img.width;
+            canvas.width = Math.min(img.width, maxWidth);
+            canvas.height = canvas.width * aspect;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return reject(new Error('Failed to get canvas context'));
+            }
+            
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = (error) => reject(error);
+    });
+};
+
 
 export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
@@ -263,7 +285,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   }, [stopCamera]);
 
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
     const video = videoRef.current;
     if (video) {
       const canvas = document.createElement('canvas');
@@ -273,7 +295,8 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/png');
-        form.setValue('photos', [dataUrl]);
+        const compressedDataUrl = await compressImage(dataUrl);
+        form.setValue('photos', [compressedDataUrl]);
       }
       handleCloseCamera();
     }
@@ -289,9 +312,10 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const dataUrl = e.target?.result as string;
-        form.setValue('photos', [dataUrl]);
+        const compressedDataUrl = await compressImage(dataUrl);
+        form.setValue('photos', [compressedDataUrl]);
       };
       reader.readAsDataURL(file);
     }
@@ -1045,9 +1069,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    
-
-    
-
-    
