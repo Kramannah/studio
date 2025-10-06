@@ -171,10 +171,7 @@ const compressImage = (dataUrl: string, quality = 0.7, maxWidth = 800): Promise<
 
 export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
-  const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [hasCameraPermission, setHasCameraPermission] = useState(true);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
@@ -240,67 +237,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   useEffect(() => {
     form.setValue("secondarySampleName", undefined);
   }, [secondaryProduct, form]);
-
-  const stopCamera = useCallback(() => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-  }, []);
-
-  const handleOpenCamera = async () => {
-    setProofMethod('photo');
-    form.setValue('signature', null);
-    form.setValue('photos', []);
-    
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-        if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-        }
-        setIsCameraOpen(true);
-    } catch (error) {
-        console.error("Error accessing camera:", error);
-        setHasCameraPermission(false);
-        toast({
-            variant: 'destructive',
-            title: 'Camera Access Denied',
-            description: 'Please enable camera permissions in your browser settings to use this app.',
-        });
-        setIsCameraOpen(false);
-    }
-  };
-  
-  const handleCloseCamera = () => {
-    stopCamera();
-    setIsCameraOpen(false);
-  };
-  
-  useEffect(() => {
-      return () => {
-        stopCamera();
-      };
-  }, [stopCamera]);
-
-
-  const handleCapture = async () => {
-    const video = videoRef.current;
-    if (video) {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/png');
-        const compressedDataUrl = await compressImage(dataUrl);
-        form.setValue('photos', [compressedDataUrl]);
-      }
-      handleCloseCamera();
-    }
-  };
 
   const handleUploadClick = () => {
     setProofMethod('photo');
@@ -431,7 +367,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
   const handleProofMethodChange = (value: 'signature') => {
     setProofMethod(value);
     form.setValue('photos', []);
-    setIsCameraOpen(false);
     openSignaturePad('signature');
   }
 
@@ -947,31 +882,7 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                               <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
                               <Card className="mt-2">
                                   <CardContent className="p-4">
-                                      {isCameraOpen ? (
-                                           <div className="space-y-2">
-                                                <div className="relative">
-                                                    <video ref={videoRef} className="w-full rounded-md aspect-video" autoPlay muted playsInline />
-                                                    {!hasCameraPermission && (
-                                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                                                            <Alert variant="destructive">
-                                                                <AlertTitle>Camera Access Required</AlertTitle>
-                                                                <AlertDescription>
-                                                                    Please allow camera access to use this feature.
-                                                                </AlertDescription>
-                                                            </Alert>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button type="button" onClick={handleCapture} className="w-full" disabled={!hasCameraPermission}>
-                                                        <Camera className="mr-2" /> Capture
-                                                    </Button>
-                                                     <Button type="button" variant="ghost" onClick={handleCloseCamera}>
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-                                           </div>
-                                      ) : photos && photos.length > 0 ? (
+                                      {photos && photos.length > 0 ? (
                                            <div className="relative w-full max-w-xs mx-auto">
                                               <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
                                               <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
@@ -995,9 +906,6 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
                                                     className="hidden"
                                                     accept="image/*"
                                                 />
-                                                <Button type="button" variant="outline" onClick={handleOpenCamera}>
-                                                    <Camera className="mr-2" /> Take Photo
-                                                </Button>
                                                 <Button type="button" variant="outline" onClick={handleUploadClick}>
                                                     <Upload className="mr-2" /> Upload Photo
                                                 </Button>
@@ -1069,3 +977,5 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
+
+    
