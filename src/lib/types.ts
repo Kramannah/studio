@@ -15,6 +15,7 @@ export interface CoverageEntry {
   signature?: string | null; // base64 encoded string
   jointCallWith?: string;
   jointCallSignature?: string | null; // base64 encoded string
+  dsmSignature?: string | null;
   submittedAt: string; // Storing as ISO string
   callObjective?: string;
   primaryProduct?: string;
@@ -76,6 +77,7 @@ export interface PlanningPermissionRequest {
   status: 'pending' | 'approved' | 'rejected';
   requestedAt: string; // ISO string
 }
+
 
 export interface MarketingSample {
     id: string;

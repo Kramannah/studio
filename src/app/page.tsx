@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { CoverageForm } from '@/components/coverage-form';
@@ -29,6 +28,7 @@ import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master' | 'exams' | 'in-field-coaching';
 
@@ -43,7 +43,7 @@ export default function Home() {
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
-  const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount } = usePlans();
+  const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount, planningRequests, requestPlanningPermission } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
   const [activeView, setActiveView] = useState<View>('planning');
@@ -60,7 +60,6 @@ export default function Home() {
   }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
   
   useEffect(() => {
-    // If the user is a manager, redirect them straight to the admin page.
     if (!authLoading && isUserManager) {
       router.push('/admin');
     }
@@ -100,21 +99,31 @@ export default function Home() {
   }
   
   if (!user || isUserManager) {
-    // Show login page if no user, or a loading/redirecting message for managers.
     return isUserManager 
       ? <div className="flex items-center justify-center min-h-screen bg-background"><p>Redirecting to manager dashboard...</p></div>
       : <LoginPage />;
   }
 
   const handleCrmClick = () => {
-    // Only change view if one of the sub-items is not already active
     const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
     if (!crmViews.includes(activeView)) {
       setActiveView('planning');
     }
   };
+  
+  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || timeLogsLoading || marketingSamplesLoading;
 
   const renderContent = () => {
+    if (anyLoading && activeView !== 'coverage') {
+      return (
+        <div className="space-y-4">
+          <Skeleton className="w-1/3 h-8" />
+          <Skeleton className="w-2/3 h-6" />
+          <Skeleton className="w-full h-96" />
+        </div>
+      )
+    }
+
     switch (activeView) {
       case 'planning':
         return <PlanningCalendar 
@@ -126,6 +135,8 @@ export default function Home() {
                 onLogCall={handleLogPlannedCall}
                 nonCallDays={nonCallDays}
                 onAddNonCallDay={addNonCallDay}
+                planningRequests={planningRequests}
+                onPermissionRequest={requestPlanningPermission}
               />;
       case 'coverage':
         return <CoverageForm 

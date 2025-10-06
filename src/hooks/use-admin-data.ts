@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
 
 export const useAdminData = () => {
     const { toast } = useToast();
@@ -31,7 +31,6 @@ export const useAdminData = () => {
             setter(items);
         } catch (error) {
             console.error(`Error fetching ${collectionName}:`, error);
-            // Don't toast for index errors, but log them.
             if ((error as any)?.code !== 'failed-precondition') {
                  toast({ variant: "destructive", title: "Data Fetch Error", description: `Could not fetch ${collectionName}. Check Firestore rules.` });
             } else {
@@ -43,7 +42,6 @@ export const useAdminData = () => {
                  fallbackSnapshot.forEach((doc) => {
                     fallbackItems.push({ id: doc.id, ...doc.data() });
                  });
-                 // This will be unsorted, but better than nothing.
                  if (orderByField && fallbackItems.length > 0) {
                      fallbackItems.sort((a,b) => {
                          const valA = a[orderByField];
@@ -98,7 +96,7 @@ export const useAdminData = () => {
             toast({ variant: "destructive", title: "Update Failed", description: "Could not update the non-call day status." });
         }
     }, [toast]);
-
+    
     const updatePlanningRequestStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
         try {
             const requestRef = doc(db, 'planningRequests', id);
@@ -110,6 +108,7 @@ export const useAdminData = () => {
             toast({ variant: "destructive", title: "Update Failed", description: "Could not update the planning request status." });
         }
     }, [toast]);
+
 
     return { 
         allEntries, 
