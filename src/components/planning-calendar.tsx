@@ -236,8 +236,8 @@ export function PlanningCalendar({
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
         const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
 
-        // Show if it's a past or current week and no approved/pending request exists
-        if (!isAfter(weekStartOfSelected, weekStartOfToday)) {
+        // Show if it's a past week and no approved/pending request exists
+        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
             return !currentWeekRequest || currentWeekRequest.status === 'rejected';
         }
 
@@ -264,11 +264,10 @@ export function PlanningCalendar({
         );
     }
     
-    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry || !canPlanPlannedCalls;
+    const isAddVisitDisabled = readOnly || !canPlanPlannedCalls;
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
-        if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
         if (!canPlanPlannedCalls) return "Planning for this week is locked.";
         return "Add a new visit";
     }
@@ -600,3 +599,5 @@ export function PlanningCalendar({
         </Card>
     );
 }
+
+    
