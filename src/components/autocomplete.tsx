@@ -32,8 +32,8 @@ type AutocompleteProps = {
     disabled?: boolean;
 }
 
-export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, disabled = false }: AutocompleteProps) {
-  const [open, setOpen] = React.useState(false)
+export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, placeholder, disabled = false }: AutocompleteProps) => {
+  const [open, setOpen] = React.useState(false);
   
   const filteredDoctors = React.useMemo(() => {
     if (!value) return [];
@@ -45,19 +45,20 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
     );
   }, [doctors, value]);
 
-  const handleSelect = (doctor: Doctor) => {
+  const handleSelect = React.useCallback((doctor: Doctor) => {
     onSelect(doctor);
     setOpen(false);
-  }
+  }, [onSelect]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.value);
     if (e.target.value) {
       if (!open) setOpen(true);
     } else {
       if (open) setOpen(false);
     }
-  }
+  }, [onChange, open]);
+
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -70,9 +71,6 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
                 className="w-full"
                 autoComplete="off"
                 disabled={disabled}
-                onClick={() => {
-                  if (value && filteredDoctors.length > 0 && !open) setOpen(true)
-                }}
             />
         </div>
       </PopoverTrigger>
@@ -105,4 +103,6 @@ export function Autocomplete({ doctors, value, onChange, onSelect, placeholder, 
       </PopoverContent>
     </Popover>
   )
-}
+});
+
+Autocomplete.displayName = "Autocomplete";
