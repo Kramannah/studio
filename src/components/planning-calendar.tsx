@@ -236,14 +236,9 @@ export function PlanningCalendar({
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
         const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
 
-        // Don't show for future weeks
-        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
-            return false;
-        }
-
-        // Show if it's a past week and no approved/pending request exists
-        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
-           return !currentWeekRequest || currentWeekRequest.status === 'rejected';
+        // Show if it's a past or current week and no approved/pending request exists
+        if (!isAfter(weekStartOfSelected, weekStartOfToday)) {
+            return !currentWeekRequest || currentWeekRequest.status === 'rejected';
         }
 
         return false;
@@ -279,7 +274,6 @@ export function PlanningCalendar({
 
     const getAddNonCallTitle = () => {
         if (readOnly) return "This is a read-only view.";
-        if (selectedDayPlans.length > 0) return "Cannot log non-call day with planned visits.";
         return "Log a non-call day";
     }
 
@@ -361,7 +355,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly || selectedDayPlans.length > 0}
+                                disabled={readOnly}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -525,6 +519,8 @@ export function PlanningCalendar({
                                                 entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
+                                            const isPastDate = selectedDate && isBefore(selectedDate, startOfToday());
+
 
                                             return (
                                             <TableRow key={plan.id}>
@@ -561,7 +557,13 @@ export function PlanningCalendar({
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                      {!readOnly && (
-                                                         <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)}>
+                                                         <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            onClick={() => onRemovePlan(plan.id)}
+                                                            disabled={isPastDate}
+                                                            title={isPastDate ? "Cannot delete plans for past dates." : "Remove plan"}
+                                                         >
                                                              <XCircle size={16} className="text-destructive"/>
                                                          </Button>
                                                      )}
