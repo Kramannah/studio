@@ -104,5 +104,35 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "DSM",
         firstName: "Eula",
         lastName: "Candawan"
+    },
+    "XNfz4EiMrIRQ4NwLlkdUXUvBzSH2": {
+        code: "LSL-01",
+        firstName: "John Patrick",
+        lastName: "Padilla"
+    },
+    "mdLCjhNVnYas96aW4IkrPWip7RS2": {
+        code: "LSL-02",
+        firstName: "Khristopher George",
+        lastName: "Pangan"
+    },
+    "ePVOaPvZYTa9CGj0MpReVnmKhD62": {
+        code: "LSL-03",
+        firstName: "Cheysa",
+        lastName: "Catama"
+    },
+    "Tajceo3bwwcH9ac9Mw4tEtj2Z952": {
+        code: "LSL-04",
+        firstName: "Pauline Jean T.",
+        lastName: "Ramos"
+    },
+    "nZZHI6JVZzZCVBIDcwiAv0RDmGv2": {
+        code: "LSL-05",
+        firstName: "Carmina",
+        lastName: "Dimaala"
+    },
+    "NOYZ3h8ylaNINBVBgFYJzhKdisY2": {
+        code: "LSL-07",
+        firstName: "Luzviminda",
+        lastName: "Rivera"
     }
 };
