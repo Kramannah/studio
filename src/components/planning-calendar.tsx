@@ -4,7 +4,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek, isAfter } from "date-fns";
 import { useState, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -191,41 +191,43 @@ export function PlanningCalendar({
     const currentWeekRequest = useMemo(() => {
         if (!selectedDate || !planningRequests) return null;
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        return planningRequests.find(req => isValid(parseISO(req.weekStartDate)) && isSameDay(parseISO(req.weekStartDate), weekStart));
+        return planningRequests.find(req => {
+             const reqDate = parseISO(req.weekStartDate);
+             return isValid(reqDate) && isSameDay(reqDate, weekStart);
+        });
     }, [planningRequests, selectedDate]);
     
-    // Planning for "planned" calls is only allowed for future weeks, or for past/current weeks if a permission request is approved.
     const canPlanPlannedCalls = useMemo(() => {
         if (!selectedDate) return false;
         
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
         const weekStartOfToday = startOfWeek(today, { weekStartsOn: 1 });
 
-        // Can always plan for future weeks
-        if (isBefore(weekStartOfToday, weekStartOfSelected)) {
+        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
             return true;
         }
         
-        // For past weeks, only if approved
-        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
-            return currentWeekRequest?.status === 'approved';
+        if (currentWeekRequest?.status === 'approved') {
+            return true;
         }
 
-        // For the current week, it's always open for unplanned, but this function is for "planned" calls logic.
-        // We will allow adding any call, and the addPlan hook will determine if it's 'planned' or 'unplanned'.
-        return true;
+        return false;
 
     }, [selectedDate, today, currentWeekRequest]);
     
 
     const showRequestButton = useMemo(() => {
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
-        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        
-        if (isBefore(startOfWeek(today, { weekStartsOn: 1 }), weekStart)) { // Future week
+
+        const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        const weekStartOfToday = startOfWeek(today, { weekStartsOn: 1 });
+
+        // Don't show for future weeks
+        if (isAfter(weekStartOfSelected, weekStartOfToday)) {
             return false;
         }
 
+        // Show if no request exists, or if the existing one was rejected
         return !currentWeekRequest || currentWeekRequest.status === 'rejected';
 
     }, [readOnly, selectedDate, today, currentWeekRequest, onPermissionRequest]);
@@ -253,7 +255,7 @@ export function PlanningCalendar({
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
-        if (!canPlanPlannedCalls && isPastDate) return "Cannot add visits for past dates without approved permission.";
+        if (!canPlanPlannedCalls && !isSameWeek(selectedDate || new Date(), new Date(), {weekStartsOn: 1})) return "Cannot add visits for past dates without approved permission.";
         return "Add a new visit";
     }
 
@@ -311,28 +313,23 @@ export function PlanningCalendar({
                             <CardTitle className="text-base font-headline">Week Status</CardTitle>
                         </CardHeader>
                         <CardContent>
-                             {selectedDate && showRequestButton ? (
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Lock className="w-5 h-5 text-destructive" />
-                                        <span className="font-semibold">Closed for Planning</span>
-                                    </div>
-                                    <Button size="sm" onClick={() => setIsPermissionDialogOpen(true)}>
-                                        <Unlock className="mr-2 h-4 w-4" />
-                                        Unlock
-                                    </Button>
-                                </div>
-                            ) : selectedDate ? (
+                             {selectedDate && (
                                 <div className="flex items-center justify-between">
                                      <div className="flex items-center gap-2">
-                                        {currentWeekRequest?.status === 'approved' ? <Unlock className="w-5 h-5 text-primary"/> : currentWeekRequest?.status === 'pending' ? <Clock className="w-5 h-5 text-yellow-500"/> : <Lock className="w-5 h-5 text-muted-foreground"/>}
-                                        <span className="font-semibold capitalize">{currentWeekRequest?.status || 'Open'}</span>
+                                        {canPlanPlannedCalls || isSameWeek(selectedDate, new Date(), {weekStartsOn: 1}) ? <Unlock className="w-5 h-5 text-primary"/> : <Lock className="w-5 h-5 text-destructive" />}
+                                        <span className="font-semibold capitalize">
+                                            {canPlanPlannedCalls || isSameWeek(selectedDate, new Date(), {weekStartsOn: 1}) ? 'Open for Planning' : 'Locked for Planning'}
+                                            {currentWeekRequest && ` (${currentWeekRequest.status})`}
+                                        </span>
                                     </div>
-                                    <span className="text-sm text-muted-foreground">
-                                        { isBefore(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) ? "Week has passed" : "Ready for planning"}
-                                    </span>
+                                    {showRequestButton && (
+                                        <Button size="sm" onClick={() => setIsPermissionDialogOpen(true)}>
+                                            <Unlock className="mr-2 h-4 w-4" />
+                                            Request Unlock
+                                        </Button>
+                                    )}
                                 </div>
-                            ) : null}
+                            )}
                         </CardContent>
                     </Card>
                 </div>
@@ -345,7 +342,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly || !!selectedDayNonCallEntry}
+                                disabled={readOnly}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -558,7 +555,5 @@ export function PlanningCalendar({
         </Card>
     );
 }
-
-    
 
     
