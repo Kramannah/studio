@@ -198,22 +198,30 @@ export function PlanningCalendar({
     const canPlanPlannedCalls = useMemo(() => {
         if (!selectedDate) return false;
         
-        // Cannot plan for past dates if no approved request
-        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        if(isBefore(weekStart, startOfWeek(today, { weekStartsOn: 1 }))) {
-             return currentWeekRequest?.status === 'approved';
+        const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        const weekStartOfToday = startOfWeek(today, { weekStartsOn: 1 });
+
+        // Can always plan for future weeks
+        if (isBefore(weekStartOfToday, weekStartOfSelected)) {
+            return true;
         }
         
-        // Can always plan for future weeks
+        // For past weeks, only if approved
+        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
+            return currentWeekRequest?.status === 'approved';
+        }
+
+        // For the current week, it's always open for unplanned, but this function is for "planned" calls logic.
+        // We will allow adding any call, and the addPlan hook will determine if it's 'planned' or 'unplanned'.
         return true;
+
     }, [selectedDate, today, currentWeekRequest]);
     
 
     const showRequestButton = useMemo(() => {
         if (readOnly || !selectedDate || !onPermissionRequest) return false;
-        // Show button for any week that is not in the future and does not have a pending or approved request.
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const isFutureWeek = isBefore(today, weekStart);
+        const isFutureWeek = isBefore(startOfWeek(today, { weekStartsOn: 1 }), weekStart);
         
         if (isFutureWeek) return false;
 
@@ -239,21 +247,17 @@ export function PlanningCalendar({
         );
     }
     
-    const isAddVisitDisabled = readOnly || (!canPlanPlannedCalls && !isSameWeek(selectedDate || new Date(), today, { weekStartsOn: 1 })) || !!selectedDayNonCallEntry;
+    const isAddVisitDisabled = readOnly || !!selectedDayNonCallEntry;
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
         if (!!selectedDayNonCallEntry) return "Cannot add visit on a non-call day.";
-        if (isAddVisitDisabled) {
-             if (isPastDate) return "Cannot add visits for past dates without approved permission.";
-        }
+        if (!canPlanPlannedCalls && isPastDate) return "Cannot add visits for past dates without approved permission.";
         return "Add a new visit";
     }
 
     const getAddNonCallTitle = () => {
         if (readOnly) return "This is a read-only view.";
-        // This logic is now simpler as per the new requirement
-        // if (!!selectedDayNonCallEntry) return "A non-call day is already logged for this date.";
         return "Log a non-call day";
     }
 
