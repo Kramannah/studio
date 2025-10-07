@@ -101,6 +101,7 @@ const formSchema = z.object({
 type CoverageFormProps = {
   onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => Promise<boolean>;
   onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
+  onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   isOnline: boolean;
   doctors: Doctor[];
   marketingSamples: MarketingSample[];
@@ -169,7 +170,7 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
 };
 
 
-export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -445,6 +446,13 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     }
     
     const { plannedDoctorId, ...restOfValues } = values;
+
+    if (callType === 'unplanned') {
+      const doctor = doctors.find(d => d.firstName === values.firstName && d.lastName === values.lastName);
+      if (doctor) {
+        onAddPlan(doctor, values.coverageDate || new Date());
+      }
+    }
 
     const savedOnline = await onSave({
       ...restOfValues,
@@ -977,5 +985,3 @@ export function CoverageForm({ onSave, onUpdate, isOnline, doctors, marketingSam
     </Card>
   )
 }
-
-    

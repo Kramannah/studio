@@ -142,6 +142,7 @@ export default function Home() {
         return <CoverageForm 
                 onSave={saveEntry}
                 onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry}
+                onAddPlan={addPlan}
                 isOnline={isOnline} 
                 doctors={doctors}
                 marketingSamples={marketingSamples}
