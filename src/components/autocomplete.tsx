@@ -41,7 +41,9 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
     return doctors.filter(doctor =>
       doctor.firstName.toLowerCase().includes(lowercasedValue) ||
       doctor.lastName.toLowerCase().includes(lowercasedValue) ||
-      `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`.includes(lowercasedValue)
+      `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`.includes(lowercasedValue) ||
+      (doctor.province && doctor.province.toLowerCase().includes(lowercasedValue)) ||
+      (doctor.municipality && doctor.municipality.toLowerCase().includes(lowercasedValue))
     );
   }, [doctors, value]);
 
