@@ -134,5 +134,37 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "MQ-01",
         firstName: "Luzviminda",
         lastName: "Rivera"
+    },
+    "sRqr0SXKIUZBCn5g9V6VQRh24SS2": {
+        code: "VIS-01",
+        firstName: "Joida",
+        lastName: "Meniosa",
+    },
+    "xOQdg23cnOgLQD5lonJtFgAELa13": {
+        code: "VIS-02",
+        firstName: "Marylyn",
+        lastName: "Baldoz",
+    },
+    "Hnr2ehdTK0O8PfSj7Vn2zQksqz63": {
+        code: "VIS-03",
+        firstName: "Sheena Marie",
+        lastName: "Callejo",
+    },
+    "h2q00DOa3EM870V5RDu2NABcb213": {
+        code: "VIS-04",
+        firstName: "Carmel",
+        lastName: "Tojon",
+    },
+    "2Bjo0AEdTbWb14C4knsPvX0Ub8r1": {
+        code: "MIN-03",
+        firstName: "Iries",
+        lastName: "Rombaiz",
+    },
+    "MkQwPWR0wyXrDRzlekEFMzQSu7Y2": {
+        code: "MIN-04",
+        firstName: "Gwyne Joseph F.",
+        lastName: "Lestor",
     }
 };
+
+    
