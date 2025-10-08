@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -521,7 +522,8 @@ export function PlanningCalendar({
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
                                             
                                             const today = startOfToday();
-                                            const isFutureWeek = selectedDate ? isAfter(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) : false;
+                                            const planDate = parseISO(plan.plannedDate);
+                                            const isFutureWeek = isValid(planDate) ? isAfter(startOfWeek(planDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) : false;
                                             const isRemovalDisabled = readOnly || !isFutureWeek;
 
                                             return (
