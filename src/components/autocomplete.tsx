@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button"
 import {
   Command,
   CommandEmpty,
-  CommandGroup,
   CommandInput,
+  CommandGroup,
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
@@ -20,8 +20,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Input } from "./ui/input"
-
 
 type AutocompleteProps = {
     doctors: Doctor[];
@@ -34,9 +32,14 @@ type AutocompleteProps = {
 
 export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, placeholder, disabled = false }: AutocompleteProps) => {
   const [open, setOpen] = React.useState(false);
-  
+
+  const handleSelect = React.useCallback((doctor: Doctor) => {
+    onSelect(doctor);
+    setOpen(false);
+  }, [onSelect]);
+
   const filteredDoctors = React.useMemo(() => {
-    if (!value) return [];
+    if (!value) return doctors;
     const lowercasedValue = value.toLowerCase();
     return doctors.filter(doctor =>
       doctor.firstName.toLowerCase().includes(lowercasedValue) ||
@@ -47,37 +50,23 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
     );
   }, [doctors, value]);
 
-  const handleSelect = React.useCallback((doctor: Doctor) => {
-    onSelect(doctor);
-    setOpen(false);
-  }, [onSelect]);
-
-  const handleInputChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
-    if (e.target.value) {
-      if (!open) setOpen(true);
-    } else {
-      if (open) setOpen(false);
-    }
-  }, [onChange, open]);
-
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative">
-            <Input 
-                value={value}
-                onChange={handleInputChange}
-                placeholder={placeholder}
-                className="w-full"
-                autoComplete="off"
-                disabled={disabled}
+      <Command
+        shouldFilter={false}
+        className="w-full overflow-visible"
+      >
+        <PopoverTrigger asChild>
+            <CommandInput
+              value={value}
+              onValueChange={onChange}
+              placeholder={placeholder}
+              disabled={disabled}
+              className="w-full"
+              onFocus={() => setOpen(true)}
             />
-        </div>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
           <CommandList>
             {filteredDoctors.length === 0 && value.length > 0 ? (
                 <CommandEmpty>No doctor found. You can add them manually.</CommandEmpty>
@@ -92,7 +81,7 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        value === `${doctor.firstName} ${doctor.lastName}` ? "opacity-100" : "opacity-0"
+                        `${doctor.firstName} ${doctor.lastName}` === value ? "opacity-100" : "opacity-0"
                       )}
                     />
                     {doctor.firstName} {doctor.lastName}
@@ -101,8 +90,8 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
                 </CommandGroup>
             )}
           </CommandList>
-        </Command>
-      </PopoverContent>
+        </PopoverContent>
+      </Command>
     </Popover>
   )
 });
