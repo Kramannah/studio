@@ -7,6 +7,7 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { isSameDay, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
 
@@ -163,14 +164,37 @@ export const useOfflineSync = (userId?: string) => {
     }
 
     setIsSyncing(true);
-    const entriesToSync = [...offlineEntries];
+    // Fetch latest master entries before syncing to prevent duplicates
+    await fetchMasterEntries();
+    
+    const entriesToSync = offlineEntries.filter(offlineEntry => {
+        const isDuplicate = masterEntries.some(masterEntry =>
+            masterEntry.userId === offlineEntry.userId &&
+            masterEntry.firstName === offlineEntry.firstName &&
+            masterEntry.lastName === offlineEntry.lastName &&
+            offlineEntry.coverageDate && masterEntry.coverageDate &&
+            isSameDay(parseISO(offlineEntry.coverageDate), parseISO(masterEntry.coverageDate))
+        );
+        return !isDuplicate;
+    });
+    
+    const alreadySyncedCount = offlineEntries.length - entriesToSync.length;
+
+    if (entriesToSync.length === 0) {
+        if (alreadySyncedCount > 0) {
+            toast({ title: 'Already Synced', description: `${alreadySyncedCount} offline entries were already on the server.` });
+        }
+        updateOfflineInStorage([]); // Clear all offline entries as they are either synced or duplicates
+        setIsSyncing(false);
+        return;
+    }
+
 
     const batch = writeBatch(db);
     entriesToSync.forEach(entry => {
         const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
         const entryRef = doc(collection(db, 'coverageEntries'));
         
-        // Firestore does not support 'undefined' values, so clean the object
         const cleanedData: Partial<CoverageEntry> = {};
         for (const key in dataToSync) {
             const typedKey = key as keyof typeof dataToSync;
@@ -179,7 +203,6 @@ export const useOfflineSync = (userId?: string) => {
             }
         }
         
-        // Ensure joint call fields are only present for joint calls
         if (cleanedData.coverageType !== 'joint') {
             delete cleanedData.jointCallWith;
             delete cleanedData.jointCallSignature;
@@ -192,14 +215,14 @@ export const useOfflineSync = (userId?: string) => {
         await batch.commit();
         const successCount = entriesToSync.length;
         
-        // Remove only the synced entries from local storage
-        const remainingEntries = offlineEntries.filter(
-            offlineEntry => !entriesToSync.some(syncedEntry => syncedEntry.id === offlineEntry.id)
-        );
-        updateOfflineInStorage(remainingEntries);
+        updateOfflineInStorage([]);
 
         if(successCount > 0){
-            toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
+            let description = `${successCount} entries synced successfully.`;
+            if (alreadySyncedCount > 0) {
+                description += ` ${alreadySyncedCount} duplicates were skipped.`;
+            }
+            toast({ title: 'Sync Complete', description });
             await fetchMasterEntries();
         }
     } catch (error) {
@@ -208,7 +231,7 @@ export const useOfflineSync = (userId?: string) => {
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey, masterEntries]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
