@@ -519,9 +519,10 @@ export function PlanningCalendar({
                                                 entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                             );
                                             const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            const isPastDate = selectedDate && isBefore(selectedDate, startOfToday());
-                                            const isRemovalDisabled = readOnly || !canPlanPlannedCalls;
-
+                                            
+                                            const today = startOfToday();
+                                            const isFutureWeek = selectedDate ? isAfter(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) : false;
+                                            const isRemovalDisabled = readOnly || !isFutureWeek;
 
                                             return (
                                             <TableRow key={plan.id}>
@@ -563,7 +564,7 @@ export function PlanningCalendar({
                                                             size="icon" 
                                                             onClick={() => onRemovePlan(plan.id)}
                                                             disabled={isRemovalDisabled}
-                                                            title={isRemovalDisabled ? "Cannot delete plans for a locked week." : "Remove plan"}
+                                                            title={isRemovalDisabled ? "Cannot delete plans for past or current weeks." : "Remove plan"}
                                                          >
                                                              <XCircle size={16} className="text-destructive"/>
                                                          </Button>
@@ -599,5 +600,7 @@ export function PlanningCalendar({
         </Card>
     );
 }
+
+    
 
     
