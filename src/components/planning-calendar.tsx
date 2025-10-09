@@ -523,8 +523,8 @@ export function PlanningCalendar({
                                             
                                             const today = startOfToday();
                                             const planDate = parseISO(plan.plannedDate);
-                                            const isFutureWeek = isValid(planDate) ? isAfter(startOfWeek(planDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) : false;
-                                            const isRemovalDisabled = readOnly || !isFutureWeek;
+                                            const isPastWeek = isValid(planDate) ? isBefore(startOfWeek(planDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 })) : false;
+                                            const isRemovalDisabled = readOnly || isPastWeek;
 
                                             return (
                                             <TableRow key={plan.id}>
@@ -566,7 +566,7 @@ export function PlanningCalendar({
                                                             size="icon" 
                                                             onClick={() => onRemovePlan(plan.id)}
                                                             disabled={isRemovalDisabled}
-                                                            title={isRemovalDisabled ? "Cannot delete plans for past or current weeks." : "Remove plan"}
+                                                            title={isRemovalDisabled ? "Cannot delete plans for past weeks." : "Remove plan"}
                                                          >
                                                              <XCircle size={16} className="text-destructive"/>
                                                          </Button>
@@ -606,3 +606,4 @@ export function PlanningCalendar({
     
 
     
+
