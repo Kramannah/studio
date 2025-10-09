@@ -105,6 +105,11 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Eula",
         lastName: "Candawan"
     },
+    "e11qs3XD1vW3JWHfEaJI2DXcCEj2": {
+        code: "DSM",
+        firstName: "M",
+        lastName: "Nonato"
+    },
     "XNfz4EiMrIRQ4NwLlkdUXUvBzSH2": {
         code: "NL-01",
         firstName: "John Patrick",
@@ -138,7 +143,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
     "sRqr0SXKIUZBCn5g9V6VQRh24SS2": {
         code: "LSL-01",
         firstName: "Joida",
-        lastName: "Meniosa",
+        lastName: "Meniosa"
     },
     "xOQdg23cnOgLQD5lonJtFgAELa13": {
         code: "LSL-03",
