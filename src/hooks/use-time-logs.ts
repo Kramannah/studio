@@ -16,7 +16,7 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchTimeLogs = useCallback(async () => {
+  const fetchTimeLogs = useCallback(async (forceFetchAll = false) => {
     if (!user) {
       setTimeLogs([]);
       setTodaysTimeIn(null);
@@ -25,23 +25,42 @@ export const useTimeLogs = () => {
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"));
+      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid));
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
-      let foundTodaysTimeIn = false;
       querySnapshot.forEach((doc) => {
-        const log = { id: doc.id, ...doc.data() } as TimeLog;
-        fetchedLogs.push(log);
-        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
-        if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
-          setTodaysTimeIn(log);
-          foundTodaysTimeIn = true;
-        }
+        fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
-      setTimeLogs(fetchedLogs);
-      if (!foundTodaysTimeIn) {
+
+      // Sort by timeIn descending, safely handling invalid dates
+      fetchedLogs.sort((a, b) => {
+        const dateA = a.timeIn ? parseISO(a.timeIn) : null;
+        const dateB = b.timeIn ? parseISO(b.timeIn) : null;
+        if (isValid(dateA) && isValid(dateB)) {
+          return dateB.getTime() - dateA.getTime();
+        }
+        if (isValid(dateA)) return -1;
+        if (isValid(dateB)) return 1;
+        return 0;
+      });
+
+      const latestLog = fetchedLogs.length > 0 ? fetchedLogs[0] : null;
+      if (latestLog) {
+        const timeInDate = latestLog.timeIn ? parseISO(latestLog.timeIn) : null;
+        if (timeInDate && isValid(timeInDate) && isToday(timeInDate) && !latestLog.timeOut) {
+          setTodaysTimeIn(latestLog);
+        } else {
+          setTodaysTimeIn(null);
+        }
+      } else {
         setTodaysTimeIn(null);
       }
+      
+      // Only set all logs if we need them, e.g. on summary page
+      if (forceFetchAll) {
+        setTimeLogs(fetchedLogs);
+      }
+
     } catch (error) {
       console.error("Error fetching time logs:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not fetch time logs." });
@@ -50,18 +69,19 @@ export const useTimeLogs = () => {
     }
   }, [user, toast]);
 
-  const fetchAllTimeLogs = fetchTimeLogs; // Keep for backward compatibility if called elsewhere
-  const fetchTodaysTimeIn = fetchTimeLogs; // The main fetch now handles both
+  const fetchAllTimeLogs = useCallback(() => {
+    return fetchTimeLogs(true);
+  }, [fetchTimeLogs]);
 
   useEffect(() => {
     if(user) {
-        fetchTodaysTimeIn();
+        fetchTimeLogs(false);
     } else {
         setLoading(false);
         setTimeLogs([]);
         setTodaysTimeIn(null);
     }
-  }, [user, fetchTodaysTimeIn]);
+  }, [user, fetchTimeLogs]);
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
