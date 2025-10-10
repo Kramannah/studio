@@ -6,7 +6,7 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, getDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO, isValid } from 'date-fns';
 
 export const useTimeLogs = () => {
@@ -16,7 +16,7 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchAllTimeLogs = useCallback(async () => {
+  const fetchTimeLogs = useCallback(async () => {
     if (!user) {
       setTimeLogs([]);
       setTodaysTimeIn(null);
@@ -32,32 +32,29 @@ export const useTimeLogs = () => {
         fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
 
-      // Sort by timeIn descending, safely handling invalid dates
+      // Sort logs by timeIn descending
       fetchedLogs.sort((a, b) => {
         const dateA = a.timeIn ? parseISO(a.timeIn) : null;
         const dateB = b.timeIn ? parseISO(b.timeIn) : null;
-        if (isValid(dateA) && isValid(dateB)) {
-          return dateB.getTime() - dateA.getTime();
-        }
-        if (isValid(dateA)) return -1;
-        if (isValid(dateB)) return 1;
-        return 0;
+        if (!dateA || !isValid(dateA)) return 1;
+        if (!dateB || !isValid(dateB)) return -1;
+        return dateB.getTime() - dateA.getTime();
       });
+
+      let foundTodaysTimeIn = false;
+      for (const log of fetchedLogs) {
+        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
+        if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
+          setTodaysTimeIn(log);
+          foundTodaysTimeIn = true;
+          break; 
+        }
+      }
       
       setTimeLogs(fetchedLogs);
-
-      const latestLog = fetchedLogs.length > 0 ? fetchedLogs[0] : null;
-      if (latestLog) {
-        const timeInDate = latestLog.timeIn ? parseISO(latestLog.timeIn) : null;
-        if (timeInDate && isValid(timeInDate) && isToday(timeInDate) && !latestLog.timeOut) {
-          setTodaysTimeIn(latestLog);
-        } else {
-          setTodaysTimeIn(null);
-        }
-      } else {
+      if (!foundTodaysTimeIn) {
         setTodaysTimeIn(null);
       }
-
     } catch (error) {
       console.error("Error fetching time logs:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not fetch time logs." });
@@ -65,16 +62,10 @@ export const useTimeLogs = () => {
       setLoading(false);
     }
   }, [user, toast]);
-  
+
   useEffect(() => {
-    if(user) {
-        fetchAllTimeLogs();
-    } else {
-        setLoading(false);
-        setTimeLogs([]);
-        setTodaysTimeIn(null);
-    }
-  }, [user, fetchAllTimeLogs]);
+    fetchTimeLogs();
+  }, [fetchTimeLogs]);
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
@@ -89,12 +80,10 @@ export const useTimeLogs = () => {
       timeIn: new Date().toISOString(),
       locationType,
       timeInPhoto: photo,
-      timeOut: null,
-      timeOutPhoto: null,
     };
     try {
       const docRef = await addDoc(collection(db, "timeLogs"), newTimeLog);
-      const createdLog = { id: docRef.id, ...newTimeLog } as TimeLog;
+      const createdLog = { id: docRef.id, ...newTimeLog };
       setTimeLogs(prev => [createdLog, ...prev]);
       setTodaysTimeIn(createdLog);
       toast({ title: "Time In Successful", description: `You have successfully timed in at ${new Date().toLocaleTimeString()}` });
@@ -128,5 +117,5 @@ export const useTimeLogs = () => {
 
   }, [user, toast, todaysTimeIn]);
 
-  return { timeLogs, fetchAllTimeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn };
+  return { timeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn };
 };

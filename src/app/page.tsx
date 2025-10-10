@@ -45,7 +45,7 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount, planningRequests, requestPlanningPermission } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchAllTimeLogs } = useTimeLogs();
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
@@ -64,12 +64,6 @@ export default function Home() {
       router.push('/admin');
     }
   }, [authLoading, isUserManager, router]);
-
-  useEffect(() => {
-    if (activeView === 'summary') {
-      fetchAllTimeLogs();
-    }
-  }, [activeView, fetchAllTimeLogs]);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
