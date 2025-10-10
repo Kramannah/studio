@@ -3,7 +3,7 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -197,6 +197,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     }, [nonCallDays, appliedRange]);
 
     const filteredTimeLogs = useMemo(() => {
+        if (timeLogs.length === 0) return [];
         if (!appliedRange.start || !appliedRange.end) {
             return timeLogs.filter(log => {
                 const logTimeIn = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
@@ -465,7 +466,7 @@ Summary:
                                         filteredTimeLogs.map((log) => {
                                             const timeIn = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
                                             const timeOut = log.timeOut ? (typeof log.timeOut === 'string' ? parseISO(log.timeOut) : log.timeOut) : null;
-                                            const duration = isValid(timeIn) && isValid(timeOut) ? `${differenceInMinutes(timeOut, timeIn)} mins` : 'Active';
+                                            const duration = isValid(timeIn) && timeOut && isValid(timeOut) ? `${differenceInMinutes(timeOut, timeIn)} mins` : 'Active';
                                             
                                             return (
                                             <TableRow key={log.id}>
@@ -476,7 +477,7 @@ Summary:
                                                 )}
                                                 <TableCell className="font-medium">{isValid(timeIn) ? format(timeIn, "PPP") : 'Invalid Date'}</TableCell>
                                                 <TableCell>{isValid(timeIn) ? format(timeIn, "p") : 'N/A'}</TableCell>
-                                                <TableCell>{isValid(timeOut) ? format(timeOut, "p") : 'N/A'}</TableCell>
+                                                <TableCell>{timeOut && isValid(timeOut) ? format(timeOut, "p") : 'N/A'}</TableCell>
                                                 <TableCell>{duration}</TableCell>
                                                 <TableCell className="capitalize">{log.locationType}</TableCell>
                                             </TableRow>

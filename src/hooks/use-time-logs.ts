@@ -16,55 +16,67 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchTimeLogs = useCallback(async () => {
+  const fetchAllTimeLogs = useCallback(async () => {
+    if (!user) return;
+    try {
+      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedLogs: TimeLog[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
+      });
+      setTimeLogs(fetchedLogs);
+    } catch (error) {
+      console.error("Error fetching all time logs:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch time log history." });
+    }
+  }, [user, toast]);
+
+  const fetchTodaysTimeIn = useCallback(async () => {
     if (!user) {
-      setTimeLogs([]);
-      setTodaysTimeIn(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid));
+      const q = query(
+        collection(db, "timeLogs"), 
+        where("userId", "==", user.uid), 
+        orderBy("timeIn", "desc"), 
+        limit(1)
+      );
       const querySnapshot = await getDocs(q);
-      const fetchedLogs: TimeLog[] = [];
-      let foundTodaysTimeIn = false;
-      querySnapshot.forEach((doc) => {
-        const log = { id: doc.id, ...doc.data() } as TimeLog;
-        fetchedLogs.push(log);
-      });
       
-      // Sort on the client side
-      fetchedLogs.sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
-
-      const latestLog = fetchedLogs[0];
-      if (latestLog) {
+      if (!querySnapshot.empty) {
+        const latestLog = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as TimeLog;
         const timeInDate = typeof latestLog.timeIn === 'string' ? parseISO(latestLog.timeIn) : latestLog.timeIn;
+
         if (isValid(timeInDate) && isToday(timeInDate) && !latestLog.timeOut) {
           setTodaysTimeIn(latestLog);
-          foundTodaysTimeIn = true;
+        } else {
+          setTodaysTimeIn(null);
         }
-      }
-
-      setTimeLogs(fetchedLogs);
-      if (!foundTodaysTimeIn) {
+      } else {
         setTodaysTimeIn(null);
       }
     } catch (error) {
-      console.error("Error fetching time logs:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch time logs." });
+      console.error("Error fetching today's time log:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch latest time log." });
     } finally {
       setLoading(false);
     }
   }, [user, toast]);
 
+
   useEffect(() => {
     if(user) {
-        fetchTimeLogs();
+        fetchTodaysTimeIn();
     } else {
         setLoading(false);
+        setTimeLogs([]);
+        setTodaysTimeIn(null);
     }
-  }, [user, fetchTimeLogs]);
+  }, [user, fetchTodaysTimeIn]);
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
@@ -79,12 +91,14 @@ export const useTimeLogs = () => {
       timeIn: new Date().toISOString(),
       locationType,
       timeInPhoto: photo,
+      timeOut: null,
+      timeOutPhoto: null,
     };
     try {
       const docRef = await addDoc(collection(db, "timeLogs"), newTimeLog);
-      const createdLog = { id: docRef.id, ...newTimeLog };
-      setTimeLogs(prev => [createdLog, ...prev].sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime()));
-      setTodaysTimeIn(createdLog as TimeLog);
+      const createdLog = { id: docRef.id, ...newTimeLog } as TimeLog;
+      setTimeLogs(prev => [createdLog, ...prev]);
+      setTodaysTimeIn(createdLog);
       toast({ title: "Time In Successful", description: `You have successfully timed in at ${new Date().toLocaleTimeString()}` });
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Could not save time in." });
@@ -107,7 +121,7 @@ export const useTimeLogs = () => {
     try {
         await updateDoc(timeLogRef, timeOutData);
         const updatedLog = { ...todaysTimeIn, ...timeOutData };
-        setTimeLogs(prev => prev.map(log => log.id === todaysTimeIn.id ? updatedLog : log).sort((a,b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime()));
+        setTimeLogs(prev => prev.map(log => log.id === todaysTimeIn.id ? updatedLog : log));
         setTodaysTimeIn(null); // Reset for next day
         toast({ title: "Time Out Successful", description: `You have successfully timed out at ${new Date().toLocaleTimeString()}` });
     } catch (error) {
@@ -116,5 +130,6 @@ export const useTimeLogs = () => {
 
   }, [user, toast, todaysTimeIn]);
 
-  return { timeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn };
+  return { timeLogs, fetchAllTimeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn };
 };
+
