@@ -6,7 +6,7 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, getDoc, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { isToday, parseISO, isValid } from 'date-fns';
 
 export const useTimeLogs = () => {
@@ -16,7 +16,7 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchTimeLogs = useCallback(async (forceFetchAll = false) => {
+  const fetchAllTimeLogs = useCallback(async () => {
     if (!user) {
       setTimeLogs([]);
       setTodaysTimeIn(null);
@@ -43,6 +43,8 @@ export const useTimeLogs = () => {
         if (isValid(dateB)) return 1;
         return 0;
       });
+      
+      setTimeLogs(fetchedLogs);
 
       const latestLog = fetchedLogs.length > 0 ? fetchedLogs[0] : null;
       if (latestLog) {
@@ -55,11 +57,6 @@ export const useTimeLogs = () => {
       } else {
         setTodaysTimeIn(null);
       }
-      
-      // Only set all logs if we need them, e.g. on summary page
-      if (forceFetchAll) {
-        setTimeLogs(fetchedLogs);
-      }
 
     } catch (error) {
       console.error("Error fetching time logs:", error);
@@ -68,20 +65,16 @@ export const useTimeLogs = () => {
       setLoading(false);
     }
   }, [user, toast]);
-
-  const fetchAllTimeLogs = useCallback(() => {
-    return fetchTimeLogs(true);
-  }, [fetchTimeLogs]);
-
+  
   useEffect(() => {
     if(user) {
-        fetchTimeLogs(false);
+        fetchAllTimeLogs();
     } else {
         setLoading(false);
         setTimeLogs([]);
         setTodaysTimeIn(null);
     }
-  }, [user, fetchTimeLogs]);
+  }, [user, fetchAllTimeLogs]);
 
   const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
     if (!user) return;
