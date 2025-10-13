@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
-import { isThisMonth, parseISO, isValid } from "date-fns";
+import { isThisMonth, parseISO, isValid, format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { provinces } from "@/lib/philippine-locations";
@@ -213,6 +213,25 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     };
     reader.readAsArrayBuffer(file);
   };
+  
+    const handleDownload = () => {
+    const dataToExport = doctors.map(doctor => ({
+      firstName: doctor.firstName,
+      lastName: doctor.lastName,
+      specialty: doctor.specialty,
+      clinic: doctor.clinic,
+      province: doctor.province,
+      municipality: doctor.municipality,
+      placeOfPractice: doctor.placeOfPractice,
+      frequency: doctor.frequency,
+      hacme: doctor.hacme,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Doctor Masterlist");
+    XLSX.writeFile(workbook, `doctor_masterlist_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
 
   const handleDownloadTemplate = () => {
     const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'province', 'municipality', 'placeOfPractice', 'frequency', 'hacme'];
@@ -349,6 +368,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                   </AlertDialogContent>
                 </AlertDialog>
               )}
+               <Button onClick={handleDownload} variant="outline" disabled={readOnly}>
+                <Download className="mr-2" />
+                Download
+              </Button>
               <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
                 <Download className="mr-2" />
                 Template
