@@ -101,7 +101,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, {} as Record<string, number>);
         
-        const target3xPlusDoctors = doctors.filter(d => d.frequency === '3x' || d.frequency === '4x');
+        const target3xPlusDoctors = doctors.filter(d => d.frequency === '3x');
         const total3xPlusTarget = target3xPlusDoctors.length;
         const actual3xPlusCompleted = target3xPlusDoctors.filter(d => {
             const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
@@ -251,7 +251,7 @@ Hi Team,
 Please find the call summary report for the selected period.
 
 Summary:
-- Call Concentration (3x/4x): ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)
+- Call Concentration (3x): ${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)
 - Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)
 - Call Rate: ${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)
 - Average Calls Per Day: ${insights.avgCallsPerDay}
@@ -352,9 +352,9 @@ Summary:
                         color="text-orange-500"
                     />
                     <StatCard 
-                        title="Call Concentration" 
+                        title="Call Concentration (3x)" 
                         value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
-                        description="Actual vs. Target for 3x/4x doctors." 
+                        description="Actual vs. Target for 3x doctors." 
                         icon={Target}
                         color="text-primary"
                     />
@@ -569,6 +569,8 @@ Summary:
         </div>
     );
 }
+
+    
 
     
 
