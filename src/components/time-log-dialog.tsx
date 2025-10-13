@@ -34,7 +34,6 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [permissionRequested, setPermissionRequested] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -43,13 +42,12 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     }
   }, []);
 
-  const getCameraPermission = async () => {
-    setPermissionRequested(true);
+  const getCameraPermission = useCallback(async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         toast({
-        variant: 'destructive',
-        title: 'Camera Not Supported',
-        description: 'Your browser does not support camera access.',
+            variant: 'destructive',
+            title: 'Camera Not Supported',
+            description: 'Your browser does not support camera access.',
         });
         setHasCameraPermission(false);
         return;
@@ -57,27 +55,26 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         streamRef.current = stream;
-        setHasCameraPermission(true);
-
         if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+            videoRef.current.srcObject = stream;
         }
+        setHasCameraPermission(true);
     } catch (error) {
         console.error('Error accessing camera:', error);
         setHasCameraPermission(false);
         toast({
-        variant: 'destructive',
-        title: 'Camera Access Denied',
-        description: 'Please enable camera permissions in your browser settings.',
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please enable camera permissions in your browser settings.',
         });
     }
-  };
+  }, [toast]);
+  
 
   useEffect(() => {
     if (isOpen) {
       setCapturedImage(null);
-      setHasCameraPermission(null);
-      setPermissionRequested(false);
+      getCameraPermission();
     } else {
       stopCamera();
     }
@@ -85,7 +82,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     return () => {
         stopCamera();
     }
-  }, [isOpen, stopCamera]);
+  }, [isOpen, stopCamera, getCameraPermission]);
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -135,25 +132,22 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
         </DialogHeader>
         <div className="space-y-4 py-4">
             <div className="relative w-full aspect-video bg-muted rounded-md overflow-hidden flex items-center justify-center">
-                {!permissionRequested ? (
-                    <Button onClick={getCameraPermission}><Camera className="mr-2"/> Enable Camera</Button>
-                ) : hasCameraPermission === null ? (
-                    <p>Loading camera...</p>
-                ) : hasCameraPermission === false ? (
-                    <p className="text-destructive p-4 text-center">Camera not available. Please check your browser permissions.</p>
-                ) : (
-                    <>
-                        {capturedImage ? (
-                            <Image src={capturedImage} alt="Captured" layout="fill" objectFit="contain" />
-                        ) : (
-                            <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                        )}
-                    </>
+                <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+
+                {hasCameraPermission === false && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                        <p className="text-destructive-foreground p-4 text-center">Camera not available. Please check permissions.</p>
+                    </div>
+                )}
+                {capturedImage && (
+                    <div className="absolute inset-0">
+                         <Image src={capturedImage} alt="Captured" layout="fill" objectFit="contain" />
+                    </div>
                 )}
                  <canvas ref={canvasRef} className="hidden" />
             </div>
 
-            {hasCameraPermission === false && permissionRequested && (
+            {hasCameraPermission === false && (
                 <Alert variant="destructive">
                     <AlertTitle>Camera Access Required</AlertTitle>
                     <AlertDescription>
