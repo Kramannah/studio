@@ -38,7 +38,8 @@ export default function AdminPage() {
         loading: dataLoading,
         fetchAllData,
         updateNonCallDayStatus,
-        updatePlanningRequestStatus
+        updatePlanningRequestStatus,
+        deleteEntry,
     } = useAdminData();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
@@ -227,6 +228,7 @@ export default function AdminPage() {
                                 allNonCallDays={allNonCallDays}
                                 allTimeLogs={allTimeLogs}
                                 allMarketingSamples={marketingSamples || []}
+                                onDeleteEntry={deleteEntry}
                             />
                         ) : (
                            <CallSummary 

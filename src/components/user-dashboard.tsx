@@ -19,9 +19,10 @@ interface UserDashboardProps {
     allNonCallDays?: NonCallDay[];
     allTimeLogs?: TimeLog[];
     allMarketingSamples: MarketingSample[];
+    onDeleteEntry?: (id: string) => void;
 }
 
-export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allMarketingSamples }: UserDashboardProps) {
+export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allMarketingSamples, onDeleteEntry = () => {} }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
     const userData = useMemo(() => {
@@ -67,7 +68,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={userData.entries} onDelete={() => {}} onEdit={() => {}} readOnly={true} />
+              <SubmittedList entries={userData.entries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 
