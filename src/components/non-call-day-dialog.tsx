@@ -48,6 +48,7 @@ const leaveReasons = [
     "Training/Orientation",
     "Sales/Marketing Event",
     "Paternity/Maternity Leave",
+    "District Meeting",
 ]
 
 export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }: NonCallDayDialogProps) {
