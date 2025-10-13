@@ -7,7 +7,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent, Briefcase, Pill } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -59,6 +59,22 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
     }, [entries, appliedRange]);
+    
+    const filteredNonCallDays = useMemo(() => {
+         if (!appliedRange.start || !appliedRange.end) {
+            return nonCallDays.filter(day => {
+                const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+                return isValid(dayDate) && isThisMonth(dayDate);
+            });
+        }
+        const start = appliedRange.start;
+        const end = appliedRange.end;
+        return nonCallDays.filter(day => {
+            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+            return isValid(dayDate) && isWithinInterval(dayDate, { start, end });
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [nonCallDays, appliedRange]);
+
 
     const insights = useMemo(() => {
         const filteredEntries = filteredEntriesForRange;
@@ -139,11 +155,31 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
 
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
 
-        const totalTargetCalls = doctors.reduce((acc, doc) => {
+        // Call Rate Adjustment Logic
+        const originalMonthlyTarget = doctors.reduce((acc, doc) => {
             const frequency = parseInt(doc.frequency.replace('x', ''), 10) || 0;
             return acc + frequency;
         }, 0);
-        const callRatePercentage = totalTargetCalls > 0 ? Math.round((totalCalls / totalTargetCalls) * 100) : 0;
+        
+        const refDate = appliedRange.start || new Date();
+        const daysInMonth = getDaysInMonth(refDate);
+        const allDaysInMonth = eachDayOfInterval({ start: new Date(refDate.getFullYear(), refDate.getMonth(), 1), end: new Date(refDate.getFullYear(), refDate.getMonth(), daysInMonth) });
+        const totalBusinessDaysInMonth = allDaysInMonth.filter(day => !isWeekend(day)).length;
+
+        const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
+        
+        const approvedNonCallDaysCount = filteredNonCallDays
+            .filter(ncd => ncd.status === 'approved')
+            .reduce((acc, ncd) => {
+                if (ncd.dayType === 'wholeday') return acc + 1;
+                if (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') return acc + 0.5;
+                return acc;
+            }, 0);
+        
+        const effectiveWorkingDays = totalBusinessDaysInMonth - approvedNonCallDaysCount;
+        const adjustedTarget = effectiveWorkingDays * dailyTarget;
+        
+        const callRatePercentage = adjustedTarget > 0 ? Math.round((totalCalls / adjustedTarget) * 100) : 0;
 
         const productCounts = filteredEntries.reduce((acc, entry) => {
             if (entry.primaryProduct) acc[entry.primaryProduct] = (acc[entry.primaryProduct] || 0) + 1;
@@ -169,7 +205,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         return {
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
-            callRate: { actual: totalCalls, total: totalTargetCalls, percentage: callRatePercentage },
+            callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
             totalWorkingDays,
             totalInbaseDays: inbaseDays.size,
@@ -179,23 +215,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             topSpecialties,
             isDataAvailable: true,
         };
-    }, [filteredEntriesForRange, doctors, entries]);
+    }, [filteredEntriesForRange, doctors, entries, filteredNonCallDays, appliedRange.start]);
     
-    const filteredNonCallDays = useMemo(() => {
-         if (!appliedRange.start || !appliedRange.end) {
-            return nonCallDays.filter(day => {
-                const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
-                return isValid(dayDate) && isThisMonth(dayDate);
-            });
-        }
-        const start = appliedRange.start;
-        const end = appliedRange.end;
-        return nonCallDays.filter(day => {
-            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
-            return isValid(dayDate) && isWithinInterval(dayDate, { start, end });
-        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [nonCallDays, appliedRange]);
-
     const filteredTimeLogs = useMemo(() => {
         if (timeLogs.length === 0) return [];
         if (!appliedRange.start || !appliedRange.end) {
@@ -326,7 +347,7 @@ Summary:
                     <StatCard 
                         title="Call Rate" 
                         value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
-                        description="Total submitted vs. total monthly target." 
+                        description="Actual calls vs. adjusted monthly target." 
                         icon={Percent}
                         color="text-orange-500"
                     />
@@ -548,5 +569,9 @@ Summary:
         </div>
     );
 }
+
+    
+
+    
 
     
