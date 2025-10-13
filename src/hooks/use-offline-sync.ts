@@ -231,7 +231,7 @@ export const useOfflineSync = (userId?: string) => {
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey, masterEntries]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, masterEntries]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
