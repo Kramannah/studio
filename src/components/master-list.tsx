@@ -337,55 +337,57 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                </div>
             </CardDescription>
           </div>
-          {!readOnly && (
-            <div className="flex flex-wrap gap-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".xlsx, .xls"
-              />
-               {selectedDoctorIds.length > 0 && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={readOnly}>
-                      <Trash2 className="mr-2" />
-                      Delete Selected ({selectedDoctorIds.length})
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete {selectedDoctorIds.length} doctor(s) from your masterlist. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteSelected}>Continue</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-               <Button onClick={handleDownload} variant="outline" disabled={readOnly}>
+          <div className="flex flex-wrap gap-2">
+              <Button onClick={handleDownload} variant="outline">
                 <Download className="mr-2" />
                 Download
               </Button>
-              <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
-                <Download className="mr-2" />
-                Template
-              </Button>
-              <Button onClick={handleUploadClick} variant="outline" disabled={readOnly}>
-                <Upload className="mr-2" />
-                Upload
-              </Button>
-              <Button onClick={handleAddNew} disabled={readOnly}>
-                <Plus className="mr-2" />
-                Add Doctor
-              </Button>
+            {!readOnly && (
+                <>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept=".xlsx, .xls"
+                    />
+                    {selectedDoctorIds.length > 0 && (
+                        <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" disabled={readOnly}>
+                            <Trash2 className="mr-2" />
+                            Delete Selected ({selectedDoctorIds.length})
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete {selectedDoctorIds.length} doctor(s) from your masterlist. This action cannot be undone.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteSelected}>Continue</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                    <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
+                        <Download className="mr-2" />
+                        Template
+                    </Button>
+                    <Button onClick={handleUploadClick} variant="outline" disabled={readOnly}>
+                        <Upload className="mr-2" />
+                        Upload
+                    </Button>
+                    <Button onClick={handleAddNew} disabled={readOnly}>
+                        <Plus className="mr-2" />
+                        Add Doctor
+                    </Button>
+                </>
+            )}
             </div>
-          )}
         </div>
         <div className="mt-4">
           <Input 
@@ -516,5 +518,3 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
-
-    
