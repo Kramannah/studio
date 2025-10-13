@@ -200,8 +200,24 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "VIS-08",
         firstName: "Joenilo",
         lastName: "Torpez",
+    },
+    "qsFiDEpOgOcTFSbiX2RJMrCKBHG3": {
+        code: "MQ-03",
+        firstName: "Mark Anthony D.",
+        lastName: "Capilos"
+    },
+    "H5NGDRDneWdH9ADuZDCFNHlovK83": {
+        code: "VIS-06",
+        firstName: "Edcel B",
+        lastName: "Babas"
+    },
+    "t8WMcGOCaQdB159ZeNBmHZvEtR13": {
+        code: "VIS-07",
+        firstName: "Charles V.",
+        lastName: "Salomeo"
     }
 };
 
     
+
 
