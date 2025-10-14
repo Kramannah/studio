@@ -114,11 +114,21 @@ export default function AdminPage() {
         };
     }, [isUserAdmin, managedUserIds, allEntries, allDoctors, allNonCallDays, allTimeLogs]);
     
+    const selectedUserData = useMemo(() => {
+        if (!selectedUserId) return null;
+        return {
+            entries: (allEntries || []).filter(e => e.userId === selectedUserId),
+            doctors: (allDoctors || []).filter(d => d.userId === selectedUserId),
+            plans: (allPlans || []).filter(p => p.userId === selectedUserId),
+            nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
+            timeLogs: (allTimeLogs || []).filter(tl => tl.userId === selectedUserId),
+        }
+    }, [selectedUserId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+
     const selectedUserUsedQuantities = useMemo(() => {
-        if (!selectedUserId) return {};
-        const userEntries = (allEntries || []).filter(e => e.userId === selectedUserId);
+        if (!selectedUserData) return {};
         const quantities: Record<string, number> = {};
-        userEntries.forEach(entry => {
+        selectedUserData.entries.forEach(entry => {
             if (entry.primarySampleName && entry.primaryProductQty) {
                 quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
             }
@@ -127,7 +137,7 @@ export default function AdminPage() {
             }
         });
         return quantities;
-    }, [selectedUserId, allEntries]);
+    }, [selectedUserData]);
 
     useEffect(() => {
         if (!loading && !hasAdminAccess) {
@@ -234,14 +244,14 @@ export default function AdminPage() {
                             <div className="flex items-center justify-center mt-10">
                                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
                             </div>
-                        ) : selectedUserId ? (
+                        ) : selectedUserId && selectedUserData ? (
                             <UserDashboard 
                                 userId={selectedUserId}
-                                allEntries={allEntries}
-                                allDoctors={allDoctors}
-                                allPlans={allPlans}
-                                allNonCallDays={allNonCallDays}
-                                allTimeLogs={allTimeLogs}
+                                allEntries={selectedUserData.entries}
+                                allDoctors={selectedUserData.doctors}
+                                allPlans={selectedUserData.plans}
+                                allNonCallDays={selectedUserData.nonCallDays}
+                                allTimeLogs={selectedUserData.timeLogs}
                                 allMarketingSamples={marketingSamples || []}
                                 onDeleteEntry={deleteEntry}
                                 usedQuantities={selectedUserUsedQuantities}
@@ -284,4 +294,5 @@ export default function AdminPage() {
             </main>
         </div>
     );
-}
+
+    
