@@ -1,112 +1,118 @@
 
-"use client"
+import { useEffect, useState, useCallback } from "react";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/hooks/use-auth";
+import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, PlanningPermissionRequest, AdminData } from "@/lib/types";
+import { useToast } from "./use-toast";
 
-import { useState, useEffect, useCallback } from 'react';
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from '@/lib/types';
-import { useToast } from "@/hooks/use-toast";
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, deleteDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
 
-export const useAdminData = () => {
-    const { toast } = useToast();
-    const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
-    const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
-    const [allPlans, setAllPlans] = useState<Plan[]>([]);
-    const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
-    const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
-    const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
-    const [loading, setLoading] = useState(true);
+export function useAdminData() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [data, setData] = useState<Omit<AdminData, "loading">>({
+    allEntries: [],
+    allDoctors: [],
+    allPlans: [],
+    allNonCallDays: [],
+    allTimeLogs: [],
+    allPlanningRequests: [],
+  });
+  const [loading, setLoading] = useState(true);
 
-    const fetchData = useCallback(async (collectionName: string, setter: Function, orderByField?: string, sortDirection: 'asc' | 'desc' = 'desc') => {
-        try {
-            const q = query(collection(db, collectionName));
-            const querySnapshot = await getDocs(q);
-            const items: any[] = [];
-            querySnapshot.forEach((doc) => {
-                items.push({ id: doc.id, ...doc.data() });
-            });
-
-             if (orderByField && items.length > 0) {
-                 items.sort((a,b) => {
-                     const valA = a[orderByField];
-                     const valB = b[orderByField];
-                     if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-                     if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-                     return 0;
-                 });
-             }
-            setter(items);
-        } catch (error) {
-            console.error(`Error fetching ${collectionName}:`, error);
-            toast({ variant: "destructive", title: "Data Fetch Error", description: `Could not fetch ${collectionName}. Check Firestore rules.` });
-        }
-    }, [toast]);
-
-    const fetchAllData = useCallback(async () => {
-        setLoading(true);
-        await Promise.all([
-            fetchData('coverageEntries', setAllEntries, 'submittedAt'),
-            fetchData('doctors', setAllDoctors),
-            fetchData('plans', setAllPlans, 'plannedDate'),
-            fetchData('nonCallDays', setAllNonCallDays, 'date'),
-            fetchData('timeLogs', setAllTimeLogs, 'timeIn'),
-            fetchData('planningRequests', setAllPlanningRequests, 'requestedAt'),
-        ]);
+  const fetchData = useCallback(async () => {
+    if (!user) {
         setLoading(false);
-    }, [fetchData]);
-
-
-    useEffect(() => {
-        fetchAllData();
-    }, [fetchAllData]);
-
-    const deleteEntry = useCallback(async (id: string, callback?: () => void) => {
-        try {
-            await deleteDoc(doc(db, "coverageEntries", id));
-            setAllEntries(prev => prev.filter(e => e.id !== id));
-            toast({ variant: 'destructive', title: "Entry Deleted", description: `A coverage entry has been removed.` });
-            if(callback) callback();
-        } catch (error) {
-            toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
-        }
-    }, [toast]);
-
-    const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
-        try {
-            const nonCallDayRef = doc(db, 'nonCallDays', id);
-            await updateDoc(nonCallDayRef, { status });
-            setAllNonCallDays(prev => prev.map(ncd => ncd.id === id ? { ...ncd, status } : ncd));
-            toast({ title: 'Status Updated', description: `The non-call day has been ${status}.` });
-        } catch (error) {
-            console.error("Error updating status:", error);
-            toast({ variant: "destructive", title: "Update Failed", description: "Could not update the non-call day status." });
-        }
-    }, [toast]);
-    
-    const updatePlanningRequestStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
-        try {
-            const requestRef = doc(db, 'planningRequests', id);
-            await updateDoc(requestRef, { status });
-            setAllPlanningRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));
-            toast({ title: 'Request Status Updated', description: `The planning request has been ${status}.` });
-        } catch (error) {
-            console.error("Error updating planning request status:", error);
-            toast({ variant: "destructive", title: "Update Failed", description: "Could not update the planning request status." });
-        }
-    }, [toast]);
-
-
-    return { 
-        allEntries, 
-        allDoctors, 
-        allPlans, 
-        allNonCallDays,
-        allTimeLogs,
-        allPlanningRequests,
-        loading, 
-        fetchAllData, 
-        deleteEntry, 
-        updateNonCallDayStatus,
-        updatePlanningRequestStatus,
+        return;
     };
-};
+    setLoading(true);
+
+    try {
+      let userFilter: string[] | null = null;
+      if (ADMIN_UIDS.includes(user.uid)) {
+        userFilter = null;
+      } else if (MANAGER_TEAMS[user.uid]) {
+        userFilter = [...MANAGER_TEAMS[user.uid], user.uid]; 
+      } else {
+        userFilter = [user.uid];
+      }
+
+      const collections = {
+          allEntries: "coverageEntries",
+          allDoctors: "doctors",
+          allPlans: "plans",
+          allNonCallDays: "nonCallDays",
+          allTimeLogs: "timeLogs",
+          allPlanningRequests: "planningRequests",
+      };
+
+      const results: Partial<AdminData> = {};
+
+      for (const [key, collName] of Object.entries(collections)) {
+        let q;
+        if (userFilter) {
+          q = query(collection(db, collName), where("userId", "in", userFilter));
+        } else {
+          q = query(collection(db, collName));
+        }
+        const snap = await getDocs(q);
+        results[key as keyof AdminData] = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as any;
+      }
+
+      setData(results as Omit<AdminData, "loading">);
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load dashboard data.'})
+    } finally {
+      setLoading(false);
+    }
+  }, [user, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
+      try {
+          const docRef = doc(db, 'nonCallDays', id);
+          await updateDoc(docRef, { status });
+          setData(prev => ({
+              ...prev,
+              allNonCallDays: prev.allNonCallDays.map(d => d.id === id ? {...d, status} : d)
+          }));
+          toast({ title: 'Success', description: `Request has been ${status}.`});
+      } catch (error) {
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to update request status.' });
+      }
+  }, [toast]);
+  
+  const updatePlanningRequestStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
+      try {
+          const docRef = doc(db, 'planningRequests', id);
+          await updateDoc(docRef, { status });
+          setData(prev => ({
+              ...prev,
+              allPlanningRequests: prev.allPlanningRequests.map(r => r.id === id ? {...r, status} : r)
+          }));
+          toast({ title: 'Success', description: `Request has been ${status}.` });
+      } catch (error) {
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to update request status.' });
+      }
+  }, [toast]);
+
+  const deleteEntry = useCallback(async (id: string) => {
+    try {
+        await deleteDoc(doc(db, "coverageEntries", id));
+        setData(prev => ({ ...prev, allEntries: prev.allEntries.filter(e => e.id !== id) }));
+        toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage report has been removed.` });
+    } catch (error) {
+        toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
+    }
+  }, [toast]);
+
+  return { ...data, loading, fetchAllData: fetchData, updateNonCallDayStatus, updatePlanningRequestStatus, deleteEntry };
+}
