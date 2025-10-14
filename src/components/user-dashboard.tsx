@@ -20,32 +20,29 @@ interface UserDashboardProps {
     allTimeLogs?: TimeLog[];
     allMarketingSamples: MarketingSample[];
     onDeleteEntry?: (id: string) => void;
+    usedQuantities?: Record<string, number>;
 }
 
-export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allMarketingSamples, onDeleteEntry = () => {} }: UserDashboardProps) {
+export function UserDashboard({ 
+    userId, 
+    allEntries, 
+    allDoctors, 
+    allPlans, 
+    allNonCallDays, 
+    allTimeLogs, 
+    allMarketingSamples, 
+    onDeleteEntry = () => {},
+    usedQuantities
+}: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
     const userData = useMemo(() => {
-        const userEntries = (allEntries || []).filter(e => e.userId === userId);
-        const userUsedQuantities: Record<string, number> = {};
-
-        userEntries.forEach(entry => {
-            if (entry.primarySampleName && entry.primaryProductQty) {
-                userUsedQuantities[entry.primarySampleName] = (userUsedQuantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
-            }
-            if (entry.secondarySampleName && entry.secondaryProductQty) {
-                userUsedQuantities[entry.secondarySampleName] = (userUsedQuantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
-            }
-        });
-
-
         return {
-            entries: userEntries,
+            entries: (allEntries || []).filter(e => e.userId === userId),
             doctors: (allDoctors || []).filter(d => d.userId === userId),
             plans: (allPlans || []).filter(p => p.userId === userId),
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === userId),
             timeLogs: (allTimeLogs || []).filter(tl => tl.userId === userId),
-            usedQuantities: userUsedQuantities,
         }
     }, [userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
 
@@ -98,7 +95,7 @@ export function UserDashboard({ userId, allEntries, allDoctors, allPlans, allNon
             <TabsContent value="marketing" className="mt-6">
                 <MarketingList 
                     samples={allMarketingSamples}
-                    usedQuantities={userData.usedQuantities}
+                    usedQuantities={usedQuantities || {}}
                     onAddSamplesBulk={async () => false}
                     readOnly={true}
                 />

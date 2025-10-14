@@ -113,6 +113,21 @@ export default function AdminPage() {
             timeLogs: (allTimeLogs || []).filter(tl => managedUserIds.includes(tl.userId)),
         };
     }, [isUserAdmin, managedUserIds, allEntries, allDoctors, allNonCallDays, allTimeLogs]);
+    
+    const selectedUserUsedQuantities = useMemo(() => {
+        if (!selectedUserId) return {};
+        const userEntries = (allEntries || []).filter(e => e.userId === selectedUserId);
+        const quantities: Record<string, number> = {};
+        userEntries.forEach(entry => {
+            if (entry.primarySampleName && entry.primaryProductQty) {
+                quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+            }
+            if (entry.secondarySampleName && entry.secondaryProductQty) {
+                quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+            }
+        });
+        return quantities;
+    }, [selectedUserId, allEntries]);
 
     useEffect(() => {
         if (!loading && !hasAdminAccess) {
@@ -229,6 +244,7 @@ export default function AdminPage() {
                                 allTimeLogs={allTimeLogs}
                                 allMarketingSamples={marketingSamples || []}
                                 onDeleteEntry={deleteEntry}
+                                usedQuantities={selectedUserUsedQuantities}
                             />
                         ) : (
                            <CallSummary 
@@ -269,5 +285,3 @@ export default function AdminPage() {
         </div>
     );
 }
-
-    
