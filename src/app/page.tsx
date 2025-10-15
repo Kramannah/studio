@@ -58,12 +58,6 @@ export default function Home() {
       if(syncAllOfflinePlans) syncAllOfflinePlans();
     }
   }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
-  
-  useEffect(() => {
-    if (!authLoading && isUserManager) {
-      router.push('/admin');
-    }
-  }, [authLoading, isUserManager, router]);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
@@ -97,11 +91,18 @@ export default function Home() {
         </div>
     )
   }
+
+  if (isUserManager) {
+    router.push('/admin');
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+            <p>Redirecting to manager dashboard...</p>
+        </div>
+    );
+  }
   
-  if (!user || isUserManager) {
-    return isUserManager 
-      ? <div className="flex items-center justify-center min-h-screen bg-background"><p>Redirecting to manager dashboard...</p></div>
-      : <LoginPage />;
+  if (!user) {
+    return <LoginPage />;
   }
 
   const handleCrmClick = () => {
