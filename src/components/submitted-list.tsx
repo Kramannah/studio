@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -230,6 +231,21 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
                                     <DetailItem label="What Went Well?" value={entry.whatWentWell} />
                                     <DetailItem label="Areas for Improvement" value={entry.areasForImprovement} />
                                 </div>
+                                {entry.reminderProducts && entry.reminderProducts.length > 0 && (
+                                    <div className="space-y-4 md:col-span-3">
+                                        <h4 className="font-bold font-headline text-primary">Reminder Products</h4>
+                                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                            {entry.reminderProducts.map((prod, index) => (
+                                                <div key={index} className="p-3 border rounded-md bg-background">
+                                                    <p className="font-semibold">{prod.productName || 'N/A'}</p>
+                                                    <DetailItem label="Sample" value={prod.sampleName} />
+                                                    <DetailItem label="Quantity" value={prod.quantity} />
+                                                    <DetailItem label="Balance" value={prod.balance} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </TableCell>
@@ -733,4 +749,5 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
       </>
     );
 }
+
 

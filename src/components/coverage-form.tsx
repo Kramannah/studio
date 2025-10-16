@@ -2,10 +2,10 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay } from "date-fns"
-import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload } from "lucide-react"
+import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -65,6 +65,12 @@ const formSchema = z.object({
   secondarySampleName: z.string().optional(),
   secondaryProductQty: z.coerce.number().optional(),
   secondaryProductBal: z.coerce.number().optional(),
+  reminderProducts: z.array(z.object({
+    productName: z.string().optional(),
+    sampleName: z.string().optional(),
+    quantity: z.coerce.number().optional(),
+    balance: z.coerce.number().optional(),
+  })).optional(),
   topicsDiscussed: z.string().optional(),
   doctorsIssue: z.string().optional(),
   planOfAction: z.string().optional(),
@@ -202,6 +208,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       secondarySampleName: "",
       secondaryProductQty: 0,
       secondaryProductBal: 0,
+      reminderProducts: [],
       topicsDiscussed: "",
       doctorsIssue: "",
       planOfAction: "",
@@ -210,6 +217,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       isOffline: false,
     },
   })
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "reminderProducts"
+  });
 
   const callType = form.watch("callType");
   const coverageType = form.watch("coverageType");
@@ -220,6 +232,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const secondaryProduct = form.watch("secondaryProduct");
   const signature = form.watch("signature");
   const jointCallSignature = form.watch("jointCallSignature");
+  const reminderProducts = form.watch("reminderProducts");
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
@@ -230,6 +243,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     if (!secondaryProduct) return [];
     return marketingSamples.filter(s => s.productGroup === secondaryProduct);
   }, [secondaryProduct, marketingSamples]);
+
+    const reminderSampleOptions = (productName?: string) => {
+        if (!productName) return [];
+        return marketingSamples.filter(s => s.productGroup === productName);
+    };
 
   useEffect(() => {
     form.setValue("primarySampleName", undefined);
@@ -271,6 +289,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         clinic: initialDoctor.clinic,
         hacme: initialDoctor.hacme,
         coverageDate: new Date(),
+        reminderProducts: [],
       });
       if (!isPlanned) {
         setAutocompleteValue(`${initialDoctor.firstName} ${initialDoctor.lastName}`);
@@ -301,6 +320,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       secondarySampleName: "",
       secondaryProductQty: 0,
       secondaryProductBal: 0,
+      reminderProducts: [],
       topicsDiscussed: "",
       doctorsIssue: "",
       planOfAction: "",
@@ -809,6 +829,86 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                               )}
                                           />
                                       </div>
+                                      <div className="space-y-4 rounded-lg border p-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="font-medium font-headline text-primary">Reminder Products</h4>
+                                            <Button type="button" size="sm" variant="ghost" onClick={() => append({})} disabled={fields.length >= 3}>
+                                                <PlusCircle className="mr-2 h-4 w-4" /> Add Product
+                                            </Button>
+                                        </div>
+                                        {fields.map((field, index) => {
+                                            const selectedProduct = reminderProducts?.[index]?.productName;
+                                            return (
+                                                <div key={field.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-2 border rounded-md relative">
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`reminderProducts.${index}.productName`}
+                                                        render={({ field }) => (
+                                                            <FormItem className="md:col-span-2">
+                                                            <FormLabel className="text-xs">Product</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                                <FormControl>
+                                                                    <SelectTrigger><SelectValue placeholder="Select product..." /></SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    {productList.map(product => (
+                                                                        <SelectItem key={product} value={product}>{product}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                     <FormField
+                                                        control={form.control}
+                                                        name={`reminderProducts.${index}.sampleName`}
+                                                        render={({ field }) => (
+                                                            <FormItem className="md:col-span-2">
+                                                            <FormLabel className="text-xs">Sample</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedProduct}>
+                                                                <FormControl>
+                                                                    <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    {reminderSampleOptions(selectedProduct).map(sample => (
+                                                                        <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                     <FormField
+                                                        control={form.control}
+                                                        name={`reminderProducts.${index}.quantity`}
+                                                        render={({ field }) => (
+                                                            <FormItem>
+                                                            <FormLabel className="text-xs">Quantity</FormLabel>
+                                                            <FormControl>
+                                                                <Input type="number" placeholder="0" {...field} />
+                                                            </FormControl>
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                    <FormField
+                                                        control={form.control}
+                                                        name={`reminderProducts.${index}.balance`}
+                                                        render={({ field }) => (
+                                                            <FormItem>
+                                                            <FormLabel className="text-xs">Balance</FormLabel>
+                                                            <FormControl>
+                                                                <Input type="number" placeholder="0" {...field} />
+                                                            </FormControl>
+                                                            </FormItem>
+                                                        )}
+                                                    />
+                                                    <Button type="button" variant="ghost" size="icon" className="absolute -top-2 -right-2 h-7 w-7" onClick={() => remove(index)}>
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
                                   </div>
                               </AccordionContent>
                           </AccordionItem>

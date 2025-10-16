@@ -1,5 +1,12 @@
 
 
+export interface ReminderProduct {
+    productName?: string;
+    sampleName?: string;
+    quantity?: number;
+    balance?: number;
+}
+
 export interface CoverageEntry {
   id: string;
   userId: string;
@@ -26,6 +33,7 @@ export interface CoverageEntry {
   secondarySampleName?: string;
   secondaryProductQty?: number;
   secondaryProductBal?: number;
+  reminderProducts?: ReminderProduct[];
   topicsDiscussed?: string;
   doctorsIssue?: string;
   planOfAction?: string;
