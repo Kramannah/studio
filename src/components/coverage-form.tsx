@@ -175,6 +175,10 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
+const getReminderSampleOptions = (marketingSamples: MarketingSample[]) => (productName?: string) => {
+    if (!productName) return [];
+    return marketingSamples.filter(s => s.productGroup === productName);
+};
 
 export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
   const { toast } = useToast()
@@ -203,11 +207,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       primaryProduct: "",
       secondaryProduct: "",
       primarySampleName: "",
-      primaryProductQty: undefined,
-      primaryProductBal: undefined,
+      primaryProductQty: 0,
+      primaryProductBal: 0,
       secondarySampleName: "",
-      secondaryProductQty: undefined,
-      secondaryProductBal: undefined,
+      secondaryProductQty: 0,
+      secondaryProductBal: 0,
       reminderProducts: [],
       topicsDiscussed: "",
       doctorsIssue: "",
@@ -233,6 +237,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const signature = form.watch("signature");
   const jointCallSignature = form.watch("jointCallSignature");
   const reminderProducts = form.watch("reminderProducts");
+  const reminderSampleOptions = useMemo(() => getReminderSampleOptions(marketingSamples), [marketingSamples]);
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
@@ -243,11 +248,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     if (!secondaryProduct) return [];
     return marketingSamples.filter(s => s.productGroup === secondaryProduct);
   }, [secondaryProduct, marketingSamples]);
-
-    const reminderSampleOptions = (productName?: string) => {
-        if (!productName) return [];
-        return marketingSamples.filter(s => s.productGroup === productName);
-    };
 
   useEffect(() => {
     form.setValue("primarySampleName", undefined);
@@ -315,11 +315,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       primaryProduct: "",
       secondaryProduct: "",
       primarySampleName: "",
-      primaryProductQty: undefined,
-      primaryProductBal: undefined,
+      primaryProductQty: 0,
+      primaryProductBal: 0,
       secondarySampleName: "",
-      secondaryProductQty: undefined,
-      secondaryProductBal: undefined,
+      secondaryProductQty: 0,
+      secondaryProductBal: 0,
       reminderProducts: [],
       topicsDiscussed: "",
       doctorsIssue: "",
