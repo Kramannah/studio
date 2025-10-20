@@ -134,6 +134,7 @@ export default function Home() {
                 doctors={doctors} 
                 plans={plans}
                 entries={masterEntries}
+                offlineEntries={offlineEntries}
                 onAddPlan={addPlan} 
                 onRemovePlan={removePlan} 
                 onLogCall={handleLogPlannedCall}

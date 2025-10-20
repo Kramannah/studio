@@ -40,10 +40,9 @@ export const useOfflineSync = (userId?: string) => {
 
   const fetchMasterEntries = useCallback(async () => {
     if (!userId || !isOnline) {
-      if(userId) setLoading(false);
+      setLoading(false);
       return;
     }
-    setLoading(true);
     try {
       const q = query(collection(db, "coverageEntries"), where("userId", "==", userId));
       const querySnapshot = await getDocs(q);
@@ -62,8 +61,7 @@ export const useOfflineSync = (userId?: string) => {
   
   useEffect(() => {
     if (userId) {
-        setLoading(true);
-        // Load offline entries from local storage
+        // Load offline entries from local storage immediately
         try {
             const localData = localStorage.getItem(getOfflineKey());
             if (localData) {
@@ -72,7 +70,9 @@ export const useOfflineSync = (userId?: string) => {
         } catch (error) {
             console.error("Failed to parse offline entries from local storage:", error);
         }
-        // Fetch master entries from Firestore
+        
+        // Then fetch master entries from Firestore
+        setLoading(true);
         fetchMasterEntries();
     } else {
       setOfflineEntries([]);

@@ -29,6 +29,7 @@ type PlanningCalendarProps = {
   doctors: Doctor[];
   plans: Plan[];
   entries: CoverageEntry[];
+  offlineEntries: CoverageEntry[]; // Added for instant status update
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
@@ -62,6 +63,7 @@ export function PlanningCalendar({
     doctors, 
     plans, 
     entries, 
+    offlineEntries,
     onAddPlan, 
     onRemovePlan, 
     onLogCall, 
@@ -78,6 +80,7 @@ export function PlanningCalendar({
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
 
+    const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
     useEffect(() => {
         if (!isPopoverOpen) {
@@ -88,7 +91,7 @@ export function PlanningCalendar({
 
 
     const visitCountsThisMonth = useMemo(() => {
-        const thisMonthEntries = entries.filter(e => {
+        const thisMonthEntries = allEntries.filter(e => {
             const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
             return isValid(submittedDate) && isThisMonth(submittedDate);
         });
@@ -97,7 +100,7 @@ export function PlanningCalendar({
           acc[doctorName] = (acc[doctorName] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
-    }, [entries]);
+    }, [allEntries]);
 
     const plansByDate = useMemo(() => {
         return plans.reduce((acc, plan) => {
@@ -134,7 +137,7 @@ export function PlanningCalendar({
     }, [plans, selectedDate]);
 
     const entriesByDate = useMemo(() => {
-        return entries.reduce((acc, entry) => {
+        return allEntries.reduce((acc, entry) => {
             const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             if (!isValid(submittedDate)) return acc;
             const date = format(submittedDate, 'yyyy-MM-dd');
@@ -144,7 +147,7 @@ export function PlanningCalendar({
             acc[date].push(entry);
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
-    }, [entries]);
+    }, [allEntries]);
     
     const selectedDayNonCallEntry = useMemo(() => {
         if (!selectedDate) return undefined;
@@ -607,5 +610,6 @@ export function PlanningCalendar({
     
 
     
+
 
 
