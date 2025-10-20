@@ -21,7 +21,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Odessa",
         lastName: "Singian",
     },
-    "xNTJrZ5xXwRliGvpCVXaxDwDpl32": {
+    "Jqy9ONMiwSP7BZM61X7x8PKI8lz1": {
         code: "CL-04",
         firstName: "Arnel Jr",
         lastName: "Bongala",
@@ -191,7 +191,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Alvin",
         lastName: "Masana",
     },
-    "CrwnET2Cohhqf4lsYil8AYPtlPo1": {
+    "CrwnET2Cohhqf4lsYiI8AYPtlPo1": {
         code: "VIS-05",
         firstName: "Armadilla",
         lastName: "Sarahina",
@@ -255,11 +255,25 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "MIN-09",
         firstName: "Rizza Mae",
         lastName: "Quinto"
-    }
+    },
+    "MlE49ceLEDbzvKAsisKnW07fGfW2": {
+        code: "LSL-DSM",
+        firstName: "Carmen Joy",
+        lastName: "Cabangon"
+    },
+    "xNTJrZ5xXwRliGvpCVXaxDwDpl32": {
+        code: "CL-04",
+        firstName: "Arnel Jr",
+        lastName: "Bongala",
+    },
+    "r19lVIqk4xTtzxvbs4W0kprHSvD2": {
+        code: "DSM_VIS",
+        firstName: "Joey",
+        lastName: "Ignacio"
+    },
 };
 
     
-
 
 
 
