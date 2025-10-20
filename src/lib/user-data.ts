@@ -178,7 +178,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
     },
     "hM21Pxjwfma3m75pefiM7j23F4f1": {
         code: "VIS-01",
-        firstName: "Eliazar Jr. C",
+        firstName: "Eliazar",
         lastName: "Pagobo",
     },
     "px4HMkypSRMTuQFrY21bFEJoYA73": {
@@ -274,6 +274,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
 };
 
     
+
 
 
 
