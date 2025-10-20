@@ -221,9 +221,45 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Rex",
         lastName: "Ligutom",
     },
+    "Dr2aymosXAUZP4PPagrNSG7UTFg1": {
+        code: "MIN-03",
+        firstName: "Kaye Angela",
+        lastName: "Daquipil"
+    },
+    "XSQqh3BUr7Nex40R9PgjLjWfVVF2": {
+        code: "MIN-04",
+        firstName: "Cyril",
+        lastName: "Calzada"
+    },
+    "iBzfeR7QujgmyUT2ogY0cN3KrLC3": {
+        code: "MIN-05",
+        firstName: "Geonalin",
+        lastName: "Naraval"
+    },
+    "8qS5baPi4YRwX1sa4g2m1ZMEDfX2": {
+        code: "MIN-06",
+        firstName: "Liezel",
+        lastName: "Lacap"
+    },
+    "bu35X2zJWmckJXGLt0yU3G6G54E3": {
+        code: "MIN-07",
+        firstName: "Rosemarie",
+        lastName: "Espiritu"
+    },
+    "w90JOQlrOJOf2FVq0iU2krdMQzI3": {
+        code: "MIN-08",
+        firstName: "Mark John",
+        lastName: "Bartania"
+    },
+    "SuPo0lvdIZPAgZb6zYrnlfPNchl1": {
+        code: "MIN-09",
+        firstName: "Rizza Mae",
+        lastName: "Quinto"
+    }
 };
 
     
+
 
 
 

@@ -1,4 +1,5 @@
 
+
 // This is a temporary list of admin UIDs.
 // In a production environment, you should manage roles in a more robust way,
 // for example, using a 'roles' collection in Firestore or custom claims.
@@ -43,5 +44,13 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "Jqy9ONMiwSP7BZM61X7x8PKI8lz1",
         "xNTJrZ5xXwRliGvpCVXaxDwDpl32"
     ],
-    "x8u4kvWvieZIVc9NdgiWmG01nts2": [],
+    "x8u4kvWvieZIVc9NdgiWmG01nts2": [
+        "Dr2aymosXAUZP4PPagrNSG7UTFg1",
+        "XSQqh3BUr7Nex40R9PgjLjWfVVF2",
+        "iBzfeR7QujgmyUT2ogY0cN3KrLC3",
+        "8qS5baPi4YRwX1sa4g2m1ZMEDfX2",
+        "bu35X2zJWmckJXGLt0yU3G6G54E3",
+        "w90JOQlrOJOf2FVq0iU2krdMQzI3",
+        "SuPo0lvdIZPAgZb6zYrnlfPNchl1"
+    ],
 };
