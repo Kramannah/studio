@@ -11,12 +11,14 @@ interface SignaturePadProps {
   value: string | null | undefined;
   onChange: (value: string | null) => void;
   className?: string;
+  internalStateManagement?: boolean;
 }
 
-export function SignaturePad({ value, onChange, className }: SignaturePadProps) {
+export function SignaturePad({ value, onChange, className, internalStateManagement = false }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const [internalValue, setInternalValue] = useState<string | null | undefined>(value);
 
   const getCanvasContext = useCallback(() => {
     const canvas = canvasRef.current;
@@ -30,15 +32,25 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     if (ctx && canvas) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       onChange(null);
+      if (internalStateManagement) {
+        setInternalValue(null);
+      }
     }
-  }, [getCanvasContext, onChange]);
+  }, [getCanvasContext, onChange, internalStateManagement]);
+  
+  const currentValue = internalStateManagement ? internalValue : value;
+
+  useEffect(() => {
+    if (internalStateManagement && value !== internalValue) {
+        setInternalValue(value);
+    }
+  }, [value, internalStateManagement, internalValue]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
     if (!canvas || !ctx) return;
 
-    // Set canvas dimensions based on container
     const parent = canvas.parentElement;
     if (parent) {
       const rect = parent.getBoundingClientRect();
@@ -46,32 +58,27 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         canvas.width = rect.width;
       }
       if (canvas.height !== rect.height) {
-        // Use parent height if available and className is passed
         canvas.height = className ? rect.height : 200;
       }
     } else {
         canvas.height = 200;
     }
 
-
-    // Set drawing styles
-    ctx.strokeStyle = '#000000'; // Black ink
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    if (value) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (currentValue) {
       const img = new Image();
       img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
-      img.src = value;
-    } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      img.src = currentValue;
     }
 
-  }, [value, getCanvasContext, className]);
+  }, [currentValue, getCanvasContext, className]);
 
   const getPosition = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -110,6 +117,15 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
 
     lastPos.current = currentPos;
   };
+  
+  const isCanvasBlank = (canvas: HTMLCanvasElement) => {
+    const context = canvas.getContext('2d');
+    if (!context) return true;
+    const pixelBuffer = new Uint32Array(
+        context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+    );
+    return !pixelBuffer.some(pixel => pixel !== 0);
+  }
 
   const stopDrawing = () => {
     if (!isDrawing.current) return;
@@ -119,18 +135,14 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     if (canvas) {
       const dataUrl = canvas.toDataURL('image/png');
       const isEmpty = isCanvasBlank(canvas);
-      onChange(isEmpty ? null : dataUrl);
+      const finalValue = isEmpty ? null : dataUrl;
+      onChange(finalValue);
+      if (internalStateManagement) {
+        setInternalValue(finalValue);
+      }
     }
   };
 
-  const isCanvasBlank = (canvas: HTMLCanvasElement) => {
-    const context = canvas.getContext('2d');
-    if (!context) return true;
-    const pixelBuffer = new Uint32Array(
-        context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-    );
-    return !pixelBuffer.some(pixel => pixel !== 0);
-  }
 
   return (
     <div className={cn('relative w-full h-full', className)}>
@@ -187,6 +199,7 @@ export function SignaturePadFullScreen({ open, onClose, onSave, value }: Signatu
                         value={currentSignature}
                         onChange={setCurrentSignature}
                         className="w-full h-full"
+                        internalStateManagement={true}
                     />
                 </div>
             </DialogContent>
