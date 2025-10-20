@@ -101,13 +101,16 @@ export const usePlans = () => {
     const isFutureWeek = isBefore(startOfToday(), weekStart);
     const request = planningRequests.find(r => r.weekStartDate === weekStart.toISOString());
     const isApproved = request?.status === 'approved';
-    const isUnplanned = isSameWeek(plannedDate, new Date(), { weekStartsOn: 1 });
+    const isCurrentWeek = isSameWeek(plannedDate, new Date(), { weekStartsOn: 1 });
+    
+    const isUnplannedCallSubmission = isCurrentWeek;
 
     let callType: 'planned' | 'unplanned' = 'unplanned';
-    if(isFutureWeek || isApproved) {
+
+    if (isUnplannedCallSubmission) {
+        callType = 'planned'; // Always treat submissions this week as 'planned' to make them editable
+    } else if (isFutureWeek || isApproved) {
         callType = 'planned';
-    } else if (isUnplanned) {
-        callType = 'unplanned';
     } else {
         toast({ variant: 'destructive', title: "Planning Locked", description: "This week is locked for planning. Request permission to unlock."});
         return;
@@ -128,7 +131,7 @@ export const usePlans = () => {
             setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}])
             toast({ 
                 title: "Visit Added", 
-                description: `${doctor.firstName} ${doctor.lastName} scheduled as an ${callType} call for ${format(plannedDate, 'PPP')}.` 
+                description: `${doctor.firstName} ${doctor.lastName} scheduled as a ${newPlanData.callType} call for ${format(plannedDate, 'PPP')}.` 
             });
         } catch (error) {
             toast({ variant: "destructive", title: "Error", description: "Could not save the plan online, saving locally." });
@@ -237,3 +240,4 @@ export const usePlans = () => {
       offlinePlanCount: offlinePlans.length 
   };
 };
+
