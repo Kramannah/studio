@@ -20,7 +20,12 @@ const nextConfig: NextConfig = {
   },
   env: {
     TZ: 'Asia/Manila',
-  }
+  },
+  pwa: {
+    dest: 'public',
+    register: true,
+    skipWaiting: true,
+  },
 };
 
 export default nextConfig;
