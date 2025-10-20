@@ -342,6 +342,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 <Download className="mr-2" />
                 Download
               </Button>
+              <Button onClick={handleDownloadTemplate} variant="outline">
+                <Download className="mr-2" />
+                Template
+              </Button>
             {!readOnly && (
                 <>
                     <input
@@ -373,10 +377,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         </AlertDialogContent>
                         </AlertDialog>
                     )}
-                    <Button onClick={handleDownloadTemplate} variant="outline" disabled={readOnly}>
-                        <Download className="mr-2" />
-                        Template
-                    </Button>
                     <Button onClick={handleUploadClick} variant="outline" disabled={readOnly}>
                         <Upload className="mr-2" />
                         Upload
