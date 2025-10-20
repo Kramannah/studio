@@ -165,9 +165,6 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => onAnalyze(entry)}>
-                                    <Sparkles className="mr-2"/> Analyze with AI
-                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}>
                                     <Edit className="mr-2"/> Edit
                                 </DropdownMenuItem>
@@ -749,5 +746,6 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
       </>
     );
 }
+
 
 
