@@ -215,10 +215,16 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "VIS-07",
         firstName: "Charles V.",
         lastName: "Salomeo"
-    }
+    },
+    "x8u4kvWvieZIVc9NdgiWmG01nts2": {
+        code: "DSM_MIN",
+        firstName: "Rex",
+        lastName: "Ligutom",
+    },
 };
 
     
+
 
 
 
