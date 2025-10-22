@@ -29,7 +29,7 @@ type PlanningCalendarProps = {
   doctors: Doctor[];
   plans: Plan[];
   entries: CoverageEntry[];
-  offlineEntries: CoverageEntry[]; // Added for instant status update
+  offlineEntries: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
@@ -610,6 +610,7 @@ export function PlanningCalendar({
     
 
     
+
 
 
 
