@@ -49,3 +49,5 @@ export const useAllCoverageEntries = () => {
 
   return { entries, loading, fetchEntries, deleteEntry };
 };
+
+    

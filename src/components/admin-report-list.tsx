@@ -134,3 +134,5 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
     </Card>
   );
 }
+
+    

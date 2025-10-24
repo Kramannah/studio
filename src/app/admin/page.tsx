@@ -10,7 +10,7 @@ import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { UserDashboard } from '@/components/user-dashboard';
 import { useAdminData } from '@/hooks/use-admin-data';
 import { MarketingList } from '@/components/marketing-list';
@@ -23,13 +23,15 @@ import { PlanningRequestApprovals } from '@/components/planning-request-approval
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { CallSummary } from '@/components/call-summary';
+import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
+import { AdminReportList } from '@/components/admin-report-list';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState('reports');
+    const [activeTab, setActiveTab] = useState('district-reports');
 
     const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
@@ -42,10 +44,10 @@ export default function AdminPage() {
     }, [isUserManager, user, selectedManagerId]);
 
     const { 
-        allEntries,
-        allDoctors,
+        allEntries: teamEntries,
+        allDoctors: teamDoctors,
         allPlans,
-        allTimeLogs,
+        allTimeLogs: teamTimeLogs,
         allNonCallDays, 
         allPlanningRequests,
         teamSummaryData,
@@ -55,8 +57,10 @@ export default function AdminPage() {
         fetchTeamSummary,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
-        deleteEntry,
+        deleteEntry: deleteTeamEntry,
     } = useAdminData(selectedManagerId);
+
+    const { entries: allEntries, deleteEntry: deleteAllUsersEntry } = useAllCoverageEntries();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
     const { addMarketingSamplesBulk } = useAdminMarketingSamples();
@@ -92,13 +96,13 @@ export default function AdminPage() {
     const selectedUserData = useMemo(() => {
         if (!selectedUserId) return null;
         return {
-            entries: allEntries || [],
-            doctors: allDoctors || [],
+            entries: teamEntries || [],
+            doctors: teamDoctors || [],
             plans: allPlans || [],
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
-            timeLogs: allTimeLogs || [],
+            timeLogs: teamTimeLogs || [],
         }
-    }, [selectedUserId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
+    }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs]);
 
     const selectedUserUsedQuantities = useMemo(() => {
         if (!selectedUserData) return {};
@@ -122,7 +126,7 @@ export default function AdminPage() {
 
     useEffect(() => {
         if (isUserManager && activeTab === 'marketing') {
-            setActiveTab('reports');
+            setActiveTab('district-reports');
         }
     }, [isUserManager, activeTab]);
 
@@ -160,7 +164,7 @@ export default function AdminPage() {
         setSelectedUserId(userId);
     }
     
-    const renderReportsContent = () => {
+    const renderDistrictReportsContent = () => {
          if (dataLoading && selectedUserId) {
             return (
                 <div className="flex items-center justify-center mt-10">
@@ -189,7 +193,7 @@ export default function AdminPage() {
                     allNonCallDays={selectedUserData.nonCallDays}
                     allTimeLogs={selectedUserData.timeLogs}
                     allMarketingSamples={marketingSamples || []}
-                    onDeleteEntry={deleteEntry}
+                    onDeleteEntry={deleteTeamEntry}
                     usedQuantities={selectedUserUsedQuantities}
                 />
             ) : null;
@@ -252,7 +256,8 @@ export default function AdminPage() {
             <main className="flex-1 p-4 md:p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                      <TabsList>
-                        <TabsTrigger value="reports">User Reports</TabsTrigger>
+                        <TabsTrigger value="district-reports">District Reports</TabsTrigger>
+                         {isUserAdmin && <TabsTrigger value="all-reports">All Reports</TabsTrigger>}
                         <TabsTrigger value="approvals" className="relative">
                             <Bell className="mr-2"/>
                             Approvals
@@ -260,7 +265,7 @@ export default function AdminPage() {
                         </TabsTrigger>
                         {isUserAdmin && <TabsTrigger value="marketing">Marketing Samples</TabsTrigger>}
                     </TabsList>
-                    <TabsContent value="reports" className="mt-6">
+                    <TabsContent value="district-reports" className="mt-6">
                         <Card className="mb-6">
                             <CardHeader>
                                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -316,8 +321,13 @@ export default function AdminPage() {
                             </CardHeader>
                         </Card>
 
-                        {renderReportsContent()}
+                        {renderDistrictReportsContent()}
                     </TabsContent>
+                    {isUserAdmin && (
+                        <TabsContent value="all-reports" className="mt-6">
+                            <AdminReportList entries={allEntries} onDelete={deleteAllUsersEntry} />
+                        </TabsContent>
+                    )}
                     <TabsContent value="approvals" className="mt-6 space-y-6">
                         <NonCallDayApprovals 
                             nonCallDays={(allNonCallDays || [])}
@@ -348,3 +358,5 @@ export default function AdminPage() {
     );
     
 }
+
+    
