@@ -131,7 +131,7 @@ export default function AdminPage() {
         if (selectedManagerId) {
             fetchTeamSummary();
         }
-    }, [selectedManagerId, fetchTeamSummary]);
+    }, [selectedManagerId]);
     
     useEffect(() => {
         if (selectedUserId) {
