@@ -4,7 +4,7 @@ import { collection, getDocs, query, where, doc, updateDoc, deleteDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
 
 export interface TeamSummaryData {
@@ -12,6 +12,9 @@ export interface TeamSummaryData {
     doctors: Doctor[];
     nonCallDays: NonCallDay[];
     timeLogs: TimeLog[];
+    plans: Plan[];
+    marketingSamples: MarketingSample[];
+    usedQuantities: Record<string, number>;
 }
 
 
@@ -100,7 +103,7 @@ export function useAdminData(managerId?: string) {
       try {
         const userFilter = MANAGER_TEAMS[managerId] || [];
         if (userFilter.length === 0) {
-            setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [] });
+            setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
             return;
         }
 
@@ -114,12 +117,14 @@ export function useAdminData(managerId?: string) {
             const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
             const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
 
-            const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap] = await Promise.all([
+            const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
                 timeLogsPromise,
                 doctorsPromise,
                 nonCallDaysPromise,
+                plansPromise,
             ]);
 
             return {
@@ -127,20 +132,44 @@ export function useAdminData(managerId?: string) {
                 timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog),
                 doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
                 nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
+                plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan),
             }
         };
 
-        const chunkResults = await Promise.all(chunks.map(fetchDataForChunk));
+        const marketingSamplesPromise = getDocs(query(collection(db, "marketingSamples")));
 
-        const combinedData: TeamSummaryData = chunkResults.reduce((acc, current) => {
+        const [chunkResults, marketingSamplesSnap] = await Promise.all([
+            Promise.all(chunks.map(fetchDataForChunk)),
+            marketingSamplesPromise,
+        ]);
+        
+        const combinedData: Omit<TeamSummaryData, 'marketingSamples' | 'usedQuantities'> = chunkResults.reduce((acc, current) => {
             acc.entries.push(...current.entries);
             acc.timeLogs.push(...current.timeLogs);
             acc.doctors.push(...current.doctors);
             acc.nonCallDays.push(...current.nonCallDays);
+            acc.plans.push(...current.plans);
             return acc;
-        }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [] });
+        }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] });
+
+        const marketingSamples = marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample);
         
-        setTeamSummaryData(combinedData);
+        const usedQuantities: Record<string, number> = {};
+        combinedData.entries.forEach(entry => {
+            if (entry.primarySampleName && entry.primaryProductQty) {
+                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+            }
+            if (entry.secondarySampleName && entry.secondaryProductQty) {
+                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+            }
+        });
+
+        setTeamSummaryData({
+            ...combinedData,
+            marketingSamples,
+            usedQuantities
+        });
+
       } catch (error) {
           console.error("Error fetching team summary:", error);
           toast({ variant: 'destructive', title: 'Error', description: 'Failed to load team summary data.'})
@@ -240,5 +269,3 @@ export function useAdminData(managerId?: string) {
     deleteEntry 
   };
 }
-
-    

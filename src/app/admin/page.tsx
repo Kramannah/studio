@@ -209,13 +209,17 @@ export default function AdminPage() {
         }
 
         if (teamSummaryData) {
-            return <CallSummary 
-                entries={teamSummaryData.entries}
-                doctors={teamSummaryData.doctors}
-                nonCallDays={teamSummaryData.nonCallDays}
-                timeLogs={teamSummaryData.timeLogs}
-                isAdminView={true}
-            />;
+            return <UserDashboard 
+                        userId={selectedManagerId}
+                        allEntries={teamSummaryData.entries}
+                        allDoctors={teamSummaryData.doctors}
+                        allPlans={teamSummaryData.plans}
+                        allNonCallDays={teamSummaryData.nonCallDays}
+                        allTimeLogs={teamSummaryData.timeLogs}
+                        allMarketingSamples={teamSummaryData.marketingSamples}
+                        onDeleteEntry={deleteTeamEntry}
+                        usedQuantities={teamSummaryData.usedQuantities}
+                    />;
         }
         
         return (
@@ -358,5 +362,3 @@ export default function AdminPage() {
     );
     
 }
-
-    
