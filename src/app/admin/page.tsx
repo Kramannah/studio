@@ -16,13 +16,13 @@ import { useAdminData } from '@/hooks/use-admin-data';
 import { MarketingList } from '@/components/marketing-list';
 import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CallSummary } from '@/components/call-summary';
 import { USER_DATA_MAP } from '@/lib/user-data';
 import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { Badge } from '@/components/ui/badge';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { TeamSummary } from '@/components/team-summary';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -48,8 +48,11 @@ export default function AdminPage() {
         allTimeLogs,
         allNonCallDays, 
         allPlanningRequests,
+        teamSummaryData,
         loading: dataLoading,
+        loadingSummary,
         fetchUserData,
+        fetchTeamSummary,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
         deleteEntry,
@@ -125,7 +128,10 @@ export default function AdminPage() {
 
     useEffect(() => {
         setSelectedUserId(null);
-    }, [selectedManagerId]);
+        if (selectedManagerId) {
+            fetchTeamSummary();
+        }
+    }, [selectedManagerId, fetchTeamSummary]);
     
     useEffect(() => {
         if (selectedUserId) {
@@ -173,31 +179,44 @@ export default function AdminPage() {
              );
         }
         
-        if (!selectedUserId) {
-             return (
-                <Alert className="mt-6">
-                    <Users className="w-4 h-4" />
-                    <AlertTitle>Select a User</AlertTitle>
-                    <AlertDescription>
-                        Please select a user from the dropdown above to view their detailed dashboard.
-                    </AlertDescription>
-                </Alert>
+        if (selectedUserId) {
+             return selectedUserData ? (
+                <UserDashboard 
+                    userId={selectedUserId}
+                    allEntries={selectedUserData.entries}
+                    allDoctors={selectedUserData.doctors}
+                    allPlans={selectedUserData.plans}
+                    allNonCallDays={selectedUserData.nonCallDays}
+                    allTimeLogs={selectedUserData.timeLogs}
+                    allMarketingSamples={marketingSamples || []}
+                    onDeleteEntry={deleteEntry}
+                    usedQuantities={selectedUserUsedQuantities}
+                />
+            ) : null;
+        }
+
+        if (loadingSummary) {
+            return (
+                <div className="flex items-center justify-center mt-10">
+                    <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+                    <p className="ml-4">Loading Team Summary...</p>
+                </div>
             );
         }
+
+        if (teamSummaryData) {
+            return <TeamSummary teamData={teamSummaryData} userMap={USER_DATA_MAP} />;
+        }
         
-        return selectedUserData ? (
-             <UserDashboard 
-                userId={selectedUserId}
-                allEntries={selectedUserData.entries}
-                allDoctors={selectedUserData.doctors}
-                allPlans={selectedUserData.plans}
-                allNonCallDays={selectedUserData.nonCallDays}
-                allTimeLogs={selectedUserData.timeLogs}
-                allMarketingSamples={marketingSamples || []}
-                onDeleteEntry={deleteEntry}
-                usedQuantities={selectedUserUsedQuantities}
-            />
-        ) : null;
+        return (
+            <Alert className="mt-6">
+                <Users className="w-4 h-4" />
+                <AlertTitle>Select a User</AlertTitle>
+                <AlertDescription>
+                    Select a user from the dropdown to view their detailed dashboard, or review the team summary below.
+                </AlertDescription>
+            </Alert>
+        );
     }
 
     return (

@@ -4,8 +4,13 @@ import { collection, getDocs, query, where, doc, updateDoc, deleteDoc } from "fi
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, PlanningPermissionRequest, AdminData } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { useToast } from "./use-toast";
+
+export interface TeamSummaryData {
+    entries: CoverageEntry[];
+    timeLogs: TimeLog[];
+}
 
 
 export function useAdminData(managerId?: string) {
@@ -17,7 +22,9 @@ export function useAdminData(managerId?: string) {
   const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
+  const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !managerId) {
@@ -81,6 +88,44 @@ export function useAdminData(managerId?: string) {
   useEffect(() => {
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
+
+  const fetchTeamSummary = useCallback(async () => {
+      if (!managerId) {
+          setTeamSummaryData(null);
+          return;
+      }
+      setLoadingSummary(true);
+      try {
+        const userFilter = MANAGER_TEAMS[managerId] || [];
+        if (userFilter.length === 0) {
+            setTeamSummaryData({ entries: [], timeLogs: [] });
+            return;
+        }
+
+        const chunks: string[][] = [];
+        for (let i = 0; i < userFilter.length; i += 30) {
+            chunks.push(userFilter.slice(i, i + 30));
+        }
+        
+        const entriesPromises = chunks.map(chunk => getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk))));
+        const timeLogsPromises = chunks.map(chunk => getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk))));
+
+        const [entriesSnaps, timeLogsSnaps] = await Promise.all([
+            Promise.all(entriesPromises),
+            Promise.all(timeLogsPromises),
+        ]);
+
+        const teamEntries = entriesSnaps.flatMap(snap => snap.docs).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry);
+        const teamTimeLogs = timeLogsSnaps.flatMap(snap => snap.docs).map(d => ({ id: d.id, ...d.data() }) as TimeLog);
+        
+        setTeamSummaryData({ entries: teamEntries, timeLogs: teamTimeLogs });
+      } catch (error) {
+          console.error("Error fetching team summary:", error);
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to load team summary data.'})
+      } finally {
+        setLoadingSummary(false);
+      }
+  }, [managerId, toast]);
   
   const fetchUserData = useCallback(async (userId: string) => {
     if (!userId) {
@@ -96,22 +141,22 @@ export function useAdminData(managerId?: string) {
           allEntries: "coverageEntries",
           allDoctors: "doctors",
           allPlans: "plans",
-          allTimeLogs: "timeLogs",
         };
 
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
-        const [entriesSnap, doctorsSnap, plansSnap, timeLogsSnap] = await Promise.all([
+        const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
             getDocs(q(collections.allEntries)),
             getDocs(q(collections.allDoctors)),
             getDocs(q(collections.allPlans)),
-            getDocs(q(collections.allTimeLogs)),
         ]);
         
         setAllEntries(entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry));
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
         setAllPlans(plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan));
-        setAllTimeLogs(timeLogsSnap.docs.map(d => ({id: d.id, ...d.data()}) as TimeLog));
+        // TimeLogs are now part of the summary data, filter from there
+        setAllTimeLogs(teamSummaryData?.timeLogs.filter(log => log.userId === userId) || []);
+
 
     } catch (error) {
          console.error("Error fetching user data:", error);
@@ -119,7 +164,7 @@ export function useAdminData(managerId?: string) {
     } finally {
         setLoading(false);
     }
-  }, [toast]);
+  }, [toast, teamSummaryData]);
 
 
   const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
@@ -160,9 +205,12 @@ export function useAdminData(managerId?: string) {
     allPlans,
     allTimeLogs,
     allNonCallDays, 
-    allPlanningRequests, 
-    loading, 
-    fetchUserData, 
+    allPlanningRequests,
+    teamSummaryData,
+    loading,
+    loadingSummary,
+    fetchUserData,
+    fetchTeamSummary,
     updateNonCallDayStatus, 
     updatePlanningRequestStatus, 
     deleteEntry 
