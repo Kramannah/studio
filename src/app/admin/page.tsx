@@ -10,7 +10,7 @@ import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserDashboard } from '@/components/user-dashboard';
 import { useAdminData } from '@/hooks/use-admin-data';
 import { MarketingList } from '@/components/marketing-list';
