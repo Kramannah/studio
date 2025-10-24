@@ -20,10 +20,16 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
+import { USER_DATA_MAP } from "@/lib/user-data";
 
 type AdminReportListProps = {
   entries: CoverageEntry[];
   onDelete: (id: string) => void;
+}
+
+const getUserName = (userId: string) => {
+    const user = USER_DATA_MAP[userId];
+    return user ? `${user.firstName} ${user.lastName}` : userId;
 }
 
 export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
@@ -33,7 +39,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
     return entries.filter(entry =>
       `${entry.firstName} ${entry.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
       entry.clinic?.toLowerCase().includes(filter.toLowerCase()) ||
-      entry.userId.toLowerCase().includes(filter.toLowerCase()) // Assuming email is not directly on entry
+      getUserName(entry.userId).toLowerCase().includes(filter.toLowerCase())
     );
   }, [entries, filter]);
   
@@ -41,6 +47,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
     const dataToExport = filteredEntries.map(entry => {
         return {
             "User ID": entry.userId,
+            "User Name": getUserName(entry.userId),
             "Doctor Name": `${entry.firstName} ${entry.lastName}`,
             "Specialty": entry.specialty,
             "Clinic": entry.clinic,
@@ -82,7 +89,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
         </div>
         <div className="mt-4">
           <Input 
-            placeholder="Filter by doctor, clinic, or user ID..."
+            placeholder="Filter by doctor, clinic, or user name..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="max-w-sm"
@@ -94,7 +101,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>User ID</TableHead>
+                        <TableHead>User Name</TableHead>
                         <TableHead>Doctor</TableHead>
                         <TableHead>Clinic</TableHead>
                         <TableHead>Type</TableHead>
@@ -107,7 +114,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
                         filteredEntries.map((entry) => (
                             <TableRow key={entry.id}>
                                 <TableCell>
-                                    <Badge variant="secondary" className="font-mono text-xs">{entry.userId.substring(0, 10)}...</Badge>
+                                    <Badge variant="secondary" className="font-sans">{getUserName(entry.userId)}</Badge>
                                 </TableCell>
                                 <TableCell className="font-medium">{entry.firstName} {entry.lastName}</TableCell>
                                 <TableCell>{entry.clinic}</TableCell>
@@ -159,5 +166,3 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
     </Card>
   );
 }
-
-    
