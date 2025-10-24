@@ -72,6 +72,7 @@ export function UserDashboard({
                     doctors={userData.doctors} 
                     plans={userData.plans}
                     entries={userData.entries}
+                    offlineEntries={[]}
                     onAddPlan={() => {}} 
                     onRemovePlan={() => {}} 
                     onLogCall={() => {}}

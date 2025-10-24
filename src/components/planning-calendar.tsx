@@ -29,7 +29,7 @@ type PlanningCalendarProps = {
   doctors: Doctor[];
   plans: Plan[];
   entries: CoverageEntry[];
-  offlineEntries: CoverageEntry[];
+  offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor) => void;
@@ -63,7 +63,7 @@ export function PlanningCalendar({
     doctors, 
     plans, 
     entries, 
-    offlineEntries,
+    offlineEntries = [],
     onAddPlan, 
     onRemovePlan, 
     onLogCall, 
@@ -610,6 +610,7 @@ export function PlanningCalendar({
     
 
     
+
 
 
 
