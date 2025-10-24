@@ -33,6 +33,8 @@ const doctorFormSchema = z.object({
   lastName: z.string().min(2, "Last name is too short"),
   specialty: z.string().min(2, "Specialty is required"),
   clinic: z.string().min(2, "Clinic is required"),
+  hcpCode: z.string().optional(),
+  coverageType: z.enum(['inbase', 'outbase']).optional(),
   province: z.string().optional(),
   municipality: z.string().optional(),
   placeOfPractice: z.string().optional(),
@@ -55,6 +57,8 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
       lastName: "",
       specialty: "",
       clinic: "",
+      hcpCode: "",
+      coverageType: undefined,
       province: "",
       municipality: "",
       placeOfPractice: "",
@@ -81,6 +85,8 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
         lastName: "",
         specialty: "",
         clinic: "",
+        hcpCode: "",
+        coverageType: undefined,
         province: "",
         municipality: "",
         placeOfPractice: "",
@@ -141,6 +147,19 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
                 )}
               />
             </div>
+             <FormField
+                control={form.control}
+                name="hcpCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-headline">HCP Code</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter HCP code" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             <FormField
               control={form.control}
               name="specialty"
@@ -225,6 +244,27 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
               )}
             />
             <div className="grid grid-cols-2 gap-4">
+                 <FormField
+                    control={form.control}
+                    name="coverageType"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="font-headline">Type of Coverage</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                            <SelectValue placeholder="Select type..." />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="inbase">Inbase</SelectItem>
+                            <SelectItem value="outbase">Outbase</SelectItem>
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
                 <FormField
                     control={form.control}
                     name="frequency"

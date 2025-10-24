@@ -155,10 +155,12 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const mappedData = json.map(row => {
             const frequencyValue = row.frequency ? String(row.frequency).toLowerCase() : '';
             const hacmeValue = row.hacme ? String(row.hacme).toUpperCase() : 'NO';
+            const coverageTypeValue = row.coverageType ? String(row.coverageType).toLowerCase() : undefined;
             
             return {
                 firstName: row.firstName || '',
                 lastName: row.lastName || '',
+                hcpCode: row.hcpCode || '',
                 specialty: row.specialty || '',
                 clinic: row.clinic || '',
                 province: row.province || '',
@@ -166,6 +168,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 placeOfPractice: row.placeOfPractice || '',
                 frequency: ['1x', '2x', '3x', '4x'].includes(frequencyValue) ? frequencyValue as '1x' | '2x' | '3x' | '4x' : '1x',
                 hacme: ['YES', 'NO'].includes(hacmeValue) ? hacmeValue as 'YES' | 'NO' : 'NO',
+                coverageType: ['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue as 'inbase' | 'outbase' : undefined,
             }
         });
 
@@ -218,8 +221,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     const dataToExport = doctors.map(doctor => ({
       firstName: doctor.firstName,
       lastName: doctor.lastName,
+      hcpCode: doctor.hcpCode,
       specialty: doctor.specialty,
       clinic: doctor.clinic,
+      coverageType: doctor.coverageType,
       province: doctor.province,
       municipality: doctor.municipality,
       placeOfPractice: doctor.placeOfPractice,
@@ -234,10 +239,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['firstName', 'lastName', 'specialty', 'clinic', 'province', 'municipality', 'placeOfPractice', 'frequency', 'hacme'];
+    const headers = ['firstName', 'lastName', 'hcpCode', 'specialty', 'clinic', 'coverageType', 'province', 'municipality', 'placeOfPractice', 'frequency', 'hacme'];
     const sampleData = [
-      { firstName: 'John', lastName: 'Doe', specialty: 'Cardiology', clinic: 'Community General Hospital', province: 'Metro Manila', municipality: 'Quezon City', placeOfPractice: 'Hospital', frequency: '2x', hacme: 'NO' },
-      { firstName: 'Jane', lastName: 'Smith', specialty: 'Pediatrics', clinic: 'City Children Clinic', province: 'Cebu', municipality: 'Cebu City', placeOfPractice: 'Clinic', frequency: '3x', hacme: 'YES' }
+      { firstName: 'John', lastName: 'Doe', hcpCode: 'P-12345', specialty: 'Cardiology', clinic: 'Community General Hospital', coverageType: 'inbase', province: 'Metro Manila', municipality: 'Quezon City', placeOfPractice: 'Hospital', frequency: '2x', hacme: 'NO' },
+      { firstName: 'Jane', lastName: 'Smith', hcpCode: 'P-67890', specialty: 'Pediatrics', clinic: 'City Children Clinic', coverageType: 'outbase', province: 'Cebu', municipality: 'Cebu City', placeOfPractice: 'Clinic', frequency: '3x', hacme: 'YES' }
     ];
     
     const workbook = XLSX.utils.book_new();
@@ -245,8 +250,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     // Main template sheet
     const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
     worksheet['!cols'] = [
-      { wch: 20 }, { wch: 20 }, { wch: 25 }, { wch: 40 }, 
-      { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 10 }
+      { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, 
+      { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 10 }
     ];
     
     // Add data validation for frequency and hacme
@@ -275,6 +280,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     
     addDataValidation(worksheet, 'frequency', '"1x,2x,3x,4x"');
     addDataValidation(worksheet, 'hacme', '"YES,NO"');
+    addDataValidation(worksheet, 'coverageType', '"inbase,outbase"');
+
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
     
@@ -313,9 +320,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     
     // Note: Dependent dropdown for municipality is complex to set up via this library.
     // We add instructions on how to set it up manually.
-    const instructionCell = "K1";
+    const instructionCell = "L1";
     if(!worksheet[instructionCell]) worksheet[instructionCell] = { t: 's', v: '' };
-    worksheet[instructionCell].v = "To enable dependent municipality dropdowns, please follow these steps in Excel:\n1. Select the Municipality column (F).\n2. Go to Data > Data Validation.\n3. Choose 'List' from the Allow dropdown.\n4. In the Source formula box, enter: =INDIRECT(SUBSTITUTE(E2,\" \",\"_\"))\n(Assuming province is in column E, starting at row 2)\n5. You will also need to create Named Ranges for each province's municipality list on the DataValidationSheet.";
+    worksheet[instructionCell].v = "To enable dependent municipality dropdowns, please follow these steps in Excel:\n1. Select the Municipality column (H).\n2. Go to Data > Data Validation.\n3. Choose 'List' from the Allow dropdown.\n4. In the Source formula box, enter: =INDIRECT(SUBSTITUTE(G2,\" \",\"_\"))\n(Assuming province is in column G, starting at row 2)\n5. You will also need to create Named Ranges for each province's municipality list on the DataValidationSheet.";
 
 
     XLSX.writeFile(workbook, 'doctor_masterlist_template.xlsx');
@@ -412,8 +419,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                           </TableHead>
                         )}
                         <TableHead>Name</TableHead>
+                        <TableHead>HCP Code</TableHead>
                         <TableHead>Specialty</TableHead>
                         <TableHead>Clinic</TableHead>
+                        <TableHead>Coverage</TableHead>
                         <TableHead>Location</TableHead>
                         <TableHead className="text-center">HACME</TableHead>
                         <TableHead className="text-center">Target</TableHead>
@@ -442,8 +451,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                                   </TableCell>
                                 )}
                                 <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
+                                <TableCell>{doctor.hcpCode}</TableCell>
                                 <TableCell>{doctor.specialty}</TableCell>
                                 <TableCell>{doctor.clinic}</TableCell>
+                                <TableCell className="capitalize">{doctor.coverageType}</TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">
                                         <span>{doctor.municipality}, {doctor.province}</span>
@@ -500,7 +511,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={readOnly ? 9 : 10} className="h-24 text-center">
+                            <TableCell colSpan={readOnly ? 10 : 11} className="h-24 text-center">
                                 {doctors.length > 0 ? "No doctors match your filter." : "No doctors in your masterlist yet."}
                             </TableCell>
                         </TableRow>

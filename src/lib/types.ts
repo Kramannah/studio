@@ -1,5 +1,6 @@
 
 
+
 export interface ReminderProduct {
     productName?: string;
     sampleName?: string;
@@ -49,6 +50,8 @@ export interface Doctor {
   lastName:string;
   specialty: string;
   clinic: string;
+  hcpCode?: string;
+  coverageType?: 'inbase' | 'outbase';
   province?: string;
   municipality?: string;
   placeOfPractice?: string;
