@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { TeamSummary } from '@/components/team-summary';
+import { CallSummary } from '@/components/call-summary';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -131,7 +131,7 @@ export default function AdminPage() {
         if (selectedManagerId) {
             fetchTeamSummary();
         }
-    }, [selectedManagerId]);
+    }, [selectedManagerId, fetchTeamSummary]);
     
     useEffect(() => {
         if (selectedUserId) {
@@ -147,7 +147,7 @@ export default function AdminPage() {
         return success;
     }
 
-    if (loading) {
+    if (loading && !selectedManagerId) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
@@ -205,7 +205,13 @@ export default function AdminPage() {
         }
 
         if (teamSummaryData) {
-            return <TeamSummary teamData={teamSummaryData} userMap={USER_DATA_MAP} />;
+            return <CallSummary 
+                entries={teamSummaryData.entries}
+                doctors={teamSummaryData.doctors}
+                nonCallDays={teamSummaryData.nonCallDays}
+                timeLogs={teamSummaryData.timeLogs}
+                isAdminView={true}
+            />;
         }
         
         return (

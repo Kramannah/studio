@@ -9,6 +9,8 @@ import { useToast } from "./use-toast";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
+    doctors: Doctor[];
+    nonCallDays: NonCallDay[];
     timeLogs: TimeLog[];
 }
 
@@ -23,7 +25,7 @@ export function useAdminData(managerId?: string) {
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
 
   const fetchTeamApprovals = useCallback(async () => {
@@ -98,7 +100,7 @@ export function useAdminData(managerId?: string) {
       try {
         const userFilter = MANAGER_TEAMS[managerId] || [];
         if (userFilter.length === 0) {
-            setTeamSummaryData({ entries: [], timeLogs: [] });
+            setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [] });
             return;
         }
 
@@ -107,18 +109,38 @@ export function useAdminData(managerId?: string) {
             chunks.push(userFilter.slice(i, i + 30));
         }
         
-        const entriesPromises = chunks.map(chunk => getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk))));
-        const timeLogsPromises = chunks.map(chunk => getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk))));
+        const fetchDataForChunk = async (chunk: string[]) => {
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
+            const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
 
-        const [entriesSnaps, timeLogsSnaps] = await Promise.all([
-            Promise.all(entriesPromises),
-            Promise.all(timeLogsPromises),
-        ]);
+            const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap] = await Promise.all([
+                entriesPromise,
+                timeLogsPromise,
+                doctorsPromise,
+                nonCallDaysPromise,
+            ]);
 
-        const teamEntries = entriesSnaps.flatMap(snap => snap.docs).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry);
-        const teamTimeLogs = timeLogsSnaps.flatMap(snap => snap.docs).map(d => ({ id: d.id, ...d.data() }) as TimeLog);
+            return {
+                entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
+                timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog),
+                doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
+                nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
+            }
+        };
+
+        const chunkResults = await Promise.all(chunks.map(fetchDataForChunk));
+
+        const combinedData: TeamSummaryData = chunkResults.reduce((acc, current) => {
+            acc.entries.push(...current.entries);
+            acc.timeLogs.push(...current.timeLogs);
+            acc.doctors.push(...current.doctors);
+            acc.nonCallDays.push(...current.nonCallDays);
+            return acc;
+        }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [] });
         
-        setTeamSummaryData({ entries: teamEntries, timeLogs: teamTimeLogs });
+        setTeamSummaryData(combinedData);
       } catch (error) {
           console.error("Error fetching team summary:", error);
           toast({ variant: 'destructive', title: 'Error', description: 'Failed to load team summary data.'})
@@ -154,8 +176,10 @@ export function useAdminData(managerId?: string) {
         setAllEntries(entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry));
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
         setAllPlans(plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan));
-        // TimeLogs are now part of the summary data, filter from there
-        setAllTimeLogs(teamSummaryData?.timeLogs.filter(log => log.userId === userId) || []);
+        
+        if (teamSummaryData?.timeLogs) {
+            setAllTimeLogs(teamSummaryData.timeLogs.filter(log => log.userId === userId));
+        }
 
 
     } catch (error) {
