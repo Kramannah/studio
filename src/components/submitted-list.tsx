@@ -5,7 +5,7 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, endOfWeek, isBefore, isSameDay, isValid, endOfFriday } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
@@ -106,7 +106,11 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
         if (!isValid(submittedDate)) return false;
         
         // The deadline is Friday midnight of the submission week.
-        const deadline = endOfFriday(submittedDate);
+        const weekStartsOn = 1; // Monday
+        const startOfSubmissionWeek = startOfWeek(submittedDate, { weekStartsOn });
+        const fridayOfSubmissionWeek = addDays(startOfSubmissionWeek, 4);
+        const deadline = endOfDay(fridayOfSubmissionWeek);
+
         return isBefore(new Date(), deadline);
     }, [entry.submittedAt, readOnly]);
 
@@ -747,6 +751,7 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
       </>
     );
 }
+
 
 
 
