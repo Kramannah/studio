@@ -291,9 +291,9 @@ export default function AdminPage() {
                                     <div className={!selectedManagerId ? "opacity-50 pointer-events-none" : ""}>
                                         <CardTitle className="flex items-center gap-2 font-headline">
                                             <Users />
-                                            User Filter
+                                            PMR Filter
                                         </CardTitle>
-                                        <CardDescription>Select a user to view their detailed dashboard.</CardDescription>
+                                        <CardDescription>Select a PMR to view their detailed dashboard.</CardDescription>
                                         <div className="flex items-center gap-2 pt-2">
                                             <Select onValueChange={handleUserSelect} value={selectedUserId || ''}>
                                                 <SelectTrigger className="w-[350px]">
@@ -348,5 +348,3 @@ export default function AdminPage() {
     );
     
 }
-
-    
