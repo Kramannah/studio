@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, CalendarClock } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,12 +21,25 @@ import { USER_DATA_MAP } from '@/lib/user-data';
 import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { Badge } from '@/components/ui/badge';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
+import { managers } from '@/lib/managers';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
+    const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('reports');
+
+    const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+    const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+    const hasAdminAccess = isUserAdmin || isUserManager;
+    
+    // Set initial manager ID for non-admin managers
+    useEffect(() => {
+        if (isUserManager && user && !selectedManagerId) {
+            setSelectedManagerId(user.uid);
+        }
+    }, [isUserManager, user, selectedManagerId]);
 
     const { 
         allEntries, 
@@ -40,32 +53,16 @@ export default function AdminPage() {
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
         deleteEntry,
-    } = useAdminData();
+    } = useAdminData(selectedManagerId);
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
     const { addMarketingSamplesBulk } = useAdminMarketingSamples();
 
-    const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
-    const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
-    const hasAdminAccess = isUserAdmin || isUserManager;
 
     const managedUserIds = useMemo(() => {
-        if (isUserAdmin) {
-            const allUserIds = [
-                ...((allEntries || []).map(e => e.userId)),
-                ...((allDoctors || []).map(d => d.userId)),
-                ...((allPlans || []).map(p => p.userId)),
-                ...((allNonCallDays || []).map(n => n.userId)),
-                ...((allTimeLogs || []).map(t => t.userId)),
-                 ...((allPlanningRequests || []).map(r => r.userId)),
-            ];
-            return Array.from(new Set(allUserIds));
-        }
-        if (isUserManager && user) {
-            return MANAGER_TEAMS[user.uid] || [];
-        }
-        return [];
-    }, [isUserAdmin, isUserManager, user, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, allPlanningRequests]);
+        if (!selectedManagerId) return [];
+        return MANAGER_TEAMS[selectedManagerId] || [];
+    }, [selectedManagerId]);
 
 
     const userMap = useMemo(() => {
@@ -78,41 +75,28 @@ export default function AdminPage() {
                 map.set(id, `User ${id.substring(0, 6)}...`);
             }
         });
-        return map;
+        // Sort the map by display name
+        return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
     }, [managedUserIds]);
-
+    
     const pendingNonCallApprovals = useMemo(() => {
-        const allPending = (allNonCallDays || []).filter(ncd => ncd.status === 'pending');
-        if(isUserAdmin) return allPending;
-        if(isUserManager) return allPending.filter(ncd => managedUserIds.includes(ncd.userId));
-        return [];
-    }, [allNonCallDays, isUserAdmin, isUserManager, managedUserIds]);
+        return (allNonCallDays || []).filter(ncd => ncd.status === 'pending');
+    }, [allNonCallDays]);
     
     const pendingPlanningRequests = useMemo(() => {
-        const allPending = (allPlanningRequests || []).filter(req => req.status === 'pending');
-        if(isUserAdmin) return allPending;
-        if(isUserManager) return allPending.filter(req => managedUserIds.includes(req.userId));
-        return [];
-    }, [allPlanningRequests, isUserAdmin, isUserManager, managedUserIds]);
+        return (allPlanningRequests || []).filter(req => req.status === 'pending');
+    }, [allPlanningRequests]);
 
     const totalPendingApprovals = pendingNonCallApprovals.length + pendingPlanningRequests.length;
     
     const teamData = useMemo(() => {
-        if (isUserAdmin) {
-             return {
-                entries: allEntries || [],
-                doctors: allDoctors || [],
-                nonCallDays: allNonCallDays || [],
-                timeLogs: allTimeLogs || [],
-            };
-        }
         return {
-            entries: (allEntries || []).filter(e => managedUserIds.includes(e.userId)),
-            doctors: (allDoctors || []).filter(d => managedUserIds.includes(d.userId)),
-            nonCallDays: (allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId)),
-            timeLogs: (allTimeLogs || []).filter(tl => managedUserIds.includes(tl.userId)),
+            entries: allEntries || [],
+            doctors: allDoctors || [],
+            nonCallDays: allNonCallDays || [],
+            timeLogs: allTimeLogs || [],
         };
-    }, [isUserAdmin, managedUserIds, allEntries, allDoctors, allNonCallDays, allTimeLogs]);
+    }, [allEntries, allDoctors, allNonCallDays, allTimeLogs]);
     
     const selectedUserData = useMemo(() => {
         if (!selectedUserId) return null;
@@ -150,6 +134,11 @@ export default function AdminPage() {
             setActiveTab('reports');
         }
     }, [isUserManager, activeTab]);
+
+    // When manager changes, reset the user selection
+    useEffect(() => {
+        setSelectedUserId(null);
+    }, [selectedManagerId]);
     
     const handleAddSamples = async (samples: any) => {
         const success = await addMarketingSamplesBulk(samples);
@@ -159,7 +148,7 @@ export default function AdminPage() {
         return success;
     }
 
-    if (loading || dataLoading || !hasAdminAccess) {
+    if (loading || !hasAdminAccess) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
@@ -174,6 +163,47 @@ export default function AdminPage() {
         } else {
             setSelectedUserId(userId);
         }
+    }
+    
+    const renderReportsContent = () => {
+         if (dataLoading) {
+            return (
+                <div className="flex items-center justify-center mt-10">
+                    <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+                </div>
+            )
+        }
+        if (!selectedManagerId) {
+             return (
+                 <Card className="mt-6">
+                    <CardContent className="p-6 text-center">
+                        <p className="text-muted-foreground">Please select a manager to view their team's data.</p>
+                    </CardContent>
+                </Card>
+             );
+        }
+        
+        return selectedUserId && selectedUserData ? (
+             <UserDashboard 
+                userId={selectedUserId}
+                allEntries={selectedUserData.entries}
+                allDoctors={selectedUserData.doctors}
+                allPlans={selectedUserData.plans}
+                allNonCallDays={selectedUserData.nonCallDays}
+                allTimeLogs={selectedUserData.timeLogs}
+                allMarketingSamples={marketingSamples || []}
+                onDeleteEntry={deleteEntry}
+                usedQuantities={selectedUserUsedQuantities}
+            />
+        ) : (
+           <CallSummary 
+                entries={teamData.entries}
+                doctors={teamData.doctors}
+                nonCallDays={teamData.nonCallDays}
+                timeLogs={teamData.timeLogs}
+                isAdminView={true}
+           />
+        )
     }
 
     return (
@@ -214,66 +244,70 @@ export default function AdminPage() {
                     <TabsContent value="reports" className="mt-6">
                         <Card className="mb-6">
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2 font-headline">
-                                    <Users />
-                                    User Filter
-                                </CardTitle>
-                                <CardDescription>Select a user to view their detailed dashboard or view all reports.</CardDescription>
-                                <div className="flex items-center gap-2 pt-2">
-                                    <Select onValueChange={handleUserSelect} value={selectedUserId || 'all'}>
-                                        <SelectTrigger className="w-[350px]">
-                                            <SelectValue placeholder="Select a user..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All Users</SelectItem>
-                                            {Array.from(userMap.entries()).map(([uid, displayName]) => (
-                                                <SelectItem key={uid} value={uid}>{displayName}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {selectedUserId && (
-                                        <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}>
-                                            <X className="w-5 h-5"/>
-                                        </Button>
-                                    )}
+                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                                     <div>
+                                        <CardTitle className="flex items-center gap-2 font-headline">
+                                            <UserSquare />
+                                            Manager Filter
+                                        </CardTitle>
+                                        <CardDescription>Select a manager to view their team's data.</CardDescription>
+                                        <div className="flex items-center gap-2 pt-2">
+                                             <Select onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin}>
+                                                <SelectTrigger className="w-[350px]">
+                                                    <SelectValue placeholder="Select a manager..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {managers.map(manager => (
+                                                        <SelectItem key={manager.uid} value={manager.uid}>{manager.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {selectedManagerId && isUserAdmin && (
+                                                <Button variant="ghost" size="icon" onClick={() => setSelectedManagerId(undefined)}>
+                                                    <X className="w-5 h-5"/>
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className={!selectedManagerId ? "opacity-50 pointer-events-none" : ""}>
+                                        <CardTitle className="flex items-center gap-2 font-headline">
+                                            <Users />
+                                            User Filter
+                                        </CardTitle>
+                                        <CardDescription>Select a user to view their detailed dashboard.</CardDescription>
+                                        <div className="flex items-center gap-2 pt-2">
+                                            <Select onValueChange={handleUserSelect} value={selectedUserId || 'all'}>
+                                                <SelectTrigger className="w-[350px]">
+                                                    <SelectValue placeholder="Select a user..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All Team Members</SelectItem>
+                                                    {Array.from(userMap.entries()).map(([uid, displayName]) => (
+                                                        <SelectItem key={uid} value={uid}>{displayName}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {selectedUserId && (
+                                                <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}>
+                                                    <X className="w-5 h-5"/>
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </CardHeader>
                         </Card>
 
-                        {dataLoading ? (
-                            <div className="flex items-center justify-center mt-10">
-                                <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                            </div>
-                        ) : selectedUserId && selectedUserData ? (
-                            <UserDashboard 
-                                userId={selectedUserId}
-                                allEntries={selectedUserData.entries}
-                                allDoctors={selectedUserData.doctors}
-                                allPlans={selectedUserData.plans}
-                                allNonCallDays={selectedUserData.nonCallDays}
-                                allTimeLogs={selectedUserData.timeLogs}
-                                allMarketingSamples={marketingSamples || []}
-                                onDeleteEntry={deleteEntry}
-                                usedQuantities={selectedUserUsedQuantities}
-                            />
-                        ) : (
-                           <CallSummary 
-                                entries={teamData.entries}
-                                doctors={teamData.doctors}
-                                nonCallDays={teamData.nonCallDays}
-                                timeLogs={teamData.timeLogs}
-                                isAdminView={true}
-                           />
-                        )}
+                        {renderReportsContent()}
                     </TabsContent>
                     <TabsContent value="approvals" className="mt-6 space-y-6">
                         <NonCallDayApprovals 
-                            nonCallDays={(allNonCallDays || []).filter(ncd => managedUserIds.includes(ncd.userId))}
+                            nonCallDays={(allNonCallDays || [])}
                             onUpdateStatus={updateNonCallDayStatus}
                             userMap={USER_DATA_MAP}
                         />
                         <PlanningRequestApprovals
-                            requests={(allPlanningRequests || []).filter(req => managedUserIds.includes(req.userId))}
+                            requests={(allPlanningRequests || [])}
                             onUpdateStatus={updatePlanningRequestStatus}
                             userMap={USER_DATA_MAP}
                         />

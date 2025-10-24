@@ -8,7 +8,7 @@ import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, Plan
 import { useToast } from "./use-toast";
 
 
-export function useAdminData() {
+export function useAdminData(managerId?: string) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [data, setData] = useState<Omit<AdminData, "loading">>({
@@ -22,21 +22,28 @@ export function useAdminData() {
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
-    if (!user) {
+    if (!user || !managerId) {
+        setData({
+            allEntries: [],
+            allDoctors: [],
+            allPlans: [],
+            allNonCallDays: [],
+            allTimeLogs: [],
+            allPlanningRequests: [],
+        });
         setLoading(false);
         return;
     };
     setLoading(true);
 
     try {
-      let userFilter: string[] | null = null;
-      if (ADMIN_UIDS.includes(user.uid)) {
-        userFilter = null;
-      } else if (MANAGER_TEAMS[user.uid]) {
-        userFilter = [...MANAGER_TEAMS[user.uid], user.uid]; 
-      } else {
-        userFilter = [user.uid];
+      const userFilter = MANAGER_TEAMS[managerId] || [];
+      if (userFilter.length === 0) {
+        setData({ allEntries: [], allDoctors: [], allPlans: [], allNonCallDays: [], allTimeLogs: [], allPlanningRequests: [] });
+        setLoading(false);
+        return;
       }
+      
 
       const collections = {
           allEntries: "coverageEntries",
@@ -50,14 +57,21 @@ export function useAdminData() {
       const results: Partial<AdminData> = {};
 
       for (const [key, collName] of Object.entries(collections)) {
-        let q;
-        if (userFilter) {
-          q = query(collection(db, collName), where("userId", "in", userFilter));
-        } else {
-          q = query(collection(db, collName));
+        // Firestore 'in' queries are limited to 30 elements. We might need to batch this.
+        const chunks: string[][] = [];
+        for (let i = 0; i < userFilter.length; i += 30) {
+            chunks.push(userFilter.slice(i, i + 30));
         }
-        const snap = await getDocs(q);
-        results[key as keyof AdminData] = snap.docs.map((d) => ({
+
+        const promises = chunks.map(chunk => {
+            const q = query(collection(db, collName), where("userId", "in", chunk));
+            return getDocs(q);
+        });
+
+        const snapshots = await Promise.all(promises);
+        const allDocs = snapshots.flatMap(snap => snap.docs);
+
+        results[key as keyof AdminData] = allDocs.map((d) => ({
           id: d.id,
           ...d.data(),
         })) as any;
@@ -70,7 +84,7 @@ export function useAdminData() {
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user, managerId, toast]);
 
   useEffect(() => {
     fetchData();
@@ -116,3 +130,5 @@ export function useAdminData() {
 
   return { ...data, loading, fetchAllData: fetchData, updateNonCallDayStatus, updatePlanningRequestStatus, deleteEntry };
 }
+
+    

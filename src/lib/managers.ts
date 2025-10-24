@@ -1,3 +1,4 @@
+
 import { MANAGER_TEAMS } from "./admins";
 import { USER_DATA_MAP } from "./user-data";
 
@@ -16,3 +17,5 @@ const getManagerList = (): Manager[] => {
 }
 
 export const managers = getManagerList();
+
+    
