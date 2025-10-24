@@ -13,14 +13,14 @@ import { MarketingList } from "./marketing-list";
 
 interface UserDashboardProps {
     userId: string;
-    allEntries?: CoverageEntry[];
-    allDoctors?: Doctor[];
-    allPlans?: Plan[];
-    allNonCallDays?: NonCallDay[];
-    allTimeLogs?: TimeLog[];
+    allEntries: CoverageEntry[];
+    allDoctors: Doctor[];
+    allPlans: Plan[];
+    allNonCallDays: NonCallDay[];
+    allTimeLogs: TimeLog[];
     allMarketingSamples: MarketingSample[];
-    onDeleteEntry?: (id: string) => void;
-    usedQuantities?: Record<string, number>;
+    onDeleteEntry: (id: string) => void;
+    usedQuantities: Record<string, number>;
 }
 
 export function UserDashboard({ 
@@ -36,16 +36,6 @@ export function UserDashboard({
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
-    const userData = useMemo(() => {
-        return {
-            entries: (allEntries || []).filter(e => e.userId === userId),
-            doctors: (allDoctors || []).filter(d => d.userId === userId),
-            plans: (allPlans || []).filter(p => p.userId === userId),
-            nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === userId),
-            timeLogs: (allTimeLogs || []).filter(tl => tl.userId === userId),
-        }
-    }, [userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
-
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5">
@@ -58,33 +48,33 @@ export function UserDashboard({
             
             <TabsContent value="summary" className="mt-6">
               <CallSummary 
-                entries={userData.entries} 
-                doctors={userData.doctors} 
-                nonCallDays={userData.nonCallDays} 
-                timeLogs={userData.timeLogs} 
+                entries={allEntries} 
+                doctors={allDoctors} 
+                nonCallDays={allNonCallDays} 
+                timeLogs={allTimeLogs} 
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={userData.entries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} />
+              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 
-                    doctors={userData.doctors} 
-                    plans={userData.plans}
-                    entries={userData.entries}
+                    doctors={allDoctors} 
+                    plans={allPlans}
+                    entries={allEntries}
                     offlineEntries={[]}
                     onAddPlan={() => {}} 
                     onRemovePlan={() => {}} 
                     onLogCall={() => {}}
-                    nonCallDays={userData.nonCallDays}
+                    nonCallDays={allNonCallDays}
                     onAddNonCallDay={() => {}}
                     readOnly={true}
                 />
             </TabsContent>
             <TabsContent value="master" className="mt-6">
                 <MasterList 
-                    doctors={userData.doctors}
-                    entries={userData.entries}
+                    doctors={allDoctors}
+                    entries={allEntries}
                     onAddDoctor={() => {}}
                     onAddDoctorsBulk={() => {}}
                     onUpdateDoctor={() => {}} 
@@ -104,3 +94,5 @@ export function UserDashboard({
           </Tabs>
     );
 }
+
+    

@@ -22,6 +22,7 @@ import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { Badge } from '@/components/ui/badge';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
 import { managers } from '@/lib/managers';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();
@@ -34,7 +35,6 @@ export default function AdminPage() {
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
     const hasAdminAccess = isUserAdmin || isUserManager;
     
-    // Set initial manager ID for non-admin managers
     useEffect(() => {
         if (isUserManager && user && !selectedManagerId) {
             setSelectedManagerId(user.uid);
@@ -42,14 +42,14 @@ export default function AdminPage() {
     }, [isUserManager, user, selectedManagerId]);
 
     const { 
-        allEntries, 
-        allDoctors, 
-        allPlans, 
+        allEntries,
+        allDoctors,
+        allPlans,
+        allTimeLogs,
         allNonCallDays, 
-        allTimeLogs, 
         allPlanningRequests,
         loading: dataLoading,
-        fetchAllData,
+        fetchUserData,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
         deleteEntry,
@@ -58,12 +58,10 @@ export default function AdminPage() {
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
     const { addMarketingSamplesBulk } = useAdminMarketingSamples();
 
-
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
         return MANAGER_TEAMS[selectedManagerId] || [];
     }, [selectedManagerId]);
-
 
     const userMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -75,7 +73,6 @@ export default function AdminPage() {
                 map.set(id, `User ${id.substring(0, 6)}...`);
             }
         });
-        // Sort the map by display name
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
     }, [managedUserIds]);
     
@@ -89,23 +86,14 @@ export default function AdminPage() {
 
     const totalPendingApprovals = pendingNonCallApprovals.length + pendingPlanningRequests.length;
     
-    const teamData = useMemo(() => {
-        return {
-            entries: allEntries || [],
-            doctors: allDoctors || [],
-            nonCallDays: allNonCallDays || [],
-            timeLogs: allTimeLogs || [],
-        };
-    }, [allEntries, allDoctors, allNonCallDays, allTimeLogs]);
-    
     const selectedUserData = useMemo(() => {
         if (!selectedUserId) return null;
         return {
-            entries: (allEntries || []).filter(e => e.userId === selectedUserId),
-            doctors: (allDoctors || []).filter(d => d.userId === selectedUserId),
-            plans: (allPlans || []).filter(p => p.userId === selectedUserId),
+            entries: allEntries || [],
+            doctors: allDoctors || [],
+            plans: allPlans || [],
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
-            timeLogs: (allTimeLogs || []).filter(tl => tl.userId === selectedUserId),
+            timeLogs: allTimeLogs || [],
         }
     }, [selectedUserId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs]);
 
@@ -135,10 +123,15 @@ export default function AdminPage() {
         }
     }, [isUserManager, activeTab]);
 
-    // When manager changes, reset the user selection
     useEffect(() => {
         setSelectedUserId(null);
     }, [selectedManagerId]);
+    
+    useEffect(() => {
+        if (selectedUserId) {
+            fetchUserData(selectedUserId);
+        }
+    }, [selectedUserId, fetchUserData]);
     
     const handleAddSamples = async (samples: any) => {
         const success = await addMarketingSamplesBulk(samples);
@@ -148,7 +141,7 @@ export default function AdminPage() {
         return success;
     }
 
-    if (loading || !hasAdminAccess) {
+    if (loading) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
@@ -158,18 +151,15 @@ export default function AdminPage() {
     }
     
     const handleUserSelect = (userId: string) => {
-        if (userId === "all") {
-            setSelectedUserId(null);
-        } else {
-            setSelectedUserId(userId);
-        }
+        setSelectedUserId(userId);
     }
     
     const renderReportsContent = () => {
-         if (dataLoading) {
+         if (dataLoading && selectedUserId) {
             return (
                 <div className="flex items-center justify-center mt-10">
                     <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+                     <p className="ml-4">Loading User Data...</p>
                 </div>
             )
         }
@@ -183,7 +173,19 @@ export default function AdminPage() {
              );
         }
         
-        return selectedUserId && selectedUserData ? (
+        if (!selectedUserId) {
+             return (
+                <Alert className="mt-6">
+                    <Users className="w-4 h-4" />
+                    <AlertTitle>Select a User</AlertTitle>
+                    <AlertDescription>
+                        Please select a user from the dropdown above to view their detailed dashboard.
+                    </AlertDescription>
+                </Alert>
+            );
+        }
+        
+        return selectedUserData ? (
              <UserDashboard 
                 userId={selectedUserId}
                 allEntries={selectedUserData.entries}
@@ -195,15 +197,7 @@ export default function AdminPage() {
                 onDeleteEntry={deleteEntry}
                 usedQuantities={selectedUserUsedQuantities}
             />
-        ) : (
-           <CallSummary 
-                entries={teamData.entries}
-                doctors={teamData.doctors}
-                nonCallDays={teamData.nonCallDays}
-                timeLogs={teamData.timeLogs}
-                isAdminView={true}
-           />
-        )
+        ) : null;
     }
 
     return (
@@ -276,12 +270,11 @@ export default function AdminPage() {
                                         </CardTitle>
                                         <CardDescription>Select a user to view their detailed dashboard.</CardDescription>
                                         <div className="flex items-center gap-2 pt-2">
-                                            <Select onValueChange={handleUserSelect} value={selectedUserId || 'all'}>
+                                            <Select onValueChange={handleUserSelect} value={selectedUserId || ''}>
                                                 <SelectTrigger className="w-[350px]">
                                                     <SelectValue placeholder="Select a user..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="all">All Team Members</SelectItem>
                                                     {Array.from(userMap.entries()).map(([uid, displayName]) => (
                                                         <SelectItem key={uid} value={uid}>{displayName}</SelectItem>
                                                     ))}
