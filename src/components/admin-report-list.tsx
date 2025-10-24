@@ -14,11 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo } from "react";
 import { Input } from "./ui/input";
 import { format, parseISO } from "date-fns";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash2, Download } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
+import * as XLSX from 'xlsx';
 
 type AdminReportListProps = {
   entries: CoverageEntry[];
@@ -36,6 +37,26 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
     );
   }, [entries, filter]);
   
+  const handleDownloadExcel = () => {
+    const dataToExport = filteredEntries.map(entry => {
+        return {
+            "User ID": entry.userId,
+            "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+            "Specialty": entry.specialty,
+            "Clinic": entry.clinic,
+            "Coverage Date": entry.coverageDate ? format(parseISO(entry.coverageDate), "PPP") : "N/A",
+            "Submitted At": entry.submittedAt ? format(parseISO(entry.submittedAt), "Pp") : "N/A",
+            "Coverage Type": entry.coverageType,
+            "Call Type": entry.callType,
+        }
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "All Submitted Coverage");
+    XLSX.writeFile(workbook, `all_submitted_coverage_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
   if (entries.length === 0) {
     return (
         <Card>
@@ -54,6 +75,10 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
             <CardTitle className="font-headline">All User Reports</CardTitle>
             <CardDescription>A complete log of all submitted coverage reports from all users.</CardDescription>
           </div>
+           <Button onClick={handleDownloadExcel} variant="outline">
+            <Download className="mr-2" />
+            Download as Excel
+          </Button>
         </div>
         <div className="mt-4">
           <Input 
