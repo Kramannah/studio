@@ -173,7 +173,7 @@ export default function AdminPage() {
              return (
                  <Card className="mt-6">
                     <CardContent className="p-6 text-center">
-                        <p className="text-muted-foreground">Please select a manager to view their team's data.</p>
+                        <p className="text-muted-foreground">Please select a DSM to view their team's data.</p>
                     </CardContent>
                 </Card>
              );
@@ -267,13 +267,13 @@ export default function AdminPage() {
                                      <div>
                                         <CardTitle className="flex items-center gap-2 font-headline">
                                             <UserSquare />
-                                            Manager Filter
+                                            DSM Filter
                                         </CardTitle>
-                                        <CardDescription>Select a manager to view their team's data.</CardDescription>
+                                        <CardDescription>Select a DSM to view their team's data.</CardDescription>
                                         <div className="flex items-center gap-2 pt-2">
                                              <Select onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin}>
                                                 <SelectTrigger className="w-[350px]">
-                                                    <SelectValue placeholder="Select a manager..." />
+                                                    <SelectValue placeholder="Select a DSM..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {managers.map(manager => (
