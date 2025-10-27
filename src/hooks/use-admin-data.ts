@@ -274,17 +274,11 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-      const { id, userId, ...dataToUpdate } = doctorData;
+      const { id, ...dataToUpdate } = doctorData;
       const doctorRef = doc(db, "doctors", id);
-      
-      const finalData = {
-          ...dataToUpdate,
-          userId: userId // ensure userId is present
-      };
+      await updateDoc(doctorRef, dataToUpdate);
 
-      await updateDoc(doctorRef, finalData);
-
-      const updatedDoctor = { id, ...finalData } as Doctor;
+      const updatedDoctor = { id, ...dataToUpdate };
 
       if (teamSummaryData) {
         setTeamSummaryData(prev => {
