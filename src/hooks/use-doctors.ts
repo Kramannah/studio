@@ -65,8 +65,8 @@ export const useDoctors = () => {
       const querySnapshot = await getDocs(q);
       const existingDoctorsMap = new Map(querySnapshot.docs.map(d => [`${d.data().firstName.toLowerCase()} ${d.data().lastName.toLowerCase()}`, d.id]));
 
-      const doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[] = [];
-      const doctorsToUpdate: (Doctor & { userId: string })[] = [];
+      const doctorsToAdd: Omit<Doctor, 'id'>[] = [];
+      const doctorsToUpdate: Doctor[] = [];
 
       doctorsData.forEach(doctor => {
         const key = `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`;
@@ -74,14 +74,14 @@ export const useDoctors = () => {
             const existingId = existingDoctorsMap.get(key)!;
             doctorsToUpdate.push({ ...doctor, id: existingId, userId: user.uid });
         } else {
-            doctorsToAdd.push(doctor);
+            doctorsToAdd.push({ ...doctor, userId: user.uid });
         }
       });
       
       doctorsToAdd.forEach(doctor => {
         const docRef = doc(collection(db, "doctors"));
-        batch.set(docRef, { ...doctor, userId: user.uid });
-        newDoctors.push({ ...doctor, id: docRef.id, userId: user.uid });
+        batch.set(docRef, doctor);
+        newDoctors.push({ ...doctor, id: docRef.id });
       });
 
       doctorsToUpdate.forEach(doctor => {
@@ -166,5 +166,3 @@ export const useDoctors = () => {
 
   return { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading };
 };
-
-    
