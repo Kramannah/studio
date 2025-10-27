@@ -276,33 +276,16 @@ export function useAdminData(managerId?: string) {
     try {
         const { id, userId, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
+        await updateDoc(doctorRef, dataToUpdate);
         
-        await updateDoc(doctorRef, {
-            firstName: dataToUpdate.firstName,
-            lastName: dataToUpdate.lastName,
-            specialty: dataToUpdate.specialty,
-            clinic: dataToUpdate.clinic,
-            hcpCode: dataToUpdate.hcpCode,
-            coverageType: dataToUpdate.coverageType,
-            province: dataToUpdate.province,
-            municipality: dataToUpdate.municipality,
-            placeOfPractice: dataToUpdate.placeOfPractice,
-            frequency: dataToUpdate.frequency,
-            hacme: dataToUpdate.hacme,
-        });
-        
-        const updatedDoctor = { ...doctorData };
-
         if (teamSummaryData) {
             setTeamSummaryData(prev => {
                 if (!prev) return null;
-                return {
-                    ...prev,
-                    doctors: prev.doctors.map(d => d.id === id ? updatedDoctor : d)
-                };
+                const newDoctors = prev.doctors.map(d => d.id === id ? doctorData : d);
+                return { ...prev, doctors: newDoctors };
             });
         }
-        setAllDoctors(prev => prev.map(d => d.id === id ? updatedDoctor : d));
+        setAllDoctors(prev => prev.map(d => d.id === id ? doctorData : d));
         toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
     } catch (error) {
         console.error("Error updating doctor:", error);
