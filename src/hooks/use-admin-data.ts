@@ -274,13 +274,24 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-        // Explicitly destructure to separate non-updatable fields
         const { id, userId, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
-
-        await updateDoc(doctorRef, dataToUpdate);
         
-        const updatedDoctor = { id, userId, ...dataToUpdate };
+        await updateDoc(doctorRef, {
+            firstName: dataToUpdate.firstName,
+            lastName: dataToUpdate.lastName,
+            specialty: dataToUpdate.specialty,
+            clinic: dataToUpdate.clinic,
+            hcpCode: dataToUpdate.hcpCode,
+            coverageType: dataToUpdate.coverageType,
+            province: dataToUpdate.province,
+            municipality: dataToUpdate.municipality,
+            placeOfPractice: dataToUpdate.placeOfPractice,
+            frequency: dataToUpdate.frequency,
+            hacme: dataToUpdate.hacme,
+        });
+        
+        const updatedDoctor = { ...doctorData };
 
         if (teamSummaryData) {
             setTeamSummaryData(prev => {
