@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
 import { Badge } from "./ui/badge";
+import { USER_DATA_MAP } from "@/lib/user-data";
 
 const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
     <Card>
@@ -44,6 +45,12 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     const handleApplyRange = () => {
         setAppliedRange({ start: startDate, end: endDate });
     };
+    
+    const getUserName = (userId: string) => {
+        const user = USER_DATA_MAP[userId];
+        return user ? `${user.firstName} ${user.lastName}` : userId;
+    }
+
 
     const filteredEntriesForRange = useMemo(() => {
         if (!appliedRange.start || !appliedRange.end) {
@@ -474,7 +481,7 @@ Summary:
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        {isAdminView && <TableHead>User ID</TableHead>}
+                                        {isAdminView && <TableHead>User</TableHead>}
                                         <TableHead>Date</TableHead>
                                         <TableHead><LogIn className="inline-block mr-1"/>Time In</TableHead>
                                         <TableHead><LogOut className="inline-block mr-1"/>Time Out</TableHead>
@@ -493,7 +500,7 @@ Summary:
                                             <TableRow key={log.id}>
                                                 {isAdminView && (
                                                     <TableCell>
-                                                        <Badge variant="secondary" className="font-mono text-xs">{log.userId.substring(0, 10)}...</Badge>
+                                                        <Badge variant="secondary" className="font-sans">{getUserName(log.userId)}</Badge>
                                                     </TableCell>
                                                 )}
                                                 <TableCell className="font-medium">{isValid(timeIn) ? format(timeIn, "PPP") : 'Invalid Date'}</TableCell>
@@ -525,7 +532,7 @@ Summary:
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        {isAdminView && <TableHead>User ID</TableHead>}
+                                        {isAdminView && <TableHead>User</TableHead>}
                                         <TableHead>Date</TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead>Reason</TableHead>
@@ -540,7 +547,7 @@ Summary:
                                                 <TableRow key={day.id}>
                                                     {isAdminView && (
                                                         <TableCell>
-                                                            <Badge variant="secondary" className="font-mono text-xs">{day.userId.substring(0, 10)}...</Badge>
+                                                            <Badge variant="secondary" className="font-sans">{getUserName(day.userId)}</Badge>
                                                         </TableCell>
                                                     )}
                                                     <TableCell className="font-medium">{isValid(dayDate) ? format(dayDate, "PPP") : "Invalid Date"}</TableCell>
@@ -569,11 +576,5 @@ Summary:
         </div>
     );
 }
-
-    
-
-    
-
-    
 
     

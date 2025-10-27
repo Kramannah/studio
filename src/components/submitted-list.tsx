@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -50,12 +49,15 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { analyzeReport, ReportAnalysisInput, ReportAnalysisOutput } from "@/ai/flows/analyze-report-flow";
 import { Checkbox } from "./ui/checkbox";
+import { USER_DATA_MAP } from "@/lib/user-data";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
     onDelete: (id: string) => void;
     onEdit: (entry: CoverageEntry) => void;
     readOnly?: boolean;
+    isAdminView?: boolean;
+    userMap?: Record<string, { code: string; firstName: string; lastName: string; }>;
 };
 
 type ViewMode = 'list' | 'calendar';
@@ -71,7 +73,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void }) => {
+const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect, isAdminView, userMap }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void, isAdminView?: boolean, userMap?: Record<string, { code: string; firstName: string; lastName: string; }> }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -116,6 +118,12 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
 
     const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
 
+    const getUserName = (userId: string) => {
+        if (!userMap) return userId;
+        const user = userMap[userId] || USER_DATA_MAP[userId];
+        return user ? `${user.firstName} ${user.lastName}` : `User ID: ${userId.substring(0,6)}...`;
+    }
+
     return (
          <Collapsible asChild>
             <TableBody>
@@ -127,6 +135,11 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
                         aria-label="Select row"
                     />
                 </TableCell>
+                {isAdminView && (
+                    <TableCell>
+                        <Badge variant="secondary" className="font-sans">{getUserName(entry.userId)}</Badge>
+                    </TableCell>
+                )}
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
                         <span>{entry.firstName} {entry.lastName}</span>
@@ -205,7 +218,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
             </TableRow>
             <CollapsibleContent asChild>
                 <TableRow>
-                    <TableCell colSpan={6} className="p-0">
+                    <TableCell colSpan={isAdminView ? 7 : 6} className="p-0">
                         <div className="p-6 bg-muted/50">
                              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                                 <div className="space-y-4">
@@ -259,7 +272,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
 }
 
 
-export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: SubmittedListProps) {
+export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isAdminView = false, userMap }: SubmittedListProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -613,6 +626,7 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                                             aria-label="Select all"
                                         />
                                     </TableHead>
+                                    {isAdminView && <TableHead>User</TableHead>}
                                     <TableHead>Provider</TableHead>
                                     <TableHead>Clinic</TableHead>
                                     <TableHead>Submitted On</TableHead>
@@ -623,12 +637,12 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
                             
                                 {filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} />
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} isAdminView={isAdminView} userMap={userMap} />
                                     ))
                                 ) : (
                                     <TableBody>
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={isAdminView ? 7 : 6} className="h-24 text-center">
                                         No submitted entries found for the selected date range.
                                         </TableCell>
                                     </TableRow>
@@ -752,7 +766,4 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false }: S
     );
 }
 
-
-
-
-
+    

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -21,6 +20,8 @@ interface UserDashboardProps {
     allMarketingSamples: MarketingSample[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
+    isAdminView?: boolean;
+    userMap?: Record<string, { code: string; firstName: string; lastName: string; }>;
 }
 
 export function UserDashboard({ 
@@ -32,7 +33,9 @@ export function UserDashboard({
     allTimeLogs, 
     allMarketingSamples, 
     onDeleteEntry = () => {},
-    usedQuantities
+    usedQuantities,
+    isAdminView = false,
+    userMap
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
@@ -51,11 +54,12 @@ export function UserDashboard({
                 entries={allEntries} 
                 doctors={allDoctors} 
                 nonCallDays={allNonCallDays} 
-                timeLogs={allTimeLogs} 
+                timeLogs={allTimeLogs}
+                isAdminView={isAdminView}
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} />
+              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} isAdminView={isAdminView} userMap={userMap} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 

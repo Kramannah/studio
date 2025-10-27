@@ -22,7 +22,6 @@ import { Badge } from '@/components/ui/badge';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { CallSummary } from '@/components/call-summary';
 import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import { AdminReportList } from '@/components/admin-report-list';
 
@@ -101,8 +100,9 @@ export default function AdminPage() {
             plans: allPlans || [],
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
             timeLogs: teamTimeLogs || [],
+            marketingSamples: marketingSamples || [],
         }
-    }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs]);
+    }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs, marketingSamples]);
 
     const selectedUserUsedQuantities = useMemo(() => {
         if (!selectedUserData) return {};
@@ -192,9 +192,11 @@ export default function AdminPage() {
                     allPlans={selectedUserData.plans}
                     allNonCallDays={selectedUserData.nonCallDays}
                     allTimeLogs={selectedUserData.timeLogs}
-                    allMarketingSamples={marketingSamples || []}
+                    allMarketingSamples={selectedUserData.marketingSamples}
                     onDeleteEntry={deleteTeamEntry}
                     usedQuantities={selectedUserUsedQuantities}
+                    userMap={USER_DATA_MAP}
+                    isAdminView={true}
                 />
             ) : null;
         }
@@ -219,6 +221,8 @@ export default function AdminPage() {
                         allMarketingSamples={teamSummaryData.marketingSamples}
                         onDeleteEntry={deleteTeamEntry}
                         usedQuantities={teamSummaryData.usedQuantities}
+                        userMap={USER_DATA_MAP}
+                        isAdminView={true}
                     />;
         }
         
@@ -362,3 +366,5 @@ export default function AdminPage() {
     );
     
 }
+
+    
