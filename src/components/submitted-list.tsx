@@ -437,10 +437,23 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
     }, [entriesByDate]);
     
     const handleDownloadExcel = () => {
+        const getUserName = (userId: string) => {
+            if (!userMap) return userId;
+            const user = userMap[userId] || USER_DATA_MAP[userId];
+            return user ? `${user.firstName} ${user.lastName}` : `User ID: ${userId.substring(0,6)}...`;
+        }
+
         const dataToExport = filteredEntries.map(entry => {
             const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
+            
+            const row: any = {};
+            if (isAdminView) {
+                row["User Name"] = getUserName(entry.userId);
+            }
+
             return {
+                ...row,
                 "Doctor Name": `${entry.firstName} ${entry.lastName}`,
                 "Specialty": entry.specialty,
                 "Clinic": entry.clinic,
@@ -461,7 +474,7 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
                 "Plan of Action": entry.planOfAction,
                 "What Went Well": entry.whatWentWell,
                 "Areas for Improvement": entry.areasForImprovement,
-            }
+            };
         });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
