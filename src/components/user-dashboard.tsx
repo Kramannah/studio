@@ -22,6 +22,11 @@ interface UserDashboardProps {
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
     userMap?: Record<string, { code: string; firstName: string; lastName: string; }>;
+    onAddDoctor?: (doctor: Omit<Doctor, 'id'>) => void;
+    onAddDoctorsBulk?: (doctors: Omit<Doctor, 'id'>[]) => void;
+    onUpdateDoctor?: (doctor: Doctor) => void;
+    onDeleteDoctor?: (id: string) => void;
+    onDeleteDoctorsBulk?: (ids: string[]) => void;
 }
 
 export function UserDashboard({ 
@@ -35,7 +40,12 @@ export function UserDashboard({
     onDeleteEntry = () => {},
     usedQuantities,
     isAdminView = false,
-    userMap
+    userMap,
+    onAddDoctor = () => {},
+    onAddDoctorsBulk = () => {},
+    onUpdateDoctor = () => {},
+    onDeleteDoctor = () => {},
+    onDeleteDoctorsBulk = () => {},
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
 
@@ -59,7 +69,7 @@ export function UserDashboard({
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={false} isAdminView={isAdminView} userMap={userMap} />
+              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} isAdminView={isAdminView} userMap={userMap} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 
@@ -79,12 +89,12 @@ export function UserDashboard({
                 <MasterList 
                     doctors={allDoctors}
                     entries={allEntries}
-                    onAddDoctor={() => {}}
-                    onAddDoctorsBulk={() => {}}
-                    onUpdateDoctor={() => {}} 
-                    onDeleteDoctor={() => {}}
-                    onDeleteDoctorsBulk={() => {}}
-                    readOnly={true}
+                    onAddDoctor={onAddDoctor}
+                    onAddDoctorsBulk={onAddDoctorsBulk}
+                    onUpdateDoctor={onUpdateDoctor} 
+                    onDeleteDoctor={onDeleteDoctor}
+                    onDeleteDoctorsBulk={onDeleteDoctorsBulk}
+                    readOnly={!isAdminView}
                 />
             </TabsContent>
             <TabsContent value="marketing" className="mt-6">
@@ -98,5 +108,3 @@ export function UserDashboard({
           </Tabs>
     );
 }
-
-    

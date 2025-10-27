@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useCallback } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
@@ -246,11 +246,85 @@ export function useAdminData(managerId?: string) {
     try {
         await deleteDoc(doc(db, "coverageEntries", id));
         setAllEntries(prev => prev.filter(e => e.id !== id));
+        if (teamSummaryData) {
+            setTeamSummaryData(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : null);
+        }
         toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage report has been removed.` });
     } catch (error) {
         toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
     }
-  }, [toast]);
+  }, [toast, teamSummaryData]);
+  
+  const addDoctor = useCallback(async (doctorData: Omit<Doctor, 'id'>) => {
+    if (!managerId) return;
+    try {
+      const docRef = await addDoc(collection(db, "doctors"), doctorData);
+      const newDoctor = { id: docRef.id, ...doctorData };
+      if (teamSummaryData) {
+          setTeamSummaryData(prev => prev ? ({ ...prev, doctors: [...prev.doctors, newDoctor] }) : null);
+      }
+      setAllDoctors(prev => [...prev, newDoctor]);
+      toast({ title: "Doctor Added", description: `${doctorData.firstName} ${doctorData.lastName} has been added.` });
+    } catch (error) {
+       toast({ variant: "destructive", title: "Error", description: "Could not add doctor." });
+    }
+  }, [managerId, toast, teamSummaryData]);
+
+  const updateDoctor = useCallback(async (doctorData: Doctor) => {
+    try {
+      const doctorRef = doc(db, "doctors", doctorData.id);
+      await updateDoc(doctorRef, { ...doctorData });
+      if (teamSummaryData) {
+        setTeamSummaryData(prev => prev ? ({ ...prev, doctors: prev.doctors.map(d => d.id === doctorData.id ? doctorData : d) }) : null);
+      }
+      setAllDoctors(prev => prev.map(d => d.id === doctorData.id ? doctorData : d));
+      toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
+    }
+  }, [toast, teamSummaryData]);
+  
+  const deleteDoctor = useCallback(async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "doctors", id));
+      if (teamSummaryData) {
+        setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => d.id !== id)}) : null);
+      }
+      setAllDoctors(prev => prev.filter(d => d.id !== id));
+      toast({ variant: 'destructive', title: "Doctor Deleted" });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not delete doctor.' });
+    }
+  }, [toast, teamSummaryData]);
+  
+  const deleteDoctorsBulk = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        const docRef = doc(db, "doctors", id);
+        batch.delete(docRef);
+      });
+      await batch.commit();
+
+      if (teamSummaryData) {
+        setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => !ids.includes(d.id))}) : null);
+      }
+      setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
+      toast({ variant: 'destructive', title: "Doctors Deleted", description: `${ids.length} doctor(s) have been removed.` });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: 'Could not delete the selected doctors.' });
+    }
+  }, [toast, teamSummaryData]);
+
+  const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
+    // This is scoped to a manager's team, but bulk adding might need a different context.
+    // For now, let's assume it adds to the manager's "pool" which isn't a current concept.
+    // Let's just refresh the list for simplicity.
+    await fetchTeamSummary();
+    toast({ title: 'Bulk Add', description: 'Bulk add in admin view not fully implemented, refreshing data.' });
+  }, [fetchTeamSummary, toast]);
+
 
   return { 
     allEntries,
@@ -266,6 +340,11 @@ export function useAdminData(managerId?: string) {
     fetchTeamSummary,
     updateNonCallDayStatus, 
     updatePlanningRequestStatus, 
-    deleteEntry 
+    deleteEntry,
+    addDoctor,
+    updateDoctor,
+    deleteDoctor,
+    deleteDoctorsBulk,
+    addDoctorsBulk,
   };
 }

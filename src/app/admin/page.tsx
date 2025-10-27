@@ -57,6 +57,11 @@ export default function AdminPage() {
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
         deleteEntry: deleteTeamEntry,
+        addDoctor,
+        updateDoctor,
+        deleteDoctor,
+        deleteDoctorsBulk,
+        addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
     const { entries: allEntries, deleteEntry: deleteAllUsersEntry } = useAllCoverageEntries();
@@ -197,6 +202,11 @@ export default function AdminPage() {
                     usedQuantities={selectedUserUsedQuantities}
                     userMap={USER_DATA_MAP}
                     isAdminView={true}
+                    onAddDoctor={(doctor) => addDoctor({ ...doctor, userId: selectedUserId })}
+                    onUpdateDoctor={updateDoctor}
+                    onDeleteDoctor={deleteDoctor}
+                    onDeleteDoctorsBulk={deleteDoctorsBulk}
+                    onAddDoctorsBulk={(doctors) => addDoctorsBulk(doctors.map(d => ({ ...d, userId: selectedUserId })))}
                 />
             ) : null;
         }
@@ -223,6 +233,15 @@ export default function AdminPage() {
                         usedQuantities={teamSummaryData.usedQuantities}
                         userMap={USER_DATA_MAP}
                         isAdminView={true}
+                        onAddDoctor={(doctor) => {
+                            // When adding a doctor from the team view, it should probably be assigned to a specific user.
+                            // This functionality needs clarification. For now, we can assign to the manager.
+                            addDoctor({ ...doctor, userId: selectedManagerId })
+                        }}
+                        onUpdateDoctor={updateDoctor}
+                        onDeleteDoctor={deleteDoctor}
+                        onDeleteDoctorsBulk={deleteDoctorsBulk}
+                        onAddDoctorsBulk={(doctors) => addDoctorsBulk(doctors.map(d => ({ ...d, userId: selectedManagerId })))}
                     />;
         }
         
@@ -366,5 +385,3 @@ export default function AdminPage() {
     );
     
 }
-
-    
