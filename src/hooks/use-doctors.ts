@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -65,7 +66,7 @@ export const useDoctors = () => {
       const existingDoctorsMap = new Map(querySnapshot.docs.map(d => [`${d.data().firstName.toLowerCase()} ${d.data().lastName.toLowerCase()}`, d.id]));
 
       const doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[] = [];
-      const doctorsToUpdate: Doctor[] = [];
+      const doctorsToUpdate: (Doctor & { userId: string })[] = [];
 
       doctorsData.forEach(doctor => {
         const key = `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`;
@@ -85,7 +86,8 @@ export const useDoctors = () => {
 
       doctorsToUpdate.forEach(doctor => {
         const docRef = doc(db, "doctors", doctor.id);
-        batch.update(docRef, { ...doctor, userId: user.uid });
+        const { id, userId, ...updateData } = doctor;
+        batch.update(docRef, updateData);
       });
 
 
@@ -120,10 +122,12 @@ export const useDoctors = () => {
     if (!user) return;
     try {
       const doctorRef = doc(db, "doctors", doctorData.id);
-      await updateDoc(doctorRef, { ...doctorData });
+      const { id, userId, ...dataToUpdate } = doctorData;
+      await updateDoc(doctorRef, dataToUpdate);
       setDoctors(prev => prev.map(d => d.id === doctorData.id ? doctorData : d));
       toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
     } catch (error) {
+      console.error("Error updating doctor:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
     }
   }, [user, toast]);
