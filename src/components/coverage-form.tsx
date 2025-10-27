@@ -398,8 +398,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
 
   const handleSaveSignature = (dataUrl: string | null) => {
       if(signatureFieldToUpdate) {
-          form.setValue(signatureFieldToUpdate, dataUrl);
-          form.trigger('signature'); // Manually trigger validation
+          form.setValue(signatureFieldToUpdate, dataUrl, { shouldValidate: true });
       }
       setIsSignaturePadOpen(false);
       setSignatureFieldToUpdate(null);
@@ -1086,5 +1085,3 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     </Card>
   )
 }
-
-    
