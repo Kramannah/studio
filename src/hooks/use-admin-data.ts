@@ -1,4 +1,6 @@
 
+"use client"
+
 import { useEffect, useState, useCallback } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -259,7 +261,7 @@ export function useAdminData(managerId?: string) {
     if (!managerId) return;
     try {
       const docRef = await addDoc(collection(db, "doctors"), doctorData);
-      const newDoctor = { id: docRef.id, ...doctorData };
+      const newDoctor = { id: docRef.id, ...doctorData } as Doctor;
       if (teamSummaryData) {
           setTeamSummaryData(prev => prev ? ({ ...prev, doctors: [...prev.doctors, newDoctor] }) : null);
       }
@@ -272,14 +274,25 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-      const doctorRef = doc(db, "doctors", doctorData.id);
-      await updateDoc(doctorRef, { ...doctorData });
+      const { id, ...dataToUpdate } = doctorData;
+      const doctorRef = doc(db, "doctors", id);
+      await updateDoc(doctorRef, dataToUpdate);
+
+      const updatedDoctor = { id, ...dataToUpdate };
+
       if (teamSummaryData) {
-        setTeamSummaryData(prev => prev ? ({ ...prev, doctors: prev.doctors.map(d => d.id === doctorData.id ? doctorData : d) }) : null);
+        setTeamSummaryData(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            doctors: prev.doctors.map(d => d.id === id ? updatedDoctor : d)
+          }
+        });
       }
-      setAllDoctors(prev => prev.map(d => d.id === doctorData.id ? doctorData : d));
+      setAllDoctors(prev => prev.map(d => d.id === id ? updatedDoctor : d));
       toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
     } catch (error) {
+      console.error("Error updating doctor:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
     }
   }, [toast, teamSummaryData]);
@@ -319,8 +332,7 @@ export function useAdminData(managerId?: string) {
 
   const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
     // This is scoped to a manager's team, but bulk adding might need a different context.
-    // For now, let's assume it adds to the manager's "pool" which isn't a current concept.
-    // Let's just refresh the list for simplicity.
+    // For now, let's just refresh the list for simplicity.
     await fetchTeamSummary();
     toast({ title: 'Bulk Add', description: 'Bulk add in admin view not fully implemented, refreshing data.' });
   }, [fetchTeamSummary, toast]);
