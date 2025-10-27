@@ -274,26 +274,43 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-      const { id, ...dataToUpdate } = doctorData;
-      const doctorRef = doc(db, "doctors", id);
-      await updateDoc(doctorRef, dataToUpdate);
+        const { id, ...dataToUpdate } = doctorData;
+        const doctorRef = doc(db, "doctors", id);
 
-      const updatedDoctor = { id, ...dataToUpdate };
+        // Explicitly create the object to be sent to Firestore
+        const payload: Omit<Doctor, 'id'> = {
+            userId: dataToUpdate.userId,
+            firstName: dataToUpdate.firstName,
+            lastName: dataToUpdate.lastName,
+            specialty: dataToUpdate.specialty,
+            clinic: dataToUpdate.clinic,
+            frequency: dataToUpdate.frequency,
+            hacme: dataToUpdate.hacme,
+            hcpCode: dataToUpdate.hcpCode,
+            coverageType: dataToUpdate.coverageType,
+            province: dataToUpdate.province,
+            municipality: dataToUpdate.municipality,
+            placeOfPractice: dataToUpdate.placeOfPractice,
+        };
 
-      if (teamSummaryData) {
-        setTeamSummaryData(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            doctors: prev.doctors.map(d => d.id === id ? updatedDoctor : d)
-          }
-        });
-      }
-      setAllDoctors(prev => prev.map(d => d.id === id ? updatedDoctor : d));
-      toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
+        await updateDoc(doctorRef, payload);
+        
+        const updatedDoctor = { id, ...payload } as Doctor;
+
+        if (teamSummaryData) {
+            setTeamSummaryData(prev => {
+                if (!prev) return null;
+                return {
+                    ...prev,
+                    doctors: prev.doctors.map(d => d.id === id ? updatedDoctor : d)
+                };
+            });
+        }
+        setAllDoctors(prev => prev.map(d => d.id === id ? updatedDoctor : d));
+        toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
     } catch (error) {
-      console.error("Error updating doctor:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
+        console.error("Error updating doctor:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
     }
   }, [toast, teamSummaryData]);
   
