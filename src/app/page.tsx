@@ -190,7 +190,9 @@ export default function Home() {
                 onAddDoctorsBulk={addDoctorsBulk}
                 onUpdateDoctor={updateDoctor} 
                 onDeleteDoctor={deleteDoctor} 
-                onDeleteDoctorsBulk={deleteDoctorsBulk}/>;
+                onDeleteDoctorsBulk={deleteDoctorsBulk}
+                readOnly={false}
+              />;
       case 'exams':
         return <Card>
                 <CardHeader>
