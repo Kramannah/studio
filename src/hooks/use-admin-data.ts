@@ -274,28 +274,12 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-        const { id, ...dataToUpdate } = doctorData;
+        const { id, userId, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
 
-        // Explicitly create the object to be sent to Firestore
-        const payload: Omit<Doctor, 'id'> = {
-            userId: dataToUpdate.userId,
-            firstName: dataToUpdate.firstName,
-            lastName: dataToUpdate.lastName,
-            specialty: dataToUpdate.specialty,
-            clinic: dataToUpdate.clinic,
-            frequency: dataToUpdate.frequency,
-            hacme: dataToUpdate.hacme,
-            hcpCode: dataToUpdate.hcpCode,
-            coverageType: dataToUpdate.coverageType,
-            province: dataToUpdate.province,
-            municipality: dataToUpdate.municipality,
-            placeOfPractice: dataToUpdate.placeOfPractice,
-        };
-
-        await updateDoc(doctorRef, payload);
+        await updateDoc(doctorRef, dataToUpdate);
         
-        const updatedDoctor = { id, ...payload } as Doctor;
+        const updatedDoctor = { id, userId, ...dataToUpdate } as Doctor;
 
         if (teamSummaryData) {
             setTeamSummaryData(prev => {
