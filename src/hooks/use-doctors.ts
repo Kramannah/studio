@@ -19,7 +19,7 @@ import {
 } from "firebase/firestore";
 
 // List of admin UIDs (must match Firestore Rules)
-const ADMIN_UIDS = ["ADMIN_UID_1", "ADMIN_UID_2"];
+const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3"];
 
 export const useDoctors = () => {
   const { toast } = useToast();
