@@ -164,33 +164,10 @@ export const useOfflineSync = (userId?: string) => {
     }
 
     setIsSyncing(true);
-    // Fetch latest master entries before syncing to prevent duplicates
-    await fetchMasterEntries();
-    
-    const entriesToSync = offlineEntries.filter(offlineEntry => {
-        const isDuplicate = masterEntries.some(masterEntry =>
-            masterEntry.userId === offlineEntry.userId &&
-            masterEntry.firstName === offlineEntry.firstName &&
-            masterEntry.lastName === offlineEntry.lastName &&
-            offlineEntry.coverageDate && masterEntry.coverageDate &&
-            isSameDay(parseISO(offlineEntry.coverageDate), parseISO(masterEntry.coverageDate))
-        );
-        return !isDuplicate;
-    });
-    
-    const alreadySyncedCount = offlineEntries.length - entriesToSync.length;
 
-    if (entriesToSync.length === 0) {
-        if (alreadySyncedCount > 0) {
-            toast({ title: 'Already Synced', description: `${alreadySyncedCount} offline entries were already on the server.` });
-        }
-        updateOfflineInStorage([]); // Clear all offline entries as they are either synced or duplicates
-        setIsSyncing(false);
-        return;
-    }
-
-
+    const entriesToSync = [...offlineEntries];
     const batch = writeBatch(db);
+
     entriesToSync.forEach(entry => {
         const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
         const entryRef = doc(collection(db, 'coverageEntries'));
@@ -218,20 +195,17 @@ export const useOfflineSync = (userId?: string) => {
         updateOfflineInStorage([]);
 
         if(successCount > 0){
-            let description = `${successCount} entries synced successfully.`;
-            if (alreadySyncedCount > 0) {
-                description += ` ${alreadySyncedCount} duplicates were skipped.`;
-            }
-            toast({ title: 'Sync Complete', description });
-            await fetchMasterEntries();
+            toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
+            await fetchMasterEntries(); // Refresh master entries after successful sync
         }
     } catch (error) {
         console.error('Failed to sync entries:', error);
+        // If sync fails, we keep the offline entries to try again later.
         toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to sync all reports. Please try again.` });
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, masterEntries]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
