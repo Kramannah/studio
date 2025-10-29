@@ -164,33 +164,18 @@ export const useOfflineSync = (userId?: string) => {
     }
 
     setIsSyncing(true);
-
-    const entriesToSync = [...offlineEntries];
-    const batch = writeBatch(db);
-
-    entriesToSync.forEach(entry => {
-        const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
-        const entryRef = doc(collection(db, 'coverageEntries'));
-        
-        const cleanedData: Partial<CoverageEntry> = {};
-        for (const key in dataToSync) {
-            const typedKey = key as keyof typeof dataToSync;
-            if (dataToSync[typedKey] !== undefined) {
-                cleanedData[typedKey] = dataToSync[typedKey];
-            }
-        }
-        
-        if (cleanedData.coverageType !== 'joint') {
-            delete cleanedData.jointCallWith;
-            delete cleanedData.jointCallSignature;
-        }
-
-        batch.set(entryRef, cleanedData);
-    });
+    toast({ title: 'Syncing...', description: `Uploading ${offlineEntries.length} offline reports.`});
 
     try {
+        const batch = writeBatch(db);
+        offlineEntries.forEach(entry => {
+            const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
+            const entryRef = doc(collection(db, 'coverageEntries'));
+            batch.set(entryRef, dataToSync);
+        });
         await batch.commit();
-        const successCount = entriesToSync.length;
+
+        const successCount = offlineEntries.length;
         
         updateOfflineInStorage([]);
 
@@ -205,7 +190,7 @@ export const useOfflineSync = (userId?: string) => {
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
