@@ -166,30 +166,44 @@ export const useOfflineSync = (userId?: string) => {
     setIsSyncing(true);
     toast({ title: 'Syncing...', description: `Uploading ${offlineEntries.length} offline reports.`});
 
-    try {
-        const batch = writeBatch(db);
-        offlineEntries.forEach(entry => {
-            const { id, ...dataToSync } = entry; // Don't sync the temporary UUID
-            const entryRef = doc(collection(db, 'coverageEntries'));
-            batch.set(entryRef, dataToSync);
-        });
-        await batch.commit();
+    let successfulSyncs: string[] = [];
+    let failedSyncs: CoverageEntry[] = [];
 
-        const successCount = offlineEntries.length;
-        
-        updateOfflineInStorage([]);
-
-        if(successCount > 0){
-            toast({ title: 'Sync Complete', description: `${successCount} entries synced successfully.` });
-            await fetchMasterEntries(); // Refresh master entries after successful sync
+    for (const entry of offlineEntries) {
+        try {
+            const { id, ...dataToSync } = entry;
+            await addDoc(collection(db, "coverageEntries"), dataToSync);
+            successfulSyncs.push(id);
+        } catch (error) {
+            console.error(`Failed to sync entry ${entry.id}:`, error);
+            failedSyncs.push(entry);
         }
-    } catch (error) {
-        console.error('Failed to sync entries:', error);
-        // If sync fails, we keep the offline entries to try again later.
-        toast({ variant: 'destructive', title: 'Sync Error', description: `Failed to sync all reports. Please try again.` });
-    } finally {
-        setIsSyncing(false);
     }
+
+    // Update local storage with any entries that failed to sync
+    updateOfflineInStorage(failedSyncs);
+
+    if (successfulSyncs.length > 0) {
+        toast({
+            title: 'Sync Partially Complete',
+            description: `${successfulSyncs.length} of ${offlineEntries.length} entries synced successfully.`,
+        });
+        await fetchMasterEntries(); // Refresh master entries after successful sync
+    }
+
+    if (failedSyncs.length > 0) {
+        toast({
+            variant: 'destructive',
+            title: 'Sync Incomplete',
+            description: `${failedSyncs.length} entries failed to sync. They remain offline for the next attempt.`,
+        });
+    }
+
+    if (successfulSyncs.length > 0 && failedSyncs.length === 0) {
+        toast({ title: 'Sync Complete', description: `All ${successfulSyncs.length} entries synced successfully.` });
+    }
+
+    setIsSyncing(false);
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey]);
 
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
