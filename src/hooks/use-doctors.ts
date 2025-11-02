@@ -166,14 +166,6 @@ export const useDoctors = () => {
 
       const batch = writeBatch(db);
       
-      // 1. Delete all existing doctors for the user
-      const currentDocsQuery = query(collection(db, "doctors"), where("userId", "==", user.uid));
-      const currentDocsSnapshot = await getDocs(currentDocsQuery);
-      currentDocsSnapshot.forEach(doc => {
-          batch.delete(doc.ref);
-      });
-
-      // 2. Add all new doctors from the upload
       const doctorsWithUserId = doctorsToAdd.map(d => ({ ...d, userId: user.uid }));
       doctorsWithUserId.forEach(doctor => {
         const docRef = doc(collection(db, "doctors"));
