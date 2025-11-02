@@ -106,8 +106,13 @@ export const useDoctors = () => {
     async (doctorData: Doctor) => {
       if (!user) return;
       try {
-        const { id, userId, ...dataToUpdate } = doctorData;
-        const doctorRef = doc(db, "doctors", id);
+        const dataToUpdate = { ...doctorData };
+        // Firestore does not allow updating the document ID or the userId field as part of the document data.
+        // We must remove them from the object before sending it to updateDoc.
+        delete (dataToUpdate as Partial<Doctor>).id;
+        delete (dataToUpdate as Partial<Doctor>).userId;
+
+        const doctorRef = doc(db, "doctors", doctorData.id);
         await updateDoc(doctorRef, dataToUpdate);
 
         setDoctors((prev) =>
