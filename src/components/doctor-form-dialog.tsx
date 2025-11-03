@@ -77,28 +77,36 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
 
 
   useEffect(() => {
-    if (doctor) {
-      form.reset(doctor);
-    } else {
-      form.reset({
-        firstName: "",
-        lastName: "",
-        specialty: "",
-        clinic: "",
-        hcpCode: "",
-        coverageType: undefined,
-        province: "",
-        municipality: "",
-        placeOfPractice: "",
-        frequency: "1x",
-        hacme: "NO",
-      });
+    if (isOpen) {
+      if (doctor) {
+        form.reset({
+            ...doctor,
+            province: doctor.province || "",
+            municipality: doctor.municipality || ""
+        });
+      } else {
+        form.reset({
+          firstName: "",
+          lastName: "",
+          specialty: "",
+          clinic: "",
+          hcpCode: "",
+          coverageType: undefined,
+          province: "",
+          municipality: "",
+          placeOfPractice: "",
+          frequency: "1x",
+          hacme: "NO",
+        });
+      }
     }
   }, [doctor, form, isOpen]);
   
   useEffect(() => {
-      form.setValue('municipality', '');
-  }, [selectedProvince, form]);
+    if (selectedProvince && !municipalities.includes(form.getValues('municipality') || '')) {
+       form.setValue('municipality', '');
+    }
+  }, [selectedProvince, municipalities, form]);
 
   const onSubmit = (values: z.infer<typeof doctorFormSchema>) => {
     if (doctor) {
@@ -192,7 +200,7 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="font-headline">Province</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select province" />

@@ -39,11 +39,12 @@ export const useDoctors = () => {
 
     setLoading(true);
     try {
-      // If user is admin, fetch all doctors
       let q;
+      // Admins can see all doctors
       if (ADMIN_UIDS.includes(user.uid)) {
         q = query(collection(db, "doctors"));
       } else {
+        // Regular users only see their own
         q = query(collection(db, "doctors"), where("userId", "==", user.uid));
       }
 
@@ -71,7 +72,7 @@ export const useDoctors = () => {
   }, [fetchDoctors]);
 
   /** ------------------------
-   * Add Doctor
+   * Add Doctor (single)
    * ------------------------ */
   const addDoctor = useCallback(
     async (doctorData: Omit<Doctor, "id" | "userId">) => {
@@ -100,19 +101,73 @@ export const useDoctors = () => {
   );
 
   /** ------------------------
-   * Update Doctor
+   * Add Doctors in Bulk (for user's own upload)
+   * This now REPLACES the existing list.
+   * ------------------------ */
+  const addDoctorsBulk = useCallback(
+    async (doctorsToAdd: Omit<Doctor, "id" | "userId">[]) => {
+      if (!user) return;
+      if (doctorsToAdd.length === 0) return;
+      setLoading(true);
+
+      const batch = writeBatch(db);
+
+      try {
+        // 1. Get all existing doctors for the user
+        const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        // 2. Delete all existing doctors
+        querySnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+
+        // 3. Add all new doctors
+        doctorsToAdd.forEach((d) => {
+            const docRef = doc(collection(db, "doctors"));
+            const newDoctor = {
+            ...d,
+            userId: user.uid,
+            };
+            batch.set(docRef, newDoctor);
+        });
+
+        // 4. Commit the batch
+        await batch.commit();
+
+        // 5. Refetch the data to update the UI
+        await fetchDoctors();
+
+        toast({
+          title: "Upload Successful",
+          description: `Your master list has been replaced with ${doctorsToAdd.length} new doctor(s).`,
+        });
+      } catch (error) {
+        console.error("Error replacing doctors in bulk:", error);
+        toast({
+          variant: "destructive",
+          title: "Upload Failed",
+          description: "Could not replace your doctor master list.",
+        });
+        // Refetch to revert to the pre-error state
+        await fetchDoctors();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user, toast, fetchDoctors]
+  );
+
+  /** ------------------------
+   * Update Doctor (only user’s own)
    * ------------------------ */
   const updateDoctor = useCallback(
     async (doctorData: Doctor) => {
       if (!user) return;
       try {
-        const dataToUpdate = { ...doctorData };
-        // Firestore does not allow updating the document ID or the userId field as part of the document data.
-        // We must remove them from the object before sending it to updateDoc.
-        delete (dataToUpdate as Partial<Doctor>).id;
-        delete (dataToUpdate as Partial<Doctor>).userId;
+        const { id, userId, ...dataToUpdate } = doctorData;
+        const doctorRef = doc(db, "doctors", id);
 
-        const doctorRef = doc(db, "doctors", doctorData.id);
         await updateDoc(doctorRef, dataToUpdate);
 
         setDoctors((prev) =>
@@ -136,7 +191,7 @@ export const useDoctors = () => {
   );
 
   /** ------------------------
-   * Delete Doctor
+   * Delete Doctor (only user’s own)
    * ------------------------ */
   const deleteDoctor = useCallback(
     async (id: string) => {
@@ -150,7 +205,7 @@ export const useDoctors = () => {
           toast({
             variant: "destructive",
             title: "Doctor Deleted",
-            description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed.`,
+            description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed from your master list.`,
           });
         }
       } catch (error) {
@@ -165,45 +220,39 @@ export const useDoctors = () => {
     [user, doctors, toast]
   );
 
-    const addDoctorsBulk = useCallback(
-    async (doctorsToAdd: Omit<Doctor, 'id'>[]) => {
-      if (!user) return;
-
-      const batch = writeBatch(db);
-      
-      const doctorsWithUserId = doctorsToAdd.map(d => ({ ...d, userId: user.uid }));
-      doctorsWithUserId.forEach(doctor => {
-        const docRef = doc(collection(db, "doctors"));
-        batch.set(docRef, doctor);
-      });
-      
-      await batch.commit();
-      fetchDoctors(); // Refetch all doctors to update the state with new data
-    },
-    [user, fetchDoctors]
-  );
-
+  /** ------------------------
+   * Bulk Delete (user’s own)
+   * ------------------------ */
   const deleteDoctorsBulk = useCallback(
     async (ids: string[]) => {
-      if (!user) return;
+      if (!user || ids.length === 0) return;
 
       const batch = writeBatch(db);
-      ids.forEach(id => {
+      ids.forEach((id) => {
         const docRef = doc(db, "doctors", id);
         batch.delete(docRef);
       });
 
-      await batch.commit();
-      setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
-      toast({
-        variant: "destructive",
-        title: "Doctors Deleted",
-        description: `${ids.length} doctor(s) have been removed.`,
-      });
+      try {
+        await batch.commit();
+        setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
+
+        toast({
+          variant: "destructive",
+          title: "Doctors Deleted",
+          description: `${ids.length} doctor(s) have been removed from your master list.`,
+        });
+      } catch (error) {
+        console.error("Error bulk deleting doctors:", error);
+        toast({
+          variant: "destructive",
+          title: "Bulk Delete Failed",
+          description: `Could not remove the selected doctors.`,
+        });
+      }
     },
     [user, toast]
   );
-
 
   return {
     doctors,
