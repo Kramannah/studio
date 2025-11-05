@@ -153,18 +153,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             defval: null,
         });
         
-        const lowercaseHeaders = (rawHeaders: string[]) => rawHeaders.map(h => h.toLowerCase());
-        const header: string[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as string[];
-        const headers = lowercaseHeaders(header);
-
+        // Function to find a property in an object with case-insensitive keys
         const getColumnValue = (row: any, ...possibleNames: string[]) => {
-            for (const name of possibleNames) {
-                const lowerName = name.toLowerCase();
-                const headerIndex = headers.indexOf(lowerName);
-                if (headerIndex !== -1) {
-                    const originalHeader = header[headerIndex];
-                    if (row[originalHeader] !== undefined && row[originalHeader] !== null) {
-                        return String(row[originalHeader]);
+            for (const key in row) {
+                if (row.hasOwnProperty(key)) {
+                    const lowerKey = key.toLowerCase().trim();
+                    if (possibleNames.some(name => name.toLowerCase() === lowerKey)) {
+                        const value = row[key];
+                        return (value !== null && value !== undefined) ? String(value).trim() : '';
                     }
                 }
             }
@@ -550,5 +546,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
 
     
