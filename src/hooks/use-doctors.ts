@@ -102,7 +102,7 @@ export const useDoctors = () => {
 
   /** ------------------------
    * Add/Update Doctors in Bulk (for user's own upload)
-   * This now adds new doctors and updates existing ones based on name.
+   * This now only adds new doctors and ignores existing ones.
    * ------------------------ */
   const addDoctorsBulk = useCallback(
     async (doctorsToAdd: Omit<Doctor, "id" | "userId">[]) => {
@@ -123,21 +123,30 @@ export const useDoctors = () => {
                 existingDoctorMap.set(key, doc);
             });
 
-            // 2. Iterate through uploaded doctors to decide whether to add or update
+            let newDoctorsCount = 0;
+
+            // 2. Iterate through uploaded doctors to decide whether to add
             doctorsToAdd.forEach((newDoctor) => {
                 const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
                 const existingDoctor = existingDoctorMap.get(key);
 
-                if (existingDoctor) {
-                    // Update existing doctor
-                    const docRef = doc(db, "doctors", existingDoctor.id);
-                    batch.update(docRef, { ...newDoctor, userId: user.uid });
-                } else {
+                if (!existingDoctor) {
                     // Add new doctor
                     const docRef = doc(collection(db, "doctors"));
                     batch.set(docRef, { ...newDoctor, userId: user.uid });
+                    newDoctorsCount++;
                 }
+                // If doctor exists, do nothing (skip)
             });
+
+            if (newDoctorsCount === 0) {
+                 toast({
+                    title: "No New Doctors",
+                    description: `All ${doctorsToAdd.length} doctors from the file already exist in your master list.`,
+                });
+                setLoading(false);
+                return;
+            }
 
             // 3. Commit the batch
             await batch.commit();
@@ -147,7 +156,7 @@ export const useDoctors = () => {
 
             toast({
                 title: "Upload Successful",
-                description: `Your master list has been updated with ${doctorsToAdd.length} doctor(s).`,
+                description: `${newDoctorsCount} new doctor(s) have been added to your master list.`,
             });
         } catch (error) {
             console.error("Error processing bulk doctor upload:", error);
