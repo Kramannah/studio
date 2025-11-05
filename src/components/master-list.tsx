@@ -148,24 +148,45 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const json = XLSX.utils.sheet_to_json<any>(worksheet);
+        const json = XLSX.utils.sheet_to_json<any>(worksheet, {
+            raw: true,
+            defval: null,
+        });
+        
+        const lowercaseHeaders = (rawHeaders: string[]) => rawHeaders.map(h => h.toLowerCase());
+        const header: string[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0] as string[];
+        const headers = lowercaseHeaders(header);
 
-        const requiredFields: (keyof Omit<Doctor, 'id'>)[] = ['firstName', 'lastName'];
+        const getColumnValue = (row: any, ...possibleNames: string[]) => {
+            for (const name of possibleNames) {
+                const lowerName = name.toLowerCase();
+                const headerIndex = headers.indexOf(lowerName);
+                if (headerIndex !== -1) {
+                    const originalHeader = header[headerIndex];
+                    if (row[originalHeader] !== undefined && row[originalHeader] !== null) {
+                        return String(row[originalHeader]);
+                    }
+                }
+            }
+            return '';
+        };
+
+        const requiredFields: string[] = ['firstName', 'lastName'];
         
         const mappedData = json.map(row => {
-            const frequencyValue = row.frequency ? String(row.frequency).toLowerCase() : '';
-            const hacmeValue = row.hacme ? String(row.hacme).toUpperCase() : 'NO';
-            const coverageTypeValue = row.coverageType ? String(row.coverageType).toLowerCase() : undefined;
+            const frequencyValue = getColumnValue(row, 'frequency').toLowerCase();
+            const hacmeValue = getColumnValue(row, 'hacme').toUpperCase();
+            const coverageTypeValue = getColumnValue(row, 'coverageType').toLowerCase();
             
             return {
-                firstName: row.firstName || '',
-                lastName: row.lastName || '',
-                hcpCode: row.hcpCode || '',
-                specialty: row.specialty || '',
-                clinic: row.clinic || '',
-                province: row.province || '',
-                municipality: row.municipality || '',
-                placeOfPractice: row.placeOfPractice || '',
+                firstName: getColumnValue(row, 'firstName', 'first name'),
+                lastName: getColumnValue(row, 'lastName', 'last name'),
+                hcpCode: getColumnValue(row, 'hcpCode', 'hcp code'),
+                specialty: getColumnValue(row, 'specialty'),
+                clinic: getColumnValue(row, 'clinic'),
+                province: getColumnValue(row, 'province'),
+                municipality: getColumnValue(row, 'municipality'),
+                placeOfPractice: getColumnValue(row, 'placeOfPractice', 'place of practice'),
                 frequency: ['1x', '2x', '3x', '4x'].includes(frequencyValue) ? frequencyValue as '1x' | '2x' | '3x' | '4x' : '1x',
                 hacme: ['YES', 'NO'].includes(hacmeValue) ? hacmeValue as 'YES' | 'NO' : 'NO',
                 coverageType: ['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue as 'inbase' | 'outbase' : undefined,
@@ -199,14 +220,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         onAddDoctorsBulk(validDoctors);
         toast({
           title: "Upload Successful",
-          description: `${validDoctors.length} doctors have been added or updated in the masterlist.`,
+          description: `${validDoctors.length} doctors have been processed.`,
         });
       } catch (error) {
         console.error("Failed to parse Excel file", error);
         toast({
           variant: "destructive",
           title: "Upload Failed",
-          description: "There was an error processing the Excel file. Please ensure it is a valid .xlsx or .xls file.",
+          description: "Could not process your doctor master list file.",
         });
       } finally {
         if (fileInputRef.current) {
@@ -529,3 +550,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
