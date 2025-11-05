@@ -122,7 +122,10 @@ export const useOfflineSync = (userId?: string) => {
         ...newEntry,
         id: newEntry.id || crypto.randomUUID(),
     }
-    updateOfflineInStorage([...offlineEntries, entryWithId]);
+    const currentOfflineEntries = offlineEntries;
+    const updatedEntries = [...currentOfflineEntries, entryWithId];
+    setOfflineEntries(updatedEntries);
+    localStorage.setItem(getOfflineKey(), JSON.stringify(updatedEntries));
     toast({ title: "Entry Saved Locally", description: "You are offline. Report will sync when you're back online." });
   }
 
