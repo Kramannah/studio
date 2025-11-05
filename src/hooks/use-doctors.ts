@@ -75,7 +75,7 @@ export const useDoctors = () => {
    * Add Doctor (single)
    * ------------------------ */
   const addDoctor = useCallback(
-    async (doctorData: Omit<Doctor, "id" | "userId">) => {
+    async (doctorData: Omit<Doctor, "id">) => {
       if (!user) return;
       try {
         const newDoctorData = { ...doctorData, userId: user.uid };
@@ -101,62 +101,70 @@ export const useDoctors = () => {
   );
 
   /** ------------------------
-   * Add Doctors in Bulk (for user's own upload)
-   * This now REPLACES the existing list.
+   * Add/Update Doctors in Bulk (for user's own upload)
+   * This now adds new doctors and updates existing ones based on name.
    * ------------------------ */
   const addDoctorsBulk = useCallback(
     async (doctorsToAdd: Omit<Doctor, "id" | "userId">[]) => {
-      if (!user) return;
-      if (doctorsToAdd.length === 0) return;
-      setLoading(true);
+        if (!user) return;
+        if (doctorsToAdd.length === 0) return;
+        setLoading(true);
 
-      const batch = writeBatch(db);
+        try {
+            const batch = writeBatch(db);
 
-      try {
-        // 1. Get all existing doctors for the user
-        const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
-        const querySnapshot = await getDocs(q);
-        
-        // 2. Delete all existing doctors
-        querySnapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
+            // 1. Get all existing doctors for the user to check for duplicates
+            const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+            const querySnapshot = await getDocs(q);
+            const existingDoctors = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Doctor[];
+            const existingDoctorMap = new Map<string, Doctor>();
+            existingDoctors.forEach(doc => {
+                const key = `${doc.firstName.toLowerCase()}|${doc.lastName.toLowerCase()}`;
+                existingDoctorMap.set(key, doc);
+            });
 
-        // 3. Add all new doctors
-        doctorsToAdd.forEach((d) => {
-            const docRef = doc(collection(db, "doctors"));
-            const newDoctor = {
-            ...d,
-            userId: user.uid,
-            };
-            batch.set(docRef, newDoctor);
-        });
+            // 2. Iterate through uploaded doctors to decide whether to add or update
+            doctorsToAdd.forEach((newDoctor) => {
+                const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
+                const existingDoctor = existingDoctorMap.get(key);
 
-        // 4. Commit the batch
-        await batch.commit();
+                if (existingDoctor) {
+                    // Update existing doctor
+                    const docRef = doc(db, "doctors", existingDoctor.id);
+                    batch.update(docRef, { ...newDoctor, userId: user.uid });
+                } else {
+                    // Add new doctor
+                    const docRef = doc(collection(db, "doctors"));
+                    batch.set(docRef, { ...newDoctor, userId: user.uid });
+                }
+            });
 
-        // 5. Refetch the data to update the UI
-        await fetchDoctors();
+            // 3. Commit the batch
+            await batch.commit();
 
-        toast({
-          title: "Upload Successful",
-          description: `Your master list has been replaced with ${doctorsToAdd.length} new doctor(s).`,
-        });
-      } catch (error) {
-        console.error("Error replacing doctors in bulk:", error);
-        toast({
-          variant: "destructive",
-          title: "Upload Failed",
-          description: "Could not replace your doctor master list.",
-        });
-        // Refetch to revert to the pre-error state
-        await fetchDoctors();
-      } finally {
-        setLoading(false);
-      }
+            // 4. Refetch the data to update the UI
+            await fetchDoctors();
+
+            toast({
+                title: "Upload Successful",
+                description: `Your master list has been updated with ${doctorsToAdd.length} doctor(s).`,
+            });
+        } catch (error) {
+            console.error("Error processing bulk doctor upload:", error);
+            toast({
+                variant: "destructive",
+                title: "Upload Failed",
+                description: "Could not process your doctor master list file.",
+            });
+            // Refetch to revert to the pre-error state
+            await fetchDoctors();
+        } finally {
+            setLoading(false);
+        }
     },
     [user, toast, fetchDoctors]
-  );
+);
+
 
   /** ------------------------
    * Update Doctor (only user’s own)
@@ -168,6 +176,7 @@ export const useDoctors = () => {
         const { id, userId, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
 
+        // Ensure we don't try to update the userId, just the other fields
         await updateDoc(doctorRef, dataToUpdate);
 
         setDoctors((prev) =>
