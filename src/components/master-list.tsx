@@ -537,9 +537,3 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
-
-    
-
-    
-
-    
