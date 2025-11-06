@@ -11,6 +11,11 @@ import { isSameDay, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
 
+// Simple and compatible unique ID generator
+const generateUniqueId = () => {
+    return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+};
+
 export const useOfflineSync = (userId?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -120,7 +125,7 @@ export const useOfflineSync = (userId?: string) => {
   const saveEntryOffline = (newEntry: Omit<CoverageEntry, 'id'> & { id?: string }) => {
     const entryWithId = {
         ...newEntry,
-        id: newEntry.id || crypto.randomUUID(),
+        id: newEntry.id || generateUniqueId(),
     }
     const currentOfflineEntries = offlineEntries;
     const updatedEntries = [...currentOfflineEntries, entryWithId];
