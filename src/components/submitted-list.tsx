@@ -4,7 +4,7 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
@@ -108,17 +108,19 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
         if (!isValid(submittedDate)) return false;
 
         const weekStartsOn = 1; // Monday
+        const startOfSubmissionMonth = startOfMonth(submittedDate);
         const weekOfMonth = getWeekOfMonth(submittedDate, { weekStartsOn });
 
         let deadline;
 
         if (weekOfMonth <= 2) {
-            // Week 1 & 2: Lock on Saturday 8 PM of the submission week.
-            const startOfSubmissionWeek = startOfWeek(submittedDate, { weekStartsOn });
-            const saturdayOfSubmissionWeek = addDays(startOfSubmissionWeek, 5);
-            deadline = set(saturdayOfSubmissionWeek, { hours: 20, minutes: 0, seconds: 0, milliseconds: 0 });
+            // Deadline is Friday 8 PM of the second week of the month.
+            const secondWeekStart = addDays(startOfSubmissionMonth, 7);
+            const startOfSecondWeek = startOfWeek(secondWeekStart, { weekStartsOn });
+            const fridayOfSecondWeek = addDays(startOfSecondWeek, 4);
+            deadline = set(fridayOfSecondWeek, { hours: 20, minutes: 0, seconds: 0, milliseconds: 0 });
         } else {
-            // Week 3 & 4: Lock on the 2nd calendar day after the end of the month.
+            // Deadline is end of the 2nd day of the next month.
             const endOfSubmissionMonth = endOfMonth(submittedDate);
             deadline = endOfDay(addDays(endOfSubmissionMonth, 2));
         }
@@ -788,3 +790,5 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
       </>
     );
 }
+
+    
