@@ -124,25 +124,30 @@ export const useDoctors = () => {
             });
 
             let newDoctorsCount = 0;
+            let updatedDoctorsCount = 0;
 
-            // 2. Iterate through uploaded doctors to decide whether to add
+            // 2. Iterate through uploaded doctors to decide whether to add or update
             doctorsToAdd.forEach((newDoctor) => {
                 const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
                 const existingDoctor = existingDoctorMap.get(key);
 
-                if (!existingDoctor) {
+                if (existingDoctor) {
+                    // Update existing doctor
+                    const docRef = doc(db, "doctors", existingDoctor.id);
+                    batch.update(docRef, { ...newDoctor, userId: user.uid });
+                    updatedDoctorsCount++;
+                } else {
                     // Add new doctor
                     const docRef = doc(collection(db, "doctors"));
                     batch.set(docRef, { ...newDoctor, userId: user.uid });
                     newDoctorsCount++;
                 }
-                // If doctor exists, do nothing (skip)
             });
 
-            if (newDoctorsCount === 0) {
+            if (newDoctorsCount === 0 && updatedDoctorsCount === 0) {
                  toast({
-                    title: "No New Doctors",
-                    description: `All ${doctorsToAdd.length} doctors from the file already exist in your master list.`,
+                    title: "No Changes",
+                    description: `All doctors from the file already exist with the same information.`,
                 });
                 setLoading(false);
                 return;
@@ -156,7 +161,7 @@ export const useDoctors = () => {
 
             toast({
                 title: "Upload Successful",
-                description: `${newDoctorsCount} new doctor(s) have been added to your master list.`,
+                description: `${newDoctorsCount} new doctor(s) added and ${updatedDoctorsCount} existing doctor(s) updated.`,
             });
         } catch (error) {
             console.error("Error processing bulk doctor upload:", error);
@@ -282,3 +287,5 @@ export const useDoctors = () => {
     loading,
   };
 };
+
+    

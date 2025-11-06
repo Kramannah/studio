@@ -149,65 +149,91 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const worksheet = workbook.Sheets[sheetName];
         
         const json = XLSX.utils.sheet_to_json<any>(worksheet, {
-            raw: true,
+            header: 1, // Use an array of arrays
             defval: null,
         });
 
-        // Function to find a property in an object with case-insensitive keys
-        const getColumnValue = (row: any, ...possibleNames: string[]) => {
-            for (const key in row) {
-                if (row.hasOwnProperty(key)) {
-                    const lowerKey = key.toLowerCase().trim().replace(/ /g, '');
-                    if (possibleNames.some(name => name.toLowerCase().replace(/ /g, '') === lowerKey)) {
-                        const value = row[key];
-                        return (value !== null && value !== undefined) ? String(value).trim() : '';
-                    }
-                }
-            }
-            return '';
-        };
-
-        const mappedData = json.map(row => {
-            const frequencyValue = getColumnValue(row, 'frequency').toLowerCase();
-            const hacmeValue = getColumnValue(row, 'hacme').toUpperCase();
-            const coverageTypeValue = getColumnValue(row, 'coverageType', 'coveragetype').toLowerCase();
-            
-            return {
-                firstName: getColumnValue(row, 'firstName', 'first name'),
-                lastName: getColumnValue(row, 'lastName', 'last name'),
-                hcpCode: getColumnValue(row, 'hcpCode', 'hcp code'),
-                specialty: getColumnValue(row, 'specialty'),
-                clinic: getColumnValue(row, 'clinic'),
-                province: getColumnValue(row, 'province'),
-                municipality: getColumnValue(row, 'municipality'),
-                placeOfPractice: getColumnValue(row, 'placeOfPractice', 'place of practice'),
-                frequency: ['1x', '2x', '3x', '4x'].includes(frequencyValue) ? frequencyValue as '1x' | '2x' | '3x' | '4x' : '1x',
-                hacme: ['YES', 'NO'].includes(hacmeValue) ? hacmeValue as 'YES' | 'NO' : 'NO',
-                coverageType: ['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue as 'inbase' | 'outbase' : undefined,
-            }
-        });
-        
-        const validDoctors = mappedData.filter(doc => doc.firstName && doc.lastName);
-
-        if (validDoctors.length !== mappedData.length) {
-            const invalidCount = mappedData.length - validDoctors.length;
+        if (json.length < 2) {
             toast({
                 variant: "destructive",
-                title: "Incomplete Data",
-                description: `${invalidCount} row(s) were skipped due to missing first or last names.`,
+                title: "Invalid File",
+                description: "The Excel file must have a header row and at least one data row.",
             });
+            return;
         }
+
+        const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim().replace(/\s+/g, ''));
+        const dataRows = json.slice(1);
         
-        if (validDoctors.length === 0) {
+        const findColumnIndex = (possibleNames: string[]) => {
+            for (const name of possibleNames) {
+                const index = headerRow.indexOf(name.toLowerCase().replace(/\s+/g, ''));
+                if (index > -1) return index;
+            }
+            return -1;
+        };
+
+        const colMap = {
+            firstName: findColumnIndex(['firstname', 'first name']),
+            lastName: findColumnIndex(['lastname', 'last name']),
+            hcpCode: findColumnIndex(['hcpcode', 'hcp code']),
+            specialty: findColumnIndex(['specialty']),
+            clinic: findColumnIndex(['clinic']),
+            province: findColumnIndex(['province']),
+            municipality: findColumnIndex(['municipality']),
+            placeOfPractice: findColumnIndex(['placeofpractice', 'place of practice']),
+            frequency: findColumnIndex(['frequency']),
+            hacme: findColumnIndex(['hacme']),
+            coverageType: findColumnIndex(['coveragetype', 'coverage type']),
+        };
+
+        if (colMap.firstName === -1 || colMap.lastName === -1) {
+            toast({
+                variant: "destructive",
+                title: "Missing Required Columns",
+                description: "The file must contain 'First Name' and 'Last Name' columns.",
+            });
+            return;
+        }
+
+        const doctorsToUpload: Omit<Doctor, 'id'>[] = dataRows.map(row => {
+            const getVal = (index: number) => (row[index] !== null && row[index] !== undefined) ? String(row[index]).trim() : '';
+            
+            const firstName = getVal(colMap.firstName);
+            const lastName = getVal(colMap.lastName);
+
+            if (!firstName || !lastName) return null; // Skip rows without first/last name
+
+            const frequencyValue = getVal(colMap.frequency).toLowerCase();
+            const hacmeValue = getVal(colMap.hacme).toUpperCase();
+            const coverageTypeValue = getVal(colMap.coverageType).toLowerCase();
+
+            return {
+                firstName,
+                lastName,
+                hcpCode: getVal(colMap.hcpCode),
+                specialty: getVal(colMap.specialty),
+                clinic: getVal(colMap.clinic),
+                province: getVal(colMap.province),
+                municipality: getVal(colMap.municipality),
+                placeOfPractice: getVal(colMap.placeOfPractice),
+                frequency: (['1x', '2x', '3x', '4x'].includes(frequencyValue) ? frequencyValue : '1x') as '1x' | '2x' | '3x' | '4x',
+                hacme: (['YES', 'NO'].includes(hacmeValue) ? hacmeValue : 'NO') as 'YES' | 'NO',
+                coverageType: (['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue : undefined) as 'inbase' | 'outbase' | undefined,
+            };
+        }).filter((doc): doc is Omit<Doctor, 'id'> => doc !== null);
+
+
+        if (doctorsToUpload.length === 0) {
           toast({
             variant: "destructive",
             title: "Upload Failed",
-            description: "No valid doctor entries found in the file. Please ensure 'firstName' and 'lastName' are provided.",
+            description: "No valid doctor entries found in the file.",
           });
           return;
         }
 
-        onAddDoctorsBulk(validDoctors);
+        onAddDoctorsBulk(doctorsToUpload);
 
       } catch (error) {
         console.error("Failed to parse Excel file", error);
@@ -537,3 +563,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
