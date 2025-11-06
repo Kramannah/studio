@@ -149,8 +149,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const worksheet = workbook.Sheets[sheetName];
         
         const json = XLSX.utils.sheet_to_json<any>(worksheet, {
-            header: 1, // Use an array of arrays
-            defval: null,
+            header: 1,
+            defval: "",
         });
 
         if (json.length < 2) {
@@ -162,29 +162,29 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             return;
         }
 
-        const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim().replace(/\s+/g, ''));
+        const headerRow: string[] = json[0].map((h: any) => String(h || '').toLowerCase().trim());
         const dataRows = json.slice(1);
         
-        const findColumnIndex = (possibleNames: string[]) => {
+        const findCol = (possibleNames: string[]) => {
             for (const name of possibleNames) {
-                const index = headerRow.indexOf(name.toLowerCase().replace(/\s+/g, ''));
+                const index = headerRow.indexOf(name.toLowerCase().replace(/\s/g, ''));
                 if (index > -1) return index;
             }
             return -1;
         };
-
+        
         const colMap = {
-            firstName: findColumnIndex(['firstname', 'first name']),
-            lastName: findColumnIndex(['lastname', 'last name']),
-            hcpCode: findColumnIndex(['hcpcode', 'hcp code']),
-            specialty: findColumnIndex(['specialty']),
-            clinic: findColumnIndex(['clinic']),
-            province: findColumnIndex(['province']),
-            municipality: findColumnIndex(['municipality']),
-            placeOfPractice: findColumnIndex(['placeofpractice', 'place of practice']),
-            frequency: findColumnIndex(['frequency']),
-            hacme: findColumnIndex(['hacme']),
-            coverageType: findColumnIndex(['coveragetype', 'coverage type']),
+            firstName: findCol(['firstname', 'first name']),
+            lastName: findCol(['lastname', 'last name']),
+            hcpCode: findCol(['hcpcode', 'hcp code']),
+            specialty: findCol(['specialty']),
+            clinic: findCol(['clinic']),
+            province: findCol(['province']),
+            municipality: findCol(['municipality']),
+            placeOfPractice: findCol(['placeofpractice', 'place of practice']),
+            frequency: findCol(['frequency']),
+            hacme: findCol(['hacme']),
+            coverageType: findCol(['coveragetype', 'coverage type']),
         };
 
         if (colMap.firstName === -1 || colMap.lastName === -1) {
@@ -202,7 +202,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             const firstName = getVal(colMap.firstName);
             const lastName = getVal(colMap.lastName);
 
-            if (!firstName || !lastName) return null; // Skip rows without first/last name
+            if (!firstName || !lastName) return null;
 
             const frequencyValue = getVal(colMap.frequency).toLowerCase();
             const hacmeValue = getVal(colMap.hacme).toUpperCase();
@@ -240,7 +240,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         toast({
           variant: "destructive",
           title: "Upload Failed",
-          description: "Could not process your doctor master list file. Please ensure it is a valid spreadsheet.",
+          description: "Could not process your doctor master list file.",
         });
       } finally {
         if (fileInputRef.current) {
@@ -356,7 +356,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     // We add instructions on how to set it up manually.
     const instructionCell = "L1";
     if(!worksheet[instructionCell]) worksheet[instructionCell] = { t: 's', v: '' };
-    worksheet[instructionCell].v = "To enable dependent municipality dropdowns, please follow these steps in Excel:\n1. Select the Municipality column (H).\n2. Go to Data > Data Validation.\n3. Choose 'List' from the Allow dropdown.\n4. In the Source formula box, enter: =INDIRECT(SUBSTITUTE(G2,\" \",\"_\"))\n(Assuming province is in column G, starting at row 2)\n5. You will also need to create Named Ranges for each province's municipality list on the DataValidationSheet.";
+    worksheet[instructionCell].v = "To enable dependent municipality dropdowns, please follow these steps in Excel:\\n1. Select the Municipality column (H).\\n2. Go to Data > Data Validation.\\n3. Choose 'List' from the Allow dropdown.\\n4. In the Source formula box, enter: =INDIRECT(SUBSTITUTE(G2,\" \",\"_\"))\\n(Assuming province is in column G, starting at row 2)\\n5. You will also need to create Named Ranges for each province's municipality list on the DataValidationSheet.";
 
 
     XLSX.writeFile(workbook, 'doctor_masterlist_template.xlsx');
