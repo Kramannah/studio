@@ -152,13 +152,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             raw: true,
             defval: null,
         });
-        
+
         // Function to find a property in an object with case-insensitive keys
         const getColumnValue = (row: any, ...possibleNames: string[]) => {
             for (const key in row) {
                 if (row.hasOwnProperty(key)) {
-                    const lowerKey = key.toLowerCase().trim();
-                    if (possibleNames.some(name => name.toLowerCase() === lowerKey)) {
+                    const lowerKey = key.toLowerCase().trim().replace(/ /g, '');
+                    if (possibleNames.some(name => name.toLowerCase().replace(/ /g, '') === lowerKey)) {
                         const value = row[key];
                         return (value !== null && value !== undefined) ? String(value).trim() : '';
                     }
@@ -167,12 +167,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             return '';
         };
 
-        const requiredFields: string[] = ['firstName', 'lastName'];
-        
         const mappedData = json.map(row => {
             const frequencyValue = getColumnValue(row, 'frequency').toLowerCase();
             const hacmeValue = getColumnValue(row, 'hacme').toUpperCase();
-            const coverageTypeValue = getColumnValue(row, 'coverageType').toLowerCase();
+            const coverageTypeValue = getColumnValue(row, 'coverageType', 'coveragetype').toLowerCase();
             
             return {
                 firstName: getColumnValue(row, 'firstName', 'first name'),
@@ -188,19 +186,15 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 coverageType: ['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue as 'inbase' | 'outbase' : undefined,
             }
         });
-
-        const validDoctors = mappedData.filter(row => requiredFields.every(field => {
-            const value = row[field as keyof typeof row];
-            return value !== undefined && value !== null && String(value).trim() !== '';
-        }));
-
+        
+        const validDoctors = mappedData.filter(doc => doc.firstName && doc.lastName);
 
         if (validDoctors.length !== mappedData.length) {
             const invalidCount = mappedData.length - validDoctors.length;
             toast({
                 variant: "destructive",
                 title: "Incomplete Data",
-                description: `${invalidCount} doctor(s) were skipped due to missing first or last names.`,
+                description: `${invalidCount} row(s) were skipped due to missing first or last names.`,
             });
         }
         
@@ -214,16 +208,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         }
 
         onAddDoctorsBulk(validDoctors);
-        toast({
-          title: "Upload Successful",
-          description: `${validDoctors.length} doctors have been processed.`,
-        });
+
       } catch (error) {
         console.error("Failed to parse Excel file", error);
         toast({
           variant: "destructive",
           title: "Upload Failed",
-          description: "Could not process your doctor master list file.",
+          description: "Could not process your doctor master list file. Please ensure it is a valid spreadsheet.",
         });
       } finally {
         if (fileInputRef.current) {
@@ -546,6 +537,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
 
     
 
