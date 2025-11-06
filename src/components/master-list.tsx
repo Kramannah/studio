@@ -148,43 +148,39 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const json = XLSX.utils.sheet_to_json<any>(worksheet, {
+        const dataRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             defval: "",
         });
 
-        if (json.length < 2) {
-            toast({
-                variant: "destructive",
-                title: "Invalid File",
-                description: "The Excel file must have a header row and at least one data row.",
-            });
+        if (dataRows.length < 1) {
+            toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty." });
             return;
         }
 
-        const headerRow: string[] = json[0].map((h: any) => String(h || '').toLowerCase().trim());
-        const dataRows = json.slice(1);
+        const headerRow: string[] = dataRows[0].map(h => String(h || '').toLowerCase().trim());
+        const bodyRows = dataRows.slice(1);
         
-        const findCol = (possibleNames: string[]) => {
+        const findColIndex = (possibleNames: string[]) => {
             for (const name of possibleNames) {
-                const index = headerRow.indexOf(name.toLowerCase().replace(/\s/g, ''));
+                const index = headerRow.indexOf(name.toLowerCase());
                 if (index > -1) return index;
             }
             return -1;
         };
         
         const colMap = {
-            firstName: findCol(['firstname', 'first name']),
-            lastName: findCol(['lastname', 'last name']),
-            hcpCode: findCol(['hcpcode', 'hcp code']),
-            specialty: findCol(['specialty']),
-            clinic: findCol(['clinic']),
-            province: findCol(['province']),
-            municipality: findCol(['municipality']),
-            placeOfPractice: findCol(['placeofpractice', 'place of practice']),
-            frequency: findCol(['frequency']),
-            hacme: findCol(['hacme']),
-            coverageType: findCol(['coveragetype', 'coverage type']),
+            firstName: findColIndex(['firstname', 'first name']),
+            lastName: findColIndex(['lastname', 'last name']),
+            hcpCode: findColIndex(['hcpcode', 'hcp code']),
+            specialty: findColIndex(['specialty']),
+            clinic: findColIndex(['clinic']),
+            province: findColIndex(['province']),
+            municipality: findColIndex(['municipality']),
+            placeOfPractice: findColIndex(['placeofpractice', 'place of practice']),
+            frequency: findColIndex(['frequency']),
+            hacme: findColIndex(['hacme']),
+            coverageType: findColIndex(['coveragetype', 'coverage type']),
         };
 
         if (colMap.firstName === -1 || colMap.lastName === -1) {
@@ -196,7 +192,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             return;
         }
 
-        const doctorsToUpload: Omit<Doctor, 'id'>[] = dataRows.map(row => {
+        const doctorsToUpload: Omit<Doctor, 'id'>[] = bodyRows.map(row => {
             const getVal = (index: number) => (row[index] !== null && row[index] !== undefined) ? String(row[index]).trim() : '';
             
             const firstName = getVal(colMap.firstName);
