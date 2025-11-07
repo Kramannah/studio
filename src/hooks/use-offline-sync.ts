@@ -174,41 +174,46 @@ export const useOfflineSync = (userId?: string) => {
     setIsSyncing(true);
     toast({ title: 'Syncing...', description: `Uploading ${offlineEntries.length} offline reports.`});
 
-    let successfulSyncs: string[] = [];
-    let failedSyncs: CoverageEntry[] = [];
+    let successfulSyncIds: string[] = [];
+    const entriesToSync = [...offlineEntries]; // Create a copy to iterate over
 
-    for (const entry of offlineEntries) {
+    const batch = writeBatch(db);
+
+    for (const entry of entriesToSync) {
         try {
             const { id, ...dataToSync } = entry;
-            await addDoc(collection(db, "coverageEntries"), dataToSync);
-            successfulSyncs.push(id);
+            const docRef = doc(collection(db, "coverageEntries")); // Create a new doc ref for each entry
+            batch.set(docRef, dataToSync);
+            successfulSyncIds.push(id);
         } catch (error) {
-            console.error(`Failed to sync entry ${entry.id}:`, error);
-            failedSyncs.push(entry);
+            console.error(`Failed to stage sync for entry ${entry.id}:`, error);
         }
     }
 
-    // Update local storage with any entries that failed to sync
-    updateOfflineInStorage(failedSyncs);
+    let remainingOfflineEntries = [...offlineEntries];
 
-    if (successfulSyncs.length > 0) {
-        toast({
-            title: 'Sync Partially Complete',
-            description: `${successfulSyncs.length} of ${offlineEntries.length} entries synced successfully.`,
-        });
-        await fetchMasterEntries(); // Refresh master entries after successful sync
-    }
+    try {
+        await batch.commit();
+        
+        // Remove successfully synced entries from local state and storage
+        remainingOfflineEntries = offlineEntries.filter(entry => !successfulSyncIds.includes(entry.id));
+        updateOfflineInStorage(remainingOfflineEntries);
 
-    if (failedSyncs.length > 0) {
+        if (successfulSyncIds.length > 0) {
+            toast({
+                title: 'Sync Complete',
+                description: `${successfulSyncIds.length} entries synced successfully.`,
+            });
+            await fetchMasterEntries(); // Refresh master entries after successful sync
+        }
+
+    } catch (error) {
+        console.error("Batch commit failed during sync:", error);
         toast({
             variant: 'destructive',
-            title: 'Sync Incomplete',
-            description: `${failedSyncs.length} entries failed to sync. They remain offline for the next attempt.`,
+            title: 'Sync Failed',
+            description: `Could not sync entries to the server. They will remain offline for the next attempt.`,
         });
-    }
-
-    if (successfulSyncs.length > 0 && failedSyncs.length === 0) {
-        toast({ title: 'Sync Complete', description: `All ${successfulSyncs.length} entries synced successfully.` });
     }
 
     setIsSyncing(false);
