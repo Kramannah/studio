@@ -23,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "./ui/checkbox";
+import { Badge } from "./ui/badge";
 
 type MasterListProps = {
   doctors: Doctor[];
@@ -55,7 +56,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         return doctors.filter(doctor =>
             `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
             doctor.specialty.toLowerCase().includes(filter.toLowerCase()) ||
-            doctor.clinic.toLowerCase().includes(filter.toLowerCase())
+            doctor.clinic.toLowerCase().includes(filter.toLowerCase()) ||
+            (doctor.province && doctor.province.toLowerCase().includes(filter.toLowerCase())) ||
+            (doctor.municipality && doctor.municipality.toLowerCase().includes(filter.toLowerCase()))
         );
     }, [doctors, filter]);
 
@@ -93,7 +96,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                 const workbook = XLSX.read(data, { type: 'array' });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
                 if (json.length < 2) {
                     toast({
@@ -123,7 +126,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     clinic: findColIndex(['clinic', 'hospital', 'hospital/clinic']),
                     coverageType: findColIndex(['coverage', 'coveragetype', 'coverage type']),
                     province: findColIndex(['province']),
-                    municipality: findColIndex(['municipality', 'city/municipality']),
+                    municipality: findColIndex(['municipality', 'city/municipality', 'city']),
                     placeOfPractice: findColIndex(['placeofpractice', 'place of practice']),
                     frequency: findColIndex(['target', 'frequency', 'freq']),
                     hacme: findColIndex(['hacme']),
@@ -282,7 +285,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                         <div className="relative w-full max-w-sm">
                             <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Filter by name, specialty, or clinic..."
+                                placeholder="Filter by name, specialty, or location..."
                                 value={filter}
                                 onChange={(e) => setFilter(e.target.value)}
                                 className="pl-10"
@@ -327,20 +330,19 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     )}
                                     <TableHead>Name</TableHead>
                                     <TableHead>Specialty</TableHead>
-                                    <TableHead>Clinic</TableHead>
+                                    <TableHead>HCP Code</TableHead>
+                                    <TableHead>Clinic / Hospital</TableHead>
+                                    <TableHead>Location</TableHead>
+                                    <TableHead>Practice</TableHead>
                                     <TableHead>Target</TableHead>
-                                    <TableHead>Visits This Month</TableHead>
-                                    <TableHead>Balance</TableHead>
+                                    <TableHead>Coverage</TableHead>
+                                    <TableHead>HACME</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredDoctors.length > 0 ? (
                                     filteredDoctors.map((doctor) => {
-                                        const visitCount = visitCountsThisMonth[`${doctor.firstName} ${doctor.lastName}`.toLowerCase()] || 0;
-                                        const target = parseInt(doctor.frequency.replace('x', ''), 10);
-                                        const balance = target - visitCount;
-
                                         return (
                                         <TableRow key={doctor.id} data-state={selectedIds.includes(doctor.id) ? "selected" : ""}>
                                             {!readOnly && (
@@ -353,10 +355,15 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                             )}
                                             <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
                                             <TableCell>{doctor.specialty}</TableCell>
+                                            <TableCell>{doctor.hcpCode || 'N/A'}</TableCell>
                                             <TableCell>{doctor.clinic}</TableCell>
+                                            <TableCell>{doctor.municipality}, {doctor.province}</TableCell>
+                                            <TableCell>{doctor.placeOfPractice || 'N/A'}</TableCell>
                                             <TableCell>{doctor.frequency}</TableCell>
-                                            <TableCell>{visitCount}</TableCell>
-                                            <TableCell>{balance > 0 ? balance : 0}</TableCell>
+                                            <TableCell className="capitalize">{doctor.coverageType || 'N/A'}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={doctor.hacme === 'YES' ? 'default' : 'secondary'}>{doctor.hacme || 'NO'}</Badge>
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 {!readOnly && (
                                                     <Button variant="ghost" size="sm" onClick={() => handleEditClick(doctor)}>Edit</Button>
@@ -366,7 +373,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     )})
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={readOnly ? 6 : 7} className="h-24 text-center">
+                                        <TableCell colSpan={readOnly ? 10 : 11} className="h-24 text-center">
                                             No doctors found.
                                         </TableCell>
                                     </TableRow>
