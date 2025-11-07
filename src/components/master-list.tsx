@@ -148,7 +148,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet, {
+        const json: any[][] = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             defval: "",
         });
@@ -174,11 +174,11 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             lastName: findColIndex(['lastname', 'last name']),
             hcpCode: findColIndex(['hcpcode', 'hcp code']),
             specialty: findColIndex(['specialty']),
-            clinic: findColIndex(['clinic']),
+            clinic: findColIndex(['clinic', 'hospital/clinic']),
             province: findColIndex(['province']),
-            municipality: findColIndex(['municipality']),
+            municipality: findColIndex(['municipality', 'city/municipality']),
             placeOfPractice: findColIndex(['placeofpractice', 'place of practice']),
-            frequency: findColIndex(['frequency']),
+            frequency: findColIndex(['frequency', 'freq']),
             hacme: findColIndex(['hacme']),
             coverageType: findColIndex(['coveragetype', 'coverage type']),
         };
@@ -236,7 +236,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         toast({
           variant: "destructive",
           title: "Upload Failed",
-          description: "Could not process your doctor master list file.",
+          description: "Could not process your doctor master list file. Please ensure it is a valid Excel file.",
         });
       } finally {
         if (fileInputRef.current) {
@@ -559,5 +559,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
     </Card>
   );
 }
+
+    
 
     
