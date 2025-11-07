@@ -148,18 +148,18 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const dataRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             defval: "",
         });
 
-        if (dataRows.length < 1) {
-            toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty." });
+        if (json.length < 2) { // Must have at least a header and one data row
+            toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
             return;
         }
 
-        const headerRow: string[] = dataRows[0].map(h => String(h || '').toLowerCase().trim());
-        const bodyRows = dataRows.slice(1);
+        const headerRow: string[] = json[0].map((h: any) => String(h || '').toLowerCase().trim());
+        const bodyRows = json.slice(1);
         
         const findColIndex = (possibleNames: string[]) => {
             for (const name of possibleNames) {
