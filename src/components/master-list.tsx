@@ -192,8 +192,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
             return;
         }
 
-        const doctorsToUpload: Omit<Doctor, 'id'>[] = bodyRows.map(row => {
-            const getVal = (index: number) => (row[index] !== null && row[index] !== undefined) ? String(row[index]).trim() : '';
+        const doctorsToUpload: Omit<Doctor, 'id'|'userId'>[] = bodyRows.map(row => {
+            const getVal = (index: number) => (row && row[index] !== null && row[index] !== undefined) ? String(row[index]).trim() : '';
             
             const firstName = getVal(colMap.firstName);
             const lastName = getVal(colMap.lastName);
@@ -217,7 +217,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onAddDoctorsBulk, on
                 hacme: (['YES', 'NO'].includes(hacmeValue) ? hacmeValue : 'NO') as 'YES' | 'NO',
                 coverageType: (['inbase', 'outbase'].includes(coverageTypeValue) ? coverageTypeValue : undefined) as 'inbase' | 'outbase' | undefined,
             };
-        }).filter((doc): doc is Omit<Doctor, 'id'> => doc !== null);
+        }).filter((doc): doc is Omit<Doctor, 'id'|'userId'> => doc !== null);
 
 
         if (doctorsToUpload.length === 0) {

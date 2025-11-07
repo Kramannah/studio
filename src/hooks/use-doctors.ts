@@ -105,7 +105,7 @@ export const useDoctors = () => {
    * This now only adds new doctors and ignores existing ones.
    * ------------------------ */
   const addDoctorsBulk = useCallback(
-    async (doctorsToAdd: Omit<Doctor, "id" | "userId">[]) => {
+    async (doctorsToAdd: Omit<Doctor, "id"|'userId'>[]) => {
         if (!user) return;
         if (doctorsToAdd.length === 0) return;
         setLoading(true);
