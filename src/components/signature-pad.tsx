@@ -11,14 +11,12 @@ interface SignaturePadProps {
   value: string | null | undefined;
   onChange: (value: string | null) => void;
   className?: string;
-  internalStateManagement?: boolean;
 }
 
-export function SignaturePad({ value, onChange, className, internalStateManagement = false }: SignaturePadProps) {
+export function SignaturePad({ value, onChange, className }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
-  const [internalValue, setInternalValue] = useState<string | null | undefined>(value);
 
   const getCanvasContext = useCallback(() => {
     const canvas = canvasRef.current;
@@ -32,20 +30,9 @@ export function SignaturePad({ value, onChange, className, internalStateManageme
     if (ctx && canvas) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       onChange(null);
-      if (internalStateManagement) {
-        setInternalValue(null);
-      }
     }
-  }, [getCanvasContext, onChange, internalStateManagement]);
+  }, [getCanvasContext, onChange]);
   
-  const currentValue = internalStateManagement ? internalValue : value;
-
-  useEffect(() => {
-    if (internalStateManagement && value !== internalValue) {
-        setInternalValue(value);
-    }
-  }, [value, internalStateManagement, internalValue]);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
@@ -70,15 +57,15 @@ export function SignaturePad({ value, onChange, className, internalStateManageme
     ctx.lineJoin = 'round';
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (currentValue) {
+    if (value) {
       const img = new Image();
       img.onload = () => {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
-      img.src = currentValue;
+      img.src = value;
     }
 
-  }, [currentValue, getCanvasContext, className]);
+  }, [value, getCanvasContext, className]);
 
   const getPosition = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -135,11 +122,7 @@ export function SignaturePad({ value, onChange, className, internalStateManageme
     if (canvas) {
       const dataUrl = canvas.toDataURL('image/png');
       const isEmpty = isCanvasBlank(canvas);
-      const finalValue = isEmpty ? null : dataUrl;
-      onChange(finalValue);
-      if (internalStateManagement) {
-        setInternalValue(finalValue);
-      }
+      onChange(isEmpty ? null : dataUrl);
     }
   };
 
@@ -166,17 +149,17 @@ interface SignaturePadFullScreenProps {
     open: boolean;
     onClose: () => void;
     onSave: (value: string | null) => void;
-    value: string | null | undefined;
+    initialValue: string | null | undefined;
 }
 
-export function SignaturePadFullScreen({ open, onClose, onSave, value }: SignaturePadFullScreenProps) {
+export function SignaturePadFullScreen({ open, onClose, onSave, initialValue }: SignaturePadFullScreenProps) {
     const [currentSignature, setCurrentSignature] = useState<string | null>(null);
 
     useEffect(() => {
         if(open) {
-            setCurrentSignature(value || null);
+            setCurrentSignature(initialValue || null);
         }
-    }, [open, value]);
+    }, [open, initialValue]);
 
     const handleSave = () => {
         onSave(currentSignature);
@@ -199,10 +182,11 @@ export function SignaturePadFullScreen({ open, onClose, onSave, value }: Signatu
                         value={currentSignature}
                         onChange={setCurrentSignature}
                         className="w-full h-full"
-                        internalStateManagement={true}
                     />
                 </div>
             </DialogContent>
         </Dialog>
     )
 }
+
+    

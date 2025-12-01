@@ -1081,8 +1081,10 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
             open={isSignaturePadOpen}
             onClose={() => setIsSignaturePadOpen(false)}
             onSave={handleSaveSignature}
-            value={signatureFieldToUpdate ? form.getValues(signatureFieldToUpdate) : null}
+            initialValue={signatureFieldToUpdate ? form.getValues(signatureFieldToUpdate) : null}
         />
     </Card>
   )
 }
+
+    
