@@ -62,6 +62,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         );
     }, [doctors, filter]);
 
+    const frequencyCounts = useMemo(() => {
+        return doctors.reduce((acc, doctor) => {
+            const freq = doctor.frequency;
+            acc[freq] = (acc[freq] || 0) + 1;
+            return acc;
+        }, {} as Record<'1x' | '2x' | '3x' | '4x', number>);
+    }, [doctors]);
+
     const handleAddClick = () => {
         setSelectedDoctor(undefined);
         setIsFormOpen(true);
@@ -280,6 +288,18 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                 </Button>
                             </div>
                         )}
+                    </div>
+                    <div className="flex items-center gap-4 mt-4">
+                        <h3 className="text-sm font-semibold">Frequency Counts:</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {(Object.keys(frequencyCounts) as Array<keyof typeof frequencyCounts>).sort().map(freq => (
+                                frequencyCounts[freq] > 0 && (
+                                <Badge key={freq} variant="secondary" className="text-sm">
+                                    {freq}: <span className="ml-1 font-bold">{frequencyCounts[freq]}</span>
+                                </Badge>
+                                )
+                            ))}
+                        </div>
                     </div>
                      <div className="flex flex-col items-start gap-4 mt-4 md:flex-row md:items-center md:justify-between">
                         <div className="relative w-full max-w-sm">
