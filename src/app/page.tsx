@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { CoverageForm } from '@/components/coverage-form';
@@ -54,10 +55,9 @@ export default function Home() {
 
   useEffect(() => {
     if (isOnline) {
-      syncAllOfflineEntries();
       if(syncAllOfflinePlans) syncAllOfflinePlans();
     }
-  }, [isOnline, syncAllOfflineEntries, syncAllOfflinePlans]);
+  }, [isOnline, syncAllOfflinePlans]);
 
   const handleLogPlannedCall = (doctor: Doctor) => {
     setDoctorToLog(doctor);
