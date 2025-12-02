@@ -7,8 +7,8 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent, Briefcase, Pill } from "lucide-react";
+import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, isSameDay } from "date-fns";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
@@ -95,6 +95,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
                 totalWorkingDays: 0,
                 totalInbaseDays: 0,
                 totalOutbaseDays: 0,
+                incentiveDays: { total: 0, inBase: 0, outBase: 0 },
                 monthlyPerformance: [],
                 topProducts: [],
                 topSpecialties: [],
@@ -125,9 +126,10 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             if (!isValid(submittedDate)) return acc;
             const day = format(submittedDate, 'yyyy-MM-dd');
-            acc[day] = (acc[day] || 0) + 1;
+            if(!acc[day]) acc[day] = [];
+            acc[day].push(entry);
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, CoverageEntry[]>);
         
         const totalWorkingDays = Object.keys(callsByDay).length;
         const totalCalls = filteredEntries.length;
@@ -209,6 +211,40 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             .sort((a, b) => b.count - a.count)
             .slice(0, 5);
 
+        // Incentive Days Logic
+        const nonCallDayMap = filteredNonCallDays.reduce((acc, day) => {
+            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+            if (isValid(dayDate)) {
+                acc[format(dayDate, 'yyyy-MM-dd')] = day;
+            }
+            return acc;
+        }, {} as Record<string, NonCallDay>);
+
+        let incentiveDays = { total: 0, inBase: 0, outBase: 0 };
+        const validIncentiveDays = new Set<string>();
+
+        Object.entries(callsByDay).forEach(([day, dayEntries]) => {
+            const callCount = dayEntries.length;
+            const hasNonCallDay = !!nonCallDayMap[day];
+
+            if (callCount >= 10 || (callCount < 10 && hasNonCallDay)) {
+                validIncentiveDays.add(day);
+                const isInBase = dayEntries.some(e => e.coverageType === 'inbase');
+                const isOutBase = dayEntries.some(e => e.coverageType === 'outbase');
+
+                if (isInBase) incentiveDays.inBase++;
+                if (isOutBase) incentiveDays.outBase++;
+            }
+        });
+        
+        Object.keys(nonCallDayMap).forEach(day => {
+            if (nonCallDayMap[day].dayType === 'wholeday') {
+                validIncentiveDays.add(day);
+            }
+        });
+
+        incentiveDays.total = validIncentiveDays.size;
+
         return {
             completed3x: { actual: actual3xPlusCompleted, total: total3xPlusTarget, percentage: percentage3x },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
@@ -217,6 +253,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             totalWorkingDays,
             totalInbaseDays: inbaseDays.size,
             totalOutbaseDays: outbaseDays.size,
+            incentiveDays,
             monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
             topProducts,
             topSpecialties,
@@ -265,6 +302,9 @@ Summary:
 - Total Working Days: ${insights.totalWorkingDays}
 - In-base Days: ${insights.totalInbaseDays}
 - Out-base Days: ${insights.totalOutbaseDays}
+- Total Incentive Days: ${insights.incentiveDays.total}
+- In-Base Incentive Days: ${insights.incentiveDays.inBase}
+- Out-Base Incentive Days: ${insights.incentiveDays.outBase}
         `.trim();
 
         const emailFile = createEmailFile(subject, body);
@@ -350,63 +390,96 @@ Summary:
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <StatCard 
-                        title="Call Rate" 
-                        value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
-                        description="Actual calls vs. adjusted monthly target." 
-                        icon={Percent}
-                        color="text-orange-500"
-                        bgColor="bg-orange-500/10"
-                    />
-                    <StatCard 
-                        title="Call Concentration (3x)" 
-                        value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
-                        description="Actual vs. Target for 3x doctors." 
-                        icon={Target}
-                        color="text-primary"
-                        bgColor="bg-primary/10"
-                    />
-                    <StatCard 
-                        title="Call Reach" 
-                        value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} 
-                        description="Doctors visited at least once."
-                        icon={Users}
-                        color="text-teal-500"
-                        bgColor="bg-teal-500/10"
-                    />
-                    <StatCard 
-                        title="Avg Calls / Day" 
-                        value={insights.avgCallsPerDay} 
-                        description="Average on working days." 
-                        icon={TrendingUp}
-                        color="text-blue-500"
-                        bgColor="bg-blue-500/10"
-                    />
-                    <StatCard 
-                        title="Total Working Days" 
-                        value={insights.totalWorkingDays} 
-                        description="Unique days with coverage." 
-                        icon={CalendarDays}
-                        color="text-yellow-500"
-                        bgColor="bg-yellow-500/10"
-                    />
-                    <StatCard 
-                        title="Inbase Days" 
-                        value={insights.totalInbaseDays} 
-                        description="Unique days with inbase calls."
-                        icon={Home}
-                        color="text-indigo-500"
-                        bgColor="bg-indigo-500/10"
-                     />
-                    <StatCard 
-                        title="Outbase Days" 
-                        value={insights.totalOutbaseDays} 
-                        description="Unique days with outbase calls." 
-                        icon={Plane}
-                        color="text-pink-500"
-                        bgColor="bg-pink-500/10"
-                    />
+                <CardContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <StatCard 
+                            title="Call Rate" 
+                            value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
+                            description="Actual calls vs. adjusted monthly target." 
+                            icon={Percent}
+                            color="text-orange-500"
+                            bgColor="bg-orange-500/10"
+                        />
+                        <StatCard 
+                            title="Call Concentration (3x)" 
+                            value={`${insights.completed3x.actual}/${insights.completed3x.total} (${insights.completed3x.percentage}%)`} 
+                            description="Actual vs. Target for 3x doctors." 
+                            icon={Target}
+                            color="text-primary"
+                            bgColor="bg-primary/10"
+                        />
+                        <StatCard 
+                            title="Call Reach" 
+                            value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} 
+                            description="Doctors visited at least once."
+                            icon={Users}
+                            color="text-teal-500"
+                            bgColor="bg-teal-500/10"
+                        />
+                        <StatCard 
+                            title="Avg Calls / Day" 
+                            value={insights.avgCallsPerDay} 
+                            description="Average on working days." 
+                            icon={TrendingUp}
+                            color="text-blue-500"
+                            bgColor="bg-blue-500/10"
+                        />
+                        <StatCard 
+                            title="Total Working Days" 
+                            value={insights.totalWorkingDays} 
+                            description="Unique days with coverage." 
+                            icon={CalendarDays}
+                            color="text-yellow-500"
+                            bgColor="bg-yellow-500/10"
+                        />
+                        <StatCard 
+                            title="Inbase Days" 
+                            value={insights.totalInbaseDays} 
+                            description="Unique days with inbase calls."
+                            icon={Home}
+                            color="text-indigo-500"
+                            bgColor="bg-indigo-500/10"
+                         />
+                        <StatCard 
+                            title="Outbase Days" 
+                            value={insights.totalOutbaseDays} 
+                            description="Unique days with outbase calls." 
+                            icon={Plane}
+                            color="text-pink-500"
+                            bgColor="bg-pink-500/10"
+                        />
+                    </div>
+
+                    <div className="mt-6 border-t pt-6">
+                        <CardTitle className="font-headline mb-2">Incentive Allowance Summary</CardTitle>
+                        <CardDescription className="mb-4">Summary for HR allowance computation.</CardDescription>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <StatCard 
+                                title="Total Incentive Days" 
+                                value={insights.incentiveDays.total} 
+                                description="Days with >=10 calls or with valid leave." 
+                                icon={ThumbsUp}
+                                color="text-green-500"
+                                bgColor="bg-green-500/10"
+                            />
+                            <StatCard 
+                                title="In-Base Incentive Days" 
+                                value={insights.incentiveDays.inBase} 
+                                description="Incentive days with in-base activity."
+                                icon={Building}
+                                color="text-sky-500"
+                                bgColor="bg-sky-500/10"
+                            />
+                            <StatCard 
+                                title="Out-Base Incentive Days" 
+                                value={insights.incentiveDays.outBase} 
+                                description="Incentive days with out-base activity." 
+                                icon={PlaneTakeoff}
+                                color="text-rose-500"
+                                bgColor="bg-rose-500/10"
+                            />
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -583,6 +656,3 @@ Summary:
         </div>
     );
 }
-
-    
-    
