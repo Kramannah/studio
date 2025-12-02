@@ -451,7 +451,7 @@ Summary:
                     </div>
 
                     <div className="mt-6 border-t pt-6">
-                        <CardTitle className="font-headline mb-2">Incentive Allowance Summary</CardTitle>
+                        <CardTitle className="font-headline mb-2">Attendance Allowance Summary</CardTitle>
                         <CardDescription className="mb-4">Summary for HR allowance computation.</CardDescription>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <StatCard 
