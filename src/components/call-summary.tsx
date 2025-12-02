@@ -17,8 +17,8 @@ import { Calendar } from "./ui/calendar";
 import { Badge } from "./ui/badge";
 import { USER_DATA_MAP } from "@/lib/user-data";
 
-const StatCard = ({ title, value, description, icon: Icon, color }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string }) => (
-    <Card>
+const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
+    <Card className={cn(bgColor)}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardDescription className="font-headline text-base">{title}</CardDescription>
             <Icon className={cn("w-6 h-6 text-muted-foreground", color)} />
@@ -357,6 +357,7 @@ Summary:
                         description="Actual calls vs. adjusted monthly target." 
                         icon={Percent}
                         color="text-orange-500"
+                        bgColor="bg-orange-500/10"
                     />
                     <StatCard 
                         title="Call Concentration (3x)" 
@@ -364,6 +365,7 @@ Summary:
                         description="Actual vs. Target for 3x doctors." 
                         icon={Target}
                         color="text-primary"
+                        bgColor="bg-primary/10"
                     />
                     <StatCard 
                         title="Call Reach" 
@@ -371,6 +373,7 @@ Summary:
                         description="Doctors visited at least once."
                         icon={Users}
                         color="text-teal-500"
+                        bgColor="bg-teal-500/10"
                     />
                     <StatCard 
                         title="Avg Calls / Day" 
@@ -378,6 +381,7 @@ Summary:
                         description="Average on working days." 
                         icon={TrendingUp}
                         color="text-blue-500"
+                        bgColor="bg-blue-500/10"
                     />
                     <StatCard 
                         title="Total Working Days" 
@@ -385,6 +389,7 @@ Summary:
                         description="Unique days with coverage." 
                         icon={CalendarDays}
                         color="text-yellow-500"
+                        bgColor="bg-yellow-500/10"
                     />
                     <StatCard 
                         title="Inbase Days" 
@@ -392,6 +397,7 @@ Summary:
                         description="Unique days with inbase calls."
                         icon={Home}
                         color="text-indigo-500"
+                        bgColor="bg-indigo-500/10"
                      />
                     <StatCard 
                         title="Outbase Days" 
@@ -399,6 +405,7 @@ Summary:
                         description="Unique days with outbase calls." 
                         icon={Plane}
                         color="text-pink-500"
+                        bgColor="bg-pink-500/10"
                     />
                 </CardContent>
             </Card>
@@ -577,4 +584,5 @@ Summary:
     );
 }
 
+    
     
