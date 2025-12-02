@@ -480,8 +480,8 @@ export function PlanningCalendar({
                         </div>
                     </div>
                      <div className="border rounded-md">
-                        {selectedDayNonCallEntry ? (
-                            <div className="flex items-center justify-between p-4">
+                        {selectedDayNonCallEntry && (
+                             <div className="flex items-center justify-between p-4 border-b">
                                 <div className="flex flex-col">
                                     <h4 className="font-semibold">{selectedDayNonCallEntry.reason}</h4>
                                     <p className="text-sm text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
@@ -500,94 +500,93 @@ export function PlanningCalendar({
                                     </Tooltip>
                                 </TooltipProvider>
                             </div>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Doctor</TableHead>
-                                        <TableHead>Location</TableHead>
-                                        <TableHead>Call Type</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selectedDayPlans.length > 0 ? (
-                                        selectedDayPlans.map((plan) => {
-                                            const doctor = doctors.find(d => d.id === plan.doctorId);
-                                            if (!doctor) return null;
+                        )}
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Doctor</TableHead>
+                                    <TableHead>Location</TableHead>
+                                    <TableHead>Call Type</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {selectedDayPlans.length > 0 ? (
+                                    selectedDayPlans.map((plan) => {
+                                        const doctor = doctors.find(d => d.id === plan.doctorId);
+                                        if (!doctor) return null;
 
-                                            const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
-                                            const isCovered = dayEntries.some(entry => 
-                                                entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
-                                                entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
-                                            );
-                                            const isTodaySelected = selectedDate && isToday(selectedDate);
-                                            
-                                            const today = startOfToday();
-                                            const planDate = parseISO(plan.plannedDate);
-                                            const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 1 });
-                                            const isFuturePlan = isValid(planDate) ? isAfter(planDate, endOfCurrentWeek) : false;
-                                            const isRemovalDisabled = readOnly || !isFuturePlan;
+                                        const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
+                                        const isCovered = dayEntries.some(entry => 
+                                            entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
+                                            entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
+                                        );
+                                        const isTodaySelected = selectedDate && isToday(selectedDate);
+                                        
+                                        const today = startOfToday();
+                                        const planDate = parseISO(plan.plannedDate);
+                                        const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 1 });
+                                        const isFuturePlan = isValid(planDate) ? isAfter(planDate, endOfCurrentWeek) : false;
+                                        const isRemovalDisabled = readOnly || !isFuturePlan;
 
-                                            return (
-                                            <TableRow key={plan.id}>
-                                                <TableCell>
-                                                    <Button 
-                                                        variant="link" 
-                                                        className="p-0 h-auto font-medium text-left"
-                                                        onClick={() => handleLogCallClick(plan)}
-                                                        disabled={!isTodaySelected || isCovered || readOnly}
-                                                        title={
-                                                            readOnly ? "This is a read-only view." :
-                                                            isCovered ? "Already covered today" :
-                                                            !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
-                                                        }
-                                                    >
-                                                        {plan.doctorFirstName} {plan.doctorLastName}
-                                                    </Button>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col">
-                                                        <span>{doctor.municipality}</span>
-                                                        <span className="text-xs text-muted-foreground">{doctor.province}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={plan.callType === 'planned' ? 'secondary' : 'outline'} className="capitalize">{plan.callType}</Badge>
-                                                </TableCell>
-                                                 <TableCell>
-                                                    {isCovered ? (
-                                                        <Badge variant="secondary" className="text-primary">Covered</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline">Not Yet Covered</Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                     {!readOnly && (
-                                                         <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
-                                                            onClick={() => onRemovePlan(plan.id)}
-                                                            disabled={isRemovalDisabled}
-                                                            title={isRemovalDisabled ? "Cannot delete plans for current or past weeks." : "Remove plan"}
-                                                         >
-                                                             <XCircle size={16} className="text-destructive"/>
-                                                         </Button>
-                                                     )}
-                                                </TableCell>
-                                            </TableRow>
-                                        )})
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center">
-                                                {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
+                                        return (
+                                        <TableRow key={plan.id}>
+                                            <TableCell>
+                                                <Button 
+                                                    variant="link" 
+                                                    className="p-0 h-auto font-medium text-left"
+                                                    onClick={() => handleLogCallClick(plan)}
+                                                    disabled={!isTodaySelected || isCovered || readOnly}
+                                                    title={
+                                                        readOnly ? "This is a read-only view." :
+                                                        isCovered ? "Already covered today" :
+                                                        !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
+                                                    }
+                                                >
+                                                    {plan.doctorFirstName} {plan.doctorLastName}
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-col">
+                                                    <span>{doctor.municipality}</span>
+                                                    <span className="text-xs text-muted-foreground">{doctor.province}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={plan.callType === 'planned' ? 'secondary' : 'outline'} className="capitalize">{plan.callType}</Badge>
+                                            </TableCell>
+                                             <TableCell>
+                                                {isCovered ? (
+                                                    <Badge variant="secondary" className="text-primary">Covered</Badge>
+                                                ) : (
+                                                    <Badge variant="outline">Not Yet Covered</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                 {!readOnly && (
+                                                     <Button 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        onClick={() => onRemovePlan(plan.id)}
+                                                        disabled={isRemovalDisabled}
+                                                        title={isRemovalDisabled ? "Cannot delete plans for current or past weeks." : "Remove plan"}
+                                                     >
+                                                         <XCircle size={16} className="text-destructive"/>
+                                                     </Button>
+                                                 )}
                                             </TableCell>
                                         </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        )}
+                                    )})
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-24 text-center">
+                                            {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     </div>
                 </div>
             </CardContent>
@@ -610,6 +609,7 @@ export function PlanningCalendar({
     
 
     
+
 
 
 
