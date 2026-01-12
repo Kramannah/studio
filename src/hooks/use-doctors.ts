@@ -187,11 +187,13 @@ export const useDoctors = () => {
     async (doctorData: Doctor) => {
       if (!user) return;
       try {
-        const { id, userId, ...dataToUpdate } = doctorData;
-        const doctorRef = doc(db, "doctors", id);
+        const { id, ...dataToUpdate } = doctorData;
+        
+        // Explicitly remove userId from the object being sent to updateDoc
+        const { userId, ...restOfData } = dataToUpdate;
 
-        // Ensure we don't try to update the userId, just the other fields
-        await updateDoc(doctorRef, dataToUpdate);
+        const doctorRef = doc(db, "doctors", id);
+        await updateDoc(doctorRef, restOfData);
 
         setDoctors((prev) =>
           prev.map((d) => (d.id === doctorData.id ? doctorData : d))
@@ -287,5 +289,3 @@ export const useDoctors = () => {
     loading,
   };
 };
-
-    
