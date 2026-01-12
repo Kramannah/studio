@@ -1,6 +1,5 @@
 
 
-
 export interface ReminderProduct {
     productName?: string;
     sampleName?: string;
@@ -57,6 +56,17 @@ export interface Doctor {
   placeOfPractice?: string;
   frequency: '1x' | '2x' | '3x' | '4x';
   hacme: 'YES' | 'NO';
+  dapavid?: string;
+  hofovir?: string;
+  inox?: string;
+  irinovid?: string;
+  ondavid?: string;
+  ricamTablet?: string;
+  tocovid100mg?: string;
+  tocovid200mg?: string;
+  tocovidVitality?: string;
+  virestCream?: string;
+  virestTab?: string;
 }
 
 export interface Plan {
@@ -116,5 +126,3 @@ export interface AdminData {
     allMarketingSamples: MarketingSample[];
     allPlanningRequests: PlanningPermissionRequest[];
 }
-
-    

@@ -138,6 +138,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     placeOfPractice: findColIndex(['placeofpractice', 'place of practice']),
                     frequency: findColIndex(['target', 'frequency', 'freq']),
                     hacme: findColIndex(['hacme']),
+                    dapavid: findColIndex(['dapavid']),
+                    hofovir: findColIndex(['hofovir']),
+                    inox: findColIndex(['inox']),
+                    irinovid: findColIndex(['irinovid']),
+                    ondavid: findColIndex(['ondavid']),
+                    ricamTablet: findColIndex(['ricam tablet']),
+                    tocovid100mg: findColIndex(['tocovid 100mg']),
+                    tocovid200mg: findColIndex(['tocovid 200mg']),
+                    tocovidVitality: findColIndex(['tocovid vitality']),
+                    virestCream: findColIndex(['virest cream']),
+                    virestTab: findColIndex(['virest tab']),
                 };
 
                 if (colMap.firstName === -1 || colMap.lastName === -1) {
@@ -174,6 +185,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                         frequency: (["1x", "2x", "3x", "4x"].includes(frequencyValue) ? frequencyValue : "1x") as "1x" | "2x" | "3x" | "4x",
                         hacme: (["YES", "NO"].includes(hacmeValue) ? hacmeValue : "NO") as "YES" | "NO",
                         coverageType: (["inbase", "outbase"].includes(coverageTypeValue) ? coverageTypeValue : undefined) as "inbase" | "outbase" | undefined,
+                        dapavid: getVal(colMap.dapavid),
+                        hofovir: getVal(colMap.hofovir),
+                        inox: getVal(colMap.inox),
+                        irinovid: getVal(colMap.irinovid),
+                        ondavid: getVal(colMap.ondavid),
+                        ricamTablet: getVal(colMap.ricamTablet),
+                        tocovid100mg: getVal(colMap.tocovid100mg),
+                        tocovid200mg: getVal(colMap.tocovid200mg),
+                        tocovidVitality: getVal(colMap.tocovidVitality),
+                        virestCream: getVal(colMap.virestCream),
+                        virestTab: getVal(colMap.virestTab),
                     });
                 }
 
@@ -211,13 +233,18 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         const headers = [
             'First Name', 'Last Name', 'HCP Code', 'Specialty', 
             'Clinic', 'Province', 'Municipality', 'Place of Practice', 
-            'Frequency', 'HACME', 'Coverage Type'
+            'Frequency', 'HACME', 'Coverage Type', 'Dapavid', 'Hofovir',
+            'Inox', 'Irinovid', 'Ondavid', 'Ricam Tablet', 'Tocovid 100mg',
+            'Tocovid 200mg', 'Tocovid Vitality', 'Virest Cream', 'Virest Tab'
         ];
         const sampleData = [
             { 
                 'First Name': 'Juan', 'Last Name': 'Dela Cruz', 'HCP Code': '12345', 'Specialty': 'Cardiology',
                 'Clinic': 'Philippine Heart Center', 'Province': 'Metro Manila', 'Municipality': 'Quezon City', 
-                'Place of Practice': 'Hospital', 'Frequency': '3x', 'HACME': 'YES', 'Coverage Type': 'inbase'
+                'Place of Practice': 'Hospital', 'Frequency': '3x', 'HACME': 'YES', 'Coverage Type': 'inbase',
+                'Dapavid': 'Rx', 'Hofovir': '', 'Inox': '', 'Irinovid': '', 'Ondavid': '', 
+                'Ricam Tablet': 'Sample', 'Tocovid 100mg': '', 'Tocovid 200mg': '', 'Tocovid Vitality': '',
+                'Virest Cream': '', 'Virest Tab': ''
             }
         ];
 
@@ -228,7 +255,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         worksheet['!cols'] = [
             { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 },
             { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-            { wch: 10 }, { wch: 10 }, { wch: 15 }
+            { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, 
+            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+            { wch: 15 }, { wch: 15 }
         ];
 
         XLSX.writeFile(workbook, 'doctors_masterlist_template.xlsx');
@@ -357,6 +387,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     <TableHead>Target</TableHead>
                                     <TableHead>Coverage</TableHead>
                                     <TableHead>HACME</TableHead>
+                                    <TableHead>Dapavid</TableHead>
+                                    <TableHead>Hofovir</TableHead>
+                                    <TableHead>Inox</TableHead>
+                                    <TableHead>Irinovid</TableHead>
+                                    <TableHead>Ondavid</TableHead>
+                                    <TableHead>Ricam Tablet</TableHead>
+                                    <TableHead>Tocovid 100mg</TableHead>
+                                    <TableHead>Tocovid 200mg</TableHead>
+                                    <TableHead>Tocovid Vitality</TableHead>
+                                    <TableHead>Virest Cream</TableHead>
+                                    <TableHead>Virest Tab</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -384,6 +425,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                             <TableCell>
                                                 <Badge variant={doctor.hacme === 'YES' ? 'default' : 'secondary'}>{doctor.hacme || 'NO'}</Badge>
                                             </TableCell>
+                                            <TableCell>{doctor.dapavid}</TableCell>
+                                            <TableCell>{doctor.hofovir}</TableCell>
+                                            <TableCell>{doctor.inox}</TableCell>
+                                            <TableCell>{doctor.irinovid}</TableCell>
+                                            <TableCell>{doctor.ondavid}</TableCell>
+                                            <TableCell>{doctor.ricamTablet}</TableCell>
+                                            <TableCell>{doctor.tocovid100mg}</TableCell>
+                                            <TableCell>{doctor.tocovid200mg}</TableCell>
+                                            <TableCell>{doctor.tocovidVitality}</TableCell>
+                                            <TableCell>{doctor.virestCream}</TableCell>
+                                            <TableCell>{doctor.virestTab}</TableCell>
                                             <TableCell className="text-right">
                                                 {!readOnly && (
                                                     <Button variant="ghost" size="sm" onClick={() => handleEditClick(doctor)}>Edit</Button>
@@ -393,7 +445,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     )})
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={readOnly ? 10 : 11} className="h-24 text-center">
+                                        <TableCell colSpan={readOnly ? 21 : 22} className="h-24 text-center">
                                             No doctors found.
                                         </TableCell>
                                     </TableRow>
