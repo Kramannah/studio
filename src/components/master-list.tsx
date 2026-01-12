@@ -466,3 +466,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
+
+    
