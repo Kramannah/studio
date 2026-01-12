@@ -295,12 +295,6 @@ export default function Home() {
                       </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => setActiveView('in-field-coaching')} isActive={activeView === 'in-field-coaching'}>
-                    <Users />
-                    In-Field Coaching
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
                  <SidebarMenuItem>
                   <SidebarMenuButton onClick={() => setActiveView('exams')} isActive={activeView === 'exams'}>
                     <ClipboardCheck />
