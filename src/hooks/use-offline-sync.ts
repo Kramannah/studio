@@ -165,13 +165,15 @@ export const useOfflineSync = (userId?: string) => {
 
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || offlineEntries.length === 0 || isSyncing) {
-      if (offlineEntries.length === 0 && !isSyncing) toast({ title: "No Entries to Sync" });
+      if (offlineEntries.length === 0 && !isSyncing) {
+          // toast({ title: "No Entries to Sync" });
+      }
       if (!isOnline && !isSyncing) toast({ title: "Cannot Sync", description: "You are currently offline." });
       return;
     }
 
     setIsSyncing(true);
-    toast({ title: 'Syncing...', description: `Uploading ${offlineEntries.length} offline reports.`});
+    toast({ title: 'Auto-Syncing...', description: `Uploading ${offlineEntries.length} offline reports.`});
 
     let successfulSyncIds: string[] = [];
     const entriesToSync = [...offlineEntries]; // Create a copy to iterate over
@@ -218,7 +220,11 @@ export const useOfflineSync = (userId?: string) => {
     setIsSyncing(false);
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, getOfflineKey]);
 
+  useEffect(() => {
+    if (isOnline && offlineEntries.length > 0 && !isSyncing) {
+        syncAllOfflineEntries();
+    }
+  }, [isOnline, offlineEntries.length, syncAllOfflineEntries, isSyncing]);
+
   return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };
-
-    
