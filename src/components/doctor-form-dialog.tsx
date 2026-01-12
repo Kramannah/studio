@@ -76,7 +76,6 @@ const ProductSelect = ({ field }: { field: any }) => (
             </SelectTrigger>
         </FormControl>
         <SelectContent>
-            <SelectItem value="">--</SelectItem>
             {productPrescriberOptions.map(option => (
                 <SelectItem key={option} value={option}>{option}</SelectItem>
             ))}
