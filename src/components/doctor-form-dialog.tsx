@@ -61,6 +61,30 @@ type DoctorFormDialogProps = {
   doctor?: Doctor;
 }
 
+const productPrescriberOptions = [
+    "Non-Prescriber",
+    "Intermittent Prescriber",
+    "Solid Prescriber",
+    "Advocate"
+];
+
+const ProductSelect = ({ field }: { field: any }) => (
+    <Select onValueChange={field.onChange} value={field.value}>
+        <FormControl>
+            <SelectTrigger>
+                <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+        </FormControl>
+        <SelectContent>
+            <SelectItem value="">--</SelectItem>
+            {productPrescriberOptions.map(option => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+
 export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: DoctorFormDialogProps) {
   const form = useForm<z.infer<typeof doctorFormSchema>>({
     resolver: zodResolver(doctorFormSchema),
@@ -357,17 +381,17 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="font-headline text-lg">Product Notes</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <FormField control={form.control} name="dapavid" render={({ field }) => (<FormItem><FormLabel>Dapavid</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="hofovir" render={({ field }) => (<FormItem><FormLabel>Hofovir</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="inox" render={({ field }) => (<FormItem><FormLabel>Inox</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="irinovid" render={({ field }) => (<FormItem><FormLabel>Irinovid</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="ondavid" render={({ field }) => (<FormItem><FormLabel>Ondavid</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="ricamTablet" render={({ field }) => (<FormItem><FormLabel>Ricam Tablet</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="tocovid100mg" render={({ field }) => (<FormItem><FormLabel>Tocovid 100mg</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="tocovid200mg" render={({ field }) => (<FormItem><FormLabel>Tocovid 200mg</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="tocovidVitality" render={({ field }) => (<FormItem><FormLabel>Tocovid Vitality</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="virestCream" render={({ field }) => (<FormItem><FormLabel>Virest Cream</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
-                    <FormField control={form.control} name="virestTab" render={({ field }) => (<FormItem><FormLabel>Virest Tab</FormLabel><FormControl><Input {...field} /></FormControl></FormItem>)} />
+                    <FormField control={form.control} name="dapavid" render={({ field }) => (<FormItem><FormLabel>Dapavid</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="hofovir" render={({ field }) => (<FormItem><FormLabel>Hofovir</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="inox" render={({ field }) => (<FormItem><FormLabel>Inox</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="irinovid" render={({ field }) => (<FormItem><FormLabel>Irinovid</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="ondavid" render={({ field }) => (<FormItem><FormLabel>Ondavid</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="ricamTablet" render={({ field }) => (<FormItem><FormLabel>Ricam Tablet</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="tocovid100mg" render={({ field }) => (<FormItem><FormLabel>Tocovid 100mg</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="tocovid200mg" render={({ field }) => (<FormItem><FormLabel>Tocovid 200mg</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="tocovidVitality" render={({ field }) => (<FormItem><FormLabel>Tocovid Vitality</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="virestCream" render={({ field }) => (<FormItem><FormLabel>Virest Cream</FormLabel><ProductSelect field={field} /></FormItem>)} />
+                    <FormField control={form.control} name="virestTab" render={({ field }) => (<FormItem><FormLabel>Virest Tab</FormLabel><ProductSelect field={field} /></FormItem>)} />
                   </div>
                 </div>
               </div>
