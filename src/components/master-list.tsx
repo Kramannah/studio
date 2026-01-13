@@ -25,6 +25,7 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 type MasterListProps = {
   doctors: Doctor[];
@@ -294,6 +295,38 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         XLSX.writeFile(workbook, 'doctors_masterlist_template.xlsx');
     };
 
+    const handleDownloadExcel = () => {
+        const dataToExport = filteredDoctors.map(doctor => ({
+            "First Name": doctor.firstName,
+            "Last Name": doctor.lastName,
+            "HCP Code": doctor.hcpCode,
+            "Specialty": doctor.specialty,
+            "Clinic": doctor.clinic,
+            "Province": doctor.province,
+            "Municipality": doctor.municipality,
+            "Place of Practice": doctor.placeOfPractice,
+            "Frequency": doctor.frequency,
+            "HACME": doctor.hacme,
+            "Coverage Type": doctor.coverageType,
+            "Dapavid": doctor.dapavid,
+            "Hofovir": doctor.hofovir,
+            "Inox": doctor.inox,
+            "Irinovid": doctor.irinovid,
+            "Ondavid": doctor.ondavid,
+            "Ricam Tablet": doctor.ricamTablet,
+            "Tocovid 100mg": doctor.tocovid100mg,
+            "Tocovid 200mg": doctor.tocovid200mg,
+            "Tocovid Vitality": doctor.tocovidVitality,
+            "Virest Cream": doctor.virestCream,
+            "Virest Tab": doctor.virestTab,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Doctor Masterlist");
+        XLSX.writeFile(workbook, `doctor_masterlist_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
             setSelectedIds(filteredDoctors.map(d => d.id));
@@ -325,29 +358,35 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                             <CardTitle className="font-headline">Doctor Master List</CardTitle>
                             <CardDescription>A complete list of all doctors in your territory.</CardDescription>
                         </div>
-                        {!readOnly && (
-                            <div className="flex flex-wrap gap-2">
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleFileChange}
-                                    className="hidden"
-                                    accept=".xlsx, .xls"
-                                />
-                                <Button onClick={handleDownloadTemplate} variant="outline">
-                                    <Download className="mr-2" />
-                                    Template
-                                </Button>
-                                <Button onClick={handleUploadClick}>
-                                    <Upload className="mr-2" />
-                                    Upload
-                                </Button>
-                                <Button onClick={handleAddClick}>
-                                    <PlusCircle className="mr-2" />
-                                    Add Doctor
-                                </Button>
-                            </div>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                             <Button onClick={handleDownloadExcel} variant="outline">
+                                <Download className="mr-2" />
+                                Download as Excel
+                            </Button>
+                            {!readOnly && (
+                                <>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileChange}
+                                        className="hidden"
+                                        accept=".xlsx, .xls"
+                                    />
+                                    <Button onClick={handleDownloadTemplate} variant="outline">
+                                        <Download className="mr-2" />
+                                        Template
+                                    </Button>
+                                    <Button onClick={handleUploadClick}>
+                                        <Upload className="mr-2" />
+                                        Upload
+                                    </Button>
+                                    <Button onClick={handleAddClick}>
+                                        <PlusCircle className="mr-2" />
+                                        Add Doctor
+                                    </Button>
+                                </>
+                            )}
+                        </div>
                     </div>
                     <div className="flex items-center gap-4 mt-4">
                         <h3 className="text-sm font-semibold">Frequency Counts:</h3>
@@ -496,3 +535,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
+
+    
