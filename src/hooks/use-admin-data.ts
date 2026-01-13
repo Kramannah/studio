@@ -40,16 +40,18 @@ export function useAdminData(managerId?: string) {
         setLoading(false);
         return;
     };
+    
+    const userFilter = MANAGER_TEAMS[managerId] || [];
+    if (userFilter.length === 0) {
+      setAllNonCallDays([]);
+      setAllPlanningRequests([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const userFilter = MANAGER_TEAMS[managerId] || [];
-      if (userFilter.length === 0) {
-        setAllNonCallDays([]);
-        setAllPlanningRequests([]);
-        setLoading(false);
-        return;
-      }
       
       const collections = {
           allNonCallDays: "nonCallDays",
@@ -101,14 +103,17 @@ export function useAdminData(managerId?: string) {
           setTeamSummaryData(null);
           return;
       }
+      
+      const userFilter = MANAGER_TEAMS[managerId] || [];
+      if (userFilter.length === 0) {
+          setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
+          setLoadingSummary(false);
+          return;
+      }
+
       setLoadingSummary(true);
       try {
-        const userFilter = MANAGER_TEAMS[managerId] || [];
-        if (userFilter.length === 0) {
-            setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
-            return;
-        }
-
+        
         const chunks: string[][] = [];
         for (let i = 0; i < userFilter.length; i += 30) {
             chunks.push(userFilter.slice(i, i + 30));
