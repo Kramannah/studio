@@ -236,8 +236,7 @@ export const usePlans = () => {
       removePlan, 
       requestPlanningPermission,
       loading, 
-      syncAllOfflinePlans, 
+      syncAllOfflinePlans: offlinePlans.length > 0 ? syncAllOfflinePlans : undefined,
       offlinePlanCount: offlinePlans.length 
   };
 };
-
