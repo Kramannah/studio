@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
 
 type MasterListProps = {
   doctors: Doctor[];
@@ -35,6 +36,35 @@ type MasterListProps = {
   onDeleteDoctorsBulk: (ids: string[]) => void;
   readOnly?: boolean;
 }
+
+const ProductPrescriberBadge = ({ status }: { status?: string }) => {
+    if (!status) {
+        return null;
+    }
+
+    const baseClasses = "text-white text-xs font-semibold";
+    let colorClasses = "";
+
+    switch (status) {
+        case "Non-Prescriber":
+            colorClasses = "bg-red-600 hover:bg-red-700";
+            break;
+        case "Intermittent Prescriber":
+            colorClasses = "bg-yellow-500 hover:bg-yellow-600 text-black";
+            break;
+        case "Solid Prescriber":
+            colorClasses = "bg-green-300 hover:bg-green-400 text-black";
+            break;
+        case "Advocate":
+            colorClasses = "bg-green-600 hover:bg-green-700";
+            break;
+        default:
+            return <span>{status}</span>;
+    }
+
+    return <Badge className={cn(baseClasses, colorClasses)}>{status}</Badge>;
+};
+
 
 export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddDoctorsBulk, onDeleteDoctorsBulk, readOnly = false }: MasterListProps) {
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -425,17 +455,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                             <TableCell>
                                                 <Badge variant={doctor.hacme === 'YES' ? 'default' : 'secondary'}>{doctor.hacme || 'NO'}</Badge>
                                             </TableCell>
-                                            <TableCell>{doctor.dapavid}</TableCell>
-                                            <TableCell>{doctor.hofovir}</TableCell>
-                                            <TableCell>{doctor.inox}</TableCell>
-                                            <TableCell>{doctor.irinovid}</TableCell>
-                                            <TableCell>{doctor.ondavid}</TableCell>
-                                            <TableCell>{doctor.ricamTablet}</TableCell>
-                                            <TableCell>{doctor.tocovid100mg}</TableCell>
-                                            <TableCell>{doctor.tocovid200mg}</TableCell>
-                                            <TableCell>{doctor.tocovidVitality}</TableCell>
-                                            <TableCell>{doctor.virestCream}</TableCell>
-                                            <TableCell>{doctor.virestTab}</TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.dapavid} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.hofovir} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.inox} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.irinovid} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.ondavid} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.ricamTablet} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.tocovid100mg} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.tocovid200mg} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.tocovidVitality} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.virestCream} /></TableCell>
+                                            <TableCell><ProductPrescriberBadge status={doctor.virestTab} /></TableCell>
                                             <TableCell className="text-right">
                                                 {!readOnly && (
                                                     <Button variant="ghost" size="sm" onClick={() => handleEditClick(doctor)}>Edit</Button>
