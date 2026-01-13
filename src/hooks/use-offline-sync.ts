@@ -182,7 +182,7 @@ export const useOfflineSync = (userId?: string) => {
 
     for (const entry of entriesToSync) {
         try {
-            const { id, ...dataToSync } = entry;
+            const { id, isOffline, ...dataToSync } = entry;
             const docRef = doc(collection(db, "coverageEntries")); // Create a new doc ref for each entry
             batch.set(docRef, dataToSync);
             successfulSyncIds.push(id);
