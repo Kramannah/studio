@@ -40,15 +40,15 @@ type MasterListProps = {
 
 const ProductPrescriberBadge = ({ status }: { status?: string }) => {
     if (!status) {
-        return null;
+        return <Badge variant="outline">N/A</Badge>;
     }
 
-    const baseClasses = "text-white text-xs font-semibold";
+    const baseClasses = "text-xs font-semibold";
     let colorClasses = "";
 
     switch (status) {
         case "Non-Prescriber":
-            colorClasses = "bg-red-600 hover:bg-red-700";
+            colorClasses = "bg-red-600 hover:bg-red-700 text-white";
             break;
         case "Intermittent Prescriber":
             colorClasses = "bg-yellow-500 hover:bg-yellow-600 text-black";
@@ -57,10 +57,10 @@ const ProductPrescriberBadge = ({ status }: { status?: string }) => {
             colorClasses = "bg-green-300 hover:bg-green-400 text-black";
             break;
         case "Advocate":
-            colorClasses = "bg-green-600 hover:bg-green-700";
+            colorClasses = "bg-green-600 hover:bg-green-700 text-white";
             break;
         default:
-            return <span>{status}</span>;
+            return <Badge variant="secondary">{status}</Badge>;
     }
 
     return <Badge className={cn(baseClasses, colorClasses)}>{status}</Badge>;
@@ -435,7 +435,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="border rounded-md">
+                    <div className="relative w-full overflow-auto border rounded-md">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted hover:bg-muted">
