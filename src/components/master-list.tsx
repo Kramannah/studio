@@ -369,7 +369,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     <div className="border rounded-md">
                         <Table>
                             <TableHeader>
-                                <TableRow>
+                                <TableRow className="bg-muted hover:bg-muted">
                                     {!readOnly && (
                                         <TableHead className="w-12">
                                             <Checkbox
@@ -466,5 +466,3 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
-
-    
