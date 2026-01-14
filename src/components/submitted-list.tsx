@@ -5,7 +5,7 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, differenceInHours } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, isToday } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
@@ -108,8 +108,11 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
         const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
         if (!isValid(submittedDate)) return false;
 
-        // An entry is editable if it was submitted less than 48 hours ago.
-        return differenceInHours(new Date(), submittedDate) < 48;
+        // An entry is editable if it was submitted today before 11:00 PM.
+        const now = new Date();
+        const endOfEditWindow = set(startOfDay(now), { hours: 23 }); // 11:00 PM today
+
+        return isToday(submittedDate) && isBefore(now, endOfEditWindow);
     }, [entry.submittedAt, readOnly]);
 
     const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;

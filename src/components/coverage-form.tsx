@@ -5,7 +5,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, subDays } from "date-fns"
+import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday } from "date-fns"
 import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
 import { SignaturePad, SignaturePadFullScreen } from "./signature-pad"
 import type { CoverageEntry, Doctor, Plan, MarketingSample } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
@@ -115,11 +115,11 @@ type CoverageFormProps = {
   doctors: Doctor[];
   marketingSamples: MarketingSample[];
   masterEntries: CoverageEntry[];
-  offlineEntries: CoverageEntry[];
-  todaysPlans: Plan[];
   initialDoctor?: Doctor | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
   onFormSubmit?: (isOnline: boolean) => void;
+  todaysPlans: Plan[];
+  offlineEntries: CoverageEntry[];
   initialDate?: Date | null;
 }
 
@@ -701,9 +701,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     mode="single"
                                                     selected={field.value}
                                                     onSelect={field.onChange}
-                                                    disabled={(date) =>
-                                                        date > new Date() || date < subDays(new Date(), 1)
-                                                    }
+                                                    disabled={(date) => date > new Date() || date < startOfToday()}
                                                     initialFocus
                                                 />
                                             </PopoverContent>
