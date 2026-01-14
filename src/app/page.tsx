@@ -10,7 +10,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -28,6 +28,7 @@ import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButt
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
+import { HelpdeskDialog } from '@/components/helpdesk-dialog';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master';
 
@@ -49,6 +50,7 @@ export default function Home() {
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
+  const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
 
   useEffect(() => {
@@ -273,6 +275,12 @@ export default function Home() {
                       </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
+                 <SidebarMenuItem>
+                   <SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}>
+                    <LifeBuoy />
+                    Helpdesk
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter>
@@ -311,6 +319,12 @@ export default function Home() {
         mode={timeLogMode}
         onTimeIn={addTimeIn}
         onTimeOut={addTimeOut}
+      />
+      <HelpdeskDialog
+        isOpen={isHelpdeskOpen}
+        onOpenChange={setIsHelpdeskOpen}
+        adminEmail="mbustamante@hovidinc.com"
+        userEmail={user.email || ''}
       />
     </SidebarProvider>
   );
