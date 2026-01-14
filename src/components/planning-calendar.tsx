@@ -138,9 +138,9 @@ export function PlanningCalendar({
 
     const entriesByDate = useMemo(() => {
         return allEntries.reduce((acc, entry) => {
-            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
-            if (!isValid(submittedDate)) return acc;
-            const date = format(submittedDate, 'yyyy-MM-dd');
+            const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
+            if (!isValid(coverageDate)) return acc;
+            const date = format(coverageDate, 'yyyy-MM-dd');
             if(!acc[date]){
                 acc[date] = [];
             }
@@ -611,3 +611,4 @@ export function PlanningCalendar({
     
 
     
+
