@@ -81,6 +81,37 @@ const ProductPrescriberSelect = ({ doctor, productKey, onUpdateDoctor }: { docto
 };
 
 
+type InlineSelectProps<T> = {
+    doctor: Doctor;
+    field: keyof Doctor;
+    options: { value: T; label: string }[];
+    onUpdateDoctor: (doctor: Doctor) => void;
+    placeholder?: string;
+    className?: string;
+};
+
+function InlineSelect<T extends string>({ doctor, field, options, onUpdateDoctor, placeholder, className }: InlineSelectProps<T>) {
+    const handleValueChange = (newValue: string) => {
+        const updatedDoctor = { ...doctor, [field]: newValue };
+        onUpdateDoctor(updatedDoctor);
+    };
+
+    return (
+        <Select onValueChange={handleValueChange} value={doctor[field] as string | undefined}>
+            <SelectTrigger className={cn("w-[110px]", className)}>
+                <SelectValue placeholder={placeholder || "Select..."} />
+            </SelectTrigger>
+            <SelectContent>
+                {options.map(option => (
+                    <SelectItem key={String(option.value)} value={String(option.value)}>
+                        {option.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
 type MasterListProps = {
   doctors: Doctor[];
   entries: CoverageEntry[];
@@ -375,6 +406,20 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         setSelectedIds([]);
     }
 
+    const frequencyOptions = [
+        { value: '1x', label: '1x' },
+        { value: '2x', label: '2x' },
+        { value: '3x', label: '3x' },
+        { value: '4x', label: '4x' },
+    ];
+    const coverageTypeOptions = [
+        { value: 'inbase', label: 'Inbase' },
+        { value: 'outbase', label: 'Outbase' },
+    ];
+    const hacmeOptions = [
+        { value: 'YES', label: 'YES' },
+        { value: 'NO', label: 'NO' },
+    ];
 
     return (
         <>
@@ -516,10 +561,30 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                             <TableCell>{doctor.clinic}</TableCell>
                                             <TableCell>{doctor.municipality}, {doctor.province}</TableCell>
                                             <TableCell>{doctor.placeOfPractice || 'N/A'}</TableCell>
-                                            <TableCell>{doctor.frequency}</TableCell>
-                                            <TableCell className="capitalize">{doctor.coverageType || 'N/A'}</TableCell>
                                             <TableCell>
-                                                <Badge variant={doctor.hacme === 'YES' ? 'default' : 'secondary'}>{doctor.hacme || 'NO'}</Badge>
+                                                <InlineSelect
+                                                    doctor={doctor}
+                                                    field="frequency"
+                                                    options={frequencyOptions}
+                                                    onUpdateDoctor={onUpdateDoctor}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                 <InlineSelect
+                                                    doctor={doctor}
+                                                    field="coverageType"
+                                                    options={coverageTypeOptions}
+                                                    onUpdateDoctor={onUpdateDoctor}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <InlineSelect
+                                                    doctor={doctor}
+                                                    field="hacme"
+                                                    options={hacmeOptions}
+                                                    onUpdateDoctor={onUpdateDoctor}
+                                                    className="w-[80px]"
+                                                />
                                             </TableCell>
                                             {productKeys.map(key => (
                                                 <TableCell key={key}>
