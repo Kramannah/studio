@@ -49,6 +49,7 @@ export default function Home() {
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
+  const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
@@ -59,8 +60,9 @@ export default function Home() {
     }
   }, [isOnline, syncAllOfflinePlans]);
 
-  const handleLogPlannedCall = (doctor: Doctor) => {
+  const handleLogPlannedCall = (doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
+    setPlannedDateToLog(plannedDate);
     setEntryToEdit(null);
     setActiveView('coverage');
   };
@@ -68,11 +70,13 @@ export default function Home() {
   const handleEditEntry = (entry: CoverageEntry, isOffline: boolean = false) => {
     setEntryToEdit({ ...entry, isOffline });
     setDoctorToLog(null);
+    setPlannedDateToLog(null);
     setActiveView('coverage');
   };
 
   const handleFormSubmit = (savedOnline: boolean) => {
     setDoctorToLog(null);
+    setPlannedDateToLog(null);
     setEntryToEdit(null);
     setActiveView(savedOnline ? 'submitted' : 'offline');
   };
@@ -157,6 +161,7 @@ export default function Home() {
                 todaysPlans={todaysPlans}
                 offlineEntries={offlineEntries}
                 entryToEdit={entryToEdit}
+                initialDate={plannedDateToLog}
               />;
       case 'offline':
         return <OfflineList 

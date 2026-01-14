@@ -32,7 +32,7 @@ type PlanningCalendarProps = {
   offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
-  onLogCall: (doctor: Doctor) => void;
+  onLogCall: (doctor: Doctor, plannedDate: Date) => void;
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
@@ -197,8 +197,9 @@ export function PlanningCalendar({
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = doctors.find(d => d.id === plan.doctorId);
-        if (doctor) {
-            onLogCall(doctor);
+        const plannedDate = parseISO(plan.plannedDate);
+        if (doctor && isValid(plannedDate)) {
+            onLogCall(doctor, plannedDate);
         }
     }
 
@@ -610,10 +611,3 @@ export function PlanningCalendar({
     
 
     
-
-
-
-
-
-
-

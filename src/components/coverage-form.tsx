@@ -120,6 +120,7 @@ type CoverageFormProps = {
   initialDoctor?: Doctor | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
   onFormSubmit?: (isOnline: boolean) => void;
+  initialDate?: Date | null;
 }
 
 const productList = [
@@ -183,7 +184,7 @@ const getReminderSampleOptions = (marketingSamples: MarketingSample[]) => (produ
     return marketingSamples.filter(s => s.productGroup === productName);
 };
 
-export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate }: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -291,14 +292,14 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         specialty: initialDoctor.specialty,
         clinic: initialDoctor.clinic,
         hacme: initialDoctor.hacme,
-        coverageDate: new Date(),
+        coverageDate: initialDate || new Date(),
         reminderProducts: [],
       });
       if (!isPlanned) {
         setAutocompleteValue(`${initialDoctor.firstName} ${initialDoctor.lastName}`);
       }
     }
-  }, [initialDoctor, entryToEdit, form, todaysPlans]);
+  }, [initialDoctor, entryToEdit, form, todaysPlans, initialDate]);
   
   const resetForm = useCallback(() => {
     form.reset({
