@@ -5,7 +5,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek, isAfter } from "date-fns";
+import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek, isAfter, isYesterday } from "date-fns";
 import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -522,7 +522,8 @@ export function PlanningCalendar({
                                             entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
                                             entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                         );
-                                        const isTodaySelected = selectedDate && isToday(selectedDate);
+                                        
+                                        const canLogCall = selectedDate && (isToday(selectedDate) || isYesterday(selectedDate));
                                         
                                         const today = startOfToday();
                                         const planDate = parseISO(plan.plannedDate);
@@ -537,11 +538,11 @@ export function PlanningCalendar({
                                                     variant="link" 
                                                     className="p-0 h-auto font-medium text-left"
                                                     onClick={() => handleLogCallClick(plan)}
-                                                    disabled={!isTodaySelected || isCovered || readOnly}
+                                                    disabled={readOnly || isCovered || !canLogCall}
                                                     title={
                                                         readOnly ? "This is a read-only view." :
                                                         isCovered ? "Already covered today" :
-                                                        !isTodaySelected ? "Coverage can only be logged for today" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
+                                                        !canLogCall ? "Coverage can only be logged for today or yesterday" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                     }
                                                 >
                                                     {plan.doctorFirstName} {plan.doctorLastName}
@@ -609,6 +610,7 @@ export function PlanningCalendar({
     
 
     
+
 
 
 
