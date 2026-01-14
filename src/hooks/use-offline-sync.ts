@@ -165,50 +165,62 @@ export const useOfflineSync = (userId?: string) => {
 
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || offlineEntries.length === 0) {
-      if (offlineEntries.length === 0 && !isSyncing) {
-          // Do not toast if there's nothing to sync
-      } else if (!isOnline && !isSyncing) {
+      if (offlineEntries.length > 0 && !isOnline && !isSyncing) {
         toast({ title: "Cannot Sync", description: "You are currently offline." });
       }
       return;
     }
-     if (isSyncing) return;
+    if (isSyncing) return;
 
     setIsSyncing(true);
     toast({ title: 'Syncing...', description: `Uploading ${offlineEntries.length} offline report(s).`});
 
-    let successfulSyncIds: string[] = [];
-    const entriesToSync = [...offlineEntries]; // Create a copy to iterate over
+    const entriesToSync = [...offlineEntries];
+    const chunks: CoverageEntry[][] = [];
+    
+    for (let i = 0; i < entriesToSync.length; i += 500) {
+        chunks.push(entriesToSync.slice(i, i + 500));
+    }
 
-    const batch = writeBatch(db);
+    let allSyncedIds: string[] = [];
+    let hasErrors = false;
 
-    for (const entry of entriesToSync) {
-        const { id, isOffline, ...dataToSync } = entry;
-        const docRef = doc(collection(db, "coverageEntries")); 
-        batch.set(docRef, dataToSync);
-        successfulSyncIds.push(id);
+    await Promise.all(chunks.map(async (chunk) => {
+        try {
+            const batch = writeBatch(db);
+            const chunkIds: string[] = [];
+            
+            for (const entry of chunk) {
+                const { id, isOffline, ...dataToSync } = entry;
+                const docRef = doc(collection(db, "coverageEntries")); 
+                batch.set(docRef, dataToSync);
+                chunkIds.push(id);
+            }
+
+            await batch.commit();
+            allSyncedIds = [...allSyncedIds, ...chunkIds];
+        } catch (error) {
+            console.error("A batch commit failed during sync:", error);
+            hasErrors = true;
+        }
+    }));
+
+    if (allSyncedIds.length > 0) {
+        const remainingOfflineEntries = offlineEntries.filter(entry => !allSyncedIds.includes(entry.id));
+        updateOfflineInStorage(remainingOfflineEntries);
+        await fetchMasterEntries();
     }
     
-    try {
-        await batch.commit();
-        
-        const remainingOfflineEntries = offlineEntries.filter(entry => !successfulSyncIds.includes(entry.id));
-        updateOfflineInStorage(remainingOfflineEntries);
-
-        if (successfulSyncIds.length > 0) {
-            toast({
-                title: 'Sync Complete',
-                description: `${successfulSyncIds.length} entries synced successfully.`,
-            });
-            await fetchMasterEntries(); 
-        }
-
-    } catch (error) {
-        console.error("Batch commit failed during sync:", error);
+    if (hasErrors) {
         toast({
             variant: 'destructive',
-            title: 'Sync Failed',
-            description: `Could not sync entries to the server. They will remain offline for the next attempt.`,
+            title: 'Partial Sync Failed',
+            description: `Could not sync all entries. The remaining entries will be synced later.`,
+        });
+    } else if (allSyncedIds.length > 0) {
+        toast({
+            title: 'Sync Complete',
+            description: `${allSyncedIds.length} entries synced successfully.`,
         });
     }
 
