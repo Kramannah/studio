@@ -1,10 +1,11 @@
 
+
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, differenceInHours } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
@@ -107,25 +108,8 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
         const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
         if (!isValid(submittedDate)) return false;
 
-        const weekStartsOn = 1; // Monday
-        const startOfSubmissionMonth = startOfMonth(submittedDate);
-        const weekOfMonth = getWeekOfMonth(submittedDate, { weekStartsOn });
-
-        let deadline;
-
-        if (weekOfMonth <= 2) {
-            // Deadline is Friday 8 PM of the second week of the month.
-            const secondWeekStart = addDays(startOfSubmissionMonth, 7);
-            const startOfSecondWeek = startOfWeek(secondWeekStart, { weekStartsOn });
-            const fridayOfSecondWeek = addDays(startOfSecondWeek, 4);
-            deadline = set(fridayOfSecondWeek, { hours: 20, minutes: 0, seconds: 0, milliseconds: 0 });
-        } else {
-            // Deadline is end of the 2nd day of the next month.
-            const endOfSubmissionMonth = endOfMonth(submittedDate);
-            deadline = endOfDay(addDays(endOfSubmissionMonth, 2));
-        }
-
-        return isBefore(new Date(), deadline);
+        // An entry is editable if it was submitted less than 48 hours ago.
+        return differenceInHours(new Date(), submittedDate) < 48;
     }, [entry.submittedAt, readOnly]);
 
     const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
@@ -434,7 +418,6 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
                 acc[date] = [];
             }
             acc[date].push(entry);
-            return acc;
         }, {} as Record<string, CoverageEntry[]>);
     }, [entries]);
     

@@ -5,8 +5,8 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay } from "date-fns"
-import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle } from "lucide-react"
+import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, subDays } from "date-fns"
+import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -40,6 +40,8 @@ import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
+import { Calendar } from "./ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 
 
 const formSchema = z.object({
@@ -484,6 +486,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   }
 
   const isEditMode = !!entryToEdit;
+  const coverageDate = form.watch("coverageDate");
 
   return (
     <Card className="h-full flex flex-col">
@@ -667,27 +670,47 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   </FormItem>
                                   )}
                               />
-                              <FormField
+                               <FormField
                                   control={form.control}
-                                  name="hacme"
+                                  name="coverageDate"
                                   render={({ field }) => (
-                                  <FormItem>
-                                      <FormLabel className="font-headline">HACME</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value} disabled>
-                                      <FormControl>
-                                          <SelectTrigger>
-                                          <SelectValue placeholder="Select..." />
-                                          </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                          <SelectItem value="YES">YES</SelectItem>
-                                          <SelectItem value="NO">NO</SelectItem>
-                                      </SelectContent>
-                                      </Select>
+                                    <FormItem>
+                                      <FormLabel className="font-headline">Coverage Date</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <FormControl>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                    "w-full pl-3 text-left font-normal",
+                                                    !field.value && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    {field.value ? (
+                                                    format(field.value, "PPP")
+                                                    ) : (
+                                                    <span>Pick a date</span>
+                                                    )}
+                                                    <CalendarIcon className="w-4 h-4 ml-auto opacity-50" />
+                                                </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={field.value}
+                                                    onSelect={field.onChange}
+                                                    disabled={(date) =>
+                                                        date > new Date() || date < subDays(new Date(), 1)
+                                                    }
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
                                       <FormMessage />
-                                  </FormItem>
+                                    </FormItem>
                                   )}
-                              />
+                                />
                           </div>
                       </div>
 
