@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { useState, useMemo, useRef, useCallback } from "react";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, Upload, Download, Search } from "lucide-react";
+import { PlusCircle, Trash2, Upload, Download, Search, Edit } from "lucide-react";
 import { Input } from "./ui/input";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +26,60 @@ import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+
+
+type ProductKey = keyof Pick<Doctor, 'dapavid' | 'hofovir' | 'inox' | 'irinovid' | 'ondavid' | 'ricamTablet' | 'tocovid100mg' | 'tocovid200mg' | 'tocovidVitality' | 'virestCream' | 'virestTab'>;
+
+
+const productPrescriberOptions = [
+    "Non-Prescriber",
+    "Intermittent Prescriber",
+    "Solid Prescriber",
+    "Advocate"
+];
+
+const ProductPrescriberSelect = ({ doctor, productKey, onUpdateDoctor }: { doctor: Doctor, productKey: ProductKey, onUpdateDoctor: (doctor: Doctor) => void }) => {
+    const currentValue = doctor[productKey] || "";
+
+    const handleValueChange = (newValue: string) => {
+        const updatedDoctor = {
+            ...doctor,
+            [productKey]: newValue,
+        };
+        onUpdateDoctor(updatedDoctor);
+    };
+    
+    let colorClasses = "bg-transparent text-foreground";
+    switch (currentValue) {
+        case "Non-Prescriber":
+            colorClasses = "bg-red-600/20 text-red-100 border-red-500/50";
+            break;
+        case "Intermittent Prescriber":
+            colorClasses = "bg-yellow-500/20 text-yellow-100 border-yellow-500/50";
+            break;
+        case "Solid Prescriber":
+            colorClasses = "bg-green-500/20 text-green-100 border-green-500/50";
+            break;
+        case "Advocate":
+            colorClasses = "bg-blue-500/20 text-blue-100 border-blue-500/50";
+            break;
+    }
+
+    return (
+        <Select onValueChange={handleValueChange} value={currentValue}>
+            <SelectTrigger className={cn("w-[180px]", colorClasses)}>
+                <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+                {productPrescriberOptions.map(option => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+};
+
 
 type MasterListProps = {
   doctors: Doctor[];
@@ -38,35 +92,6 @@ type MasterListProps = {
   readOnly?: boolean;
 }
 
-const ProductPrescriberBadge = ({ status }: { status?: string }) => {
-    if (!status) {
-        return <Badge variant="outline">N/A</Badge>;
-    }
-
-    const baseClasses = "text-xs font-semibold";
-    let colorClasses = "";
-
-    switch (status) {
-        case "Non-Prescriber":
-            colorClasses = "bg-red-600 hover:bg-red-700 text-white";
-            break;
-        case "Intermittent Prescriber":
-            colorClasses = "bg-yellow-500 hover:bg-yellow-600 text-black";
-            break;
-        case "Solid Prescriber":
-            colorClasses = "bg-green-300 hover:bg-green-400 text-black";
-            break;
-        case "Advocate":
-            colorClasses = "bg-green-600 hover:bg-green-700 text-white";
-            break;
-        default:
-            return <Badge variant="secondary">{status}</Badge>;
-    }
-
-    return <Badge className={cn(baseClasses, colorClasses)}>{status}</Badge>;
-};
-
-
 export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDeleteDoctor, onAddDoctorsBulk, onDeleteDoctorsBulk, readOnly = false }: MasterListProps) {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [selectedDoctor, setSelectedDoctor] = useState<Doctor | undefined>(undefined);
@@ -74,6 +99,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
+
 
     const visitCountsThisMonth = useMemo(() => {
         return entries.reduce((acc, entry) => {
@@ -494,20 +521,16 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                             <TableCell>
                                                 <Badge variant={doctor.hacme === 'YES' ? 'default' : 'secondary'}>{doctor.hacme || 'NO'}</Badge>
                                             </TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.dapavid} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.hofovir} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.inox} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.irinovid} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.ondavid} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.ricamTablet} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.tocovid100mg} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.tocovid200mg} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.tocovidVitality} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.virestCream} /></TableCell>
-                                            <TableCell><ProductPrescriberBadge status={doctor.virestTab} /></TableCell>
+                                            {productKeys.map(key => (
+                                                <TableCell key={key}>
+                                                    <ProductPrescriberSelect doctor={doctor} productKey={key} onUpdateDoctor={onUpdateDoctor} />
+                                                </TableCell>
+                                            ))}
                                             <TableCell className="text-right">
                                                 {!readOnly && (
-                                                    <Button variant="ghost" size="sm" onClick={() => handleEditClick(doctor)}>Edit</Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleEditClick(doctor)} title="Edit Doctor Details">
+                                                        <Edit className="w-4 h-4"/>
+                                                    </Button>
                                                 )}
                                             </TableCell>
                                         </TableRow>
@@ -535,5 +558,3 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
-
-    
