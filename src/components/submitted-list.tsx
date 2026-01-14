@@ -412,12 +412,15 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
     const entriesByDate = useMemo(() => {
         return entries.reduce((acc, entry) => {
             const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
-            if (!isValid(submittedDate)) return acc;
+            if (!isValid(submittedDate)) {
+                return acc;
+            }
             const date = format(submittedDate, 'yyyy-MM-dd');
             if(!acc[date]){
                 acc[date] = [];
             }
             acc[date].push(entry);
+            return acc;
         }, {} as Record<string, CoverageEntry[]>);
     }, [entries]);
     
