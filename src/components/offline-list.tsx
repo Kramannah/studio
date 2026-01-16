@@ -1,8 +1,9 @@
+
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import Image from "next/image";
 import { Button } from "./ui/button";
 import { RefreshCw, Hourglass, Edit } from "lucide-react";
@@ -42,51 +43,56 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: O
             </div>
         </CardHeader>
       </Card>
-      {entries.map(entry => (
-        <Card key={entry.id}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-headline">{entry.firstName} {entry.lastName}</CardTitle>
-                <CardDescription>{entry.specialty} - {entry.clinic}</CardDescription>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Hourglass size={14} />
-                <span>Pending Sync</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p><strong>Coverage Date:</strong> {format(parseISO(entry.coverageDate), "PPP")}</p>
-            <p><strong>Coverage Type:</strong> <span className="capitalize">{entry.coverageType}</span></p>
-            <p><strong>Submitted:</strong> {format(parseISO(entry.submittedAt), "PPpp")}</p>
-            {entry.photos && entry.photos.length > 0 && (
-              <div className="mt-4">
-                <h4 className="font-semibold font-headline">Photos</h4>
-                <div className="flex gap-2 mt-2 overflow-x-auto">
-                  {entry.photos.map((photo, index) => (
-                    <Image key={index} src={photo} alt={`photo ${index}`} width={80} height={80} className="object-cover rounded-md" />
-                  ))}
+      {entries.map(entry => {
+        const coverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+        const submittedAt = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+
+        return (
+          <Card key={entry.id}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg font-headline">{entry.firstName} {entry.lastName}</CardTitle>
+                  <CardDescription>{entry.specialty} - {entry.clinic}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Hourglass size={14} />
+                  <span>Pending Sync</span>
                 </div>
               </div>
-            )}
-             {entry.signature && (
-              <div className="mt-4">
-                <h4 className="font-semibold font-headline">Signature</h4>
-                <div className="p-2 mt-2 border rounded-md bg-muted">
-                    <Image src={entry.signature} alt="signature" width={150} height={75} className="bg-white" />
+            </CardHeader>
+            <CardContent>
+              <p><strong>Coverage Date:</strong> {coverageDate && isValid(coverageDate) ? format(coverageDate, "PPP") : 'Invalid Date'}</p>
+              <p><strong>Coverage Type:</strong> <span className="capitalize">{entry.coverageType}</span></p>
+              <p><strong>Submitted:</strong> {submittedAt && isValid(submittedAt) ? format(submittedAt, "PPpp") : 'Invalid Date'}</p>
+              {entry.photos && entry.photos.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-semibold font-headline">Photos</h4>
+                  <div className="flex gap-2 mt-2 overflow-x-auto">
+                    {entry.photos.map((photo, index) => (
+                      <Image key={index} src={photo} alt={`photo ${index}`} width={80} height={80} className="object-cover rounded-md" />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full" onClick={() => onEdit(entry)}>
-                <Edit className="mr-2" />
-                Edit Entry
-            </Button>
-          </CardFooter>
-        </Card>
-      ))}
+              )}
+               {entry.signature && (
+                <div className="mt-4">
+                  <h4 className="font-semibold font-headline">Signature</h4>
+                  <div className="p-2 mt-2 border rounded-md bg-muted">
+                      <Image src={entry.signature} alt="signature" width={150} height={75} className="bg-white" />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" onClick={() => onEdit(entry)}>
+                  <Edit className="mr-2" />
+                  Edit Entry
+              </Button>
+            </CardFooter>
+          </Card>
+        )
+      })}
     </div>
   );
 }
