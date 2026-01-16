@@ -4,7 +4,7 @@
 import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Button } from "./ui/button";
 import { PlusCircle, Trash2, Upload, Download, Search, Edit } from "lucide-react";
 import { Input } from "./ui/input";
@@ -30,6 +30,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 
 type ProductKey = keyof Pick<Doctor, 'dapavid' | 'hofovir' | 'inox' | 'irinovid' | 'ondavid' | 'ricamTablet' | 'tocovid100mg' | 'tocovid200mg' | 'tocovidVitality' | 'virestCream' | 'virestTab'>;
+
+const InlineInputCell = ({
+  initialValue,
+  onSave,
+  placeholder = "N/A",
+  className,
+}: {
+  initialValue: string | undefined;
+  onSave: (newValue: string) => void;
+  placeholder?: string;
+  className?: string;
+}) => {
+  const [value, setValue] = useState(initialValue || "");
+
+  useEffect(() => {
+    setValue(initialValue || "");
+  }, [initialValue]);
+
+  const handleBlur = () => {
+    if (value !== (initialValue || "")) {
+      onSave(value);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  return (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      placeholder={placeholder}
+      className={cn(
+        "h-8 w-full min-w-[120px] border-transparent bg-transparent px-1 transition-colors duration-300 ease-in-out hover:border-input focus:border-input focus:bg-background focus:ring-1 focus:ring-ring",
+        className
+      )}
+    />
+  );
+};
 
 
 const productPrescriberOptions = [
@@ -556,11 +600,35 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                                 </TableCell>
                                             )}
                                             <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                            <TableCell>{doctor.specialty || 'N/A'}</TableCell>
-                                            <TableCell>{doctor.hcpCode || 'N/A'}</TableCell>
-                                            <TableCell>{doctor.clinic || 'N/A'}</TableCell>
+                                            <TableCell>
+                                                 <InlineInputCell
+                                                    initialValue={doctor.specialty}
+                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, specialty: newValue })}
+                                                    placeholder="N/A"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <InlineInputCell
+                                                    initialValue={doctor.hcpCode}
+                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, hcpCode: newValue })}
+                                                    placeholder="N/A"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <InlineInputCell
+                                                    initialValue={doctor.clinic}
+                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, clinic: newValue })}
+                                                    placeholder="N/A"
+                                                />
+                                            </TableCell>
                                             <TableCell>{[doctor.municipality, doctor.province].filter(Boolean).join(', ') || 'N/A'}</TableCell>
-                                            <TableCell>{doctor.placeOfPractice || 'N/A'}</TableCell>
+                                            <TableCell>
+                                                <InlineInputCell
+                                                    initialValue={doctor.placeOfPractice}
+                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, placeOfPractice: newValue })}
+                                                    placeholder="N/A"
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <InlineSelect
                                                     doctor={doctor}
@@ -623,3 +691,5 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
+
+    
