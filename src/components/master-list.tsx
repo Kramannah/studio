@@ -342,18 +342,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                 }
 
                 onAddDoctorsBulk(doctorsToUpload);
-                toast({
-                    variant: "default",
-                    title: "Upload Success",
-                    description: `${doctorsToUpload.length} doctor(s) processed for upload.`,
-                });
 
             } catch (error) {
                 console.error("Excel parse error", error);
                 toast({
                     variant: "destructive",
                     title: "Upload Failed",
-                    description: "Could not process your doctor master list file. Please check the file format.",
+                    description: "Could not process your doctor master list file.",
                 });
             } finally {
                 if (fileInputRef.current) fileInputRef.current.value = "";

@@ -19,7 +19,7 @@ import {
 } from "firebase/firestore";
 
 // List of admin UIDs (must match Firestore Rules)
-const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3"];
+const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
 export const useDoctors = () => {
   const { toast } = useToast();
@@ -105,79 +105,82 @@ export const useDoctors = () => {
    * This now only adds new doctors and ignores existing ones.
    * ------------------------ */
   const addDoctorsBulk = useCallback(
-    async (doctorsToAdd: Omit<Doctor, "id"|'userId'>[]) => {
-        if (!user) return;
-        if (doctorsToAdd.length === 0) return;
-        setLoading(true);
+    async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[]) => {
+      if (!user) return;
+      if (doctorsToAdd.length === 0) return;
+      setLoading(true);
 
-        try {
-            const batch = writeBatch(db);
+      try {
+        const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+        const querySnapshot = await getDocs(q);
+        const existingDoctors = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Doctor[];
+        const existingDoctorMap = new Map<string, Doctor>();
+        existingDoctors.forEach(doc => {
+          const key = `${doc.firstName.toLowerCase()}|${doc.lastName.toLowerCase()}`;
+          existingDoctorMap.set(key, doc);
+        });
 
-            // 1. Get all existing doctors for the user to check for duplicates
-            const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
-            const querySnapshot = await getDocs(q);
-            const existingDoctors = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Doctor[];
-            const existingDoctorMap = new Map<string, Doctor>();
-            existingDoctors.forEach(doc => {
-                const key = `${doc.firstName.toLowerCase()}|${doc.lastName.toLowerCase()}`;
-                existingDoctorMap.set(key, doc);
-            });
+        const operations: { type: 'create' | 'update'; data: any; id?: string }[] = [];
+        let newDoctorsCount = 0;
+        let updatedDoctorsCount = 0;
 
-            let newDoctorsCount = 0;
-            let updatedDoctorsCount = 0;
+        doctorsToAdd.forEach((newDoctor) => {
+          const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
+          const existingDoctor = existingDoctorMap.get(key);
 
-            // 2. Iterate through uploaded doctors to decide whether to add or update
-            doctorsToAdd.forEach((newDoctor) => {
-                const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
-                const existingDoctor = existingDoctorMap.get(key);
+          if (existingDoctor) {
+            operations.push({ type: 'update', data: { ...newDoctor, userId: user.uid }, id: existingDoctor.id });
+            updatedDoctorsCount++;
+          } else {
+            operations.push({ type: 'create', data: { ...newDoctor, userId: user.uid } });
+            newDoctorsCount++;
+          }
+        });
 
-                if (existingDoctor) {
-                    // Update existing doctor
-                    const docRef = doc(db, "doctors", existingDoctor.id);
-                    batch.update(docRef, { ...newDoctor, userId: user.uid });
-                    updatedDoctorsCount++;
-                } else {
-                    // Add new doctor
-                    const docRef = doc(collection(db, "doctors"));
-                    batch.set(docRef, { ...newDoctor, userId: user.uid });
-                    newDoctorsCount++;
-                }
-            });
-
-            if (newDoctorsCount === 0 && updatedDoctorsCount === 0) {
-                 toast({
-                    title: "No Changes",
-                    description: `All doctors from the file already exist with the same information.`,
-                });
-                setLoading(false);
-                return;
-            }
-
-            // 3. Commit the batch
-            await batch.commit();
-
-            // 4. Refetch the data to update the UI
-            await fetchDoctors();
-
-            toast({
-                title: "Upload Successful",
-                description: `${newDoctorsCount} new doctor(s) added and ${updatedDoctorsCount} existing doctor(s) updated.`,
-            });
-        } catch (error) {
-            console.error("Error processing bulk doctor upload:", error);
-            toast({
-                variant: "destructive",
-                title: "Upload Failed",
-                description: "Could not process your doctor master list file.",
-            });
-            // Refetch to revert to the pre-error state
-            await fetchDoctors();
-        } finally {
-            setLoading(false);
+        if (operations.length === 0) {
+          toast({
+            title: "No Changes",
+            description: `All doctors from the file already exist.`,
+          });
+          setLoading(false);
+          return;
         }
+
+        const chunkSize = 499; // Keep it safely under the 500 limit
+        for (let i = 0; i < operations.length; i += chunkSize) {
+          const chunk = operations.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+          chunk.forEach(op => {
+            if (op.type === 'create') {
+              const docRef = doc(collection(db, "doctors"));
+              batch.set(docRef, op.data);
+            } else if (op.type === 'update' && op.id) {
+              const docRef = doc(db, "doctors", op.id);
+              batch.update(docRef, op.data);
+            }
+          });
+          await batch.commit();
+        }
+
+        await fetchDoctors();
+        toast({
+          title: "Upload Successful",
+          description: `${newDoctorsCount} new doctor(s) added and ${updatedDoctorsCount} existing doctor(s) updated.`,
+        });
+      } catch (error) {
+        console.error("Error processing bulk doctor upload:", error);
+        toast({
+          variant: "destructive",
+          title: "Upload Failed",
+          description: "Could not process your doctor master list file.",
+        });
+        await fetchDoctors();
+      } finally {
+        setLoading(false);
+      }
     },
     [user, toast, fetchDoctors]
-);
+  );
 
 
   /** ------------------------
@@ -187,18 +190,15 @@ export const useDoctors = () => {
     async (doctorData: Doctor) => {
       if (!user) return;
       try {
-        const { id, ...dataToUpdate } = doctorData;
+        const { id, userId, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
-        await updateDoc(doctorRef, dataToUpdate);
+        // Ensure userId from auth is used, not from doctorData if it exists
+        await updateDoc(doctorRef, { ...dataToUpdate, userId: user.uid });
 
         setDoctors((prev) =>
-          prev.map((d) => (d.id === doctorData.id ? doctorData : d))
+          prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
         );
 
-        toast({
-          title: "Doctor Updated",
-          description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.`,
-        });
       } catch (error) {
         console.error("Error updating doctor:", error);
         toast({
