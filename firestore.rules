@@ -4,9 +4,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Allow users to read, create, update, and delete their own doctor masterlist.
+    // Admins can also create, update, and delete for other users.
     match /doctors/{doctorId} {
-      allow read, create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || request.auth.token.email.endsWith('@hovidinc.com'));
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || request.auth.token.email.endsWith('@hovidinc.com'));
     }
 
     // Allow users to manage their own coverage entries.
