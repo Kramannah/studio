@@ -7,13 +7,12 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, isThisMonth, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, isSameDay } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Calendar as CalendarIcon, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff } from "lucide-react";
+import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, isSameDay, startOfMonth, endOfMonth, parse } from "date-fns";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Calendar } from "./ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { USER_DATA_MAP } from "@/lib/user-data";
 
@@ -38,14 +37,30 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
     const summaryRef = useRef<HTMLDivElement>(null);
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
 
-    const handleApplyRange = () => {
-        setAppliedRange({ start: startDate, end: endDate });
-    };
+    const availableMonths = useMemo(() => {
+        const monthSet = new Set<string>();
+        entries.forEach(entry => {
+            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (isValid(submittedDate)) {
+                monthSet.add(format(submittedDate, 'yyyy-MM'));
+            }
+        });
+        // Add current month if not present
+        monthSet.add(format(new Date(), 'yyyy-MM'));
+
+        return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); // Sort descending
+    }, [entries]);
     
+    useEffect(() => {
+        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+        const start = startOfMonth(monthDate);
+        const end = endOfMonth(monthDate);
+        setAppliedRange({ start, end });
+    }, [selectedMonth]);
+
     const getUserName = (userId: string) => {
         const user = USER_DATA_MAP[userId];
         return user ? `${user.firstName} ${user.lastName}` : userId;
@@ -53,12 +68,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
 
 
     const filteredEntriesForRange = useMemo(() => {
-        if (!appliedRange.start || !appliedRange.end) {
-            return entries.filter(e => {
-                const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-                return isValid(submittedDate) && isThisMonth(submittedDate);
-            });
-        }
+        if (!appliedRange.start || !appliedRange.end) return [];
         const start = appliedRange.start;
         const end = appliedRange.end;
         return entries.filter(e => {
@@ -68,12 +78,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     }, [entries, appliedRange]);
     
     const filteredNonCallDays = useMemo(() => {
-         if (!appliedRange.start || !appliedRange.end) {
-            return nonCallDays.filter(day => {
-                const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
-                return isValid(dayDate) && isThisMonth(dayDate);
-            });
-        }
+         if (!appliedRange.start || !appliedRange.end) return [];
         const start = appliedRange.start;
         const end = appliedRange.end;
         return nonCallDays.filter(day => {
@@ -263,12 +268,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     
     const filteredTimeLogs = useMemo(() => {
         if (timeLogs.length === 0) return [];
-        if (!appliedRange.start || !appliedRange.end) {
-            return timeLogs.filter(log => {
-                const logTimeIn = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
-                return isValid(logTimeIn) && isThisMonth(logTimeIn);
-            });
-        }
+        if (!appliedRange.start || !appliedRange.end) return [];
         const start = appliedRange.start;
         const end = appliedRange.end;
         return timeLogs.filter(log => {
@@ -284,7 +284,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
 
     const handleSendEmail = () => {
         const dateRangeString = (appliedRange.start && appliedRange.end)
-            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}`
+            ? `${format(appliedRange.start, "MMMM yyyy")}`
             : "for This Month";
 
         const subject = `Call Summary Report ${dateRangeString}`;
@@ -333,60 +333,27 @@ Summary:
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">
-                                {appliedRange.start && appliedRange.end 
-                                    ? `Summary for ${format(appliedRange.start, "PPP")} to ${format(appliedRange.end, "PPP")}`
+                                {appliedRange.start 
+                                    ? `Summary for ${format(appliedRange.start, "MMMM yyyy")}`
                                     : "This Month's Summary"
                                 }
                             </CardTitle>
                             <CardDescription>A quick overview of your performance for the selected period.</CardDescription>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
-                             <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !startDate && "text-muted-foreground"
-                                    )}
-                                    >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                    mode="single"
-                                    selected={startDate}
-                                    onSelect={setStartDate}
-                                    initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !endDate && "text-muted-foreground"
-                                    )}
-                                    >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {endDate ? format(endDate, "PPP") : <span>End Date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                    mode="single"
-                                    selected={endDate}
-                                    onSelect={setEndDate}
-                                    initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                            <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
-                             <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
+                             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Select a month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableMonths.map(month => (
+                                        <SelectItem key={month} value={month}>
+                                            {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                         </div>
                     </div>
                 </CardHeader>
