@@ -306,30 +306,43 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     const hacmeValue = getVal(colMap.hacme).toUpperCase();
                     const coverageTypeValue = getVal(colMap.coverageType).toLowerCase();
 
-                    doctorsToUpload.push({
+                    const doctorToUpload: Omit<Doctor, 'id' | 'userId'> = {
                         firstName,
                         lastName,
-                        hcpCode: getVal(colMap.hcpCode),
-                        specialty: getVal(colMap.specialty) || undefined,
-                        clinic: getVal(colMap.clinic) || undefined,
-                        province: getVal(colMap.province),
-                        municipality: getVal(colMap.municipality),
-                        placeOfPractice: getVal(colMap.placeOfPractice),
                         frequency: (["1x", "2x", "3x", "4x"].includes(frequencyValue) ? frequencyValue : "1x") as "1x" | "2x" | "3x" | "4x",
                         hacme: (["YES", "NO"].includes(hacmeValue) ? hacmeValue : "NO") as "YES" | "NO",
-                        coverageType: (["inbase", "outbase"].includes(coverageTypeValue) ? coverageTypeValue : undefined) as "inbase" | "outbase" | undefined,
-                        dapavid: getVal(colMap.dapavid),
-                        hofovir: getVal(colMap.hofovir),
-                        inox: getVal(colMap.inox),
-                        irinovid: getVal(colMap.irinovid),
-                        ondavid: getVal(colMap.ondavid),
-                        ricamTablet: getVal(colMap.ricamTablet),
-                        tocovid100mg: getVal(colMap.tocovid100mg),
-                        tocovid200mg: getVal(colMap.tocovid200mg),
-                        tocovidVitality: getVal(colMap.tocovidVitality),
-                        virestCream: getVal(colMap.virestCream),
-                        virestTab: getVal(colMap.virestTab),
+                    };
+
+                    const hcpCode = getVal(colMap.hcpCode);
+                    if (hcpCode) doctorToUpload.hcpCode = hcpCode;
+
+                    const specialty = getVal(colMap.specialty);
+                    if (specialty) doctorToUpload.specialty = specialty;
+
+                    const clinic = getVal(colMap.clinic);
+                    if (clinic) doctorToUpload.clinic = clinic;
+                    
+                    if (["inbase", "outbase"].includes(coverageTypeValue)) {
+                        doctorToUpload.coverageType = coverageTypeValue as 'inbase' | 'outbase';
+                    }
+                    
+                    const province = getVal(colMap.province);
+                    if (province) doctorToUpload.province = province;
+
+                    const municipality = getVal(colMap.municipality);
+                    if (municipality) doctorToUpload.municipality = municipality;
+
+                    const placeOfPractice = getVal(colMap.placeOfPractice);
+                    if (placeOfPractice) doctorToUpload.placeOfPractice = placeOfPractice;
+
+                    productKeys.forEach(key => {
+                        const productValue = getVal(colMap[key]);
+                        if(productValue) {
+                            (doctorToUpload as any)[key] = productValue;
+                        }
                     });
+
+                    doctorsToUpload.push(doctorToUpload);
                 }
 
                 if (doctorsToUpload.length === 0) {
