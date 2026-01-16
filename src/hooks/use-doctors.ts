@@ -188,12 +188,8 @@ export const useDoctors = () => {
       if (!user) return;
       try {
         const { id, ...dataToUpdate } = doctorData;
-        
-        // Explicitly remove userId from the object being sent to updateDoc
-        const { userId, ...restOfData } = dataToUpdate;
-
         const doctorRef = doc(db, "doctors", id);
-        await updateDoc(doctorRef, restOfData);
+        await updateDoc(doctorRef, dataToUpdate);
 
         setDoctors((prev) =>
           prev.map((d) => (d.id === doctorData.id ? doctorData : d))

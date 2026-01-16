@@ -47,8 +47,8 @@ export interface Doctor {
   userId: string;
   firstName: string;
   lastName:string;
-  specialty: string;
-  clinic: string;
+  specialty?: string;
+  clinic?: string;
   province?: string;
   municipality?: string;
   placeOfPractice?: string;

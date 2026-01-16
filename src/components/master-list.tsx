@@ -144,8 +144,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const filteredDoctors = useMemo(() => {
         return doctors.filter(doctor =>
             `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
-            doctor.specialty.toLowerCase().includes(filter.toLowerCase()) ||
-            doctor.clinic.toLowerCase().includes(filter.toLowerCase()) ||
+            (doctor.specialty && doctor.specialty.toLowerCase().includes(filter.toLowerCase())) ||
+            (doctor.clinic && doctor.clinic.toLowerCase().includes(filter.toLowerCase())) ||
             (doctor.province && doctor.province.toLowerCase().includes(filter.toLowerCase())) ||
             (doctor.municipality && doctor.municipality.toLowerCase().includes(filter.toLowerCase()))
         );
@@ -266,8 +266,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                         firstName,
                         lastName,
                         hcpCode: getVal(colMap.hcpCode),
-                        specialty: getVal(colMap.specialty) || 'Unknown',
-                        clinic: getVal(colMap.clinic) || 'Unknown',
+                        specialty: getVal(colMap.specialty) || undefined,
+                        clinic: getVal(colMap.clinic) || undefined,
                         province: getVal(colMap.province),
                         municipality: getVal(colMap.municipality),
                         placeOfPractice: getVal(colMap.placeOfPractice),
@@ -556,10 +556,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                                 </TableCell>
                                             )}
                                             <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                            <TableCell>{doctor.specialty}</TableCell>
+                                            <TableCell>{doctor.specialty || 'N/A'}</TableCell>
                                             <TableCell>{doctor.hcpCode || 'N/A'}</TableCell>
-                                            <TableCell>{doctor.clinic}</TableCell>
-                                            <TableCell>{doctor.municipality}, {doctor.province}</TableCell>
+                                            <TableCell>{doctor.clinic || 'N/A'}</TableCell>
+                                            <TableCell>{[doctor.municipality, doctor.province].filter(Boolean).join(', ') || 'N/A'}</TableCell>
                                             <TableCell>{doctor.placeOfPractice || 'N/A'}</TableCell>
                                             <TableCell>
                                                 <InlineSelect

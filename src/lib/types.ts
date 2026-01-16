@@ -47,8 +47,8 @@ export interface Doctor {
   userId: string;
   firstName: string;
   lastName:string;
-  specialty: string;
-  clinic: string;
+  specialty?: string;
+  clinic?: string;
   hcpCode?: string;
   coverageType?: 'inbase' | 'outbase';
   province?: string;

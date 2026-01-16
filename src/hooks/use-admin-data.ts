@@ -279,7 +279,7 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
     try {
-        const { id, userId, ...dataToUpdate } = doctorData;
+        const { id, ...dataToUpdate } = doctorData;
         const doctorRef = doc(db, "doctors", id);
         await updateDoc(doctorRef, dataToUpdate);
         

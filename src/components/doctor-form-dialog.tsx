@@ -30,10 +30,10 @@ import { provinces } from "@/lib/philippine-locations";
 import { ScrollArea } from "./ui/scroll-area"
 
 const doctorFormSchema = z.object({
-  firstName: z.string().min(2, "First name is too short"),
-  lastName: z.string().min(2, "Last name is too short"),
-  specialty: z.string().min(2, "Specialty is required"),
-  clinic: z.string().min(2, "Clinic is required"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  specialty: z.string().optional(),
+  clinic: z.string().optional(),
   hcpCode: z.string().optional(),
   coverageType: z.enum(['inbase', 'outbase']).optional(),
   province: z.string().optional(),
