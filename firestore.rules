@@ -3,12 +3,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAdmin() {
+      // Admin check: either by a specific email domain or by being in the list of hardcoded admin UIDs.
+      return request.auth.token.email.endsWith('@hovidinc.com') || request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+    }
+
     // Allow users to read, create, update, and delete their own doctor masterlist.
     // Admins can also create, update, and delete for other users.
     match /doctors/{doctorId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || request.auth.token.email.endsWith('@hovidinc.com'));
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || request.auth.token.email.endsWith('@hovidinc.com'));
+      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Allow users to manage their own coverage entries.
@@ -37,7 +42,7 @@ service cloud.firestore {
     // Marketing samples are read-only for users, but writable for admins.
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
-        allow write: if request.auth != null && request.auth.token.email.endsWith('@hovidinc.com'); // Example admin rule
+        allow write: if request.auth != null && isAdmin(); // Use isAdmin function
     }
 
     // Time logs can be created and updated by the user who owns them.
