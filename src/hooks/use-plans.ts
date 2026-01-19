@@ -105,7 +105,6 @@ export const usePlans = () => {
 
     let callType: 'planned' | 'unplanned' = 'unplanned';
     
-    // Unplanned calls are for the current week only
     if (isSameWeek(plannedDate, startOfToday(), { weekStartsOn: 1 })) {
         callType = 'unplanned';
     } else if (isFutureWeekOrCurrent || isApproved) {
