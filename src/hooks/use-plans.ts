@@ -97,19 +97,18 @@ export const usePlans = () => {
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user) return;
     
-    const weekStart = startOfWeek(plannedDate, { weekStartsOn: 1 });
-    const isFutureWeek = isBefore(startOfToday(), weekStart);
-    const request = planningRequests.find(r => r.weekStartDate === weekStart.toISOString());
-    const isApproved = request?.status === 'approved';
-    const isCurrentWeek = isSameWeek(plannedDate, new Date(), { weekStartsOn: 1 });
+    const weekStartOfPlannedDate = startOfWeek(plannedDate, { weekStartsOn: 1 });
+    const isFutureWeekOrCurrent = !isBefore(weekStartOfPlannedDate, startOfWeek(startOfToday(), { weekStartsOn: 1 }));
     
-    const isUnplannedCallSubmission = isCurrentWeek;
+    const request = planningRequests.find(r => isSameWeek(new Date(r.weekStartDate), weekStartOfPlannedDate, { weekStartsOn: 1 }));
+    const isApproved = request?.status === 'approved';
 
     let callType: 'planned' | 'unplanned' = 'unplanned';
-
-    if (isUnplannedCallSubmission) {
-        callType = 'planned'; // Always treat submissions this week as 'planned' to make them editable
-    } else if (isFutureWeek || isApproved) {
+    
+    // Unplanned calls are for the current week only
+    if (isSameWeek(plannedDate, startOfToday(), { weekStartsOn: 1 })) {
+        callType = 'unplanned';
+    } else if (isFutureWeekOrCurrent || isApproved) {
         callType = 'planned';
     } else {
         toast({ variant: 'destructive', title: "Planning Locked", description: "This week is locked for planning. Request permission to unlock."});
