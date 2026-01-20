@@ -235,22 +235,6 @@ export function PlanningCalendar({
     }, [selectedDate, currentWeekRequest]);
     
 
-    const showRequestButton = useMemo(() => {
-        if (readOnly || !selectedDate || !onPermissionRequest) return false;
-
-        const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
-
-        // Show if it's a past week and no approved/pending request exists
-        if (isBefore(weekStartOfSelected, weekStartOfToday)) {
-            return !currentWeekRequest || currentWeekRequest.status === 'rejected';
-        }
-
-        return false;
-
-    }, [readOnly, selectedDate, currentWeekRequest, onPermissionRequest]);
-
-
     const handlePermissionRequest = async (reason: string) => {
         if(selectedDate && onPermissionRequest) {
             const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
@@ -282,6 +266,62 @@ export function PlanningCalendar({
         return "Log a non-call day";
     }
 
+    const renderWeekStatus = () => {
+        if (!selectedDate || readOnly) return null;
+
+        const isPastWk = isBefore(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 }));
+
+        if (!isPastWk) {
+            return (
+                <Badge variant='secondary' className="capitalize">
+                    <Unlock className="w-3 h-3 mr-1.5" /> Unlocked
+                </Badge>
+            );
+        }
+
+        // It's a past week, so check request status
+        if (currentWeekRequest?.status === 'approved') {
+            return (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger>
+                            <Badge variant='secondary' className="capitalize">
+                                <Unlock className="w-3 h-3 mr-1.5" /> Unlocked (Approved)
+                            </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>This past week has been unlocked for planning.</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            );
+        }
+
+        if (currentWeekRequest?.status === 'pending') {
+            return (
+                 <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger>
+                             <Badge variant='destructive' className="capitalize cursor-not-allowed">
+                                <Lock className="w-3 h-3 mr-1.5" /> Locked (Pending)
+                            </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Your request to unlock this week is pending approval.</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            );
+        }
+
+        // Status is 'rejected' or no request exists. Show clickable button.
+        return (
+            <Button variant="destructive" className="capitalize" onClick={() => setIsPermissionDialogOpen(true)}>
+                <Lock className="w-3 h-3 mr-1.5" />
+                Locked (Request Unlock)
+            </Button>
+        );
+    }
 
     return (
         <Card>
@@ -333,38 +373,7 @@ export function PlanningCalendar({
                             <h3 className="text-xl font-semibold font-headline">
                                 Plans for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
                             </h3>
-                            {selectedDate && (
-                                showRequestButton ? (
-                                    <Button variant="destructive" className="capitalize" onClick={() => setIsPermissionDialogOpen(true)}>
-                                        <Lock className="w-3 h-3 mr-1.5" />
-                                        Locked (Request Unlock)
-                                    </Button>
-                                ) : (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger>
-                                                <Badge variant={canPlanPlannedCalls ? 'secondary' : 'destructive'} className="capitalize">
-                                                    {canPlanPlannedCalls ? 
-                                                        <><Unlock className="w-3 h-3 mr-1.5" /> Unlocked</> : 
-                                                        <><Lock className="w-3 h-3 mr-1.5" /> Locked</>
-                                                    }
-                                                    {currentWeekRequest && ` (${currentWeekRequest.status})`}
-                                                </Badge>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>
-                                                    {canPlanPlannedCalls 
-                                                        ? 'This week is open for planning.' 
-                                                        : currentWeekRequest?.status === 'pending'
-                                                        ? 'Unlock request is pending approval.'
-                                                        : 'Planning for this past week is locked.'
-                                                    }
-                                                </p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                )
-                            )}
+                            {renderWeekStatus()}
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <Button 
