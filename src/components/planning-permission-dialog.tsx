@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState } from "react"
@@ -38,13 +37,23 @@ export function PlanningPermissionDialog({ isOpen, onOpenChange, onConfirm, week
             });
             return;
         }
-        setIsSubmitting(true);
-        const success = await onConfirm(reason);
-        setIsSubmitting(false);
 
-        if (success) {
-            onOpenChange(false);
-            setReason("");
+        setIsSubmitting(true);
+        try {
+            const success = await onConfirm(reason);
+            if (success) {
+                onOpenChange(false);
+                setReason("");
+            }
+        } catch (error) {
+            console.error("An unexpected error occurred during submission:", error);
+            toast({
+                variant: "destructive",
+                title: "Submission Error",
+                description: "An unexpected error occurred. Please try again.",
+            });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -53,6 +62,7 @@ export function PlanningPermissionDialog({ isOpen, onOpenChange, onConfirm, week
             onOpenChange(open);
             if(!open) {
                 setReason("");
+                setIsSubmitting(false);
             }
         }
     }
