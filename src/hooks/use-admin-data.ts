@@ -1,11 +1,11 @@
 
 "use client"
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { MANAGER_TEAMS } from "@/lib/admins";
+import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
 
@@ -32,59 +32,61 @@ export function useAdminData(managerId?: string) {
   const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !managerId) {
+    if (!user) {
         setAllNonCallDays([]);
         setAllPlanningRequests([]);
-        setLoading(false);
         return;
-    };
-    
-    const userFilter = MANAGER_TEAMS[managerId] || [];
-    if (userFilter.length === 0) {
+    }
+
+    let userFilter: string[] | null = null;
+    if (managerId) {
+      userFilter = MANAGER_TEAMS[managerId] || [];
+    } else if (!isUserAdmin) {
       setAllNonCallDays([]);
       setAllPlanningRequests([]);
-      setLoading(false);
       return;
     }
 
     setLoading(true);
-
     try {
-      
-      const collections = {
-          allNonCallDays: "nonCallDays",
-          allPlanningRequests: "planningRequests",
-      };
+        const fetchCollection = async (collName: string, userIds: string[] | null) => {
+            if (userIds !== null && userIds.length === 0) {
+                return [];
+            }
+            
+            let allDocsData: any[] = [];
 
-      const results: { allNonCallDays: NonCallDay[], allPlanningRequests: PlanningPermissionRequest[] } = {
-          allNonCallDays: [],
-          allPlanningRequests: [],
-      };
+            if (userIds === null) { // Admin fetching all
+                const q = query(collection(db, collName));
+                const snapshot = await getDocs(q);
+                allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            } else { // Manager fetching for team
+                const chunks: string[][] = [];
+                for (let i = 0; i < userIds.length; i += 30) {
+                    chunks.push(userIds.slice(i, i + 30));
+                }
 
-      for (const [key, collName] of Object.entries(collections)) {
-        const chunks: string[][] = [];
-        for (let i = 0; i < userFilter.length; i += 30) {
-            chunks.push(userFilter.slice(i, i + 30));
+                const promises = chunks.map(chunk => {
+                    const q = query(collection(db, collName), where("userId", "in", chunk));
+                    return getDocs(q);
+                });
+
+                const snapshots = await Promise.all(promises);
+                allDocsData = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            }
+            return allDocsData;
         }
-
-        const promises = chunks.map(chunk => {
-            const q = query(collection(db, collName), where("userId", "in", chunk));
-            return getDocs(q);
-        });
-
-        const snapshots = await Promise.all(promises);
-        const allDocs = snapshots.flatMap(snap => snap.docs);
-
-        results[key as keyof typeof results] = allDocs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        })) as any;
-      }
       
-      setAllNonCallDays(results.allNonCallDays);
-      setAllPlanningRequests(results.allPlanningRequests);
+      const [nonCallDaysRes, planningRequestsRes] = await Promise.all([
+          fetchCollection("nonCallDays", userFilter),
+          fetchCollection("planningRequests", userFilter)
+      ]);
+      
+      setAllNonCallDays(nonCallDaysRes as NonCallDay[]);
+      setAllPlanningRequests(planningRequestsRes as PlanningPermissionRequest[]);
 
     } catch (error) {
       console.error("Error fetching admin approval data:", error);
@@ -92,7 +94,7 @@ export function useAdminData(managerId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [user, managerId, toast]);
+  }, [user, managerId, isUserAdmin, toast]);
 
   useEffect(() => {
     fetchTeamApprovals();
