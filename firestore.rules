@@ -32,14 +32,14 @@ service cloud.firestore {
 
     // A user can create/read their own non-call days. Only an admin can update (approve/reject).
     match /nonCallDays/{dayId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update: if request.auth != null && isAdmin();
     }
     
     // A user can create/read their own planning requests. Only an admin can update (approve/reject).
     match /planningRequests/{requestId} {
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update: if request.auth != null && isAdmin();
     }
