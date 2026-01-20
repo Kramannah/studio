@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -146,6 +144,39 @@ export const useOfflineSync = (userId?: string) => {
     }
   };
 
+  const deleteMasterEntriesBulk = useCallback(async (ids: string[]) => {
+    if (!userId) {
+      toast({ variant: 'destructive', title: 'Not logged in', description: 'You must be logged in to delete entries.'});
+      return;
+    }
+    if (ids.length === 0) return;
+
+    try {
+        const batch = writeBatch(db);
+        ids.forEach(id => {
+            const docRef = doc(db, "coverageEntries", id);
+            batch.delete(docRef);
+        });
+
+        await batch.commit();
+
+        setMasterEntries(prev => prev.filter(e => !ids.includes(e.id)));
+
+        toast({
+            variant: "destructive",
+            title: "Entries Deleted",
+            description: `${ids.length} coverage report(s) have been removed.`,
+        });
+    } catch (error) {
+        console.error("Error bulk deleting entries:", error);
+        toast({
+            variant: "destructive",
+            title: "Bulk Delete Failed",
+            description: "Could not remove the selected entries.",
+        });
+    }
+  }, [userId, toast]);
+
   const updateMasterEntry = async (entryToUpdate: Omit<CoverageEntry, 'submittedAt'>) => {
     try {
         const entryRef = doc(db, "coverageEntries", entryToUpdate.id);
@@ -233,5 +264,5 @@ export const useOfflineSync = (userId?: string) => {
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries, isSyncing]);
 
-  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
+  return { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, deleteMasterEntriesBulk, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading };
 };

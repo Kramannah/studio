@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -55,6 +53,7 @@ import { USER_DATA_MAP } from "@/lib/user-data";
 type SubmittedListProps = {
     entries: CoverageEntry[];
     onDelete: (id: string) => void;
+    onDeleteBulk?: (ids: string[]) => void;
     onEdit: (entry: CoverageEntry) => void;
     readOnly?: boolean;
     isAdminView?: boolean;
@@ -271,7 +270,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
 }
 
 
-export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isAdminView = false, userMap }: SubmittedListProps) {
+export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnly = false, isAdminView = false, userMap }: SubmittedListProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -409,6 +408,13 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
 
         const zipBlob = await zip.generateAsync({ type: "blob" });
         saveAs(zipBlob, `bulk_attachments_${format(new Date(), 'yyyy-MM-dd')}.zip`);
+    };
+
+    const handleDeleteSelected = () => {
+        if (onDeleteBulk) {
+            onDeleteBulk(selectedEntryIds);
+            setSelectedEntryIds([]);
+        }
     };
 
 
@@ -608,6 +614,27 @@ export function SubmittedList({ entries, onDelete, onEdit, readOnly = false, isA
                             </PopoverContent>
                         </Popover>
                         <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
+                        {selectedEntryIds.length > 0 && onDeleteBulk && viewMode === 'list' && !readOnly && (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive">
+                                        <Trash2 className="mr-2" /> Delete ({selectedEntryIds.length})
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This will permanently delete {selectedEntryIds.length} selected coverage report(s). This action cannot be undone.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteSelected}>Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
                         {selectedEntryIds.length > 0 && viewMode === 'list' && (
                              <Button onClick={handleBulkDownloadAttachments} variant="secondary">
                                 <Package className="mr-2" />

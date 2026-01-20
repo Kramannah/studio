@@ -1,4 +1,3 @@
-
 'use client';
 
 import { CoverageForm } from '@/components/coverage-form';
@@ -8,7 +7,7 @@ import { CallSummary } from '@/components/call-summary';
 import { PlanningCalendar } from '@/components/planning-calendar';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
-import { usePlans } from '@/hooks/use-plans';
+import { usePlans } from '@/hooks/use-plans.tsx';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy } from "lucide-react";
@@ -24,7 +23,7 @@ import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
 import { TimeLogDialog } from "@/components/time-log-dialog";
-import { useTimeLogs } from "@/hooks/use-time-logs";
+import { useTimeLogs } from "@/hooks/use-time-logs.tsx";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
@@ -42,7 +41,7 @@ export default function Home() {
 
 
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, deleteMasterEntriesBulk, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
   const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount, planningRequests, requestPlanningPermission } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
@@ -173,7 +172,7 @@ export default function Home() {
                 onEdit={(entry) => handleEditEntry(entry, true)}
               />;
       case 'submitted':
-        return <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+        return <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onDeleteBulk={deleteMasterEntriesBulk} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'marketing':
         return <MarketingList 
                 samples={marketingSamples}
