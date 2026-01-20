@@ -334,31 +334,39 @@ export function PlanningCalendar({
                                 Plans for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
                             </h3>
                             {selectedDate && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger>
-                                            <Badge variant={canPlanPlannedCalls ? 'secondary' : 'destructive'} className="capitalize">
-                                                {canPlanPlannedCalls ? 
-                                                    <><Unlock className="w-3 h-3 mr-1.5" /> Unlocked</> : 
-                                                    <><Lock className="w-3 h-3 mr-1.5" /> Locked</>
-                                                }
-                                                {currentWeekRequest && ` (${currentWeekRequest.status})`}
-                                            </Badge>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>{canPlanPlannedCalls ? 'This week is open for planning.' : 'Planning for this week is locked.'}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
+                                showRequestButton ? (
+                                    <Button variant="destructive" className="capitalize" onClick={() => setIsPermissionDialogOpen(true)}>
+                                        <Lock className="w-3 h-3 mr-1.5" />
+                                        Locked (Request Unlock)
+                                    </Button>
+                                ) : (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger>
+                                                <Badge variant={canPlanPlannedCalls ? 'secondary' : 'destructive'} className="capitalize">
+                                                    {canPlanPlannedCalls ? 
+                                                        <><Unlock className="w-3 h-3 mr-1.5" /> Unlocked</> : 
+                                                        <><Lock className="w-3 h-3 mr-1.5" /> Locked</>
+                                                    }
+                                                    {currentWeekRequest && ` (${currentWeekRequest.status})`}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>
+                                                    {canPlanPlannedCalls 
+                                                        ? 'This week is open for planning.' 
+                                                        : currentWeekRequest?.status === 'pending'
+                                                        ? 'Unlock request is pending approval.'
+                                                        : 'Planning for this past week is locked.'
+                                                    }
+                                                </p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )
                             )}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                             {showRequestButton && (
-                                <Button onClick={() => setIsPermissionDialogOpen(true)}>
-                                    <Unlock className="w-4 h-4 mr-2" />
-                                    Request Unlock
-                                </Button>
-                            )}
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
@@ -614,3 +622,6 @@ export function PlanningCalendar({
 
     
 
+
+
+    
