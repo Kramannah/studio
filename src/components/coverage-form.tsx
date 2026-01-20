@@ -682,6 +682,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                 <FormControl>
                                                 <Button
                                                     variant={"outline"}
+                                                    disabled={!!initialDate && !isEditMode}
                                                     className={cn(
                                                     "w-full pl-3 text-left font-normal",
                                                     !field.value && "text-muted-foreground"
@@ -1132,5 +1133,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     </Card>
   )
 }
+
+    
 
     
