@@ -1,9 +1,8 @@
-
 "use client"
 
 import type { PlanningPermissionRequest } from "@/lib/types";
 import { useMemo, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +15,21 @@ type PlanningRequestApprovalsProps = {
     onUpdateStatus: (id: string, status: 'approved' | 'rejected') => void;
     userMap: Record<string, { code: string; firstName: string; lastName: string }>;
 };
+
+// Helper function to safely parse dates that could be strings or Firestore Timestamps
+const safeParseDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (typeof date === 'string') {
+        return parseISO(date);
+    }
+    if (typeof date.toDate === 'function') { // Firestore Timestamp
+        return date.toDate();
+    }
+    if (date instanceof Date) {
+        return date;
+    }
+    return null;
+}
 
 export function PlanningRequestApprovals({ requests, onUpdateStatus, userMap }: PlanningRequestApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
@@ -56,12 +70,16 @@ export function PlanningRequestApprovals({ requests, onUpdateStatus, userMap }: 
                                 </TableHeader>
                                 <TableBody>
                                     {filteredRequests.length > 0 ? (
-                                        filteredRequests.map((req) => (
+                                        filteredRequests.map((req) => {
+                                            const weekStartDate = safeParseDate(req.weekStartDate);
+                                            const requestedAtDate = safeParseDate(req.requestedAt);
+
+                                            return (
                                             <TableRow key={req.id}>
                                                 <TableCell className="font-medium">{getUserName(req.userId)}</TableCell>
-                                                <TableCell>{format(parseISO(req.weekStartDate), "PPP")}</TableCell>
+                                                <TableCell>{weekStartDate && isValid(weekStartDate) ? format(weekStartDate, "PPP") : "Invalid Date"}</TableCell>
                                                 <TableCell className="max-w-[300px] truncate">{req.reason}</TableCell>
-                                                <TableCell>{format(parseISO(req.requestedAt), "Pp")}</TableCell>
+                                                <TableCell>{requestedAtDate && isValid(requestedAtDate) ? format(requestedAtDate, "Pp") : "Invalid Date"}</TableCell>
                                                 <TableCell className="text-right">
                                                     {req.status === 'pending' ? (
                                                         <div className="flex justify-end gap-2">
@@ -77,7 +95,7 @@ export function PlanningRequestApprovals({ requests, onUpdateStatus, userMap }: 
                                                     )}
                                                 </TableCell>
                                             </TableRow>
-                                        ))
+                                        )})
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={5} className="h-24 text-center">

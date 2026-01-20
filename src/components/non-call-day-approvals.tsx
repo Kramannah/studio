@@ -1,9 +1,8 @@
-
 "use client"
 
 import type { NonCallDay } from "@/lib/types";
 import { useMemo, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +22,21 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-am': 'Half Day (AM)',
     'halfday-pm': 'Half Day (PM)',
 };
+
+// Helper function to safely parse dates that could be strings or Firestore Timestamps
+const safeParseDate = (date: any): Date | null => {
+    if (!date) return null;
+    if (typeof date === 'string') {
+        return parseISO(date);
+    }
+    if (typeof date.toDate === 'function') { // Firestore Timestamp
+        return date.toDate();
+    }
+    if (date instanceof Date) {
+        return date;
+    }
+    return null;
+}
 
 export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: NonCallDayApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
@@ -64,10 +78,12 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
                                 </TableHeader>
                                 <TableBody>
                                     {filteredDays.length > 0 ? (
-                                        filteredDays.map((day) => (
+                                        filteredDays.map((day) => {
+                                            const nonCallDate = safeParseDate(day.date);
+                                            return (
                                             <TableRow key={day.id}>
                                                 <TableCell className="font-medium">{getUserName(day.userId)}</TableCell>
-                                                <TableCell>{format(parseISO(day.date), "PPP")}</TableCell>
+                                                <TableCell>{nonCallDate && isValid(nonCallDate) ? format(nonCallDate, "PPP") : "Invalid Date"}</TableCell>
                                                 <TableCell>{dayTypeLabels[day.dayType]}</TableCell>
                                                 <TableCell>{day.reason}</TableCell>
                                                 <TableCell>{day.remarks || 'N/A'}</TableCell>
@@ -86,7 +102,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
                                                     )}
                                                 </TableCell>
                                             </TableRow>
-                                        ))
+                                        )})
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={6} className="h-24 text-center">
@@ -103,4 +119,3 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
         </Card>
     );
 }
-
