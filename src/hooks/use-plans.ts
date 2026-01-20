@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -173,7 +172,7 @@ export const usePlans = () => {
             toast({ variant: 'destructive', title: "Currently Offline", description: "Cannot remove a synced plan while offline." });
         }
     }
-  }, [masterPlans, offlinePlans, toast, user, isOnline]);
+  }, [masterPlans, offlinePlans, toast, user, isOnline, getOfflineKey]);
 
   const syncAllOfflinePlans = useCallback(async () => {
     if (!isOnline || !user || offlinePlans.length === 0) return;
@@ -204,6 +203,11 @@ export const usePlans = () => {
         toast({ variant: 'destructive', title: "Not Authenticated", description: "You must be logged in to make a request."});
         return false;
     };
+
+    if (!isOnline) {
+        toast({ variant: 'destructive', title: "Offline", description: "You must be online to submit a request." });
+        return false;
+    }
     
     const newRequest: Omit<PlanningPermissionRequest, 'id'> = {
         userId: user.uid,
@@ -223,7 +227,7 @@ export const usePlans = () => {
         toast({ variant: 'destructive', title: "Request Failed", description: "Could not submit your request. Please try again." });
         return false;
     }
-  }, [user, toast]);
+  }, [user, toast, isOnline, setPlanningRequests]);
 
   const allPlans = useMemo(() => [...masterPlans, ...offlinePlans], [masterPlans, offlinePlans]);
 
