@@ -25,19 +25,32 @@ export const useTimeLogs = () => {
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"));
+      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid));
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
-      let foundTodaysTimeIn = false;
       querySnapshot.forEach((doc) => {
-        const log = { id: doc.id, ...doc.data() } as TimeLog;
-        fetchedLogs.push(log);
+        fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
+      });
+
+      // Sort logs by timeIn descending
+      fetchedLogs.sort((a, b) => {
+        const dateA = a.timeIn ? parseISO(a.timeIn) : null;
+        const dateB = b.timeIn ? parseISO(b.timeIn) : null;
+        if (!dateA || !isValid(dateA)) return 1;
+        if (!dateB || !isValid(dateB)) return -1;
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      let foundTodaysTimeIn = false;
+      for (const log of fetchedLogs) {
         const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
         if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
           setTodaysTimeIn(log);
           foundTodaysTimeIn = true;
+          break; 
         }
-      });
+      }
+      
       setTimeLogs(fetchedLogs);
       if (!foundTodaysTimeIn) {
         setTodaysTimeIn(null);

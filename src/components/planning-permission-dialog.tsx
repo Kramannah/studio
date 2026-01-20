@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react"
@@ -45,12 +46,12 @@ export function PlanningPermissionDialog({ isOpen, onOpenChange, onConfirm, week
                 onOpenChange(false);
                 setReason("");
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("An unexpected error occurred during submission:", error);
             toast({
                 variant: "destructive",
                 title: "Submission Error",
-                description: "An unexpected error occurred. Please try again.",
+                description: `An unexpected error occurred: ${error.message || 'Please try again.'}`,
             });
         } finally {
             setIsSubmitting(false);
