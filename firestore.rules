@@ -30,14 +30,18 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    // Allow users to manage their own non-call days.
+    // A user can create/read their own non-call days. Only an admin can update (approve/reject).
     match /nonCallDays/{dayId} {
-      allow read, create, update: if request.auth != null;
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && isAdmin();
     }
     
-    // Allow users to manage their own planning permission requests.
+    // A user can create/read their own planning requests. Only an admin can update (approve/reject).
     match /planningRequests/{requestId} {
-      allow read, create, update: if request.auth != null;
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && isAdmin();
     }
     
     // Marketing samples are read-only for users, but writable for admins.
