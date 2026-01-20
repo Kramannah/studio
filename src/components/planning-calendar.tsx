@@ -254,6 +254,8 @@ export function PlanningCalendar({
     }
     
     const isAddVisitDisabled = readOnly || !canPlanPlannedCalls;
+    const isAddNonCallDisabled = readOnly || !canPlanPlannedCalls;
+
 
     const getAddVisitTitle = () => {
         if (readOnly) return "This is a read-only view.";
@@ -263,6 +265,7 @@ export function PlanningCalendar({
 
     const getAddNonCallTitle = () => {
         if (readOnly) return "This is a read-only view.";
+        if (!canPlanPlannedCalls) return "Planning for this week is locked.";
         return "Log a non-call day";
     }
 
@@ -379,7 +382,7 @@ export function PlanningCalendar({
                             <Button 
                                 variant="outline" 
                                 onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly}
+                                disabled={isAddNonCallDisabled}
                                 title={getAddNonCallTitle()}
                             >
                                 <CalendarOff className="mr-2"/>
@@ -545,11 +548,7 @@ export function PlanningCalendar({
                                         
                                         const canLogCall = selectedDate && isToday(selectedDate);
                                         
-                                        const today = startOfToday();
-                                        const planDate = parseISO(plan.plannedDate);
-                                        const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 1 });
-                                        const isFuturePlan = isValid(planDate) ? isAfter(planDate, endOfCurrentWeek) : false;
-                                        const isRemovalDisabled = readOnly || !isFuturePlan;
+                                        const isRemovalDisabled = readOnly || isCovered;
 
                                         return (
                                         <TableRow key={plan.id}>
@@ -591,7 +590,7 @@ export function PlanningCalendar({
                                                         size="icon" 
                                                         onClick={() => onRemovePlan(plan.id)}
                                                         disabled={isRemovalDisabled}
-                                                        title={isRemovalDisabled ? "Cannot delete plans for current or past weeks." : "Remove plan"}
+                                                        title={isRemovalDisabled ? "Cannot remove a plan that has already been covered." : "Remove plan"}
                                                      >
                                                          <XCircle size={16} className="text-destructive"/>
                                                      </Button>
@@ -634,3 +633,4 @@ export function PlanningCalendar({
 
 
     
+
