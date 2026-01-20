@@ -234,6 +234,22 @@ export function PlanningCalendar({
 
     }, [selectedDate, currentWeekRequest]);
     
+    const canLogCall = useMemo(() => {
+        if (!selectedDate) return false;
+        
+        // For today or future dates, it is allowed
+        if (!isBefore(selectedDate, today)) {
+            return true;
+        }
+        
+        // For past weeks, only allow if approved
+        if (currentWeekRequest?.status === 'approved') {
+            return true;
+        }
+
+        return false;
+
+    }, [selectedDate, today, currentWeekRequest]);
 
     const handlePermissionRequest = async (reason: string) => {
         if(selectedDate && onPermissionRequest) {
@@ -546,7 +562,7 @@ export function PlanningCalendar({
                                             entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                                         );
                                         
-                                        const canLogCall = selectedDate && isToday(selectedDate);
+                                        const isLogCallDisabled = readOnly || isCovered || !canLogCall;
                                         
                                         const isRemovalDisabled = readOnly || isCovered;
 
@@ -557,11 +573,11 @@ export function PlanningCalendar({
                                                     variant="link" 
                                                     className="p-0 h-auto font-medium text-left"
                                                     onClick={() => handleLogCallClick(plan)}
-                                                    disabled={readOnly || isCovered || !canLogCall}
+                                                    disabled={isLogCallDisabled}
                                                     title={
                                                         readOnly ? "This is a read-only view." :
                                                         isCovered ? "Already covered today" :
-                                                        !canLogCall ? "Coverage can only be logged for the current day" : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
+                                                        !canLogCall ? "Unlock this week to log past coverage." : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
                                                     }
                                                 >
                                                     {plan.doctorFirstName} {plan.doctorLastName}
@@ -633,4 +649,3 @@ export function PlanningCalendar({
 
 
     
-

@@ -162,6 +162,7 @@ export default function Home() {
                 offlineEntries={offlineEntries}
                 entryToEdit={entryToEdit}
                 initialDate={plannedDateToLog}
+                planningRequests={planningRequests}
               />;
       case 'offline':
         return <OfflineList 

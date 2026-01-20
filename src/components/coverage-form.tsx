@@ -1,11 +1,10 @@
 
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday } from "date-fns"
+import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek } from "date-fns"
 import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -28,9 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignaturePad, SignaturePadFullScreen } from "./signature-pad"
-import type { CoverageEntry, Doctor, Plan, MarketingSample } from "@/lib/types"
+import type { CoverageEntry, Doctor, Plan, MarketingSample, PlanningPermissionRequest } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
@@ -121,6 +120,7 @@ type CoverageFormProps = {
   todaysPlans: Plan[];
   offlineEntries: CoverageEntry[];
   initialDate?: Date | null;
+  planningRequests?: PlanningPermissionRequest[];
 }
 
 const productList = [
@@ -184,7 +184,7 @@ const getReminderSampleOptions = (marketingSamples: MarketingSample[]) => (produ
     return marketingSamples.filter(s => s.productGroup === productName);
 };
 
-export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate, planningRequests }: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -701,7 +701,31 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     mode="single"
                                                     selected={field.value}
                                                     onSelect={field.onChange}
-                                                    disabled={(date) => date > new Date() || date < startOfToday()}
+                                                    disabled={(date) => {
+                                                        const today = new Date();
+                                                        // Disable future dates
+                                                        if (isAfter(date, today)) {
+                                                            return true;
+                                                        }
+                                                        // Enable today
+                                                        if (isSameDay(date, today)) {
+                                                            return false;
+                                                        }
+                                                        // For past dates, check for unlock request
+                                                        const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+                                                        const matchingRequest = planningRequests?.find(req => {
+                                                            const reqDate = parseISO(req.weekStartDate);
+                                                            return isValid(reqDate) && isSameDay(reqDate, weekStart);
+                                                        });
+                                                
+                                                        // If an approved request exists for that week, enable the date.
+                                                        if (matchingRequest?.status === 'approved') {
+                                                            return false;
+                                                        }
+                                                
+                                                        // Otherwise, disable the past date.
+                                                        return true;
+                                                    }}
                                                     initialFocus
                                                 />
                                             </PopoverContent>
