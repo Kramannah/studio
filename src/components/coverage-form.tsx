@@ -282,24 +282,45 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
-      const isPlanned = todaysPlans.some(p => p.doctorId === initialDoctor.id);
+      // When logging a call from the planning calendar, reset the form and populate it
+      // with the doctor's details and the correct planned date.
+      // We set callType to 'planned' to prevent creating a duplicate plan entry on submission.
       form.reset({
-        ...form.getValues(),
-        callType: isPlanned ? 'planned' : 'unplanned',
-        plannedDoctorId: isPlanned ? initialDoctor.id : undefined,
+        // Start with default values to clear the form completely
+        callType: "planned",
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,
         clinic: initialDoctor.clinic,
         hacme: initialDoctor.hacme,
-        coverageDate: initialDate || new Date(),
+        coverageType: "inbase",
+        coverageDate: initialDate || new Date(), // Use the date from the plan
+        photos: [],
+        signature: null,
+        jointCallSignature: null,
+        jointCallWith: "",
+        callObjective: "",
+        primaryProduct: "",
+        secondaryProduct: "",
+        primarySampleName: "",
+        primaryProductQty: 0,
+        primaryProductBal: 0,
+        secondarySampleName: "",
+        secondaryProductQty: 0,
+        secondaryProductBal: 0,
         reminderProducts: [],
+        topicsDiscussed: "",
+        doctorsIssue: "",
+        planOfAction: "",
+        whatWentWell: "",
+        areasForImprovement: "",
+        isOffline: false,
+        plannedDoctorId: initialDoctor.id, // Set this to keep UI consistent
       });
-      if (!isPlanned) {
-        setAutocompleteValue(`${initialDoctor.firstName} ${initialDoctor.lastName}`);
-      }
+      setAutocompleteValue(''); // No need for autocomplete when coming from calendar.
+      setProofMethod(null);
     }
-  }, [initialDoctor, entryToEdit, form, todaysPlans, initialDate]);
+  }, [initialDoctor, entryToEdit, form, initialDate]);
   
   const resetForm = useCallback(() => {
     form.reset({
