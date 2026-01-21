@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry } from "@/lib/types";
@@ -73,7 +74,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect, isAdminView, userMap }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void, isAdminView?: boolean, userMap?: Record<string, { code: string; firstName: string; lastName: string; }> }) => {
+const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect, isAdminView, userMap, onOpenImageViewer }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void, isAdminView?: boolean, userMap?: Record<string, { code: string; firstName: string; lastName: string; }>, onOpenImageViewer: (imageUrl: string) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
@@ -151,24 +152,26 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
                         {entry.photos && entry.photos.length > 0 && (
                             <div className="flex -space-x-4">
                                 {entry.photos.map((photo, index) => (
-                                    <Image key={index} src={photo} alt={`photo ${index}`} width={40} height={40} className="object-cover border-2 rounded-full border-background" />
+                                    <button type="button" key={index} onClick={() => onOpenImageViewer(photo)} className="transition-transform duration-200 ease-in-out rounded-full focus:outline-none focus:ring-2 focus:ring-ring hover:scale-110">
+                                        <Image src={photo} alt={`photo ${index}`} width={40} height={40} className="object-cover border-2 rounded-full border-background" />
+                                    </button>
                                 ))}
                             </div>
                         )}
                         {entry.signature && (
-                            <div className="p-1 bg-white border rounded-md">
-                                <Image src={entry.signature} alt="signature" width={40} height={20} />
-                            </div>
+                            <button type="button" onClick={() => onOpenImageViewer(entry.signature!)} className="p-1 transition-transform duration-200 ease-in-out bg-white border rounded-md focus:outline-none focus:ring-2 focus:ring-ring hover:scale-110">
+                                <Image src={entry.signature} alt="signature" width={40} height={20} className="bg-white" />
+                            </button>
                         )}
                         {entry.dsmSignature && (
-                            <div className="p-1 bg-white border rounded-md">
-                                <Image src={entry.dsmSignature} alt="dsm signature" width={40} height={20} />
-                            </div>
+                             <button type="button" onClick={() => onOpenImageViewer(entry.dsmSignature!)} className="p-1 transition-transform duration-200 ease-in-out bg-white border rounded-md focus:outline-none focus:ring-2 focus:ring-ring hover:scale-110">
+                                <Image src={entry.dsmSignature} alt="dsm signature" width={40} height={20} className="bg-white" />
+                            </button>
                         )}
                          {entry.jointCallSignature && (
-                            <div className="p-1 bg-white border rounded-md">
-                                <Image src={entry.jointCallSignature} alt="joint call signature" width={40} height={20} />
-                            </div>
+                            <button type="button" onClick={() => onOpenImageViewer(entry.jointCallSignature!)} className="p-1 transition-transform duration-200 ease-in-out bg-white border rounded-md focus:outline-none focus:ring-2 focus:ring-ring hover:scale-110">
+                                <Image src={entry.jointCallSignature} alt="joint call signature" width={40} height={20} className="bg-white" />
+                            </button>
                         )}
                     </div>
                 </TableCell>
@@ -280,6 +283,8 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
     const [endDate, setEndDate] = useState<Date | undefined>();
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
     const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
+    const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -540,6 +545,11 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
         window.location.href = mailtoLink;
     };
     
+    const handleOpenImageViewer = (imageUrl: string) => {
+        setSelectedImage(imageUrl);
+        setIsImageViewerOpen(true);
+    };
+
     if (entries.length === 0) {
         return (
             <Card>
@@ -678,7 +688,7 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                             
                                 {filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} isAdminView={isAdminView} userMap={userMap} />
+                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} isAdminView={isAdminView} userMap={userMap} onOpenImageViewer={handleOpenImageViewer} />
                                     ))
                                 ) : (
                                     <TableBody>
@@ -801,6 +811,18 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                          <p>No analysis available.</p>
                     )}
                 </div>
+            </DialogContent>
+        </Dialog>
+        <Dialog open={isImageViewerOpen} onOpenChange={setIsImageViewerOpen}>
+            <DialogContent className="max-w-3xl h-[80vh]">
+                <DialogHeader>
+                    <DialogTitle>Attachment Viewer</DialogTitle>
+                </DialogHeader>
+                {selectedImage && (
+                    <div className="relative flex items-center justify-center h-full">
+                        <Image src={selectedImage} alt="Enlarged attachment" layout="fill" objectFit="contain" />
+                    </div>
+                )}
             </DialogContent>
         </Dialog>
       </>
