@@ -814,12 +814,12 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
             </DialogContent>
         </Dialog>
         <Dialog open={isImageViewerOpen} onOpenChange={setIsImageViewerOpen}>
-            <DialogContent className="max-w-3xl h-[80vh]">
+            <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Attachment Viewer</DialogTitle>
                 </DialogHeader>
                 {selectedImage && (
-                    <div className="relative flex items-center justify-center h-full">
+                    <div className="relative flex-grow bg-white rounded-md">
                         <Image src={selectedImage} alt="Enlarged attachment" layout="fill" objectFit="contain" />
                     </div>
                 )}
@@ -828,5 +828,3 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
       </>
     );
 }
-
-    
