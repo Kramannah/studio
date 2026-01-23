@@ -4,7 +4,7 @@
 import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, isToday } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, isToday, parse } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
@@ -50,6 +50,7 @@ import { Label } from "./ui/label";
 import { analyzeReport, ReportAnalysisInput, ReportAnalysisOutput } from "@/ai/flows/analyze-report-flow";
 import { Checkbox } from "./ui/checkbox";
 import { USER_DATA_MAP } from "@/lib/user-data";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
@@ -279,8 +280,7 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analyzedDoctor, setAnalyzedDoctor] = useState<string>('');
-    const [startDate, setStartDate] = useState<Date | undefined>();
-    const [endDate, setEndDate] = useState<Date | undefined>();
+    const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
     const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
     const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
@@ -288,11 +288,31 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
 
     const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-
-    const handleApplyRange = () => {
-        setAppliedRange({ start: startDate, end: endDate });
+    
+    const availableMonths = useMemo(() => {
+        const monthSet = new Set<string>();
+        entries.forEach(entry => {
+            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            if (isValid(submittedDate)) {
+                monthSet.add(format(submittedDate, 'yyyy-MM'));
+            }
+        });
+        monthSet.add(format(new Date(), 'yyyy-MM'));
+        return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+    }, [entries]);
+    
+    useEffect(() => {
+        if (selectedMonth) {
+            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            const start = startOfMonth(monthDate);
+            const end = endOfMonth(monthDate);
+            setAppliedRange({ start, end });
+        } else {
+            setAppliedRange({});
+        }
         setSelectedEntryIds([]);
-    };
+    }, [selectedMonth]);
+
 
     const handleAnalyze = async (entry: CoverageEntry) => {
         setAnalyzedDoctor(`${entry.firstName} ${entry.lastName}`);
@@ -525,8 +545,8 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
     };
 
     const handleSendEmail = () => {
-        const dateRangeString = (appliedRange.start && appliedRange.end)
-            ? `${format(appliedRange.start, 'PPP')} to ${format(appliedRange.end, 'PPP')}`
+        const dateRangeString = selectedMonth
+            ? `for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}`
             : "for All Time";
 
         const subject = `Submitted Coverage Report - ${dateRangeString}`;
@@ -568,8 +588,8 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                     <div>
                         <CardTitle className="font-headline">Submitted Coverage</CardTitle>
                         <CardDescription>
-                            {appliedRange.start && appliedRange.end 
-                                ? `Showing reports from ${format(appliedRange.start, "PPP")} to ${format(appliedRange.end, "PPP")}.`
+                            {selectedMonth
+                                ? `Showing reports for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}.`
                                 : "A log of all your submitted coverage reports."
                             }
                         </CardDescription>
@@ -579,51 +599,19 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                             <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')}><List/></Button>
                             <Button variant={viewMode === 'calendar' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('calendar')}><CalendarViewIcon/></Button>
                         </div>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "w-[140px] justify-start text-left font-normal",
-                                    !startDate && "text-muted-foreground"
-                                )}
-                                >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {startDate ? format(startDate, "PPP") : <span>Start Date</span>}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                mode="single"
-                                selected={startDate}
-                                onSelect={setStartDate}
-                                initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "w-[140px] justify-start text-left font-normal",
-                                    !endDate && "text-muted-foreground"
-                                )}
-                                >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {endDate ? format(endDate, "PPP") : <span>End Date</span>}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                mode="single"
-                                selected={endDate}
-                                onSelect={setEndDate}
-                                initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
-                        <Button onClick={handleApplyRange} disabled={!startDate || !endDate}>Apply</Button>
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Select a month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availableMonths.map(month => (
+                                    <SelectItem key={month} value={month}>
+                                        {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
                         {selectedEntryIds.length > 0 && onDeleteBulk && viewMode === 'list' && !readOnly && (
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -814,12 +802,12 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
             </DialogContent>
         </Dialog>
         <Dialog open={isImageViewerOpen} onOpenChange={setIsImageViewerOpen}>
-            <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+            <DialogContent className="max-w-3xl h-[80vh] flex flex-col bg-white">
                 <DialogHeader>
                     <DialogTitle>Attachment Viewer</DialogTitle>
                 </DialogHeader>
                 {selectedImage && (
-                    <div className="relative flex-grow bg-white rounded-md">
+                    <div className="relative flex-grow">
                         <Image src={selectedImage} alt="Enlarged attachment" layout="fill" objectFit="contain" />
                     </div>
                 )}
