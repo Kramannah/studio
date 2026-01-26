@@ -69,7 +69,7 @@ export function UserDashboard({
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={allEntries} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} isAdminView={isAdminView} userMap={userMap} />
+              <SubmittedList entries={allEntries} doctors={allDoctors} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} isAdminView={isAdminView} userMap={userMap} />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 

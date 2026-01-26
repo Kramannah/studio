@@ -173,7 +173,7 @@ export default function Home() {
                 onEdit={(entry) => handleEditEntry(entry, true)}
               />;
       case 'submitted':
-        return <SubmittedList entries={masterEntries} onDelete={deleteMasterEntry} onDeleteBulk={deleteMasterEntriesBulk} onEdit={(entry) => handleEditEntry(entry, false)} />;
+        return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onDeleteBulk={deleteMasterEntriesBulk} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'marketing':
         return <MarketingList 
                 samples={marketingSamples}

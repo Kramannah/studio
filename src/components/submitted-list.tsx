@@ -1,7 +1,7 @@
 
 "use client"
 
-import type { CoverageEntry } from "@/lib/types";
+import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, isToday, parse } from "date-fns";
@@ -54,6 +54,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 type SubmittedListProps = {
     entries: CoverageEntry[];
+    doctors: Doctor[];
     onDelete: (id: string) => void;
     onDeleteBulk?: (ids: string[]) => void;
     onEdit: (entry: CoverageEntry) => void;
@@ -75,9 +76,18 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect, isAdminView, userMap, onOpenImageViewer }: { entry: CoverageEntry, onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void, isAdminView?: boolean, userMap?: Record<string, { code: string; firstName: string; lastName: string; }>, onOpenImageViewer: (imageUrl: string) => void }) => {
+const EntryRow = ({ entry, doctors, onDelete, onEdit, onAnalyze, readOnly, isSelected, onSelect, isAdminView, userMap, onOpenImageViewer }: { entry: CoverageEntry, doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, onAnalyze: (entry: CoverageEntry) => void, readOnly?: boolean, isSelected: boolean, onSelect: (id: string, checked: boolean) => void, isAdminView?: boolean, userMap?: Record<string, { code: string; firstName: string; lastName: string; }>, onOpenImageViewer: (imageUrl: string) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
+    const doctor = useMemo(() => {
+        return doctors.find(d =>
+            d.firstName.toLowerCase() === entry.firstName?.toLowerCase() &&
+            d.lastName.toLowerCase() === entry.lastName?.toLowerCase()
+        );
+    }, [doctors, entry.firstName, entry.lastName]);
+
+    const frequency = doctor?.frequency;
+
     const handleDownloadAttachments = async (entry: CoverageEntry) => {
         const zip = new JSZip();
         
@@ -148,6 +158,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
                 </TableCell>
                 <TableCell>{entry.clinic}</TableCell>
                 <TableCell>{isValid(submittedDate) ? format(submittedDate, "PPP") : 'Invalid Date'}</TableCell>
+                <TableCell>{frequency ? <Badge variant="outline">{frequency}</Badge> : 'N/A'}</TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
                         {entry.photos && entry.photos.length > 0 && (
@@ -220,11 +231,12 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
             </TableRow>
             <CollapsibleContent asChild>
                 <TableRow>
-                    <TableCell colSpan={isAdminView ? 7 : 6} className="p-0">
+                    <TableCell colSpan={isAdminView ? 8 : 7} className="p-0">
                         <div className="p-6 bg-muted/50">
                              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                                 <div className="space-y-4">
                                     <h4 className="font-bold font-headline text-primary">Pre-call Plan</h4>
+                                    <DetailItem label="Target Frequency" value={frequency} />
                                     <DetailItem label="Call Type" value={entry.callType} />
                                     <DetailItem label="Coverage Type" value={entry.coverageType} />
                                     {entry.coverageType === 'joint' && <DetailItem label="Joint Call With" value={entry.jointCallWith} />}
@@ -274,7 +286,7 @@ const EntryRow = ({ entry, onDelete, onEdit, onAnalyze, readOnly, isSelected, on
 }
 
 
-export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnly = false, isAdminView = false, userMap }: SubmittedListProps) {
+export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit, readOnly = false, isAdminView = false, userMap }: SubmittedListProps) {
     const listRef = useRef<HTMLDivElement>(null);
     const [isAnalysisDialogOpen, setIsAnalysisDialogOpen] = useState(false);
     const [currentAnalysis, setCurrentAnalysis] = useState<ReportAnalysisOutput | null>(null);
@@ -478,6 +490,11 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
         const dataToExport = filteredEntries.map(entry => {
             const submittedAt = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
+            const doctor = doctors.find(d => 
+                d.firstName.toLowerCase() === entry.firstName?.toLowerCase() && 
+                d.lastName.toLowerCase() === entry.lastName?.toLowerCase()
+            );
+            const frequency = doctor ? doctor.frequency : 'N/A';
             
             const row: any = {};
             if (isAdminView) {
@@ -489,6 +506,7 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                 "Doctor Name": `${entry.firstName} ${entry.lastName}`,
                 "Specialty": entry.specialty,
                 "Clinic": entry.clinic,
+                "Target Frequency": frequency,
                 "Coverage Date": isValid(coverageDate) ? format(coverageDate, "PPP") : "Invalid Date",
                 "Submitted At": isValid(submittedAt) ? format(submittedAt, "Pp") : "Invalid Date",
                 "Coverage Type": entry.coverageType,
@@ -669,6 +687,7 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                                     <TableHead>Provider</TableHead>
                                     <TableHead>Clinic</TableHead>
                                     <TableHead>Submitted On</TableHead>
+                                    <TableHead>Target</TableHead>
                                     <TableHead>Attachments</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
@@ -676,12 +695,12 @@ export function SubmittedList({ entries, onDelete, onDeleteBulk, onEdit, readOnl
                             
                                 {filteredEntries.length > 0 ? (
                                     filteredEntries.map((entry) => (
-                                        <EntryRow key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} isAdminView={isAdminView} userMap={userMap} onOpenImageViewer={handleOpenImageViewer} />
+                                        <EntryRow key={entry.id} entry={entry} doctors={doctors} onDelete={onDelete} onEdit={onEdit} onAnalyze={handleAnalyze} readOnly={readOnly} isSelected={selectedEntryIds.includes(entry.id)} onSelect={handleSelectEntry} isAdminView={isAdminView} userMap={userMap} onOpenImageViewer={handleOpenImageViewer} />
                                     ))
                                 ) : (
                                     <TableBody>
                                     <TableRow>
-                                        <TableCell colSpan={isAdminView ? 7 : 6} className="h-24 text-center">
+                                        <TableCell colSpan={isAdminView ? 8 : 7} className="h-24 text-center">
                                         No submitted entries found for the selected date range.
                                         </TableCell>
                                     </TableRow>
