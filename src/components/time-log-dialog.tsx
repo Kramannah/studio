@@ -26,6 +26,29 @@ type TimeLogDialogProps = {
   onTimeOut?: (photo: string) => void
 }
 
+const compressImage = (dataUrl: string, quality = 0.7, maxWidth = 800): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new window.Image();
+        img.src = dataUrl;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const aspect = img.height / img.width;
+            canvas.width = Math.min(img.width, maxWidth);
+            canvas.height = canvas.width * aspect;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return reject(new Error('Failed to get canvas context'));
+            }
+            
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = (error) => reject(error);
+    });
+};
+
+
 export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut }: TimeLogDialogProps) {
   const { toast } = useToast()
   const [locationType, setLocationType] = useState<"inbase" | "outbase">("inbase")
@@ -84,7 +107,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
     }
   }, [isOpen, stopCamera, getCameraPermission]);
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -93,8 +116,9 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
       const context = canvas.getContext('2d');
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setCapturedImage(dataUrl);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const compressedUrl = await compressImage(dataUrl);
+        setCapturedImage(compressedUrl);
         stopCamera();
       }
     }
