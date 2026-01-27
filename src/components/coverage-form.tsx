@@ -396,6 +396,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     }
   }, [entryToEdit, initialDoctor, form, resetForm]);
 
+  const plannedDoctorId = form.watch("plannedDoctorId");
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
