@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { SignaturePad } from "./signature-pad"
+import { SignatureDialog } from "./signature-dialog"
 import type { CoverageEntry, Doctor, Plan, MarketingSample, PlanningPermissionRequest } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
@@ -187,6 +187,12 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
+  const [signatureState, setSignatureState] = useState<{
+    isOpen: boolean;
+    target: 'signature' | 'jointCallSignature' | null;
+    title: string;
+    initialValue: string | null | undefined;
+  }>({ isOpen: false, target: null, title: '', initialValue: null });
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -487,6 +493,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const isEditMode = !!entryToEdit;
 
   return (
+    <>
     <Card className="h-full flex flex-col">
         <CardHeader>
             <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage Event' : 'Log New Coverage Event'}</CardTitle>
@@ -1066,17 +1073,30 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                     )}
 
                                     {proofMethod === 'signature' && (
-                                        <FormField
-                                            control={form.control}
-                                            name="signature"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormControl>
-                                                        <SignaturePad {...field} />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
-                                        />
+                                        <div className="mt-4 space-y-2">
+                                            <Label>MD Signature</Label>
+                                            <div className="flex items-center gap-4">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setSignatureState({ 
+                                                        isOpen: true, 
+                                                        target: 'signature', 
+                                                        title: 'Doctor Signature',
+                                                        initialValue: form.getValues('signature') 
+                                                    })}
+                                                >
+                                                    <Edit className="mr-2 h-4 w-4" />
+                                                    {form.watch('signature') ? 'Edit Signature' : 'Add Signature'}
+                                                </Button>
+                                                {form.watch('signature') && (
+                                                    <div className="p-1 border rounded-md bg-white">
+                                                        <Image src={form.watch('signature')!} alt="MD Signature" width={120} height={60} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
+                                        </div>
                                     )}
                                 </CardContent>
                             </Card>
@@ -1107,21 +1127,30 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                       </FormItem>
                                       )}
                                   />
-                                  <div className="space-y-2">
-                                      <Label>{jointCallWith || 'Companion'} Signature</Label>
-                                       <FormField
-                                            control={form.control}
-                                            name="jointCallSignature"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormControl>
-                                                        <SignaturePad {...field} />
-                                                    </FormControl>
-                                                    <FormMessage/>
-                                                </FormItem>
+                                   <div className="space-y-2">
+                                        <Label className="font-headline">{jointCallWith || 'Companion'} Signature</Label>
+                                        <div className="flex items-center gap-4">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() => setSignatureState({ 
+                                                    isOpen: true, 
+                                                    target: 'jointCallSignature', 
+                                                    title: `${jointCallWith || 'Companion'} Signature`,
+                                                    initialValue: form.getValues('jointCallSignature') 
+                                                })}
+                                            >
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                {form.watch('jointCallSignature') ? 'Edit Signature' : 'Add Signature'}
+                                            </Button>
+                                            {form.watch('jointCallSignature') && (
+                                                <div className="p-1 border rounded-md bg-white">
+                                                    <Image src={form.watch('jointCallSignature')!} alt="Joint Call Signature" width={120} height={60} />
+                                                </div>
                                             )}
-                                        />
-                                  </div>
+                                        </div>
+                                        <FormMessage>{form.formState.errors.jointCallSignature?.message}</FormMessage>
+                                    </div>
                               </div>
                           )}
                       </div>
@@ -1137,5 +1166,17 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
           </ScrollArea>
         </CardContent>
     </Card>
+    <SignatureDialog
+        isOpen={signatureState.isOpen}
+        onOpenChange={(open) => setSignatureState(s => ({ ...s, isOpen: open }))}
+        onSave={(signatureData) => {
+            if (signatureState.target) {
+                form.setValue(signatureState.target, signatureData, { shouldValidate: true });
+            }
+        }}
+        initialSignature={signatureState.initialValue}
+        title={signatureState.title}
+    />
+    </>
   )
 }

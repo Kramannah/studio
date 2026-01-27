@@ -1,9 +1,7 @@
 "use client"
 
 import React, { useRef, useEffect, useCallback } from 'react';
-import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { Eraser } from 'lucide-react';
 
 interface SignaturePadProps {
   value: string | null | undefined;
@@ -22,15 +20,6 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     return canvas.getContext('2d');
   }, []);
 
-  const clearCanvas = useCallback(() => {
-    const ctx = getCanvasContext();
-    const canvas = canvasRef.current;
-    if (ctx && canvas) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      onChange(null);
-    }
-  }, [getCanvasContext, onChange]);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
@@ -44,7 +33,6 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         canvas.width = rect.width;
       }
       if (canvas.height !== rect.height) {
-        // Use a fixed height if no height is provided by classname
         canvas.height = parent.clientHeight > 0 ? parent.clientHeight : 200;
       }
     }
@@ -53,13 +41,16 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Set a white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
 
     if (value) {
       const img = new Image();
       img.onload = () => {
-        // Make sure to draw on a clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Draw the saved signature over the white background
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       };
       img.src = value;
@@ -103,10 +94,17 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   const isCanvasBlank = (canvas: HTMLCanvasElement) => {
     const context = canvas.getContext('2d');
     if (!context) return true;
-    const pixelBuffer = new Uint32Array(
-      context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
-    );
-    return !pixelBuffer.some(pixel => pixel !== 0);
+    
+    // Create a blank canvas with a white background to compare against
+    const blank = document.createElement('canvas');
+    blank.width = canvas.width;
+    blank.height = canvas.height;
+    const blankCtx = blank.getContext('2d');
+    if(!blankCtx) return true;
+    blankCtx.fillStyle = 'white';
+    blankCtx.fillRect(0,0,blank.width, blank.height);
+
+    return canvas.toDataURL() === blank.toDataURL();
   };
 
   const stopDrawing = () => {
@@ -118,7 +116,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
       if (isCanvasBlank(canvas)) {
         onChange(null);
       } else {
-        // Use JPEG with quality 0.5 for performance
+        // Use JPEG with quality 0.5 for performance and to enforce a background
         const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
         onChange(dataUrl);
       }
@@ -126,8 +124,7 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   };
 
   return (
-    <div className={cn('relative w-full', className)}>
-      <div className="w-full h-48 border rounded-md">
+    <div className={cn('relative w-full h-full', className)}>
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -137,18 +134,8 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="bg-white rounded-md cursor-crosshair touch-none w-full h-full"
+          className="rounded-md cursor-crosshair touch-none w-full h-full"
         />
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={clearCanvas}
-        className="mt-2"
-      >
-        <Eraser className="mr-2 h-4 w-4" /> Clear
-      </Button>
     </div>
   );
 }
