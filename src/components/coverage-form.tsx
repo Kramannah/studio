@@ -28,17 +28,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { SignaturePad, SignaturePadFullScreen } from "./signature-pad"
+import { SignaturePad } from "./signature-pad"
 import type { CoverageEntry, Doctor, Plan, MarketingSample, PlanningPermissionRequest } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "./ui/dialog"
 import { Autocomplete } from "./autocomplete"
 import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { Calendar } from "./ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 
@@ -189,8 +187,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
-  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
-  const [signatureFieldToUpdate, setSignatureFieldToUpdate] = useState<'signature' | 'jointCallSignature' | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -238,8 +234,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const photos = form.watch("photos");
   const primaryProduct = form.watch("primaryProduct");
   const secondaryProduct = form.watch("secondaryProduct");
-  const signature = form.watch("signature");
-  const jointCallSignature = form.watch("jointCallSignature");
   const reminderProducts = form.watch("reminderProducts");
   const reminderSampleOptions = useMemo(() => getReminderSampleOptions(marketingSamples), [marketingSamples]);
 
@@ -260,10 +254,16 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   useEffect(() => {
     form.setValue("secondarySampleName", undefined);
   }, [secondaryProduct, form]);
+  
+  useEffect(() => {
+    if (proofMethod === 'photo') {
+        form.setValue('signature', null);
+    } else if (proofMethod === 'signature') {
+        form.setValue('photos', []);
+    }
+  }, [proofMethod, form]);
 
   const handleUploadClick = () => {
-    setProofMethod('photo');
-    form.setValue('signature', null);
     fileInputRef.current?.click();
   };
 
@@ -406,30 +406,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     }
   };
 
-  const handleProofMethodChange = (value: 'signature') => {
-    setProofMethod(value);
-    form.setValue('photos', []);
-    openSignaturePad('signature');
-  }
-
-  const openSignaturePad = (fieldName: 'signature' | 'jointCallSignature') => {
-    setSignatureFieldToUpdate(fieldName);
-    setIsSignaturePadOpen(true);
-  }
-
-  const handleSaveSignature = async (dataUrl: string | null) => {
-      if(signatureFieldToUpdate) {
-          if (dataUrl) {
-              const compressedUrl = await compressImage(dataUrl, 0.5, 400);
-              form.setValue(signatureFieldToUpdate, compressedUrl, { shouldValidate: true });
-          } else {
-              form.setValue(signatureFieldToUpdate, null, { shouldValidate: true });
-          }
-      }
-      setIsSignaturePadOpen(false);
-      setSignatureFieldToUpdate(null);
-  }
-
   async function onSubmit(values: z.infer<typeof formSchema>) {
     const isEditMode = !!entryToEdit;
     const allEntries = [...masterEntries, ...offlineEntries];
@@ -509,7 +485,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   }
 
   const isEditMode = !!entryToEdit;
-  const coverageDate = form.watch("coverageDate");
 
   return (
     <Card className="h-full flex flex-col">
@@ -726,25 +701,20 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     onSelect={field.onChange}
                                                     disabled={(date) => {
                                                         const today = startOfToday();
-                                                        // 1. Disable all future dates.
                                                         if (isAfter(date, today)) {
                                                             return true;
                                                         }
-                                                        // 2. Enable all dates within the current week.
                                                         if (isSameWeek(date, today, { weekStartsOn: 1 })) {
                                                             return false;
                                                         }
-                                                        // 3. For dates in past weeks, check for an unlock request.
                                                         const weekStart = startOfWeek(date, { weekStartsOn: 1 });
                                                         const matchingRequest = planningRequests?.find(req => {
                                                             const reqDate = parseISO(req.weekStartDate);
                                                             return isValid(reqDate) && isSameDay(reqDate, weekStart);
                                                         });
-                                                        // If an approved request for that past week exists, enable the date.
                                                         if (matchingRequest?.status === 'approved') {
                                                             return false;
                                                         }
-                                                        // 4. Otherwise (it's a locked past week), disable the date.
                                                         return true;
                                                     }}
                                                     initialFocus
@@ -1055,26 +1025,31 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                       
                       <div className="space-y-6">
                           <div>
-                              <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
-                              <Card className="mt-2">
-                                  <CardContent className="p-4">
-                                      {photos && photos.length > 0 ? (
-                                           <div className="relative w-full max-w-xs mx-auto">
-                                              <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
-                                              <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
-                                                  <Trash2 />
-                                              </Button>
-                                          </div>
-                                      ) : signature && proofMethod === 'signature' ? (
-                                            <div className="space-y-2">
-                                                <Label>MD Signature</Label>
-                                                <div className="p-2 border rounded-md bg-muted w-fit">
-                                                    <Image src={signature} alt="signature" width={200} height={100} className="bg-white rounded" />
-                                                </div>
-                                                <Button variant="outline" size="sm" onClick={() => openSignaturePad('signature')}><Edit className="mr-2"/> Edit Signature</Button>
+                            <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
+                            <Card className="mt-2">
+                                <CardContent className="p-4 space-y-4">
+                                    <RadioGroup value={proofMethod || ''} onValueChange={(val) => setProofMethod(val as 'photo' | 'signature' | null)} className="flex gap-4">
+                                        <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl><RadioGroupItem value="photo" /></FormControl>
+                                            <Label htmlFor="photo" className="font-normal">Photo</Label>
+                                        </FormItem>
+                                        <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl><RadioGroupItem value="signature" /></FormControl>
+                                            <Label htmlFor="signature" className="font-normal">MD Signature</Label>
+                                        </FormItem>
+                                    </RadioGroup>
+
+                                    {proofMethod === 'photo' && (
+                                        <div className="mt-4">
+                                            {photos && photos.length > 0 ? (
+                                                <div className="relative w-full max-w-xs mx-auto">
+                                                <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
+                                                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
+                                                    <Trash2 />
+                                                </Button>
                                             </div>
-                                      ) : (
-                                          <div className="flex gap-2">
+                                            ) : (
+                                            <>
                                                 <input
                                                     type="file"
                                                     ref={fileInputRef}
@@ -1085,15 +1060,29 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                 <Button type="button" variant="outline" onClick={handleUploadClick}>
                                                     <Upload className="mr-2" /> Upload Photo
                                                 </Button>
-                                                <Button type="button" variant="outline" onClick={() => handleProofMethodChange('signature')}>
-                                                    <Edit className="mr-2" /> MD Signature
-                                                </Button>
-                                            </div>
-                                      )}
-                                  </CardContent>
-                              </Card>
-                              <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
+                                            </>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {proofMethod === 'signature' && (
+                                        <FormField
+                                            control={form.control}
+                                            name="signature"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl>
+                                                        <SignaturePad {...field} />
+                                                    </FormControl>
+                                                </FormItem>
+                                            )}
+                                        />
+                                    )}
+                                </CardContent>
+                            </Card>
+                            <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
                           </div>
+
                           {coverageType === 'joint' && (
                               <div className="space-y-4">
                                   <FormField
@@ -1120,15 +1109,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   />
                                   <div className="space-y-2">
                                       <Label>{jointCallWith || 'Companion'} Signature</Label>
-                                      {jointCallSignature ? (
-                                          <div className="p-2 border rounded-md bg-muted w-fit">
-                                              <Image src={jointCallSignature} alt="Companion signature" width={200} height={100} className="bg-white rounded" />
-                                          </div>
-                                      ) : <p className="text-sm text-muted-foreground">No signature provided.</p>}
-                                      <Button type="button" variant="outline" size="sm" onClick={() => openSignaturePad('jointCallSignature')}>
-                                          <Edit className="mr-2"/> {jointCallSignature ? 'Edit' : 'Add'} Signature
-                                      </Button>
-                                      <FormMessage>{form.formState.errors.jointCallSignature?.message}</FormMessage>
+                                       <FormField
+                                            control={form.control}
+                                            name="jointCallSignature"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormControl>
+                                                        <SignaturePad {...field} />
+                                                    </FormControl>
+                                                    <FormMessage/>
+                                                </FormItem>
+                                            )}
+                                        />
                                   </div>
                               </div>
                           )}
@@ -1144,12 +1136,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
             </div>
           </ScrollArea>
         </CardContent>
-        <SignaturePadFullScreen 
-            open={isSignaturePadOpen}
-            onClose={() => setIsSignaturePadOpen(false)}
-            onSave={handleSaveSignature}
-            initialValue={signatureFieldToUpdate ? form.getValues(signatureFieldToUpdate) : null}
-        />
     </Card>
   )
 }
