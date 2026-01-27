@@ -236,7 +236,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const callType = form.watch("callType");
   const coverageType = form.watch("coverageType");
   const jointCallWith = form.watch("jointCallWith");
-  const plannedDoctorId = form.watch("plannedDoctorId");
   const photos = form.watch("photos");
   const primaryProduct = form.watch("primaryProduct");
   const secondaryProduct = form.watch("secondaryProduct");
@@ -280,12 +279,31 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       reader.onload = async (e) => {
         const dataUrl = e.target?.result as string;
         const compressedDataUrl = await compressImage(dataUrl);
-        form.setValue('photos', [compressedDataUrl]);
+        form.setValue('photos', [compressedDataUrl], { shouldValidate: true });
+        form.setValue('signature', null);
+        setProofMethod('photo');
       };
       reader.readAsDataURL(file);
     }
   };
   
+  const handleSignatureButtonClick = () => {
+    setProofMethod('signature');
+    form.setValue('photos', []);
+    setSignatureState({ 
+        isOpen: true, 
+        target: 'signature', 
+        title: 'Doctor Signature',
+        initialValue: form.getValues('signature') 
+    });
+  };
+
+  const clearProof = () => {
+    form.setValue('photos', [], { shouldValidate: true });
+    form.setValue('signature', null, { shouldValidate: true });
+    setProofMethod(null);
+  };
+
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
       form.reset({
@@ -370,6 +388,8 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
             setProofMethod("photo");
         } else if (entryToEdit.signature) {
             setProofMethod("signature");
+        } else {
+            setProofMethod(null);
         }
     } else if (!initialDoctor) {
         resetForm();
@@ -1034,67 +1054,36 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                           <div>
                             <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
                             <Card className="mt-2">
-                                <CardContent className="p-4 space-y-4">
-                                    <RadioGroup value={proofMethod || ''} onValueChange={(val) => setProofMethod(val as 'photo' | 'signature' | null)} className="flex gap-4">
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl><RadioGroupItem value="photo" /></FormControl>
-                                            <Label htmlFor="photo" className="font-normal">Photo</Label>
-                                        </FormItem>
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl><RadioGroupItem value="signature" /></FormControl>
-                                            <Label htmlFor="signature" className="font-normal">MD Signature</Label>
-                                        </FormItem>
-                                    </RadioGroup>
-
-                                    {proofMethod === 'photo' && (
-                                        <div className="mt-4">
-                                            {photos && photos.length > 0 ? (
-                                                <div className="relative w-full max-w-xs mx-auto">
-                                                <Image src={photos[0]} alt="Proof" width={400} height={300} className="object-cover rounded-md" />
-                                                <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2" onClick={() => form.setValue('photos', [])}>
-                                                    <Trash2 />
-                                                </Button>
-                                            </div>
-                                            ) : (
-                                            <>
-                                                <input
-                                                    type="file"
-                                                    ref={fileInputRef}
-                                                    onChange={handleFileChange}
-                                                    className="hidden"
-                                                    accept="image/*"
-                                                />
-                                                <Button type="button" variant="outline" onClick={handleUploadClick}>
-                                                    <Upload className="mr-2" /> Upload Photo
-                                                </Button>
-                                            </>
-                                            )}
+                                <CardContent className="p-4">
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        onChange={handleFileChange}
+                                        className="hidden"
+                                        accept="image/*"
+                                    />
+                                    { (!photos || photos.length === 0) && !form.watch('signature') ? (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleUploadClick}>
+                                                <Camera className="w-8 h-8" /> 
+                                                <span>Upload Photo</span>
+                                            </Button>
+                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleSignatureButtonClick}>
+                                                <Edit className="w-8 h-8" />
+                                                <span>Capture Signature</span>
+                                            </Button>
                                         </div>
-                                    )}
-
-                                    {proofMethod === 'signature' && (
-                                        <div className="mt-4 space-y-2">
-                                            <div className="flex items-center gap-4">
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    onClick={() => setSignatureState({ 
-                                                        isOpen: true, 
-                                                        target: 'signature', 
-                                                        title: 'Doctor Signature',
-                                                        initialValue: form.getValues('signature') 
-                                                    })}
-                                                >
-                                                    <Edit className="mr-2 h-4 w-4" />
-                                                    {form.watch('signature') ? 'Edit MD Signature' : 'Add MD Signature'}
-                                                </Button>
-                                                {form.watch('signature') && (
-                                                    <div className="p-1 border rounded-md bg-white">
-                                                        <Image src={form.watch('signature')!} alt="MD Signature" width={120} height={60} />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <FormMessage>{form.formState.errors.signature?.message}</FormMessage>
+                                    ) : (
+                                        <div className="relative w-full p-2 border rounded-md min-h-[150px] flex items-center justify-center bg-muted/30">
+                                            {photos && photos.length > 0 && proofMethod === 'photo' && (
+                                                <Image src={photos[0]} alt="Proof" width={200} height={150} className="object-contain rounded-md" />
+                                            )}
+                                            {form.watch('signature') && proofMethod === 'signature' && (
+                                                <Image src={form.watch('signature')!} alt="MD Signature" width={240} height={120} className="bg-white rounded-md p-1 border" />
+                                            )}
+                                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={clearProof}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
                                         </div>
                                     )}
                                 </CardContent>
