@@ -237,12 +237,17 @@ export function PlanningCalendar({
     const canLogCall = useMemo(() => {
         if (!selectedDate) return false;
         
-        // For today or future dates, it is allowed
+        // Allow for today or future dates.
         if (!isBefore(selectedDate, today)) {
             return true;
         }
+
+        // Allow for past dates within the same week.
+        if (isSameWeek(selectedDate, today, { weekStartsOn: 1 })) {
+            return true;
+        }
         
-        // For past weeks, only allow if approved
+        // For past weeks, only allow if an unlock request is approved.
         if (currentWeekRequest?.status === 'approved') {
             return true;
         }
@@ -649,3 +654,4 @@ export function PlanningCalendar({
 
 
     
+
