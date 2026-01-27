@@ -31,7 +31,7 @@ export function SignatureDialog({ isOpen, onOpenChange, onSave, initialSignature
     
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl h-[70vh] flex flex-col p-0 gap-0">
+            <DialogContent className="p-0 gap-0 flex flex-col w-screen h-screen max-w-none top-0 left-0 translate-x-0 translate-y-0 rounded-none border-none">
                 <DialogHeader className="p-4 border-b">
                     <DialogTitle className="font-headline">{title}</DialogTitle>
                     <DialogDescription>Draw the signature in the box below.</DialogDescription>
