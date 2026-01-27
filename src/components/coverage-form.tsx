@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek } from "date-fns"
+import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek, isSameWeek } from "date-fns"
 import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -282,11 +282,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
-      // When logging a call from the planning calendar, reset the form and populate it
-      // with the doctor's details and the correct planned date.
-      // We set callType to 'planned' to prevent creating a duplicate plan entry on submission.
       form.reset({
-        // Start with default values to clear the form completely
         callType: "planned",
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
@@ -294,7 +290,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         clinic: initialDoctor.clinic,
         hacme: initialDoctor.hacme,
         coverageType: "inbase",
-        coverageDate: initialDate || new Date(), // Use the date from the plan
+        coverageDate: initialDate || new Date(),
         photos: [],
         signature: null,
         jointCallSignature: null,
@@ -315,9 +311,9 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         whatWentWell: "",
         areasForImprovement: "",
         isOffline: false,
-        plannedDoctorId: initialDoctor.id, // Set this to keep UI consistent
+        plannedDoctorId: initialDoctor.id, 
       });
-      setAutocompleteValue(''); // No need for autocomplete when coming from calendar.
+      setAutocompleteValue(''); 
       setProofMethod(null);
     }
   }, [initialDoctor, entryToEdit, form, initialDate]);
@@ -421,9 +417,14 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     setIsSignaturePadOpen(true);
   }
 
-  const handleSaveSignature = (dataUrl: string | null) => {
+  const handleSaveSignature = async (dataUrl: string | null) => {
       if(signatureFieldToUpdate) {
-          form.setValue(signatureFieldToUpdate, dataUrl, { shouldValidate: true });
+          if (dataUrl) {
+              const compressedUrl = await compressImage(dataUrl, 0.5, 400);
+              form.setValue(signatureFieldToUpdate, compressedUrl, { shouldValidate: true });
+          } else {
+              form.setValue(signatureFieldToUpdate, null, { shouldValidate: true });
+          }
       }
       setIsSignaturePadOpen(false);
       setSignatureFieldToUpdate(null);
@@ -724,28 +725,26 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     selected={field.value}
                                                     onSelect={field.onChange}
                                                     disabled={(date) => {
-                                                        const today = new Date();
-                                                        // Disable future dates
+                                                        const today = startOfToday();
+                                                        // 1. Disable all future dates.
                                                         if (isAfter(date, today)) {
                                                             return true;
                                                         }
-                                                        // Enable today
-                                                        if (isSameDay(date, today)) {
+                                                        // 2. Enable all dates within the current week.
+                                                        if (isSameWeek(date, today, { weekStartsOn: 1 })) {
                                                             return false;
                                                         }
-                                                        // For past dates, check for unlock request
+                                                        // 3. For dates in past weeks, check for an unlock request.
                                                         const weekStart = startOfWeek(date, { weekStartsOn: 1 });
                                                         const matchingRequest = planningRequests?.find(req => {
                                                             const reqDate = parseISO(req.weekStartDate);
                                                             return isValid(reqDate) && isSameDay(reqDate, weekStart);
                                                         });
-                                                
-                                                        // If an approved request exists for that week, enable the date.
+                                                        // If an approved request for that past week exists, enable the date.
                                                         if (matchingRequest?.status === 'approved') {
                                                             return false;
                                                         }
-                                                
-                                                        // Otherwise, disable the past date.
+                                                        // 4. Otherwise (it's a locked past week), disable the date.
                                                         return true;
                                                     }}
                                                     initialFocus
@@ -1154,7 +1153,3 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     </Card>
   )
 }
-
-    
-
-    
