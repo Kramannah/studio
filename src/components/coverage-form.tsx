@@ -1074,7 +1074,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
 
                                     {proofMethod === 'signature' && (
                                         <div className="mt-4 space-y-2">
-                                            <Label>MD Signature</Label>
                                             <div className="flex items-center gap-4">
                                                 <Button
                                                     type="button"
@@ -1087,7 +1086,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     })}
                                                 >
                                                     <Edit className="mr-2 h-4 w-4" />
-                                                    {form.watch('signature') ? 'Edit Signature' : 'Add Signature'}
+                                                    {form.watch('signature') ? 'Edit MD Signature' : 'Add MD Signature'}
                                                 </Button>
                                                 {form.watch('signature') && (
                                                     <div className="p-1 border rounded-md bg-white">
@@ -1128,7 +1127,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                       )}
                                   />
                                    <div className="space-y-2">
-                                        <Label className="font-headline">{jointCallWith || 'Companion'} Signature</Label>
                                         <div className="flex items-center gap-4">
                                             <Button
                                                 type="button"
@@ -1141,7 +1139,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                 })}
                                             >
                                                 <Edit className="mr-2 h-4 w-4" />
-                                                {form.watch('jointCallSignature') ? 'Edit Signature' : 'Add Signature'}
+                                                {form.watch('jointCallSignature') ? `Edit ${jointCallWith || 'Companion'} Signature` : `Add ${jointCallWith || 'Companion'} Signature`}
                                             </Button>
                                             {form.watch('jointCallSignature') && (
                                                 <div className="p-1 border rounded-md bg-white">
