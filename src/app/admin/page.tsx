@@ -11,19 +11,29 @@ import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { UserDashboard } from '@/components/user-dashboard';
 import { useAdminData } from '@/hooks/use-admin-data';
-import { MarketingList } from '@/components/marketing-list';
 import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { USER_DATA_MAP } from '@/lib/user-data';
-import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { Badge } from '@/components/ui/badge';
-import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
-import { AdminReportList } from '@/components/admin-report-list';
+import dynamic from 'next/dynamic';
+
+const DynamicSkeleton = () => (
+    <div className="flex items-center justify-center mt-10">
+        <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+        <p className="ml-4">Loading Component...</p>
+    </div>
+);
+
+const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
+const AdminReportList = dynamic(() => import('@/components/admin-report-list').then(mod => mod.AdminReportList), { loading: () => <DynamicSkeleton /> });
+const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
+const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
+const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
+
 
 export default function AdminPage() {
     const { user, loading, logout } = useAuth();

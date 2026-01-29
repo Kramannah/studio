@@ -1,10 +1,6 @@
+
 'use client';
 
-import { CoverageForm } from '@/components/coverage-form';
-import { OfflineList } from '@/components/offline-list';
-import { MasterList } from '@/components/master-list';
-import { CallSummary } from '@/components/call-summary';
-import { PlanningCalendar } from '@/components/planning-calendar';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans.tsx';
@@ -12,23 +8,38 @@ import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { SubmittedList } from "@/components/submitted-list";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
-import { MarketingList } from "@/components/marketing-list";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
-import { TimeLogDialog } from "@/components/time-log-dialog";
 import { useTimeLogs } from "@/hooks/use-time-logs.tsx";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
-import { HelpdeskDialog } from '@/components/helpdesk-dialog';
+import dynamic from 'next/dynamic';
+
+const DynamicSkeleton = () => (
+  <div className="space-y-4">
+    <Skeleton className="w-1/3 h-8" />
+    <Skeleton className="w-2/3 h-6" />
+    <Skeleton className="w-full h-96" />
+  </div>
+);
+
+const CoverageForm = dynamic(() => import('@/components/coverage-form').then(mod => mod.CoverageForm), { loading: () => <DynamicSkeleton /> });
+const OfflineList = dynamic(() => import('@/components/offline-list').then(mod => mod.OfflineList), { loading: () => <DynamicSkeleton /> });
+const MasterList = dynamic(() => import('@/components/master-list').then(mod => mod.MasterList), { loading: () => <DynamicSkeleton /> });
+const CallSummary = dynamic(() => import('@/components/call-summary').then(mod => mod.CallSummary), { loading: () => <DynamicSkeleton /> });
+const PlanningCalendar = dynamic(() => import('@/components/planning-calendar').then(mod => mod.PlanningCalendar), { loading: () => <DynamicSkeleton /> });
+const SubmittedList = dynamic(() => import('@/components/submitted-list').then(mod => mod.SubmittedList), { loading: () => <DynamicSkeleton /> });
+const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
+const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
+const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
+
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master';
 
