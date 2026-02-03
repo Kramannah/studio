@@ -1,8 +1,7 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
@@ -60,7 +59,7 @@ export function useAdminData(managerId?: string) {
             let allDocsData: any[] = [];
 
             if (userIds === null) { // Admin fetching all
-                const q = query(collection(db, collName));
+                const q = query(collection(db, collName), orderBy("date", "desc"), limit(200));
                 const snapshot = await getDocs(q);
                 allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } else { // Manager fetching for team
@@ -70,7 +69,7 @@ export function useAdminData(managerId?: string) {
                 }
 
                 const promises = chunks.map(chunk => {
-                    const q = query(collection(db, collName), where("userId", "in", chunk));
+                    const q = query(collection(db, collName), where("userId", "in", chunk), limit(100));
                     return getDocs(q);
                 });
 
@@ -122,11 +121,12 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
+            // Limit entries to recent ones for performance
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), orderBy("submittedAt", "desc"), limit(200)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), orderBy("timeIn", "desc"), limit(100)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), orderBy("date", "desc"), limit(50)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), orderBy("plannedDate", "desc"), limit(200)));
 
             const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
@@ -206,9 +206,9 @@ export function useAdminData(managerId?: string) {
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
         const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
-            getDocs(q(collections.allEntries)),
+            getDocs(query(q(collections.allEntries), orderBy("submittedAt", "desc"), limit(100))),
             getDocs(q(collections.allDoctors)),
-            getDocs(q(collections.allPlans)),
+            getDocs(query(q(collections.allPlans), orderBy("plannedDate", "desc"), limit(100))),
         ]);
         
         setAllEntries(entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry));

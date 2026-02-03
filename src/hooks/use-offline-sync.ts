@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { isSameDay, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
@@ -47,13 +47,19 @@ export const useOfflineSync = (userId?: string) => {
       return;
     }
     try {
-      const q = query(collection(db, "coverageEntries"), where("userId", "==", userId));
+      // Limit to last 100 entries for faster initial load
+      const q = query(
+        collection(db, "coverageEntries"), 
+        where("userId", "==", userId),
+        orderBy("submittedAt", "desc"),
+        limit(100)
+      );
       const querySnapshot = await getDocs(q);
       const entries: CoverageEntry[] = [];
       querySnapshot.forEach(doc => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
-      setMasterEntries(entries.sort((a,b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
+      setMasterEntries(entries);
     } catch (error) {
       console.error("Error fetching master entries:", error);
       toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch submitted entries from the server." });

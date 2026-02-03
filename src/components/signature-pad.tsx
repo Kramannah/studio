@@ -20,42 +20,54 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     return canvas.getContext('2d');
   }, []);
 
-  useEffect(() => {
+  const initializeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = getCanvasContext();
     if (!canvas || !ctx) return;
 
-    // Adjust canvas size to its container
     const parent = canvas.parentElement;
     if (parent) {
       const rect = parent.getBoundingClientRect();
-      if (canvas.width !== rect.width) {
+      // Ensure we have actual dimensions before initializing
+      if (rect.width > 0 && rect.height > 0) {
         canvas.width = rect.width;
+        canvas.height = rect.height;
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Set a solid white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (value) {
+          const img = new Image();
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          };
+          img.src = value;
+        }
       }
-      if (canvas.height !== rect.height) {
-        canvas.height = parent.clientHeight > 0 ? parent.clientHeight : 200;
-      }
-    }
-
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Set a white background
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-
-    if (value) {
-      const img = new Image();
-      img.onload = () => {
-        // Draw the saved signature over the white background
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      };
-      img.src = value;
     }
   }, [value, getCanvasContext]);
+
+  useEffect(() => {
+    // Initial load
+    initializeCanvas();
+
+    // Use a small delay to handle dialog opening animations
+    const timer = setTimeout(initializeCanvas, 100);
+
+    // Watch for window resizes
+    window.addEventListener('resize', initializeCanvas);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', initializeCanvas);
+    };
+  }, [initializeCanvas]);
 
   const getPosition = (e: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -95,16 +107,16 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     const context = canvas.getContext('2d');
     if (!context) return true;
     
-    // Create a blank canvas with a white background to compare against
-    const blank = document.createElement('canvas');
-    blank.width = canvas.width;
-    blank.height = canvas.height;
-    const blankCtx = blank.getContext('2d');
-    if(!blankCtx) return true;
-    blankCtx.fillStyle = 'white';
-    blankCtx.fillRect(0,0,blank.width, blank.height);
-
-    return canvas.toDataURL() === blank.toDataURL();
+    // Create a small hidden canvas to compare if it's still pure white
+    // This is faster than comparing full resolution strings
+    const pixelData = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 0; i < pixelData.length; i += 4) {
+      // Check if any pixel is not white (255, 255, 255)
+      if (pixelData[i] !== 255 || pixelData[i+1] !== 255 || pixelData[i+2] !== 255) {
+        return false;
+      }
+    }
+    return true;
   };
 
   const stopDrawing = () => {
@@ -116,8 +128,8 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
       if (isCanvasBlank(canvas)) {
         onChange(null);
       } else {
-        // Use JPEG with quality 0.5 for performance and to enforce a background
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        // High compression for fast syncing
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
         onChange(dataUrl);
       }
     }

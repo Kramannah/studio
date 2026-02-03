@@ -1,11 +1,10 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek, isSameWeek } from "date-fns"
-import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon } from "lucide-react"
+import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -187,6 +186,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [signatureState, setSignatureState] = useState<{
     isOpen: boolean;
     target: 'signature' | 'jointCallSignature' | null;
@@ -240,6 +240,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const primaryProduct = form.watch("primaryProduct");
   const secondaryProduct = form.watch("secondaryProduct");
   const reminderProducts = form.watch("reminderProducts");
+  const plannedDoctorId = form.watch("plannedDoctorId");
   const reminderSampleOptions = useMemo(() => getReminderSampleOptions(marketingSamples), [marketingSamples]);
 
   const primarySampleOptions = useMemo(() => {
@@ -396,8 +397,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     }
   }, [entryToEdit, initialDoctor, form, resetForm]);
 
-  const plannedDoctorId = form.watch("plannedDoctorId");
-
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
         const doctor = doctors.find(d => d.id === plannedDoctorId);
@@ -434,81 +433,94 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    const isEditMode = !!entryToEdit;
-    const allEntries = [...masterEntries, ...offlineEntries];
-    const newCoverageDate = values.coverageDate || new Date();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    if (!isEditMode) {
-      const doctorInMasterlist = doctors.find(
-        (d) =>
-          d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
-          d.lastName.toLowerCase() === values.lastName?.toLowerCase()
-      );
+    try {
+      const isEditMode = !!entryToEdit;
+      const allEntries = [...masterEntries, ...offlineEntries];
+      const newCoverageDate = values.coverageDate || new Date();
+
+      if (!isEditMode) {
+        const doctorInMasterlist = doctors.find(
+          (d) =>
+            d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
+            d.lastName.toLowerCase() === values.lastName?.toLowerCase()
+        );
+        
+        if (doctorInMasterlist) {
+            const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
+            
+            const coveragesInMonth = allEntries.filter(entry => {
+              const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
+              return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
+                     entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
+                     isValid(entryCoverageDate) && isSameMonth(entryCoverageDate, newCoverageDate);
+            }).length;
       
-      if (doctorInMasterlist) {
-          const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
-          
-          const coveragesInMonth = allEntries.filter(entry => {
+            if (coveragesInMonth >= frequency) {
+              toast({
+                variant: "destructive",
+                title: "Submission Limit Reached",
+                description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM yyyy')}.`,
+              });
+              setIsSubmitting(false);
+              return; 
+            }
+        }
+
+        const alreadyCoveredToday = allEntries.some(entry => {
             const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
             return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
                    entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-                   isValid(entryCoverageDate) && isSameMonth(entryCoverageDate, newCoverageDate);
-          }).length;
-    
-          if (coveragesInMonth >= frequency) {
+                   isValid(entryCoverageDate) && isSameDay(entryCoverageDate, newCoverageDate);
+        });
+
+        if (alreadyCoveredToday) {
             toast({
-              variant: "destructive",
-              title: "Submission Limit Reached",
-              description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM yyyy')}.`,
+                variant: "destructive",
+                title: "Duplicate Coverage",
+                description: `A coverage report for Dr. ${values.firstName} ${values.lastName} has already been submitted for ${format(newCoverageDate, 'PPP')}.`,
             });
-            return; 
-          }
+            setIsSubmitting(false);
+            return;
+        }
       }
 
-      const alreadyCoveredToday = allEntries.some(entry => {
-          const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
-          return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
-                 entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-                 isValid(entryCoverageDate) && isSameDay(entryCoverageDate, newCoverageDate);
-      });
-
-      if (alreadyCoveredToday) {
-          toast({
-              variant: "destructive",
-              title: "Duplicate Coverage",
-              description: `A coverage report for Dr. ${values.firstName} ${values.lastName} has already been submitted for ${format(newCoverageDate, 'PPP')}.`,
+      if (isEditMode) {
+          onUpdate({
+              ...values,
+              id: entryToEdit.id,
+              coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
           });
+          toast({ title: "Update Successful", description: "Your changes to the coverage report have been saved." });
+          resetForm();
+          onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
+          setIsSubmitting(false);
           return;
       }
-    }
+      
+      const { plannedDoctorId, ...restOfValues } = values;
 
-    if (isEditMode) {
-        onUpdate({
-            ...values,
-            id: entryToEdit.id,
-            coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
-        });
-        toast({ title: "Update Successful", description: "Your changes to the coverage report have been saved." });
-        resetForm();
-        onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
-        return;
-    }
-    
-    const { plannedDoctorId, ...restOfValues } = values;
-
-    if (callType === 'unplanned') {
-      const doctor = doctors.find(d => d.firstName === values.firstName && d.lastName === values.lastName);
-      if (doctor) {
-        onAddPlan(doctor, values.coverageDate || new Date());
+      if (callType === 'unplanned') {
+        const doctor = doctors.find(d => d.firstName === values.firstName && d.lastName === values.lastName);
+        if (doctor) {
+          onAddPlan(doctor, values.coverageDate || new Date());
+        }
       }
-    }
 
-    const savedOnline = await onSave({
-      ...restOfValues,
-      coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
-    });
-    resetForm();
-    onFormSubmit?.(savedOnline);
+      const savedOnline = await onSave({
+        ...restOfValues,
+        coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
+      });
+      resetForm();
+      onFormSubmit?.(savedOnline);
+    } catch (error) {
+      console.error("Submission failed", error);
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'An unexpected error occurred. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const isEditMode = !!entryToEdit;
@@ -1143,9 +1155,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                           )}
                       </div>
                       
-                      <Button type="submit" size="lg" className="w-full font-headline">
-                          <Save className="mr-2" />
-                          {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
+                      <Button type="submit" size="lg" className="w-full font-headline" disabled={isSubmitting}>
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Saving Report...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2" />
+                              {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
+                            </>
+                          )}
                       </Button>
                   </div>
               </form>
