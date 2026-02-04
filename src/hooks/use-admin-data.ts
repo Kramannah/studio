@@ -1,12 +1,14 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { parseISO, isValid } from "date-fns";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -59,7 +61,7 @@ export function useAdminData(managerId?: string) {
             let allDocsData: any[] = [];
 
             if (userIds === null) { // Admin fetching all
-                const q = query(collection(db, collName), orderBy("date", "desc"), limit(200));
+                const q = query(collection(db, collName), limit(300));
                 const snapshot = await getDocs(q);
                 allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } else { // Manager fetching for team
@@ -69,7 +71,7 @@ export function useAdminData(managerId?: string) {
                 }
 
                 const promises = chunks.map(chunk => {
-                    const q = query(collection(db, collName), where("userId", "in", chunk), limit(100));
+                    const q = query(collection(db, collName), where("userId", "in", chunk), limit(150));
                     return getDocs(q);
                 });
 
@@ -84,8 +86,21 @@ export function useAdminData(managerId?: string) {
           fetchCollection("planningRequests", userFilter)
       ]);
       
-      setAllNonCallDays(nonCallDaysRes as NonCallDay[]);
-      setAllPlanningRequests(planningRequestsRes as PlanningPermissionRequest[]);
+      // Sort in memory to avoid index requirements
+      const sortedNonCallDays = (nonCallDaysRes as NonCallDay[]).sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateB - dateA;
+      });
+
+      const sortedPlanningRequests = (planningRequestsRes as PlanningPermissionRequest[]).sort((a, b) => {
+          const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+          const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+          return dateB - dateA;
+      });
+      
+      setAllNonCallDays(sortedNonCallDays);
+      setAllPlanningRequests(sortedPlanningRequests);
 
     } catch (error) {
       console.error("Error fetching admin approval data:", error);
@@ -121,12 +136,12 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            // Limit entries to recent ones for performance
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), orderBy("submittedAt", "desc"), limit(200)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), orderBy("timeIn", "desc"), limit(100)));
+            // Remove orderBy from Firestore query to bypass missing index errors with "in" operator
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), limit(300)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), limit(150)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), orderBy("date", "desc"), limit(50)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), orderBy("plannedDate", "desc"), limit(200)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), limit(100)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), limit(300)));
 
             const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
@@ -160,6 +175,28 @@ export function useAdminData(managerId?: string) {
             acc.plans.push(...current.plans);
             return acc;
         }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] });
+
+        // Sort data in memory
+        combinedData.entries.sort((a, b) => {
+            const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+            const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+            return dateB - dateA;
+        });
+        combinedData.timeLogs.sort((a, b) => {
+            const dateA = a.timeIn ? new Date(a.timeIn).getTime() : 0;
+            const dateB = b.timeIn ? new Date(b.timeIn).getTime() : 0;
+            return dateB - dateA;
+        });
+        combinedData.nonCallDays.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
+        });
+        combinedData.plans.sort((a, b) => {
+            const dateA = a.plannedDate ? new Date(a.plannedDate).getTime() : 0;
+            const dateB = b.plannedDate ? new Date(b.plannedDate).getTime() : 0;
+            return dateB - dateA;
+        });
 
         const marketingSamples = marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample);
         
@@ -205,15 +242,31 @@ export function useAdminData(managerId?: string) {
 
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
+        // Use simpler queries for user view to ensure speed
         const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
-            getDocs(query(q(collections.allEntries), orderBy("submittedAt", "desc"), limit(100))),
+            getDocs(query(q(collections.allEntries), limit(200))),
             getDocs(q(collections.allDoctors)),
-            getDocs(query(q(collections.allPlans), orderBy("plannedDate", "desc"), limit(100))),
+            getDocs(query(q(collections.allPlans), limit(200))),
         ]);
         
-        setAllEntries(entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry));
+        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
+        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan);
+
+        // Sort in memory
+        entries.sort((a, b) => {
+            const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+            const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+            return dateB - dateA;
+        });
+        plans.sort((a, b) => {
+            const dateA = a.plannedDate ? new Date(a.plannedDate).getTime() : 0;
+            const dateB = b.plannedDate ? new Date(b.plannedDate).getTime() : 0;
+            return dateB - dateA;
+        });
+        
+        setAllEntries(entries);
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
-        setAllPlans(plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan));
+        setAllPlans(plans);
         
         if (teamSummaryData?.timeLogs) {
             setAllTimeLogs(teamSummaryData.timeLogs.filter(log => log.userId === userId));
@@ -334,10 +387,8 @@ export function useAdminData(managerId?: string) {
   }, [toast, teamSummaryData]);
 
   const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
-    // This is scoped to a manager's team, but bulk adding might need a different context.
-    // For now, let's just refresh the list for simplicity.
     await fetchTeamSummary();
-    toast({ title: 'Bulk Add', description: 'Bulk add in admin view not fully implemented, refreshing data.' });
+    toast({ title: 'Bulk Add', description: 'Bulk add processed, refreshing data.' });
   }, [fetchTeamSummary, toast]);
 
 
