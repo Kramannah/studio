@@ -92,7 +92,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         
         if (filteredEntries.length === 0 && doctors.length === 0) {
             return {
-                completedHighFreq: { actual: 0, total: 0, percentage: 0 },
+                completedHighFreq: { actual: 0, total: 0, percentage: 0, reached2Plus: 0 },
                 coverageReach: { actual: 0, total: 0, percentage: 0 },
                 callRate: { actual: 0, total: 0, percentage: 0 },
                 avgCallsPerDay: 0,
@@ -113,18 +113,20 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, {} as Record<string, number>);
         
-        // Call Concentration logic: Target doctors with frequency 2x, 3x, or 4x
-        // Count as "Met" if they reached their full target OR if they reached at least 2 visits
-        const highFreqDoctors = doctors.filter(d => ['2x', '3x', '4x'].includes(d.frequency));
-        const totalHighFreqTarget = highFreqDoctors.length;
-        const actualHighFreqMet = highFreqDoctors.filter(d => {
-            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
-            const targetCount = parseInt(d.frequency.replace('x', ''), 10) || 0;
-            return visitCount >= targetCount || visitCount >= 2;
-        }).length;
-        const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqMet / totalHighFreqTarget) * 100) : 0;
-        
+        // Revised logic for Call Concentration: Achievement of 3x visits across the masterlist
         const totalDoctors = doctors.length;
+        const visited3Plus = doctors.filter(d => {
+            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
+            return visitCount >= 3;
+        }).length;
+        const percentage3Plus = totalDoctors > 0 ? Math.round((visited3Plus / totalDoctors) * 100) : 0;
+
+        // Sub-stat: Doctors covered at least 2 times
+        const visited2Plus = doctors.filter(d => {
+            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
+            return visitCount >= 2;
+        }).length;
+        
         const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName.toLowerCase()} ${e.lastName.toLowerCase()}`));
         const actualVisitedCount = visitedDoctorNames.size;
         const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
@@ -253,7 +255,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         incentiveDays.total = validIncentiveDays.size;
 
         return {
-            completedHighFreq: { actual: actualHighFreqMet, total: totalHighFreqTarget, percentage: percentageHighFreq },
+            completedHighFreq: { actual: visited3Plus, total: totalDoctors, percentage: percentage3Plus, reached2Plus: visited2Plus },
             coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
@@ -297,7 +299,8 @@ Hi Team,
 Please find the call summary report for the selected period.
 
 Summary:
-- Call Concentration (>=2x): ${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)
+- Call Concentration (3x): ${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)
+- Doctors reached >= 2 visits: ${insights.completedHighFreq.reached2Plus}
 - Call Reach: ${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)
 - Call Rate: ${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)
 - Average Calls Per Day: ${insights.avgCallsPerDay}
@@ -370,9 +373,9 @@ Summary:
                             bgColor="bg-orange-500/10"
                         />
                         <StatCard 
-                            title="Call Concentration (>=2x)" 
+                            title="Call Concentration (3x)" 
                             value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)`} 
-                            description="Target (>=2x) met OR full target met." 
+                            description={`${insights.completedHighFreq.reached2Plus} doctors reached at least 2 visits.`} 
                             icon={Target}
                             color="text-primary"
                             bgColor="bg-primary/10"
@@ -443,7 +446,7 @@ Summary:
                                 title="Out-Base Incentive Days" 
                                 value={insights.incentiveDays.outBase} 
                                 description="Incentive days with out-base activity." 
-                                icon={PlaneTakeoff}
+ icon={PlaneTakeoff}
                                 color="text-rose-500"
                                 bgColor="bg-rose-500/10"
                             />
