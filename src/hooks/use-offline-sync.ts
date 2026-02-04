@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 import { isSameDay, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v2';
@@ -48,10 +48,10 @@ export const useOfflineSync = (userId?: string) => {
     }
     try {
       // Limit to last 100 entries for faster initial load
+      // Removed orderBy to avoid index requirement and prevent "Failed to load" errors
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId),
-        orderBy("submittedAt", "desc"),
         limit(100)
       );
       const querySnapshot = await getDocs(q);
@@ -59,6 +59,14 @@ export const useOfflineSync = (userId?: string) => {
       querySnapshot.forEach(doc => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
+      
+      // Sort in memory to avoid index requirements
+      entries.sort((a, b) => {
+          const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+          const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+          return dateB - dateA;
+      });
+
       setMasterEntries(entries);
     } catch (error) {
       console.error("Error fetching master entries:", error);

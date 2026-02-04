@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -108,12 +107,12 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         }
         
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName.toLowerCase()} ${entry.lastName.toLowerCase()}`;
+            const providerName = `${entry.firstName?.toLowerCase()} ${entry.lastName?.toLowerCase()}`;
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        // Revised logic for Call Concentration: Achievement of 3x visits across the masterlist
+        // Call Concentration logic: Achievement of 3x visits across the masterlist
         const totalDoctors = doctors.length;
         const visited3Plus = doctors.filter(d => {
             const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
@@ -127,7 +126,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return visitCount >= 2;
         }).length;
         
-        const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName.toLowerCase()} ${e.lastName.toLowerCase()}`));
+        const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName?.toLowerCase()} ${e.lastName?.toLowerCase()}`));
         const actualVisitedCount = visitedDoctorNames.size;
         const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
 
@@ -446,7 +445,7 @@ Summary:
                                 title="Out-Base Incentive Days" 
                                 value={insights.incentiveDays.outBase} 
                                 description="Incentive days with out-base activity." 
- icon={PlaneTakeoff}
+                                icon={PlaneTakeoff}
                                 color="text-rose-500"
                                 bgColor="bg-rose-500/10"
                             />
