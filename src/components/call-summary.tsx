@@ -112,17 +112,27 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, {} as Record<string, number>);
         
-        // Call Concentration logic: Achievement of 3x visits across the masterlist
-        const totalDoctors = doctors.length;
-        const visited3Plus = doctors.filter(d => {
+        // Call Concentration logic: Reverted to 3x achievement based on high-frequency targets in masterlist
+        const highFreqDoctors = doctors.filter(d => {
+            const freq = parseInt(d.frequency.replace('x', ''), 10) || 0;
+            return freq >= 3;
+        });
+        
+        const totalHighFreqTarget = highFreqDoctors.length;
+        const actualHighFreqAchieved = highFreqDoctors.filter(d => {
             const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
             return visitCount >= 3;
         }).length;
-        const percentage3Plus = totalDoctors > 0 ? Math.round((visited3Plus / totalDoctors) * 100) : 0;
         
+        const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
+        
+        // Coverage Reach: Percentage of all doctors visited at least once
+        const totalDoctorsInList = doctors.length;
         const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName?.toLowerCase()} ${e.lastName?.toLowerCase()}`));
-        const actualVisitedCount = visitedDoctorNames.size;
-        const percentageReach = totalDoctors > 0 ? Math.round((actualVisitedCount / totalDoctors) * 100) : 0;
+        const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
+            doctors.some(d => `${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}` === name)
+        ).length;
+        const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
             const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
@@ -248,8 +258,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         incentiveDays.total = validIncentiveDays.size;
 
         return {
-            completedHighFreq: { actual: visited3Plus, total: totalDoctors, percentage: percentage3Plus },
-            coverageReach: { actual: actualVisitedCount, total: totalDoctors, percentage: percentageReach },
+            completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
+            coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
             totalWorkingDays,
@@ -399,7 +409,7 @@ Summary:
                         <StatCard 
                             title="Call Concentration (3x)" 
                             value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)`} 
-                            description="Doctors who reached target of at least 3 visits." 
+                            description="Doctors with 3x+ target who reached at least 3 visits." 
                             icon={Target}
                             color="text-primary"
                             bgColor="bg-primary/10"
