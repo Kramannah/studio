@@ -315,11 +315,19 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
     }, [entries]);
     
     useEffect(() => {
-        if (selectedMonth) {
-            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-            const start = startOfMonth(monthDate);
-            const end = endOfMonth(monthDate);
-            setAppliedRange({ start, end });
+        if (selectedMonth && selectedMonth !== 'all') {
+            try {
+                const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+                if (isValid(monthDate)) {
+                    const start = startOfMonth(monthDate);
+                    const end = endOfMonth(monthDate);
+                    setAppliedRange({ start, end });
+                } else {
+                    setAppliedRange({});
+                }
+            } catch (e) {
+                setAppliedRange({});
+            }
         } else {
             setAppliedRange({});
         }
@@ -573,9 +581,11 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
     };
 
     const handleSendEmail = () => {
-        const dateRangeString = selectedMonth
-            ? `for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}`
-            : "for All Time";
+        const dateRangeString = selectedMonth === 'all'
+            ? "for All Time"
+            : (isValid(parse(selectedMonth, 'yyyy-MM', new Date())) 
+                ? `for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}`
+                : "for Selected Period");
 
         const subject = `Submitted Coverage Report - ${dateRangeString}`;
         
@@ -616,9 +626,11 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
                     <div>
                         <CardTitle className="font-headline">Submitted Coverage</CardTitle>
                         <CardDescription>
-                            {selectedMonth
-                                ? `Showing reports for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}.`
-                                : "A log of all your submitted coverage reports."
+                            {selectedMonth === 'all'
+                                ? "A log of all your submitted coverage reports."
+                                : (isValid(parse(selectedMonth, 'yyyy-MM', new Date())) 
+                                    ? `Showing reports for ${format(parse(selectedMonth, 'yyyy-MM', new Date()), 'MMMM yyyy')}.`
+                                    : "A log of your submitted coverage reports.")
                             }
                         </CardDescription>
                     </div>
@@ -641,6 +653,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
                                 <SelectValue placeholder="Select a month" />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="all">All Time</SelectItem>
                                 {availableMonths.map(month => (
                                     <SelectItem key={month} value={month}>
                                         {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
