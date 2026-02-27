@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isBefore, isSameDay, isValid, startOfWeek, addDays, getWeekOfMonth, endOfMonth, getHours, set, startOfMonth, isToday, parse } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package } from "lucide-react";
+import { Calendar as CalendarIcon, Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Sparkles, Loader2, Package, Search } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
@@ -297,6 +297,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
     const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
     const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const [viewMode, setViewMode] = useState<ViewMode>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -358,7 +359,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
     };
     
     const filteredEntries = useMemo(() => {
-        let sortedEntries = [...entries].sort((a, b) => {
+        let results = [...entries].sort((a, b) => {
             const dateA = typeof a.submittedAt === 'string' ? parseISO(a.submittedAt) : a.submittedAt;
             const dateB = typeof b.submittedAt === 'string' ? parseISO(b.submittedAt) : b.submittedAt;
             if (!isValid(dateA)) return 1;
@@ -366,17 +367,26 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
             return dateB.getTime() - dateA.getTime();
         });
 
-        if (!appliedRange.start || !appliedRange.end) {
-            return sortedEntries;
+        if (appliedRange.start && appliedRange.end) {
+            const start = startOfDay(appliedRange.start);
+            const end = endOfDay(appliedRange.end);
+            results = results.filter(e => {
+                const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+                return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
+            });
         }
 
-        const start = startOfDay(appliedRange.start);
-        const end = endOfDay(appliedRange.end);
-        return sortedEntries.filter(e => {
-            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-            return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
-        });
-    }, [entries, appliedRange]);
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            results = results.filter(e => 
+                `${e.firstName} ${e.lastName}`.toLowerCase().includes(query) ||
+                e.clinic?.toLowerCase().includes(query) ||
+                e.specialty?.toLowerCase().includes(query)
+            );
+        }
+
+        return results;
+    }, [entries, appliedRange, searchQuery]);
     
     useEffect(() => {
         setSelectedEntryIds([]);
@@ -456,7 +466,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
 
 
     const entriesByDate = useMemo(() => {
-        return entries.reduce((acc, entry) => {
+        return filteredEntries.reduce((acc, entry) => {
             const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             if (!isValid(submittedDate)) {
                 return acc;
@@ -468,7 +478,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
             acc[date].push(entry);
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
-    }, [entries]);
+    }, [filteredEntries]);
     
     const selectedDayEntries = useMemo(() => {
         if (!selectedDate) return [];
@@ -613,6 +623,15 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
                         </CardDescription>
                     </div>
                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative w-full sm:w-[250px]">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Search MD or Clinic..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-9 h-9"
+                            />
+                        </div>
                         <div className="flex items-center gap-1 p-1 border rounded-lg bg-muted">
                             <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')}><List/></Button>
                             <Button variant={viewMode === 'calendar' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('calendar')}><CalendarViewIcon/></Button>
@@ -701,7 +720,7 @@ export function SubmittedList({ entries, doctors, onDelete, onDeleteBulk, onEdit
                                     <TableBody>
                                     <TableRow>
                                         <TableCell colSpan={isAdminView ? 8 : 7} className="h-24 text-center">
-                                        No submitted entries found for the selected date range.
+                                        No submitted entries found matching your criteria.
                                         </TableCell>
                                     </TableRow>
                                     </TableBody>
