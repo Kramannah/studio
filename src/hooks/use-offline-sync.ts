@@ -48,12 +48,11 @@ export const useOfflineSync = (userId?: string) => {
       return;
     }
     try {
-      // Limit to last 100 entries for faster initial load
-      // Removed orderBy to avoid index requirement and prevent "Failed to load" errors
+      // Fetch all user entries to ensure summaries (Call Concentration, Reach, etc.) are accurate.
+      // Removed limit(100) to ensure "syncing" to summary is complete.
       const q = query(
         collection(db, "coverageEntries"), 
-        where("userId", "==", userId),
-        limit(100)
+        where("userId", "==", userId)
       );
       const querySnapshot = await getDocs(q);
       const entries: CoverageEntry[] = [];
@@ -61,7 +60,7 @@ export const useOfflineSync = (userId?: string) => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
       
-      // Sort in memory to avoid index requirements
+      // Sort in memory to avoid index requirements and ensure latest entries are shown first.
       entries.sort((a, b) => {
           const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
           const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
