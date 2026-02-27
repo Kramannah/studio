@@ -312,6 +312,37 @@ Summary:
         a.click();
     };
 
+    const handleDownloadExcel = () => {
+        const summaryData = [
+            { Category: "Call Performance", Metric: "Call Rate", Result: `${insights.callRate.actual}/${insights.callRate.total}`, Percentage: `${insights.callRate.percentage}%` },
+            { Category: "Call Performance", Metric: "Call Concentration (3x)", Result: `${insights.completedHighFreq.actual}/${insights.completedHighFreq.total}`, Percentage: `${insights.completedHighFreq.percentage}%` },
+            { Category: "Call Performance", Metric: "Call Reach", Result: `${insights.coverageReach.actual}/${insights.coverageReach.total}`, Percentage: `${insights.coverageReach.percentage}%` },
+            { Category: "Daily Activity", Metric: "Avg Calls / Day", Result: insights.avgCallsPerDay, Percentage: "" },
+            { Category: "Daily Activity", Metric: "Total Working Days", Result: insights.totalWorkingDays, Percentage: "" },
+            { Category: "Daily Activity", Metric: "Inbase Days", Result: insights.totalInbaseDays, Percentage: "" },
+            { Category: "Daily Activity", Metric: "Outbase Days", Result: insights.totalOutbaseDays, Percentage: "" },
+            { Category: "HR Attendance", Metric: "Total Incentive Days", Result: insights.incentiveDays.total, Percentage: "" },
+            { Category: "HR Attendance", Metric: "In-Base Incentive Days", Result: insights.incentiveDays.inBase, Percentage: "" },
+            { Category: "HR Attendance", Metric: "Out-Base Incentive Days", Result: insights.incentiveDays.outBase, Percentage: "" },
+        ];
+
+        const productsData = insights.topProducts.map(p => ({ Product: p.name, Mentions: p.count }));
+        const specialtiesData = insights.topSpecialties.map(s => ({ Specialty: s.name, Visits: s.count }));
+
+        const workbook = XLSX.utils.book_new();
+        
+        const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary Metrics");
+
+        const productsSheet = XLSX.utils.json_to_sheet(productsData);
+        XLSX.utils.book_append_sheet(workbook, productsSheet, "Top Products");
+
+        const specialtiesSheet = XLSX.utils.json_to_sheet(specialtiesData);
+        XLSX.utils.book_append_sheet(workbook, specialtiesSheet, "Top Specialties");
+
+        XLSX.writeFile(workbook, `call_summary_${selectedMonth}_report.xlsx`);
+    };
+
 
     if (entries.length === 0 && doctors.length === 0) {
         return (
@@ -350,6 +381,7 @@ Summary:
                                     ))}
                                 </SelectContent>
                             </Select>
+                            <Button variant="outline" onClick={handleDownloadExcel}><Download className="mr-2"/> Download Excel</Button>
                             <Button onClick={handleSendEmail}><Send className="mr-2"/> Send via Email</Button>
                         </div>
                     </div>
