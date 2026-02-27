@@ -2,13 +2,12 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { parseISO, isValid } from "date-fns";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -61,7 +60,7 @@ export function useAdminData(managerId?: string) {
             let allDocsData: any[] = [];
 
             if (userIds === null) { // Admin fetching all
-                const q = query(collection(db, collName), limit(1000));
+                const q = query(collection(db, collName));
                 const snapshot = await getDocs(q);
                 allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } else { // Manager fetching for team
@@ -71,7 +70,7 @@ export function useAdminData(managerId?: string) {
                 }
 
                 const promises = chunks.map(chunk => {
-                    const q = query(collection(db, collName), where("userId", "in", chunk), limit(500));
+                    const q = query(collection(db, collName), where("userId", "in", chunk));
                     return getDocs(q);
                 });
 
@@ -136,12 +135,11 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            // Increased limits to ensure summaries are more accurate for the current month.
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), limit(1000)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), limit(500)));
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), limit(300)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), limit(1000)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
 
             const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
@@ -242,7 +240,6 @@ export function useAdminData(managerId?: string) {
 
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
-        // Removed strict limits for individual user view to ensure full month syncing to summary
         const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
             getDocs(q(collections.allEntries)),
             getDocs(q(collections.allDoctors)),
