@@ -3,8 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, isThisMonth, parseISO, isToday, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek, isSameWeek } from "date-fns"
-import { Save, ChevronDown, Camera, Trash2, X, ImagePlus, Edit, Upload, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
+import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek, isSameWeek } from "date-fns"
+import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -28,13 +28,12 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignatureDialog } from "./signature-dialog"
-import type { CoverageEntry, Doctor, Plan, MarketingSample, PlanningPermissionRequest } from "@/lib/types"
+import type { CoverageEntry, Doctor, MarketingSample, PlanningPermissionRequest, Plan } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Autocomplete } from "./autocomplete"
-import { Label } from "./ui/label"
 import { ScrollArea } from "./ui/scroll-area"
 import { Calendar } from "./ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
@@ -175,11 +174,6 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
-const getReminderSampleOptions = (marketingSamples: MarketingSample[]) => (productName?: string) => {
-    if (!productName) return [];
-    return marketingSamples.filter(s => s.productGroup === productName);
-};
-
 export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate, planningRequests }: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -240,7 +234,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   const secondaryProduct = form.watch("secondaryProduct");
   const reminderProducts = form.watch("reminderProducts");
   const plannedDoctorId = form.watch("plannedDoctorId");
-  const reminderSampleOptions = useMemo(() => getReminderSampleOptions(marketingSamples), [marketingSamples]);
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
@@ -253,14 +246,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
   }, [secondaryProduct, marketingSamples]);
 
   useEffect(() => {
-    form.setValue("primarySampleName", undefined);
-    form.setValue("primaryProductQty", 0);
-  }, [primaryProduct, form]);
+    if (!isSubmitting) {
+        form.setValue("primarySampleName", "");
+        form.setValue("primaryProductQty", 0);
+    }
+  }, [primaryProduct, form, isSubmitting]);
 
   useEffect(() => {
-    form.setValue("secondarySampleName", undefined);
-    form.setValue("secondaryProductQty", 0);
-  }, [secondaryProduct, form]);
+    if (!isSubmitting) {
+        form.setValue("secondarySampleName", "");
+        form.setValue("secondaryProductQty", 0);
+    }
+  }, [secondaryProduct, form, isSubmitting]);
   
   useEffect(() => {
     if (proofMethod === 'photo') {
@@ -443,48 +440,54 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       const newCoverageDate = values.coverageDate || new Date();
 
       if (!isEditMode) {
+        // Optimized single-pass check for frequency and duplicates
+        const docFirstNameLower = values.firstName?.toLowerCase();
+        const docLastNameLower = values.lastName?.toLowerCase();
+        
         const doctorInMasterlist = doctors.find(
           (d) =>
-            d.firstName.toLowerCase() === values.firstName?.toLowerCase() &&
-            d.lastName.toLowerCase() === values.lastName?.toLowerCase()
+            d.firstName.toLowerCase() === docFirstNameLower &&
+            d.lastName.toLowerCase() === docLastNameLower
         );
         
-        if (doctorInMasterlist) {
-            const frequency = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
-            
-            const coveragesInMonth = allEntries.filter(entry => {
-              const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
-              return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
-                     entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-                     isValid(entryCoverageDate) && isSameMonth(entryCoverageDate, newCoverageDate);
-            }).length;
-      
-            if (coveragesInMonth >= frequency) {
-              toast({
-                variant: "destructive",
-                title: "Submission Limit Reached",
-                description: `${values.firstName} ${values.lastName} has already met the monthly coverage frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM yyyy')}.`,
-              });
-              setIsSubmitting(false);
-              return; 
+        let coveragesInMonth = 0;
+        let alreadyCoveredToday = false;
+
+        for (const entry of allEntries) {
+            if (entry.firstName?.toLowerCase() === docFirstNameLower && entry.lastName?.toLowerCase() === docLastNameLower) {
+                const entryDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+                if (entryDate && isValid(entryDate)) {
+                    if (isSameMonth(entryDate, newCoverageDate)) {
+                        coveragesInMonth++;
+                    }
+                    if (isSameDay(entryDate, newCoverageDate)) {
+                        alreadyCoveredToday = true;
+                    }
+                }
             }
         }
-
-        const alreadyCoveredToday = allEntries.some(entry => {
-            const entryCoverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : new Date(0);
-            return entry.firstName?.toLowerCase() === values.firstName?.toLowerCase() &&
-                   entry.lastName?.toLowerCase() === values.lastName?.toLowerCase() &&
-                   isValid(entryCoverageDate) && isSameDay(entryCoverageDate, newCoverageDate);
-        });
 
         if (alreadyCoveredToday) {
             toast({
                 variant: "destructive",
                 title: "Duplicate Coverage",
-                description: `A coverage report for Dr. ${values.firstName} ${values.lastName} has already been submitted for ${format(newCoverageDate, 'PPP')}.`,
+                description: `A report for Dr. ${values.firstName} ${values.lastName} has already been submitted for today.`,
             });
             setIsSubmitting(false);
             return;
+        }
+
+        if (doctorInMasterlist) {
+            const freqTarget = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
+            if (coveragesInMonth >= freqTarget) {
+              toast({
+                variant: "destructive",
+                title: "Submission Limit Reached",
+                description: `${values.firstName} ${values.lastName} has met the frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM')}.`,
+              });
+              setIsSubmitting(false);
+              return; 
+            }
         }
       }
 
@@ -494,7 +497,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
               id: entryToEdit.id,
               coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
           });
-          toast({ title: "Update Successful", description: "Your changes to the coverage report have been saved." });
+          toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
           onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
           setIsSubmitting(false);
@@ -518,7 +521,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       onFormSubmit?.(savedOnline);
     } catch (error) {
       console.error("Submission failed", error);
-      toast({ variant: 'destructive', title: 'Submission Error', description: 'An unexpected error occurred. Please try again.' });
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'Please check your connection and try again.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -530,12 +533,12 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     <>
     <Card className="h-full flex flex-col">
         <CardHeader>
-            <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage Event' : 'Log New Coverage Event'}</CardTitle>
-            <CardDescription>{isEditMode ? 'Update the details for this coverage event below.' : 'Select the call type and fill in the details below.'}</CardDescription>
+            <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage' : 'Log Coverage'}</CardTitle>
+            <CardDescription>{isEditMode ? 'Update details below.' : 'Fill in the details below.'}</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
-            <div className="p-1 pr-6">
+            <div className="p-1 pr-6 pb-10">
               <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
                   {!isEditMode && (
@@ -562,20 +565,12 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                     className="flex gap-4 pt-2"
                                     >
                                     <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                        <RadioGroupItem value="planned" />
-                                        </FormControl>
-                                        <FormLabel className="font-normal text-sm">
-                                        Planned Call
-                                        </FormLabel>
+                                        <FormControl><RadioGroupItem value="planned" /></FormControl>
+                                        <FormLabel className="font-normal text-sm">Planned Call</FormLabel>
                                     </FormItem>
                                     <FormItem className="flex items-center space-x-3 space-y-0">
-                                        <FormControl>
-                                        <RadioGroupItem value="unplanned" />
-                                        </FormControl>
-                                        <FormLabel className="font-normal text-sm">
-                                        Unplanned Call
-                                        </FormLabel>
+                                        <FormControl><RadioGroupItem value="unplanned" /></FormControl>
+                                        <FormLabel className="font-normal text-sm">Unplanned Call</FormLabel>
                                     </FormItem>
                                     </RadioGroup>
                                 </FormControl>
@@ -631,7 +626,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                       value={autocompleteValue}
                                       onChange={handleAutocompleteChange}
                                       onSelect={handleAutocompleteSelect}
-                                      placeholder="Type to search for a doctor from your masterlist..."
+                                      placeholder="Search masterlist..."
                                       disabled={isEditMode}
                                   />
                                   <FormMessage>{form.formState.errors.firstName?.message}</FormMessage>
@@ -645,9 +640,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">First Name</FormLabel>
-                                      <FormControl>
-                                          <Input placeholder="John" {...field} disabled/>
-                                      </FormControl>
+                                      <FormControl><Input {...field} disabled/></FormControl>
                                   </FormItem>
                                   )}
                               />
@@ -657,9 +650,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Last Name</FormLabel>
-                                      <FormControl>
-                                          <Input placeholder="Doe" {...field} disabled/>
-                                      </FormControl>
+                                      <FormControl><Input {...field} disabled/></FormControl>
                                   </FormItem>
                                   )}
                               />
@@ -669,9 +660,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Specialty</FormLabel>
-                                      <FormControl>
-                                          <Input placeholder="Cardiology" {...field} disabled/>
-                                      </FormControl>
+                                      <FormControl><Input {...field} disabled/></FormControl>
                                   </FormItem>
                                   )}
                               />
@@ -681,9 +670,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Clinic</FormLabel>
-                                      <FormControl>
-                                          <Input placeholder="Community General Hospital" {...field} disabled/>
-                                      </FormControl>
+                                      <FormControl><Input {...field} disabled/></FormControl>
                                   </FormItem>
                                   )}
                               />
@@ -695,9 +682,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                       <FormLabel className="font-headline">Type of Coverage</FormLabel>
                                       <Select onValueChange={field.onChange} value={field.value}>
                                       <FormControl>
-                                          <SelectTrigger>
-                                          <SelectValue placeholder="Select type" />
-                                          </SelectTrigger>
+                                          <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
                                           <SelectItem value="inbase">Inbase</SelectItem>
@@ -726,11 +711,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     !field.value && "text-muted-foreground"
                                                     )}
                                                 >
-                                                    {field.value ? (
-                                                    format(field.value, "PPP")
-                                                    ) : (
-                                                    <span>Pick a date</span>
-                                                    )}
+                                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                                                     <CalendarIcon className="w-4 h-4 ml-auto opacity-50" />
                                                 </Button>
                                                 </FormControl>
@@ -742,21 +723,14 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     onSelect={field.onChange}
                                                     disabled={(date) => {
                                                         const today = startOfToday();
-                                                        if (isAfter(date, today)) {
-                                                            return true;
-                                                        }
-                                                        if (isSameWeek(date, today, { weekStartsOn: 1 })) {
-                                                            return false;
-                                                        }
+                                                        if (isAfter(date, today)) return true;
+                                                        if (isSameWeek(date, today, { weekStartsOn: 1 })) return false;
                                                         const weekStart = startOfWeek(date, { weekStartsOn: 1 });
                                                         const matchingRequest = planningRequests?.find(req => {
                                                             const reqDate = parseISO(req.weekStartDate);
                                                             return isValid(reqDate) && isSameDay(reqDate, weekStart);
                                                         });
-                                                        if (matchingRequest?.status === 'approved') {
-                                                            return false;
-                                                        }
-                                                        return true;
+                                                        return matchingRequest?.status !== 'approved';
                                                     }}
                                                     initialFocus
                                                 />
@@ -780,9 +754,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                           render={({ field }) => (
                                               <FormItem>
                                               <FormLabel className="font-headline">Call Objective</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="e.g. Discuss new product benefits" {...field} />
-                                              </FormControl>
+                                              <FormControl><Textarea placeholder="e.g. Discuss benefits" {...field} /></FormControl>
                                               <FormMessage />
                                               </FormItem>
                                           )}
@@ -796,14 +768,10 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                   <FormLabel className="font-headline">Primary Product</FormLabel>
                                                   <Select onValueChange={field.onChange} value={field.value}>
                                                       <FormControl>
-                                                          <SelectTrigger>
-                                                          <SelectValue placeholder="Select..." />
-                                                          </SelectTrigger>
+                                                          <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent>
-                                                          {productList.map(product => (
-                                                          <SelectItem key={product} value={product}>{product}</SelectItem>
-                                                          ))}
+                                                          {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                                       </SelectContent>
                                                   </Select>
                                                   <FormMessage />
@@ -818,14 +786,10 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                   <FormLabel className="font-headline">Secondary Product</FormLabel>
                                                   <Select onValueChange={field.onChange} value={field.value}>
                                                       <FormControl>
-                                                          <SelectTrigger>
-                                                          <SelectValue placeholder="Select..." />
-                                                          </SelectTrigger>
+                                                          <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent>
-                                                          {productList.map(product => (
-                                                          <SelectItem key={product} value={product}>{product}</SelectItem>
-                                                          ))}
+                                                          {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                                       </SelectContent>
                                                   </Select>
                                                   <FormMessage />
@@ -842,14 +806,10 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                       <FormLabel className="font-headline">Primary Samples</FormLabel>
                                                       <Select onValueChange={field.onChange} value={field.value} disabled={!primaryProduct}>
                                                           <FormControl>
-                                                              <SelectTrigger>
-                                                                  <SelectValue placeholder="Select sample..." />
-                                                              </SelectTrigger>
+                                                              <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
                                                           <SelectContent>
-                                                              {primarySampleOptions.map(sample => (
-                                                                  <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
-                                                              ))}
+                                                              {primarySampleOptions.map(s => <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>)}
                                                           </SelectContent>
                                                       </Select>
                                                       <FormMessage />
@@ -862,9 +822,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Quantity</FormLabel>
-                                                  <FormControl>
-                                                      <Input type="number" placeholder="0" {...field} />
-                                                  </FormControl>
+                                                  <FormControl><Input type="number" {...field} /></FormControl>
                                                   <FormMessage />
                                                   </FormItem>
                                               )}
@@ -879,14 +837,10 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                       <FormLabel className="font-headline">Secondary Samples</FormLabel>
                                                       <Select onValueChange={field.onChange} value={field.value} disabled={!secondaryProduct}>
                                                           <FormControl>
-                                                              <SelectTrigger>
-                                                                  <SelectValue placeholder="Select sample..." />
-                                                              </SelectTrigger>
+                                                              <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
                                                           <SelectContent>
-                                                              {secondarySampleOptions.map(sample => (
-                                                                  <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
-                                                              ))}
+                                                              {secondarySampleOptions.map(s => <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>)}
                                                           </SelectContent>
                                                       </Select>
                                                       <FormMessage />
@@ -899,9 +853,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Quantity</FormLabel>
-                                                  <FormControl>
-                                                      <Input type="number" placeholder="0" {...field} />
-                                                  </FormControl>
+                                                  <FormControl><Input type="number" {...field} /></FormControl>
                                                   <FormMessage />
                                                   </FormItem>
                                               )}
@@ -914,78 +866,52 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                 <PlusCircle className="mr-2 h-4 w-4" /> Add Product
                                             </Button>
                                         </div>
-                                        {fields.map((field, index) => {
-                                            const selectedProduct = reminderProducts?.[index]?.productName;
-                                            return (
-                                                <div key={field.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-2 border rounded-md relative">
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`reminderProducts.${index}.productName`}
-                                                        render={({ field }) => (
-                                                            <FormItem className="md:col-span-2">
-                                                            <FormLabel className="text-xs">Product</FormLabel>
-                                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                                <FormControl>
-                                                                    <SelectTrigger><SelectValue placeholder="Select product..." /></SelectTrigger>
-                                                                </FormControl>
-                                                                <SelectContent>
-                                                                    {productList.map(product => (
-                                                                        <SelectItem key={product} value={product}>{product}</SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                     <FormField
-                                                        control={form.control}
-                                                        name={`reminderProducts.${index}.sampleName`}
-                                                        render={({ field }) => (
-                                                            <FormItem className="md:col-span-2">
-                                                            <FormLabel className="text-xs">Sample</FormLabel>
-                                                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedProduct}>
-                                                                <FormControl>
-                                                                    <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
-                                                                </FormControl>
-                                                                <SelectContent>
-                                                                    {reminderSampleOptions(selectedProduct).map(sample => (
-                                                                        <SelectItem key={sample.id} value={sample.materialName}>{sample.materialName}</SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                     <FormField
-                                                        control={form.control}
-                                                        name={`reminderProducts.${index}.quantity`}
-                                                        render={({ field }) => (
-                                                            <FormItem>
-                                                            <FormLabel className="text-xs">Quantity</FormLabel>
-                                                            <FormControl>
-                                                                <Input type="number" placeholder="0" {...field} />
-                                                            </FormControl>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                    <FormField
-                                                        control={form.control}
-                                                        name={`reminderProducts.${index}.balance`}
-                                                        render={({ field }) => (
-                                                            <FormItem>
-                                                            <FormLabel className="text-xs">Balance</FormLabel>
-                                                            <FormControl>
-                                                                <Input type="number" placeholder="0" {...field} />
-                                                            </FormControl>
-                                                            </FormItem>
-                                                        )}
-                                                    />
-                                                    <Button type="button" variant="ghost" size="icon" className="absolute -top-2 -right-2 h-7 w-7" onClick={() => remove(index)}>
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            )
-                                        })}
+                                        {fields.map((field, index) => (
+                                            <div key={field.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-2 border rounded-md relative">
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`reminderProducts.${index}.productName`}
+                                                    render={({ field }) => (
+                                                        <FormItem className="md:col-span-2">
+                                                        <FormLabel className="text-xs">Product</FormLabel>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                                                            <SelectContent>
+                                                                {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                 <FormField
+                                                    control={form.control}
+                                                    name={`reminderProducts.${index}.sampleName`}
+                                                    render={({ field: f }) => (
+                                                        <FormItem className="md:col-span-2">
+                                                        <FormLabel className="text-xs">Sample</FormLabel>
+                                                        <Select onValueChange={f.onChange} value={f.value} disabled={!reminderProducts?.[index]?.productName}>
+                                                            <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                                                            <SelectContent>
+                                                                {marketingSamples.filter(s => s.productGroup === reminderProducts?.[index]?.productName).map(s => (
+                                                                    <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                 <FormField
+                                                    control={form.control}
+                                                    name={`reminderProducts.${index}.quantity`}
+                                                    render={({ field }) => (
+                                                        <FormItem><FormLabel className="text-xs">Qty</FormLabel><FormControl><Input type="number" {...field} /></FormControl></FormItem>
+                                                    )}
+                                                />
+                                                <Button type="button" variant="ghost" size="icon" className="absolute -top-2 -right-2 h-7 w-7" onClick={() => remove(index)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
                                     </div>
                                   </div>
                               </AccordionContent>
@@ -994,71 +920,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                               <AccordionTrigger className="text-lg font-semibold font-headline">Post-call Analysis</AccordionTrigger>
                               <AccordionContent className="pt-4">
                                   <div className="space-y-4">
-                                      <FormField
-                                          control={form.control}
-                                          name="topicsDiscussed"
-                                          render={({ field }) => (
-                                              <FormItem>
-                                              <FormLabel className="font-headline">Topics Discussed</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="..." {...field} />
-                                              </FormControl>
-                                              <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
-                                      <FormField
-                                          control={form.control}
-                                          name="doctorsIssue"
-                                          render={({ field }) => (
-                                              <FormItem>
-                                              <FormLabel className="font-headline">Doctor's Issue / Concern</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="..." {...field} />
-                                              </FormControl>
-                                              <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
-                                      <FormField
-                                          control={form.control}
-                                          name="planOfAction"
-                                          render={({ field }) => (
-                                              <FormItem>
-                                              <FormLabel className="font-headline">Plan of Action</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="..." {...field} />
-                                              </FormControl>
-                                              <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
-                                      <FormField
-                                          control={form.control}
-                                          name="whatWentWell"
-                                          render={({ field }) => (
-                                              <FormItem>
-                                              <FormLabel className="font-headline">What went well?</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="..." {...field} />
-                                              </FormControl>
-                                              <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
-                                      <FormField
-                                          control={form.control}
-                                          name="areasForImprovement"
-                                          render={({ field }) => (
-                                              <FormItem>
-                                              <FormLabel className="font-headline">Areas for Improvement</FormLabel>
-                                              <FormControl>
-                                                  <Textarea placeholder="..." {...field} />
-                                              </FormControl>
-                                              <FormMessage />
-                                              </FormItem>
-                                          )}
-                                      />
+                                      <FormField control={form.control} name="topicsDiscussed" render={({ field }) => (<FormItem><FormLabel>Topics Discussed</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
+                                      <FormField control={form.control} name="doctorsIssue" render={({ field }) => (<FormItem><FormLabel>Doctor's Issue</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
+                                      <FormField control={form.control} name="planOfAction" render={({ field }) => (<FormItem><FormLabel>Plan of Action</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
+                                      <FormField control={form.control} name="whatWentWell" render={({ field }) => (<FormItem><FormLabel>What went well?</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
+                                      <FormField control={form.control} name="areasForImprovement" render={({ field }) => (<FormItem><FormLabel>Areas for Improvement</FormLabel><FormControl><Textarea {...field} /></FormControl></FormItem>)} />
                                   </div>
                               </AccordionContent>
                           </AccordionItem>
@@ -1069,24 +935,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                             <FormLabel className="text-lg font-semibold font-headline">Proof of Coverage</FormLabel>
                             <Card className="mt-2">
                                 <CardContent className="p-4">
-                                    <input
-                                        type="file"
-                                        file-input-id="proof-photo"
-                                        ref={fileInputRef}
-                                        onChange={handleFileChange}
-                                        className="hidden"
-                                        accept="image/*"
-                                    />
+                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
                                     { (!photos || photos.length === 0) && !form.watch('signature') ? (
                                         <div className="grid grid-cols-2 gap-4">
-                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleUploadClick}>
-                                                <Camera className="w-8 h-8" /> 
-                                                <span>Upload Photo</span>
-                                            </Button>
-                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleSignatureButtonClick}>
-                                                <Edit className="w-8 h-8" />
-                                                <span>Capture Signature</span>
-                                            </Button>
+                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleUploadClick}><Camera className="w-8 h-8" /> <span>Upload Photo</span></Button>
+                                            <Button type="button" variant="outline" className="h-24 flex-col gap-2" onClick={handleSignatureButtonClick}><Edit className="w-8 h-8" /><span>Capture Signature</span></Button>
                                         </div>
                                     ) : (
                                         <div className="relative w-full p-2 border rounded-md min-h-[150px] flex items-center justify-center bg-muted/30">
@@ -1096,9 +949,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                             {form.watch('signature') && proofMethod === 'signature' && (
                                                 <Image src={form.watch('signature')!} alt="MD Signature" width={240} height={120} className="bg-white rounded-md p-1 border" />
                                             )}
-                                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={clearProof}>
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
+                                            <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={clearProof}><Trash2 className="w-4 h-4" /></Button>
                                         </div>
                                     )}
                                 </CardContent>
@@ -1115,15 +966,9 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                       <FormItem>
                                           <FormLabel className="font-headline">Joint Call With</FormLabel>
                                           <Select onValueChange={field.onChange} value={field.value}>
-                                          <FormControl>
-                                              <SelectTrigger>
-                                              <SelectValue placeholder="Select companion..." />
-                                              </SelectTrigger>
-                                          </FormControl>
+                                          <FormControl><SelectTrigger><SelectValue placeholder="Select companion..." /></SelectTrigger></FormControl>
                                           <SelectContent>
-                                              {jointCallRoles.map(role => (
-                                                <SelectItem key={role} value={role}>{role}</SelectItem>
-                                              ))}
+                                              {jointCallRoles.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}
                                           </SelectContent>
                                           </Select>
                                           <FormMessage />
@@ -1143,11 +988,11 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                 })}
                                             >
                                                 <Edit className="mr-2 h-4 w-4" />
-                                                {form.watch('jointCallSignature') ? `Edit ${jointCallWith || 'Companion'} Signature` : `Add ${jointCallWith || 'Companion'} Signature`}
+                                                {form.watch('jointCallSignature') ? `Edit Signature` : `Add Signature`}
                                             </Button>
                                             {form.watch('jointCallSignature') && (
                                                 <div className="p-1 border rounded-md bg-white">
-                                                    <Image src={form.watch('jointCallSignature')!} alt="Joint Call Signature" width={120} height={60} />
+                                                    <Image src={form.watch('jointCallSignature')!} alt="Joint Signature" width={120} height={60} />
                                                 </div>
                                             )}
                                         </div>
@@ -1158,17 +1003,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                       </div>
                       
                       <Button type="submit" size="lg" className="w-full font-headline" disabled={isSubmitting}>
-                          {isSubmitting ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Saving Report...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="mr-2" />
-                              {isEditMode ? 'Update Coverage Report' : 'Save Coverage Report'}
-                            </>
-                          )}
+                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
                       </Button>
                   </div>
               </form>
@@ -1179,10 +1014,14 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
     </Card>
     <SignatureDialog
         isOpen={signatureState.isOpen}
-        onOpenChange={(open) => setSignatureState(s => ({ ...s, isOpen: open }))}
-        onSave={(signatureData) => {
+        onOpenChange={(open) => {
+            setSignatureState(s => ({ ...s, isOpen: open }));
+            if (!open) form.trigger(signatureState.target!);
+        }}
+        onSave={(sig) => {
             if (signatureState.target) {
-                form.setValue(signatureState.target, signatureData, { shouldValidate: true });
+                form.setValue(signatureState.target, sig, { shouldValidate: true });
+                form.trigger(signatureState.target);
             }
         }}
         initialSignature={signatureState.initialValue}
