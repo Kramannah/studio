@@ -121,29 +121,28 @@ type CoverageFormProps = {
 }
 
 const productList = [
-  "Anti-Fungals-Difluvid",
-  "Anti-Fungals-Inox",
-  "Anti-Fungals-Ketovid",
-  "Anti-Fungals-Terbivid",
-  "Antihistamine-Ricam Syrup",
-  "Antihistamine-Ricam Tablet",
-  "Anti-Viral-Hofovir",
-  "Anti-Viral-Virest Tab",
-  "CNS/Pain-Biovid Forte",
-  "CNS/Pain-Celevid",
-  "CNS/Pain-Pengesic",
-  "Dermatology-Calazin",
-  "Dermatology-Hovicor",
-  "Endocrine-Dapavid",
-  "Endocrine-Hovideuform 500",
-  "Endocrine-Hovideuform XRS5",
-  "Gastro-Gascovid Double Action",
-  "Gastro-Hovizol",
-  "Tocovid-Tocovid 100mg",
-  "Tocovid-Tocovid 200mg",
-  "Tocovid-Tocovid 50mg",
-  "Tocovid-Tocovid D'Repair",
-  "Tocovid-Tocovid Vitality",
+  "Anti-Fungals - Difluvid",
+  "Anti-Fungals - Inox",
+  "Anti-Fungals - Terbivid",
+  "Antihistamine - Ricam Syrup",
+  "Antihistamine - Ricam Tablet",
+  "Anti-Viral - Hofovir",
+  "Anti-Viral - Virest Tab",
+  "CNS/Pain - Biovid Forte",
+  "CNS/Pain - Celevid",
+  "CNS/Pain - Pengesic",
+  "Dermatology - Calazin",
+  "Dermatology - Hovicor",
+  "Endocrine - Dapavid",
+  "Endocrine - Hovideuform 500",
+  "Endocrine - Hovideuform XR500",
+  "Gastro - Gascovid Double Action",
+  "Gastro - Hovizol",
+  "Tocovid - Tocovid 100mg",
+  "Tocovid - Tocovid 200mg",
+  "Tocovid - Tocovid 50mg",
+  "Tocovid - Tocovid D'Repair",
+  "Tocovid - Tocovid Vitality",
 ];
 
 const jointCallRoles = [
@@ -255,10 +254,12 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
 
   useEffect(() => {
     form.setValue("primarySampleName", undefined);
+    form.setValue("primaryProductQty", 0);
   }, [primaryProduct, form]);
 
   useEffect(() => {
     form.setValue("secondarySampleName", undefined);
+    form.setValue("secondaryProductQty", 0);
   }, [secondaryProduct, form]);
   
   useEffect(() => {
@@ -1070,6 +1071,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                 <CardContent className="p-4">
                                     <input
                                         type="file"
+                                        file-input-id="proof-photo"
                                         ref={fileInputRef}
                                         onChange={handleFileChange}
                                         className="hidden"
