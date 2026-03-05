@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -29,6 +30,7 @@ const DynamicSkeleton = () => (
   </div>
 );
 
+// High-performance dynamic loading for heavy components
 const CoverageForm = dynamic(() => import('@/components/coverage-form').then(mod => mod.CoverageForm), { loading: () => <DynamicSkeleton /> });
 const OfflineList = dynamic(() => import('@/components/offline-list').then(mod => mod.OfflineList), { loading: () => <DynamicSkeleton /> });
 const MasterList = dynamic(() => import('@/components/master-list').then(mod => mod.MasterList), { loading: () => <DynamicSkeleton /> });
@@ -91,6 +93,30 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   };
 
+  // Improved: Calculate real-time deduction including local/offline calls
+  const mergedUsedQuantities = useMemo(() => {
+    const quantities = { ...usedQuantities };
+    
+    // Add deductions from calls that haven't been synced to the server yet
+    offlineEntries.forEach(entry => {
+        if (entry.primarySampleName && entry.primaryProductQty) {
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+        }
+        if (entry.secondarySampleName && entry.secondaryProductQty) {
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+        }
+        if (entry.reminderProducts) {
+            entry.reminderProducts.forEach(prod => {
+                if (prod.sampleName && prod.quantity) {
+                    quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+                }
+            });
+        }
+    });
+    
+    return quantities;
+  }, [usedQuantities, offlineEntries]);
+
   const todaysPlans = useMemo(() => {
     return plans.filter(p => {
         const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
@@ -106,8 +132,6 @@ export default function Home() {
     )
   }
 
-  // Removed auto-redirect for managers to allow them to use the PMR/User view for themselves.
-  
   if (!user) {
     return <LoginPage />;
   }
@@ -122,16 +146,11 @@ export default function Home() {
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
+    // Only show overall skeleton if we are truly stuck. Otherwise, let components handle their own loading.
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage';
 
     if (isContentLoading) {
-      return (
-        <div className="space-y-4">
-          <Skeleton className="w-1/3 h-8" />
-          <Skeleton className="w-2/3 h-6" />
-          <Skeleton className="w-full h-96" />
-        </div>
-      )
+      return <DynamicSkeleton />;
     }
 
     switch (activeView) {
@@ -179,7 +198,7 @@ export default function Home() {
       case 'marketing':
         return <MarketingList 
                 samples={marketingSamples}
-                usedQuantities={usedQuantities}
+                usedQuantities={mergedUsedQuantities}
                 onAddSamplesBulk={async () => {
                     alert('Only admins can upload a masterlist.');
                     return false;
@@ -314,7 +333,7 @@ export default function Home() {
             </SidebarFooter>
           </Sidebar>
 
-          <main className="flex-1 w-full">
+          <main className="flex-1 w-full overflow-x-hidden">
             <div className="w-full h-full p-4 md:p-6">
               {renderContent()}
             </div>

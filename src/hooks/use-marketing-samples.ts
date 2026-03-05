@@ -26,6 +26,7 @@ export const useMarketingSamples = () => {
       setMarketingSamples(fetchedSamples);
 
       // Fetch all coverage entries to calculate usage
+      // We fetch all to ensure global balance is accurate
       const entriesQuery = query(collection(db, "coverageEntries"));
       const entriesSnapshot = await getDocs(entriesQuery);
       const fetchedEntries: CoverageEntry[] = [];
@@ -48,14 +49,28 @@ export const useMarketingSamples = () => {
 
   const usedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
-    allEntries.forEach(entry => {
+    
+    const processEntry = (entry: CoverageEntry) => {
+        // Sum primary
         if (entry.primarySampleName && entry.primaryProductQty) {
-            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
         }
+        // Sum secondary
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
         }
-    });
+        // Sum reminders (The missing link)
+        if (entry.reminderProducts && entry.reminderProducts.length > 0) {
+            entry.reminderProducts.forEach(prod => {
+                if (prod.sampleName && prod.quantity) {
+                    quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+                }
+            });
+        }
+    };
+
+    allEntries.forEach(processEntry);
+    
     return quantities;
   }, [allEntries]);
 
@@ -70,12 +85,14 @@ export const useAdminMarketingSamples = () => {
     try {
       const batch = writeBatch(db);
       
+      // Clear existing list first
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       querySnapshot.forEach(doc => {
           batch.delete(doc.ref);
       });
 
+      // Add new ones in safe chunks
       samplesData.forEach(sample => {
         const docRef = doc(collection(db, "marketingSamples"));
         batch.set(docRef, { 

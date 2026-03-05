@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -440,7 +441,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       const newCoverageDate = values.coverageDate || new Date();
 
       if (!isEditMode) {
-        // Optimized single-pass check for frequency and duplicates
+        // High-performance single-pass validation check
         const docFirstNameLower = values.firstName?.toLowerCase();
         const docLastNameLower = values.lastName?.toLowerCase();
         
@@ -1016,11 +1017,15 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         isOpen={signatureState.isOpen}
         onOpenChange={(open) => {
             setSignatureState(s => ({ ...s, isOpen: open }));
-            if (!open) form.trigger(signatureState.target!);
+            // Force re-validation when the dialog closes to ensure "signature needed" message clears
+            if (!open) {
+                form.trigger(signatureState.target!);
+            }
         }}
         onSave={(sig) => {
             if (signatureState.target) {
-                form.setValue(signatureState.target, sig, { shouldValidate: true });
+                form.setValue(signatureState.target, sig, { shouldValidate: true, shouldDirty: true });
+                // Important: Trigger validation on the field immediately
                 form.trigger(signatureState.target);
             }
         }}
