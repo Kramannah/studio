@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -6,7 +5,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans.tsx';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -107,14 +106,7 @@ export default function Home() {
     )
   }
 
-  if (isUserManager) {
-    router.push('/admin');
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <p>Redirecting to manager dashboard...</p>
-        </div>
-    );
-  }
+  // Removed auto-redirect for managers to allow them to use the PMR/User view for themselves.
   
   if (!user) {
     return <LoginPage />;
@@ -130,7 +122,6 @@ export default function Home() {
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
-    // Only show skeleton for the main content area, not time log loading
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage';
 
     if (isContentLoading) {
@@ -307,8 +298,8 @@ export default function Home() {
                  {hasAdminAccess && (
                   <Link href="/admin" className="w-full">
                     <Button size="sm" variant="outline" className="w-full font-headline">
-                      <ShieldCheck className="mr-2" />
-                      {isUserAdmin ? 'Admin' : 'Manager View'}
+                      <LayoutDashboard className="mr-2" />
+                      {isUserAdmin ? 'Admin View' : 'Manager View'}
                     </Button>
                   </Link>
                 )}

@@ -7,7 +7,14 @@ import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'SFE Offline coverage',
-  description: 'A coverage logging application',
+  description: 'A coverage logging application with offline support',
+  manifest: '/manifest.json',
+  themeColor: '#142.1 76.2% 36.3%',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'SFE Offline',
+  },
 };
 
 const ptSans = PT_Sans({
