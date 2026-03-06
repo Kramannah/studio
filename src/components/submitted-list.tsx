@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isValid, isToday, set, startOfDay, isBefore } from "date-fns";
 import Image from "next/image";
 import { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Search, AlertCircle } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Search, CircleAlert } from "lucide-react";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Button } from "./ui/button";
@@ -47,7 +47,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
     const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
 
     return (
-         <Collapsible asChild>
+         <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
             <TableBody>
             <TableRow>
                 <TableCell className="font-medium">
@@ -66,23 +66,25 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
-                    <AlertDialog>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}><Edit className="mr-2 h-4 w-4"/> Edit</DropdownMenuItem>
-                                {!readOnly && <AlertDialogTrigger asChild><DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</DropdownMenuItem></AlertDialogTrigger>}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle></AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => onDelete(entry.id)}>Delete</AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                     <CollapsibleTrigger asChild><Button variant="ghost" size="icon">{isOpen ? <ChevronUp /> : <ChevronDown />}</Button></CollapsibleTrigger>
+                    <div className="flex items-center justify-end gap-1">
+                        <AlertDialog>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}><Edit className="mr-2 h-4 w-4"/> Edit</DropdownMenuItem>
+                                    {!readOnly && <AlertDialogTrigger asChild><DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</DropdownMenuItem></AlertDialogTrigger>}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle></AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => onDelete(entry.id)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                        <CollapsibleTrigger asChild><Button variant="ghost" size="icon">{isOpen ? <ChevronUp /> : <ChevronDown />}</Button></CollapsibleTrigger>
+                    </div>
                 </TableCell>
             </TableRow>
             <CollapsibleContent asChild>
@@ -130,7 +132,7 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
       <div className="space-y-4">
         {!isNight && (
             <Alert>
-                <AlertCircle className="h-4 w-4" />
+                <CircleAlert className="h-4 w-4" />
                 <AlertTitle>Working Mode</AlertTitle>
                 <AlertDescription>Showing today's reports only. Full weekly history will be visible after 8:00 PM.</AlertDescription>
             </Alert>

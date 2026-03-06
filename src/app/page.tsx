@@ -3,10 +3,10 @@
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
-import { usePlans } from '@/hooks/use-plans.tsx';
+import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, CloudSync } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -16,12 +16,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
-import { useTimeLogs } from "@/hooks/use-time-logs.tsx";
+import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
-import { isSyncWindowOpen } from '@/lib/utils';
+import { isSyncWindowOpen, cn } from '@/lib/utils';
 
 const DynamicSkeleton = () => (
   <div className="space-y-4">
@@ -160,7 +160,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={handleManualSync} disabled={isManualSyncing || !isOnline} className="font-headline hidden sm:flex">
-                    <CloudSync className={cn("mr-2", isManualSyncing && "animate-spin")} />
+                    <RefreshCw className={cn("mr-2", isManualSyncing && "animate-spin")} />
                     {isManualSyncing ? 'Syncing...' : 'Sync All'}
                 </Button>
                 <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
