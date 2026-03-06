@@ -6,8 +6,9 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc, getDoc, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { isToday, parseISO, isValid } from 'date-fns';
+import { isSyncWindowOpen, isCurrentWeek } from '@/lib/utils';
 
 export const useTimeLogs = () => {
   const { toast } = useToast();
@@ -16,7 +17,7 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchTimeLogs = useCallback(async () => {
+  const fetchTimeLogs = useCallback(async (forceAllWeek = false) => {
     if (!user) {
       setTimeLogs([]);
       setTodaysTimeIn(null);
@@ -32,90 +33,53 @@ export const useTimeLogs = () => {
         fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
 
-      // Sort logs by timeIn descending
-      fetchedLogs.sort((a, b) => {
-        const dateA = a.timeIn ? parseISO(a.timeIn) : null;
-        const dateB = b.timeIn ? parseISO(b.timeIn) : null;
-        if (!dateA || !isValid(dateA)) return 1;
-        if (!dateB || !isValid(dateB)) return -1;
-        return dateB.getTime() - dateA.getTime();
+      const isNightMode = forceAllWeek || isSyncWindowOpen();
+
+      const filtered = fetchedLogs.filter(log => {
+          const tDate = log.timeIn ? parseISO(log.timeIn) : null;
+          if (!tDate || !isValid(tDate)) return false;
+          
+          if (isNightMode) {
+              return isCurrentWeek(log.timeIn);
+          } else {
+              return isToday(tDate);
+          }
       });
 
-      let foundTodaysTimeIn = false;
-      for (const log of fetchedLogs) {
-        const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
-        if (!foundTodaysTimeIn && isValid(timeInDate) && isToday(timeInDate) && !log.timeOut) {
-          setTodaysTimeIn(log);
-          foundTodaysTimeIn = true;
-          break; 
-        }
-      }
-      
-      setTimeLogs(fetchedLogs);
-      if (!foundTodaysTimeIn) {
-        setTodaysTimeIn(null);
-      }
+      filtered.sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
+
+      setTodaysTimeIn(filtered.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+      setTimeLogs(filtered);
     } catch (error) {
       console.error("Error fetching time logs:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch time logs." });
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   useEffect(() => {
     fetchTimeLogs();
   }, [fetchTimeLogs]);
 
-  const addTimeIn = useCallback(async (photo: string, locationType: 'inbase' | 'outbase') => {
-    if (!user) return;
-
-    if (todaysTimeIn) {
-        toast({ variant: "destructive", title: "Already Timed In", description: "You have already timed in for today." });
-        return;
-    }
-
-    const newTimeLog = {
-      userId: user.uid,
-      timeIn: new Date().toISOString(),
-      locationType,
-      timeInPhoto: photo,
-    };
-    try {
-      const docRef = await addDoc(collection(db, "timeLogs"), newTimeLog);
-      const createdLog = { id: docRef.id, ...newTimeLog };
-      setTimeLogs(prev => [createdLog, ...prev]);
-      setTodaysTimeIn(createdLog);
-      toast({ title: "Time In Successful", description: `You have successfully timed in at ${new Date().toLocaleTimeString()}` });
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "Could not save time in." });
-    }
-  }, [user, toast, todaysTimeIn]);
-
-  const addTimeOut = useCallback(async (photo: string) => {
-    if (!user) return;
-    
-    if (!todaysTimeIn) {
-      toast({ variant: "destructive", title: "Not Timed In", description: "You must time in before you can time out." });
-      return;
-    }
-    
-    const timeLogRef = doc(db, "timeLogs", todaysTimeIn.id);
-    const timeOutData = {
-        timeOut: new Date().toISOString(),
-        timeOutPhoto: photo,
-    };
-    try {
-        await updateDoc(timeLogRef, timeOutData);
-        const updatedLog = { ...todaysTimeIn, ...timeOutData };
-        setTimeLogs(prev => prev.map(log => log.id === todaysTimeIn.id ? updatedLog : log));
-        setTodaysTimeIn(null); // Reset for next day
-        toast({ title: "Time Out Successful", description: `You have successfully timed out at ${new Date().toLocaleTimeString()}` });
-    } catch (error) {
-        toast({ variant: "destructive", title: "Error", description: "Could not save time out." });
-    }
-
-  }, [user, toast, todaysTimeIn]);
-
-  return { timeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn };
+  return { 
+      timeLogs, 
+      addTimeIn: async (photo: string, loc: 'inbase' | 'outbase') => {
+          const newLog = { userId: user?.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
+          const docRef = await addDoc(collection(db, "timeLogs"), newLog);
+          const created = { id: docRef.id, ...newLog } as TimeLog;
+          setTimeLogs(prev => [created, ...prev]);
+          setTodaysTimeIn(created);
+      }, 
+      addTimeOut: async (photo: string) => {
+          if (!todaysTimeIn) return;
+          const ref = doc(db, "timeLogs", todaysTimeIn.id);
+          const data = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
+          await updateDoc(ref, data);
+          setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...data} : l));
+          setTodaysTimeIn(null);
+      }, 
+      loading, 
+      todaysTimeIn,
+      fetchTimeLogs
+  };
 };

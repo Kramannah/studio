@@ -6,7 +6,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans.tsx';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, ShieldCheck, Notebook, ClipboardCheck, Users, LifeBuoy, LayoutDashboard } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, CloudSync } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -17,10 +17,11 @@ import { LoginPage } from "@/components/login-page";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs.tsx";
-import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
+import { isSyncWindowOpen } from '@/lib/utils';
 
 const DynamicSkeleton = () => (
   <div className="space-y-4">
@@ -30,7 +31,6 @@ const DynamicSkeleton = () => (
   </div>
 );
 
-// High-performance dynamic loading for heavy components
 const CoverageForm = dynamic(() => import('@/components/coverage-form').then(mod => mod.CoverageForm), { loading: () => <DynamicSkeleton /> });
 const OfflineList = dynamic(() => import('@/components/offline-list').then(mod => mod.OfflineList), { loading: () => <DynamicSkeleton /> });
 const MasterList = dynamic(() => import('@/components/master-list').then(mod => mod.MasterList), { loading: () => <DynamicSkeleton /> });
@@ -41,23 +41,21 @@ const MarketingList = dynamic(() => import('@/components/marketing-list').then(m
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
 
-
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
-  const router = useRouter();
   const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
   const hasAdminAccess = isUserAdmin || isUserManager;
 
-
   const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, deleteMasterEntriesBulk, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
-  const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, offlinePlanCount, planningRequests, requestPlanningPermission } = usePlans();
-  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading } = useNonCallDays();
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading } = useTimeLogs();
+  const { plans, addPlan, removePlan, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays();
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
+  
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
@@ -65,12 +63,26 @@ export default function Home() {
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   useEffect(() => {
     if (isOnline) {
       if(syncAllOfflinePlans) syncAllOfflinePlans();
     }
   }, [isOnline, syncAllOfflinePlans]);
+
+  const handleManualSync = async () => {
+      setIsManualSyncing(true);
+      await Promise.all([
+          syncAllOfflineEntries(true),
+          syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
+          refreshPlans(true),
+          fetchTimeLogs(true),
+          fetchNonCallDays(true),
+          refetchMarketingSamples()
+      ]);
+      setIsManualSyncing(false);
+  };
 
   const handleLogPlannedCall = (doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
@@ -93,27 +105,15 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   };
 
-  // Improved: Calculate real-time deduction including local/offline calls
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
-    
-    // Add deductions from calls that haven't been synced to the server yet
     offlineEntries.forEach(entry => {
-        if (entry.primarySampleName && entry.primaryProductQty) {
-            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
-        }
-        if (entry.secondarySampleName && entry.secondaryProductQty) {
-            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
-        }
-        if (entry.reminderProducts) {
-            entry.reminderProducts.forEach(prod => {
-                if (prod.sampleName && prod.quantity) {
-                    quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
-                }
-            });
-        }
+        if (entry.primarySampleName && entry.primaryProductQty) quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+        if (entry.secondarySampleName && entry.secondaryProductQty) quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+        entry.reminderProducts?.forEach(prod => {
+            if (prod.sampleName && prod.quantity) quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+        });
     });
-    
     return quantities;
   }, [usedQuantities, offlineEntries]);
 
@@ -124,116 +124,31 @@ export default function Home() {
     });
   },[plans]);
   
-  if (authLoading) {
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-        </div>
-    )
-  }
-
-  if (!user) {
-    return <LoginPage />;
-  }
+  if (authLoading) return <div className="flex items-center justify-center min-h-screen bg-background"><RefreshCw className="w-12 h-12 animate-spin text-primary" /></div>;
+  if (!user) return <LoginPage />;
 
   const handleCrmClick = () => {
     const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
-    if (!crmViews.includes(activeView)) {
-      setActiveView('planning');
-    }
+    if (!crmViews.includes(activeView)) setActiveView('planning');
   };
   
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
-    // Only show overall skeleton if we are truly stuck. Otherwise, let components handle their own loading.
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage';
-
-    if (isContentLoading) {
-      return <DynamicSkeleton />;
-    }
+    if (isContentLoading) return <DynamicSkeleton />;
 
     switch (activeView) {
-      case 'planning':
-        return <PlanningCalendar 
-                doctors={doctors} 
-                plans={plans}
-                entries={masterEntries}
-                offlineEntries={offlineEntries}
-                onAddPlan={addPlan} 
-                onRemovePlan={removePlan} 
-                onLogCall={handleLogPlannedCall}
-                nonCallDays={nonCallDays}
-                onAddNonCallDay={addNonCallDay}
-                planningRequests={planningRequests}
-                onPermissionRequest={requestPlanningPermission}
-              />;
-      case 'coverage':
-        return <CoverageForm 
-                onSave={saveEntry}
-                onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry}
-                onAddPlan={addPlan}
-                isOnline={isOnline} 
-                doctors={doctors}
-                marketingSamples={marketingSamples}
-                masterEntries={masterEntries}
-                initialDoctor={doctorToLog} 
-                onFormSubmit={handleFormSubmit}
-                todaysPlans={todaysPlans}
-                offlineEntries={offlineEntries}
-                entryToEdit={entryToEdit}
-                initialDate={plannedDateToLog}
-                planningRequests={planningRequests}
-              />;
-      case 'offline':
-        return <OfflineList 
-                entries={offlineEntries} 
-                isSyncing={isSyncing} 
-                syncAll={syncAllOfflineEntries} 
-                isOnline={isOnline}
-                onEdit={(entry) => handleEditEntry(entry, true)}
-              />;
-      case 'submitted':
-        return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onDeleteBulk={deleteMasterEntriesBulk} onEdit={(entry) => handleEditEntry(entry, false)} />;
-      case 'marketing':
-        return <MarketingList 
-                samples={marketingSamples}
-                usedQuantities={mergedUsedQuantities}
-                onAddSamplesBulk={async () => {
-                    alert('Only admins can upload a masterlist.');
-                    return false;
-                }}
-                loading={marketingSamplesLoading}
-                onRefresh={refetchMarketingSamples}
-                readOnly={true}
-              />;
-      case 'summary':
-        return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
-      case 'master':
-        return <MasterList 
-                doctors={doctors}
-                entries={masterEntries}
-                onAddDoctor={addDoctor}
-                onAddDoctorsBulk={addDoctorsBulk}
-                onUpdateDoctor={updateDoctor} 
-                onDeleteDoctor={deleteDoctor} 
-                onDeleteDoctorsBulk={deleteDoctorsBulk}
-                readOnly={false}
-              />;
-      default:
-        return null;
+      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={marketingSamples} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} />;
+      case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
+      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+      case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} onAddSamplesBulk={async () => false} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} readOnly={true} />;
+      case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
+      case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
+      default: return null;
     }
   }
-
-  const isCrmActive = [
-    'planning', 
-    'coverage', 
-    'offline', 
-    'submitted', 
-    'marketing', 
-    'summary', 
-    'master'
-  ].includes(activeView);
 
   return (
     <SidebarProvider>
@@ -243,25 +158,21 @@ export default function Home() {
               <SidebarTrigger/>
               <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={handleManualSync} disabled={isManualSyncing || !isOnline} className="font-headline hidden sm:flex">
+                    <CloudSync className={cn("mr-2", isManualSyncing && "animate-spin")} />
+                    {isManualSyncing ? 'Syncing...' : 'Sync All'}
+                </Button>
                 <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                     {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                     <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
                 </Badge>
                 {timeLogsLoading ? (
-                    <Button size="sm" variant="outline" className="font-headline" disabled>
-                        <RefreshCw className="mr-2 animate-spin"/> Loading...
-                    </Button>
+                    <Button size="sm" variant="outline" className="font-headline" disabled><RefreshCw className="mr-2 animate-spin"/> Loading...</Button>
                 ) : !todaysTimeIn ? (
-                  <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}>
-                      <LogIn className="mr-2"/>
-                      Time In
-                  </Button>
+                  <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}><LogIn className="mr-2"/>Time In</Button>
                 ) : (
-                  <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}>
-                      <LogOut className="mr-2"/>
-                      Time Out
-                  </Button>
+                  <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}><LogOut className="mr-2"/>Time Out</Button>
                 )}
             </div>
         </header>
@@ -270,89 +181,36 @@ export default function Home() {
           <Sidebar>
             <SidebarContent>
               <SidebarMenu>
-                <SidebarMenuItem isActive={isCrmActive}>
-                  <SidebarMenuButton onClick={handleCrmClick} hasSubmenu>
-                    <Notebook />
-                    CRM
-                  </SidebarMenuButton>
+                <SidebarMenuItem isActive={true}>
+                  <SidebarMenuButton onClick={handleCrmClick} hasSubmenu><Notebook />CRM</SidebarMenuButton>
                   <SidebarMenuSub>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('planning')} isActive={activeView === 'planning'}>Call Planning</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('coverage')} isActive={activeView === 'coverage'}>Call Reporting</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('planning')} isActive={activeView === 'planning'}>Call Planning</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('coverage')} isActive={activeView === 'coverage'}>Call Reporting</SidebarMenuSubButton></SidebarMenuSubItem>
                        <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('offline')} isActive={activeView === 'offline'}>
                           Offline Calls
                           {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
-                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
+                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
+                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
-                 <SidebarMenuItem>
-                   <SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}>
-                    <LifeBuoy />
-                    Helpdesk
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                 <SidebarMenuItem><SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}><LifeBuoy />Helpdesk</SidebarMenuButton></SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter>
-                <div className="flex items-center gap-2 p-2">
-                     <span className="text-sm text-muted-foreground truncate">{user.email}</span>
-                </div>
-                 {hasAdminAccess && (
-                  <Link href="/admin" className="w-full">
-                    <Button size="sm" variant="outline" className="w-full font-headline">
-                      <LayoutDashboard className="mr-2" />
-                      {isUserAdmin ? 'Admin View' : 'Manager View'}
-                    </Button>
-                  </Link>
-                )}
-              <SidebarMenu>
-                <SidebarMenuItem>
-                   <SidebarMenuButton onClick={logout}>
-                    <LogOut />
-                    Logout
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
+                 {hasAdminAccess && <Link href="/admin" className="w-full mb-2"><Button size="sm" variant="outline" className="w-full font-headline"><LayoutDashboard className="mr-2" />{isUserAdmin ? 'Admin View' : 'Manager View'}</Button></Link>}
+                 <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start"><LogOut className="mr-2" />Logout</Button>
             </SidebarFooter>
           </Sidebar>
-
-          <main className="flex-1 w-full overflow-x-hidden">
-            <div className="w-full h-full p-4 md:p-6">
-              {renderContent()}
-            </div>
-          </main>
+          <main className="flex-1 w-full overflow-x-hidden"><div className="w-full h-full p-4 md:p-6">{renderContent()}</div></main>
         </div>
       </div>
-      <TimeLogDialog 
-        isOpen={isTimeLogDialogOpen}
-        onOpenChange={setIsTimeLogDialogOpen}
-        mode={timeLogMode}
-        onTimeIn={addTimeIn}
-        onTimeOut={addTimeOut}
-      />
-      <HelpdeskDialog
-        isOpen={isHelpdeskOpen}
-        onOpenChange={setIsHelpdeskOpen}
-        adminEmail="mbustamante@hovidinc.com"
-        userEmail={user.email || ''}
-      />
+      <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />
+      <HelpdeskDialog isOpen={isHelpdeskOpen} onOpenChange={setIsHelpdeskOpen} adminEmail="mbustamante@hovidinc.com" userEmail={user.email || ''} />
     </SidebarProvider>
   );
 }
