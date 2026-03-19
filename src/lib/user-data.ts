@@ -284,5 +284,10 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         code: "CL-03",
         firstName: "Canlas",
         lastName: ""
+    },
+    "Uv9m8nch": {
+        code: "MQ-04",
+        firstName: "",
+        lastName: "Almazan",
     }
 };
