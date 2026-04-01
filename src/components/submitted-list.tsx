@@ -6,10 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isValid, isToday, set, startOfDay, isBefore } from "date-fns";
 import Image from "next/image";
-import { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash2, FileArchive, ChevronDown, ChevronUp, Edit, List, Calendar as CalendarViewIcon, Send, Search, CircleAlert } from "lucide-react";
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+import React, { useState, useMemo, useCallback } from "react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -18,6 +16,10 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { isSyncWindowOpen } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { ScrollArea } from "./ui/scroll-area";
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
@@ -29,7 +31,14 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: CoverageEntry, doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) => {
+const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }: { 
+    entry: CoverageEntry, 
+    doctors: Doctor[], 
+    onDelete: (id: string) => void, 
+    onEdit: (entry: CoverageEntry) => void, 
+    readOnly?: boolean,
+    onShowHistory: (firstName: string, lastName: string) => void
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
@@ -71,7 +80,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}><Edit className="mr-2 h-4 w-4"/> Edit</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || '', entry.lastName || '')}>
+                                        <History className="mr-2 h-4 w-4"/> Visits History
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}>
+                                        <Edit className="mr-2 h-4 w-4"/> Edit
+                                    </DropdownMenuItem>
                                     {!readOnly && <AlertDialogTrigger asChild><DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</DropdownMenuItem></AlertDialogTrigger>}
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -115,9 +129,121 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
     )
 }
 
-export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = false }: { entries: CoverageEntry[], doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) {
+function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: { 
+    doctorName: { first: string, last: string } | null, 
+    isOpen: boolean, 
+    onOpenChange: (open: boolean) => void 
+}) {
+    const [history, setHistory] = useState<CoverageEntry[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const fetchHistory = useCallback(async () => {
+        if (!doctorName) return;
+        setLoading(true);
+        try {
+            const q = query(
+                collection(db, "coverageEntries"),
+                where("firstName", "==", doctorName.first),
+                where("lastName", "==", doctorName.last),
+                orderBy("coverageDate", "desc")
+            );
+            const snapshot = await getDocs(q);
+            const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
+            setHistory(entries);
+        } catch (error) {
+            console.error("Error fetching doctor history:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [doctorName]);
+
+    React.useEffect(() => {
+        if (isOpen && doctorName) {
+            fetchHistory();
+        } else {
+            setHistory([]);
+        }
+    }, [isOpen, doctorName, fetchHistory]);
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Visits History</DialogTitle>
+                    <DialogDescription>
+                        Full coverage timeline for Dr. {doctorName?.first} {doctorName?.last}
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="flex-1 overflow-hidden mt-4">
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center h-64 gap-4">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            <p className="text-muted-foreground">Fetching past visits...</p>
+                        </div>
+                    ) : history.length > 0 ? (
+                        <ScrollArea className="h-[60vh] pr-4">
+                            <div className="space-y-4">
+                                {history.map((entry) => (
+                                    <Card key={entry.id} className="overflow-hidden">
+                                        <CardHeader className="bg-muted/30 py-3">
+                                            <div className="flex justify-between items-center">
+                                                <CardTitle className="text-sm font-headline">
+                                                    {entry.coverageDate ? format(parseISO(entry.coverageDate), "PPP") : "N/A"}
+                                                </CardTitle>
+                                                <Badge variant="outline" className="capitalize">{entry.coverageType}</Badge>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <DetailItem label="Objective" value={entry.callObjective} />
+                                                <DetailItem label="Primary Product" value={entry.primaryProduct} />
+                                                <DetailItem label="Secondary Product" value={entry.secondaryProduct} />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <DetailItem label="Issues" value={entry.doctorsIssue} />
+                                                <DetailItem label="Next Steps" value={entry.planOfAction} />
+                                                <div className="pt-2">
+                                                    <p className="text-xs font-semibold text-muted-foreground mb-1">Proof</p>
+                                                    <div className="flex gap-2">
+                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={48} height={48} className="rounded object-cover border" />}
+                                                        {entry.signature && <div className="p-1 bg-white border rounded"><Image src={entry.signature} alt="sig" width={48} height={24} /></div>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                            No other historical visits found for this provider.
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = false }: { 
+    entries: CoverageEntry[], 
+    doctors: Doctor[], 
+    onDelete: (id: string) => void, 
+    onEdit: (entry: CoverageEntry) => void, 
+    readOnly?: boolean 
+}) {
     const [searchQuery, setSearchQuery] = useState("");
+    const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    
     const isNight = isSyncWindowOpen();
+
+    const handleShowHistory = (firstName: string, lastName: string) => {
+        setHistoryDoctor({ first: firstName, last: lastName });
+        setIsHistoryOpen(true);
+    };
 
     const filtered = useMemo(() => {
         let res = [...entries];
@@ -162,7 +288,7 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                             </TableRow>
                         </TableHeader>
                         {filtered.length > 0 ? (
-                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} />)
+                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
                         ) : (
                             <TableBody><TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No reports found for this period.</TableCell></TableRow></TableBody>
                         )}
@@ -170,6 +296,12 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                 </div>
             </CardContent>
         </Card>
+
+        <DoctorHistoryDialog 
+            doctorName={historyDoctor} 
+            isOpen={isHistoryOpen} 
+            onOpenChange={setIsHistoryOpen} 
+        />
       </div>
     );
 }
