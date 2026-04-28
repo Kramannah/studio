@@ -4,6 +4,9 @@
 // for example, using a 'roles' collection in Firestore or custom claims.
 export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
+// Centralized helpdesk contact email
+export const HELPDESK_EMAIL = "mbustamante@hovidinc.com";
+
 
 // Defines which users a manager can see in their admin dashboard.
 // The key is the manager's UID, and the value is an array of their team members' UIDs.
@@ -41,8 +44,8 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "JvBQZydSDxNkZRP2vNofGXMGbGk1",
         "JvY6C2uEdPeEqoWLuqB4eYfbZqj2",
         "mZJZjTMVinNRegZFQG9FZzRjpiA2",
-        "xNTJrZ5xXwRliGvpCVXaxDwDpl32",
         "n7J3AJy6KIXQYMEil0TyQQcAxs93",
+        "xNTJrZ5xXwRliGvpCVXaxDwDpl32",
         "HmxNU3owvAPLnprYQHfjTHF0zUA3"
     ],
     "x8u4kvWvieZIVc9NdgiWmG01nts2": [
