@@ -201,10 +201,17 @@ export function useAdminData(managerId?: string) {
         const usedQuantities: Record<string, number> = {};
         combinedData.entries.forEach(entry => {
             if (entry.primarySampleName && entry.primaryProductQty) {
-                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
             }
             if (entry.secondarySampleName && entry.secondaryProductQty) {
-                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            }
+            if (entry.reminderProducts) {
+                entry.reminderProducts.forEach(prod => {
+                    if (prod.sampleName && prod.quantity) {
+                        usedQuantities[prod.sampleName] = (usedQuantities[prod.sampleName] || 0) + Number(prod.quantity);
+                    }
+                });
             }
         });
 

@@ -124,10 +124,17 @@ export default function AdminPage() {
         const quantities: Record<string, number> = {};
         selectedUserData.entries.forEach(entry => {
             if (entry.primarySampleName && entry.primaryProductQty) {
-                quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + entry.primaryProductQty;
+                quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
             }
             if (entry.secondarySampleName && entry.secondaryProductQty) {
-                quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + entry.secondaryProductQty;
+                quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            }
+            if (entry.reminderProducts) {
+                entry.reminderProducts.forEach(prod => {
+                    if (prod.sampleName && prod.quantity) {
+                        quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+                    }
+                });
             }
         });
         return quantities;

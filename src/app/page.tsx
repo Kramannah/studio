@@ -98,10 +98,14 @@ export default function Home() {
     setActiveView('coverage');
   };
 
-  const handleFormSubmit = (savedOnline: boolean) => {
+  const handleFormSubmit = async (savedOnline: boolean) => {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
+    // Force inventory refetch to ensure immediate deduction visibility
+    if (savedOnline) {
+        refetchMarketingSamples();
+    }
     setActiveView(savedOnline ? 'submitted' : 'offline');
   };
 

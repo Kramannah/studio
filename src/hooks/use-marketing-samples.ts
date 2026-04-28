@@ -59,7 +59,7 @@ export const useMarketingSamples = () => {
         if (entry.secondarySampleName && entry.secondaryProductQty) {
             quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
         }
-        // Sum reminders (The missing link)
+        // Sum reminders
         if (entry.reminderProducts && entry.reminderProducts.length > 0) {
             entry.reminderProducts.forEach(prod => {
                 if (prod.sampleName && prod.quantity) {
