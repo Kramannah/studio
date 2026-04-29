@@ -4,10 +4,10 @@
 import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isValid, isToday, set, startOfDay, isBefore } from "date-fns";
+import { format, parseISO, isValid, isToday, set, startOfDay, isBefore, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2 } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "./ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
@@ -237,6 +239,8 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState("list");
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     
     const isNight = isSyncWindowOpen();
 
@@ -245,14 +249,29 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
         setIsHistoryOpen(true);
     };
 
+    const entryDates = useMemo(() => {
+        return entries.map(e => {
+            const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+            return d && isValid(d) ? d : null;
+        }).filter((d): d is Date => d !== null);
+    }, [entries]);
+
     const filtered = useMemo(() => {
         let res = [...entries];
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             res = res.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) || e.clinic?.toLowerCase().includes(q));
         }
+
+        if (activeTab === 'calendar' && selectedDate) {
+            res = res.filter(e => {
+                const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+                return d && isSameDay(d, selectedDate);
+            });
+        }
+
         return res;
-    }, [entries, searchQuery]);
+    }, [entries, searchQuery, activeTab, selectedDate]);
 
     return (
       <div className="space-y-4">
@@ -269,31 +288,85 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                     <CardTitle className="font-headline">Submitted Reports</CardTitle>
                     <CardDescription>{isNight ? "Weekly History" : "Today's Work"}</CardDescription>
                 </div>
-                <div className="relative w-full md:w-[300px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search MD or Clinic..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <div className="relative w-full sm:w-[250px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search MD..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+                    </div>
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+                        <TabsList className="grid grid-cols-2 h-9">
+                            <TabsTrigger value="list" className="px-3"><List className="w-4 h-4 mr-2" /> List</TabsTrigger>
+                            <TabsTrigger value="calendar" className="px-3"><CalendarIcon className="w-4 h-4 mr-2" /> Calendar</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="border rounded-md">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provider</TableHead>
-                                <TableHead>Clinic</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Freq</TableHead>
-                                <TableHead>Proof</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        {filtered.length > 0 ? (
-                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                        ) : (
-                            <TableBody><TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No reports found for this period.</TableCell></TableRow></TableBody>
-                        )}
-                    </Table>
-                </div>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsContent value="list" className="mt-0">
+                        <div className="border rounded-md">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Provider</TableHead>
+                                        <TableHead>Clinic</TableHead>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Freq</TableHead>
+                                        <TableHead>Proof</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                {filtered.length > 0 ? (
+                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                ) : (
+                                    <TableBody><TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No reports found.</TableCell></TableRow></TableBody>
+                                )}
+                            </Table>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="calendar" className="mt-0">
+                        <div className="flex flex-col lg:flex-row gap-6">
+                            <div className="w-full lg:w-auto">
+                                <Calendar
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    modifiers={{ 
+                                        hasEntry: entryDates,
+                                    }}
+                                    modifiersStyles={{
+                                        hasEntry: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' }
+                                    }}
+                                    className="border rounded-md bg-card"
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <div className="mb-4">
+                                    <h3 className="text-lg font-semibold font-headline">
+                                        {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "Select a date"}
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">{filtered.length} report(s) found</p>
+                                </div>
+                                <div className="border rounded-md">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Provider</TableHead>
+                                                <TableHead>Clinic</TableHead>
+                                                <TableHead className="text-right">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        {filtered.length > 0 ? (
+                                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                        ) : (
+                                            <TableBody><TableRow><TableCell colSpan={3} className="h-32 text-center text-muted-foreground">No entries for this date.</TableCell></TableRow></TableBody>
+                                        )}
+                                    </Table>
+                                </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </CardContent>
         </Card>
 
