@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, Upload, Download, Search, Edit } from "lucide-react";
+import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "./ui/input";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -172,6 +172,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const [selectedDoctor, setSelectedDoctor] = useState<Doctor | undefined>(undefined);
     const [filter, setFilter] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+    
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
@@ -194,6 +197,17 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
             (doctor.municipality && doctor.municipality.toLowerCase().includes(filter.toLowerCase()))
         );
     }, [doctors, filter]);
+
+    const totalPages = Math.ceil(filteredDoctors.length / itemsPerPage);
+    
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filter]);
+
+    const paginatedDoctors = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredDoctors.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredDoctors, currentPage]);
 
     const frequencyCounts = useMemo(() => {
         return doctors.reduce((acc, doctor) => {
@@ -595,8 +609,8 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredDoctors.length > 0 ? (
-                                    filteredDoctors.map((doctor) => {
+                                {paginatedDoctors.length > 0 ? (
+                                    paginatedDoctors.map((doctor) => {
                                         return (
                                         <TableRow key={doctor.id} data-state={selectedIds.includes(doctor.id) ? "selected" : ""}>
                                             {!readOnly && (
@@ -686,6 +700,37 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                             </TableBody>
                         </Table>
                     </div>
+                    
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4">
+                            <p className="text-sm text-muted-foreground">
+                                Showing {Math.min(filteredDoctors.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredDoctors.length, currentPage * itemsPerPage)} of {filteredDoctors.length} doctors
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="w-4 h-4 mr-1" />
+                                    Previous
+                                </Button>
+                                <span className="text-sm font-medium">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    Next
+                                    <ChevronRight className="w-4 h-4 ml-1" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
             {!readOnly && (
@@ -699,5 +744,3 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         </>
     );
 }
-
-    

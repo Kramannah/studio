@@ -7,7 +7,7 @@ import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, User } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
 import { useMarketingSamples } from "@/hooks/use-marketing-samples";
@@ -74,34 +74,39 @@ export default function Home() {
     }
   }, [isOnline, syncAllOfflinePlans]);
 
-  const handleManualSync = async () => {
+  const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
-      await Promise.all([
-          syncAllOfflineEntries(true),
-          syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
-          refreshPlans(true),
-          fetchTimeLogs(true),
-          fetchNonCallDays(true),
-          refetchMarketingSamples()
-      ]);
-      setIsManualSyncing(false);
-  };
+      try {
+          await Promise.all([
+              syncAllOfflineEntries(true),
+              syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
+              refreshPlans(true),
+              fetchTimeLogs(true),
+              fetchNonCallDays(true),
+              refetchMarketingSamples()
+          ]);
+      } catch (e) {
+          console.error("Manual sync failed", e);
+      } finally {
+          setIsManualSyncing(false);
+      }
+  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchMarketingSamples]);
 
-  const handleLogPlannedCall = (doctor: Doctor, plannedDate: Date) => {
+  const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
     setPlannedDateToLog(plannedDate);
     setEntryToEdit(null);
     setActiveView('coverage');
-  };
+  }, []);
 
-  const handleEditEntry = (entry: CoverageEntry, isOffline: boolean = false) => {
+  const handleEditEntry = useCallback((entry: CoverageEntry, isOffline: boolean = false) => {
     setEntryToEdit({ ...entry, isOffline });
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setActiveView('coverage');
-  };
+  }, []);
 
-  const handleFormSubmit = async (savedOnline: boolean) => {
+  const handleFormSubmit = useCallback(async (savedOnline: boolean) => {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
@@ -109,7 +114,7 @@ export default function Home() {
         refetchMarketingSamples();
     }
     setActiveView(savedOnline ? 'submitted' : 'offline');
-  };
+  }, [refetchMarketingSamples]);
 
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
