@@ -1,5 +1,3 @@
-
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -12,10 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Upload, Download, RefreshCw } from "lucide-react";
+import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -31,6 +29,9 @@ type MarketingListProps = {
 
 export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readOnly = false, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
@@ -41,6 +42,18 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
       sample.materialName.toLowerCase().includes(filter.toLowerCase())
     );
   }, [samples, filter]);
+
+  // Reset to first page when filtering
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter]);
+
+  const totalPages = Math.ceil(filteredSamples.length / itemsPerPage);
+  
+  const paginatedSamples = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredSamples, currentPage]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -184,8 +197,8 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                                 <RefreshCw className="inline-block mr-2 animate-spin" /> Loading samples...
                             </TableCell>
                         </TableRow>
-                    ) : filteredSamples.length > 0 ? (
-                        filteredSamples.map((sample) => {
+                    ) : paginatedSamples.length > 0 ? (
+                        paginatedSamples.map((sample) => {
                             const used = usedQuantities[sample.materialName] || 0;
                             const balance = sample.allocationQuantity - used;
                             const isLowStock = balance <= 0;
@@ -210,6 +223,37 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                 </TableBody>
             </Table>
         </div>
+        
+        {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+                <p className="text-sm text-muted-foreground">
+                    Showing {Math.min(filteredSamples.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredSamples.length, currentPage * itemsPerPage)} of {filteredSamples.length} samples
+                </p>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                    >
+                        <ChevronLeft className="w-4 h-4 mr-1" />
+                        Previous
+                    </Button>
+                    <span className="text-sm font-medium">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                </div>
+            </div>
+        )}
       </CardContent>
     </Card>
   );
