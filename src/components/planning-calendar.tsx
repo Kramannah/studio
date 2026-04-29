@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -10,7 +9,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, ShieldQuestion, Lock, Unlock } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -23,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "./ui/tooltip";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { Checkbox } from "./ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 
 type PlanningCalendarProps = {
@@ -79,6 +79,7 @@ export function PlanningCalendar({
     const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState("calendar");
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
@@ -127,6 +128,14 @@ export function PlanningCalendar({
             return acc;
         }, {} as Record<string, NonCallDay[]>);
     }, [nonCallDays]);
+
+    const sortedAllPlans = useMemo(() => {
+        return [...plans].sort((a, b) => {
+            const dateA = typeof a.plannedDate === 'string' ? parseISO(a.plannedDate) : a.plannedDate;
+            const dateB = typeof b.plannedDate === 'string' ? parseISO(b.plannedDate) : b.plannedDate;
+            return dateA.getTime() - dateB.getTime();
+        });
+    }, [plans]);
 
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
@@ -197,7 +206,7 @@ export function PlanningCalendar({
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = doctors.find(d => d.id === plan.doctorId);
-        const plannedDate = parseISO(plan.plannedDate);
+        const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
         if (doctor && isValid(plannedDate)) {
             onLogCall(doctor, plannedDate);
         }
@@ -220,12 +229,10 @@ export function PlanningCalendar({
         const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
         const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
         
-        // Always allow planning for future weeks or the current week
         if (!isBefore(weekStartOfSelected, weekStartOfToday)) {
             return true;
         }
         
-        // For past weeks, only allow if approved
         if (currentWeekRequest?.status === 'approved') {
             return true;
         }
@@ -234,27 +241,16 @@ export function PlanningCalendar({
 
     }, [selectedDate, currentWeekRequest]);
     
-    const canLogCall = useMemo(() => {
-        if (!selectedDate) return false;
-        
-        // Allow for today or future dates.
-        if (!isBefore(selectedDate, today)) {
-            return true;
-        }
-
-        // Allow for past dates within the same week.
-        if (isSameWeek(selectedDate, today, { weekStartsOn: 1 })) {
-            return true;
-        }
-        
-        // For past weeks, only allow if an unlock request is approved.
-        if (currentWeekRequest?.status === 'approved') {
-            return true;
-        }
-
-        return false;
-
-    }, [selectedDate, today, currentWeekRequest]);
+    const canLogCallForDate = (date: Date) => {
+        if (!isBefore(date, today)) return true;
+        if (isSameWeek(date, today, { weekStartsOn: 1 })) return true;
+        const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+        const request = planningRequests?.find(req => {
+            const reqDate = parseISO(req.weekStartDate);
+            return isValid(reqDate) && isSameDay(reqDate, weekStart);
+        });
+        return request?.status === 'approved';
+    }
 
     const handlePermissionRequest = async (reason: string) => {
         if(selectedDate && onPermissionRequest) {
@@ -263,32 +259,6 @@ export function PlanningCalendar({
         }
         return false;
     };
-
-    if (doctors.length === 0 && !readOnly) {
-        return (
-            <Card>
-                <CardContent className="p-6 text-center">
-                    <p className="text-muted-foreground">You must add doctors to your masterlist before you can plan visits.</p>
-                </CardContent>
-            </Card>
-        );
-    }
-    
-    const isAddVisitDisabled = readOnly || !canPlanPlannedCalls;
-    const isAddNonCallDisabled = readOnly || !canPlanPlannedCalls;
-
-
-    const getAddVisitTitle = () => {
-        if (readOnly) return "This is a read-only view.";
-        if (!canPlanPlannedCalls) return "Planning for this week is locked.";
-        return "Add a new visit";
-    }
-
-    const getAddNonCallTitle = () => {
-        if (readOnly) return "This is a read-only view.";
-        if (!canPlanPlannedCalls) return "Planning for this week is locked.";
-        return "Log a non-call day";
-    }
 
     const renderWeekStatus = () => {
         if (!selectedDate || readOnly) return null;
@@ -303,7 +273,6 @@ export function PlanningCalendar({
             );
         }
 
-        // It's a past week, so check request status
         if (currentWeekRequest?.status === 'approved') {
             return (
                 <TooltipProvider>
@@ -338,298 +307,249 @@ export function PlanningCalendar({
             );
         }
 
-        // Status is 'rejected' or no request exists. Show clickable button.
         return (
-            <Button variant="destructive" className="capitalize" onClick={() => setIsPermissionDialogOpen(true)}>
+            <Button variant="destructive" size="sm" className="capitalize h-7 px-2 text-[10px]" onClick={() => setIsPermissionDialogOpen(true)}>
                 <Lock className="w-3 h-3 mr-1.5" />
                 Locked (Request Unlock)
             </Button>
         );
     }
 
+    const PlanTable = ({ plansToRender, showDate = false }: { plansToRender: Plan[], showDate?: boolean }) => (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    {showDate && <TableHead>Date</TableHead>}
+                    <TableHead>Doctor</TableHead>
+                    <TableHead className="hidden md:table-cell">Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {plansToRender.length > 0 ? (
+                    plansToRender.map((plan) => {
+                        const doctor = doctors.find(d => d.id === plan.doctorId);
+                        if (!doctor) return null;
+
+                        const planDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
+                        const dateString = format(planDate, 'yyyy-MM-dd');
+                        const dayEntries = entriesByDate[dateString] || [];
+                        const isCovered = dayEntries.some(entry => 
+                            entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
+                            entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
+                        );
+                        
+                        const isLogCallDisabled = readOnly || isCovered || !canLogCallForDate(planDate);
+                        const isRemovalDisabled = readOnly || isCovered;
+
+                        return (
+                        <TableRow key={plan.id}>
+                            {showDate && (
+                                <TableCell className="whitespace-nowrap text-xs font-mono">
+                                    {format(planDate, "MM/dd")}
+                                </TableCell>
+                            )}
+                            <TableCell>
+                                <Button 
+                                    variant="link" 
+                                    className="p-0 h-auto font-medium text-left text-sm"
+                                    onClick={() => handleLogCallClick(plan)}
+                                    disabled={isLogCallDisabled}
+                                >
+                                    {plan.doctorFirstName} {plan.doctorLastName}
+                                </Button>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                                <span className="text-xs text-muted-foreground">{doctor.municipality}</span>
+                            </TableCell>
+                             <TableCell>
+                                {isCovered ? (
+                                    <Badge variant="secondary" className="text-primary text-[10px] h-5 px-1.5">Covered</Badge>
+                                ) : (
+                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5">Planned</Badge>
+                                )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                                 {!readOnly && (
+                                     <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8"
+                                        onClick={() => onRemovePlan(plan.id)}
+                                        disabled={isRemovalDisabled}
+                                     >
+                                         <XCircle size={14} className="text-destructive"/>
+                                     </Button>
+                                 )}
+                            </TableCell>
+                        </TableRow>
+                    )})
+                ) : (
+                    <TableRow>
+                        <TableCell colSpan={showDate ? 5 : 4} className="h-24 text-center text-muted-foreground">
+                            No visits planned.
+                        </TableCell>
+                    </TableRow>
+                )}
+            </TableBody>
+        </Table>
+    );
+
+    if (doctors.length === 0 && !readOnly) {
+        return (
+            <Card>
+                <CardContent className="p-6 text-center">
+                    <p className="text-muted-foreground">You must add doctors to your masterlist before you can plan visits.</p>
+                </CardContent>
+            </Card>
+        );
+    }
+    
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="font-headline">Call Planning Calendar</CardTitle>
-                <CardDescription>Plan your upcoming doctor visits. Select a date to view or add plans.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-8">
-                <div className="space-y-4">
-                     <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        modifiers={{ 
-                            planned: plannedDays,
-                            nonCall: nonCallCalendarDays,
-                            weekend: { dayOfWeek: [0, 6] }
-                        }}
-                        modifiersStyles={{
-                            planned: { 
-                                border: '2px solid hsl(var(--accent))',
-                                borderRadius: 'var(--radius)',
-                            },
-                             nonCall: {
-                                backgroundColor: 'hsl(var(--destructive) / 0.2)',
-                                color: 'hsl(var(--destructive-foreground) / 0.8)',
-                            }
-                        }}
-                        components={{
-                            DayContent: ({ date, activeModifiers }) => {
-                                const dateString = format(date, 'yyyy-MM-dd');
-                                const count = plansByDate[dateString]?.length;
-                                return (
-                                    <div className="relative flex items-center justify-center w-full h-full">
-                                        {date.getDate()}
-                                        {count && !activeModifiers.nonCall && (
-                                            <Badge variant="secondary" className="absolute w-5 h-5 p-0 -top-1 -right-1 justify-center">{count}</Badge>
-                                        )}
-                                    </div>
-                                );
-                            },
-                        }}
-                        className="w-full p-4 mx-auto border rounded-md sm:w-auto"
-                    />
+        <Card className="border-none shadow-none bg-transparent">
+            <CardHeader className="px-0 pt-0">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <CardTitle className="font-headline">Call Planning</CardTitle>
+                        <CardDescription>Schedule and manage your doctor visits.</CardDescription>
+                    </div>
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="calendar" className="flex items-center gap-2">
+                                <CalendarIcon className="w-4 h-4" /> <span className="hidden sm:inline">Calendar</span>
+                            </TabsTrigger>
+                            <TabsTrigger value="list" className="flex items-center gap-2">
+                                <List className="w-4 h-4" /> <span className="hidden sm:inline">List View</span>
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
-                <div>
-                    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                        <div className="flex items-center gap-3">
-                            <h3 className="text-xl font-semibold font-headline">
-                                Plans for: {selectedDate ? format(selectedDate, "PPP") : "No date selected"}
-                            </h3>
-                            {renderWeekStatus()}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Button 
-                                variant="outline" 
-                                onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={isAddNonCallDisabled}
-                                title={getAddNonCallTitle()}
-                            >
-                                <CalendarOff className="mr-2"/>
-                                Add Non-Call Day
-                            </Button>
-                            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button disabled={isAddVisitDisabled} title={getAddVisitTitle()}>
-                                        <PlusCircle className="mr-2"/>
-                                        Add Visit
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[80vw] max-w-[60rem]">
-                                    <div className="grid gap-4">
-                                        <div className="space-y-2">
-                                            <h4 className="font-medium leading-none">Add Doctor to Plan</h4>
-                                            <p className="text-sm text-muted-foreground">
-                                                Select doctors to add to the visit plan for {selectedDate ? format(selectedDate, "PPP") : ""}.
-                                            </p>
-                                        </div>
-                                        <div className="relative">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                                            <Input
-                                                placeholder="Search doctors to add to plan..."
-                                                value={doctorFilter}
-                                                onChange={(e) => setDoctorFilter(e.target.value)}
-                                                className="pl-10"
-                                            />
-                                        </div>
-                                        <ScrollArea className="h-72">
-                                            <TooltipProvider>
-                                                <div className="border rounded-md">
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead className="w-12">
-                                                                <Checkbox 
-                                                                    checked={selectedDoctorIdsForPlan.length === filteredDoctors.length && filteredDoctors.length > 0}
-                                                                    onCheckedChange={(checked) => {
-                                                                        if (checked) {
-                                                                            setSelectedDoctorIdsForPlan(filteredDoctors.map(d => d.id));
-                                                                        } else {
-                                                                            setSelectedDoctorIdsForPlan([]);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            </TableHead>
-                                                            <TableHead>Doctor</TableHead>
-                                                            <TableHead>Location</TableHead>
-                                                            <TableHead className="text-center">Target</TableHead>
-                                                            <TableHead className="text-center">Balance</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {filteredDoctors.length > 0 ? (
-                                                            filteredDoctors.map(doctor => {
+            </CardHeader>
+            <CardContent className="px-0">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsContent value="calendar" className="mt-0 space-y-6">
+                        <div className="flex flex-col lg:flex-row gap-6">
+                            <div className="w-full lg:w-auto">
+                                <Calendar
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    modifiers={{ 
+                                        planned: plannedDays,
+                                        nonCall: nonCallCalendarDays,
+                                        weekend: { dayOfWeek: [0, 6] }
+                                    }}
+                                    modifiersStyles={{
+                                        planned: { border: '2px solid hsl(var(--primary))' },
+                                        nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.1)', color: 'hsl(var(--destructive))' }
+                                    }}
+                                    components={{
+                                        DayContent: ({ date, activeModifiers }) => {
+                                            const dateString = format(date, 'yyyy-MM-dd');
+                                            const count = plansByDate[dateString]?.length;
+                                            return (
+                                                <div className="relative flex items-center justify-center w-full h-full">
+                                                    {date.getDate()}
+                                                    {count && !activeModifiers.nonCall && (
+                                                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">
+                                                            {count}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        },
+                                    }}
+                                    className="w-full p-4 border rounded-md bg-card"
+                                />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-1">
+                                        <h3 className="text-lg font-semibold font-headline">
+                                            {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                                        </h3>
+                                        {renderWeekStatus()}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => setIsNonCallDialogOpen(true)} disabled={readOnly || !canPlanPlannedCalls}>
+                                            <CalendarOff className="w-4 h-4 mr-1.5" /> Leave
+                                        </Button>
+                                        <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button size="sm" disabled={readOnly || !canPlanPlannedCalls}>
+                                                    <PlusCircle className="w-4 h-4 mr-1.5" /> Plan
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[90vw] max-w-md p-0" align="end">
+                                                <div className="p-4 space-y-4">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                        <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-9 h-9" />
+                                                    </div>
+                                                    <ScrollArea className="h-64">
+                                                        <div className="space-y-1">
+                                                            {filteredDoctors.map(doctor => {
                                                                 const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
                                                                 const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                                const targetCount = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                                const balance = Math.max(0, targetCount - visitCount);
-                                                                const isCompleted = balance === 0;
-                                                                const isAlreadyPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+                                                                const target = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                                const balance = Math.max(0, target - visitCount);
+                                                                const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
 
                                                                 return (
-                                                                    <TableRow 
-                                                                        key={doctor.id} 
-                                                                        className={cn(isCompleted && "bg-primary/10", isAlreadyPlanned && "bg-muted/50 opacity-60")}
-                                                                        data-selected={selectedDoctorIdsForPlan.includes(doctor.id)}
-                                                                    >
-                                                                        <TableCell>
+                                                                    <div key={doctor.id} className={cn("flex items-center justify-between p-2 rounded-md hover:bg-muted text-sm", isPlanned && "opacity-50")}>
+                                                                        <div className="flex items-center gap-3">
                                                                             <Checkbox 
                                                                                 checked={selectedDoctorIdsForPlan.includes(doctor.id)}
                                                                                 onCheckedChange={(checked) => {
-                                                                                    if (checked) {
-                                                                                        setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
-                                                                                    } else {
-                                                                                        setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
-                                                                                    }
+                                                                                    if (checked) setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
+                                                                                    else setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
                                                                                 }}
-                                                                                disabled={isAlreadyPlanned}
+                                                                                disabled={isPlanned}
                                                                             />
-                                                                        </TableCell>
-                                                                        <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                                        <TableCell>
-                                                                            <div className="flex flex-col">
-                                                                                <span>{doctor.municipality}, {doctor.province}</span>
-                                                                                <span className="text-xs text-muted-foreground">{doctor.placeOfPractice}</span>
+                                                                            <div>
+                                                                                <p className="font-medium">{doctor.firstName} {doctor.lastName}</p>
+                                                                                <p className="text-[10px] text-muted-foreground">{doctor.municipality}, {doctor.province}</p>
                                                                             </div>
-                                                                        </TableCell>
-                                                                        <TableCell className="text-center">{doctor.frequency}</TableCell>
-                                                                        <TableCell className="text-center">{isAlreadyPlanned ? 'Planned' : balance}</TableCell>
-                                                                    </TableRow>
+                                                                        </div>
+                                                                        <Badge variant="secondary" className="text-[10px]">{isPlanned ? 'Planned' : `Bal: ${balance}`}</Badge>
+                                                                    </div>
                                                                 )
-                                                            })
-                                                        ) : (
-                                                            <TableRow>
-                                                                <TableCell colSpan={5} className="h-24 text-center">
-                                                                    No doctors found.
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
+                                                            })}
+                                                        </div>
+                                                    </ScrollArea>
+                                                    <Button className="w-full" onClick={handleAddSelectedPlans} disabled={selectedDoctorIdsForPlan.length === 0}>
+                                                        Add {selectedDoctorIdsForPlan.length} to Schedule
+                                                    </Button>
                                                 </div>
-                                            </TooltipProvider>
-                                        </ScrollArea>
-                                        <div className="flex justify-end">
-                                            <Button
-                                                onClick={handleAddSelectedPlans}
-                                                disabled={selectedDoctorIdsForPlan.length === 0}
-                                            >
-                                                Add Selected to Plan ({selectedDoctorIdsForPlan.length})
-                                            </Button>
-                                        </div>
+                                            </PopoverContent>
+                                        </Popover>
                                     </div>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                    </div>
-                     <div className="border rounded-md">
-                        {selectedDayNonCallEntry && (
-                             <div className="flex items-center justify-between p-4 border-b">
-                                <div className="flex flex-col">
-                                    <h4 className="font-semibold">{selectedDayNonCallEntry.reason}</h4>
-                                    <p className="text-sm text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
                                 </div>
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Badge variant={selectedDayNonCallEntry.status === 'approved' ? 'secondary' : selectedDayNonCallEntry.status === 'rejected' ? 'destructive' : 'outline'} className="capitalize">
-                                                <StatusIcon status={selectedDayNonCallEntry.status} />
-                                                <span className="ml-2">{selectedDayNonCallEntry.status}</span>
-                                            </Badge>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Your non-call day request is {selectedDayNonCallEntry.status}.</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            </div>
-                        )}
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Doctor</TableHead>
-                                    <TableHead>Location</TableHead>
-                                    <TableHead>Call Type</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {selectedDayPlans.length > 0 ? (
-                                    selectedDayPlans.map((plan) => {
-                                        const doctor = doctors.find(d => d.id === plan.doctorId);
-                                        if (!doctor) return null;
-
-                                        const dayEntries = selectedDate ? entriesByDate[format(selectedDate, 'yyyy-MM-dd')] || [] : [];
-                                        const isCovered = dayEntries.some(entry => 
-                                            entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
-                                            entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
-                                        );
-                                        
-                                        const isLogCallDisabled = readOnly || isCovered || !canLogCall;
-                                        
-                                        const isRemovalDisabled = readOnly || isCovered;
-
-                                        return (
-                                        <TableRow key={plan.id}>
-                                            <TableCell>
-                                                <Button 
-                                                    variant="link" 
-                                                    className="p-0 h-auto font-medium text-left"
-                                                    onClick={() => handleLogCallClick(plan)}
-                                                    disabled={isLogCallDisabled}
-                                                    title={
-                                                        readOnly ? "This is a read-only view." :
-                                                        isCovered ? "Already covered today" :
-                                                        !canLogCall ? "Unlock this week to log past coverage." : `Log call for ${plan.doctorFirstName} ${plan.doctorLastName}`
-                                                    }
-                                                >
-                                                    {plan.doctorFirstName} {plan.doctorLastName}
-                                                </Button>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span>{doctor.municipality}</span>
-                                                    <span className="text-xs text-muted-foreground">{doctor.province}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={plan.callType === 'planned' ? 'secondary' : 'outline'} className="capitalize">{plan.callType}</Badge>
-                                            </TableCell>
-                                             <TableCell>
-                                                {isCovered ? (
-                                                    <Badge variant="secondary" className="text-primary">Covered</Badge>
-                                                ) : (
-                                                    <Badge variant="outline">Not Yet Covered</Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                 {!readOnly && (
-                                                     <Button 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        onClick={() => onRemovePlan(plan.id)}
-                                                        disabled={isRemovalDisabled}
-                                                        title={isRemovalDisabled ? "Cannot remove a plan that has already been covered." : "Remove plan"}
-                                                     >
-                                                         <XCircle size={16} className="text-destructive"/>
-                                                     </Button>
-                                                 )}
-                                            </TableCell>
-                                        </TableRow>
-                                    )})
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
-                                            {selectedDate ? "No visits planned for this date." : "Select a date to plan visits."}
-                                        </TableCell>
-                                    </TableRow>
+                                {selectedDayNonCallEntry && (
+                                     <div className="flex items-center justify-between p-3 border rounded-md bg-destructive/5">
+                                        <div>
+                                            <p className="text-sm font-bold text-destructive">{selectedDayNonCallEntry.reason}</p>
+                                            <p className="text-[10px] text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
+                                        </div>
+                                        <Badge variant="outline" className="h-6 text-[10px] capitalize gap-1.5">
+                                            <StatusIcon status={selectedDayNonCallEntry.status} /> {selectedDayNonCallEntry.status}
+                                        </Badge>
+                                    </div>
                                 )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
+                                <div className="border rounded-md bg-card">
+                                    <PlanTable plansToRender={selectedDayPlans} />
+                                </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="list" className="mt-0">
+                        <div className="border rounded-md bg-card">
+                            <PlanTable plansToRender={sortedAllPlans} showDate={true} />
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </CardContent>
             {selectedDate && <NonCallDayDialog 
                 isOpen={isNonCallDialogOpen}
@@ -646,12 +566,3 @@ export function PlanningCalendar({
         </Card>
     );
 }
-
-    
-
-    
-
-
-
-    
-
