@@ -399,7 +399,7 @@ export function PlanningCalendar({
             </div>
 
             <div className="flex flex-col xl:flex-row gap-8 items-start">
-                <div className="w-full xl:w-[500px] shrink-0">
+                <div className="w-full xl:w-[400px] shrink-0">
                     <Card className="shadow-md border-2 overflow-hidden">
                         <Calendar
                             mode="single"
@@ -419,10 +419,10 @@ export function PlanningCalendar({
                                     const dateString = format(date, 'yyyy-MM-dd');
                                     const count = plansByDate[dateString]?.length;
                                     return (
-                                        <div className="relative flex items-center justify-center w-full h-full text-lg">
+                                        <div className="relative flex items-center justify-center w-full h-full">
                                             {date.getDate()}
                                             {count && !activeModifiers.nonCall && (
-                                                <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[12px] text-primary-foreground font-black shadow-sm translate-x-1/4 -translate-y-1/4">
+                                                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-black shadow-sm">
                                                     {count}
                                                 </span>
                                             )}
@@ -430,7 +430,7 @@ export function PlanningCalendar({
                                     );
                                 },
                             }}
-                            className="w-full p-6 bg-card"
+                            className="w-full p-4 bg-card"
                         />
                     </Card>
                 </div>
