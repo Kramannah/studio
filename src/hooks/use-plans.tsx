@@ -1,14 +1,11 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { format, isSameWeek, startOfToday, isBefore, startOfWeek, isToday, parseISO, isValid } from 'date-fns';
-import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch } from 'firebase/firestore';
-import { isSyncWindowOpen, isCurrentWeek } from '@/lib/utils';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, orderBy } from 'firebase/firestore';
+import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -41,7 +38,16 @@ export const usePlans = () => {
 
     if (isOnline) {
       try {
-        const plansQuery = query(collection(db, "plans"), where("userId", "==", user.uid));
+        const startDate = getQueryStartDateISO(forceAllWeek);
+        
+        // Optimize query to only fetch relevant plans for the current period
+        const plansQuery = query(
+          collection(db, "plans"), 
+          where("userId", "==", user.uid),
+          where("plannedDate", ">=", startDate),
+          orderBy("plannedDate", "asc")
+        );
+        
         const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
@@ -54,21 +60,7 @@ export const usePlans = () => {
           allPlans.push({ id: doc.id, ...doc.data() } as Plan);
         });
 
-        const isNightMode = forceAllWeek || isSyncWindowOpen();
-
-        // Filter: Daytime = Today's plans. Nighttime = Current Week's plans.
-        const filteredPlans = allPlans.filter(p => {
-            const pDate = p.plannedDate ? parseISO(p.plannedDate) : null;
-            if (!pDate || !isValid(pDate)) return false;
-            
-            if (isNightMode) {
-                return isCurrentWeek(p.plannedDate);
-            } else {
-                return isToday(pDate);
-            }
-        });
-
-        setMasterPlans(filteredPlans);
+        setMasterPlans(allPlans);
         
         const fetchedRequests: PlanningPermissionRequest[] = [];
         requestsSnapshot.forEach((doc) => {
@@ -145,3 +137,5 @@ export const usePlans = () => {
       fetchData
   };
 };
+
+import { useAuth } from './use-auth';

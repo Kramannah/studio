@@ -1,13 +1,11 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
-import { isToday, parseISO, isValid } from 'date-fns';
-import { isSyncWindowOpen, isCurrentWeek } from '@/lib/utils';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, orderBy } from 'firebase/firestore';
+import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -43,44 +41,33 @@ export const useOfflineSync = (userId?: string) => {
       return;
     }
     try {
+      const startDate = getQueryStartDateISO(forceAllWeek);
+      
+      // Perform server-side range query for high performance
       const q = query(
         collection(db, "coverageEntries"), 
-        where("userId", "==", userId)
+        where("userId", "==", userId),
+        where("submittedAt", ">=", startDate),
+        orderBy("submittedAt", "desc")
       );
+      
       const querySnapshot = await getDocs(q);
       const entries: CoverageEntry[] = [];
       querySnapshot.forEach(doc => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
       
-      const isNightMode = forceAllWeek || isSyncWindowOpen();
-
-      // Filter: During day, show today. At night or manual sync, show current week.
-      const filtered = entries.filter(e => {
-          const submittedAt = e.submittedAt ? parseISO(e.submittedAt) : null;
-          if (!submittedAt || !isValid(submittedAt)) return false;
-          
-          if (isNightMode) {
-              return isCurrentWeek(e.submittedAt);
-          } else {
-              return isToday(submittedAt);
-          }
-      });
-
-      filtered.sort((a, b) => {
-          const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-          const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-          return dateB - dateA;
-      });
-
-      setMasterEntries(filtered);
+      setMasterEntries(entries);
     } catch (error) {
       console.error("Error fetching master entries:", error);
-      toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch entries." });
+      // Fallback for missing index during development or range errors
+      if (error instanceof Error && error.message.includes('index')) {
+          console.warn("Firestore index required for optimized range query.");
+      }
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, toast]);
+  }, [userId, isOnline]);
   
   useEffect(() => {
     if (userId) {

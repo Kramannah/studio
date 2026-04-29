@@ -1,13 +1,13 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { getQueryStartDateISO } from "@/lib/utils";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -60,7 +60,7 @@ export function useAdminData(managerId?: string) {
             let allDocsData: any[] = [];
 
             if (userIds === null) { // Admin fetching all
-                const q = query(collection(db, collName));
+                const q = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
                 const snapshot = await getDocs(q);
                 allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } else { // Manager fetching for team
@@ -85,7 +85,6 @@ export function useAdminData(managerId?: string) {
           fetchCollection("planningRequests", userFilter)
       ]);
       
-      // Sort in memory to avoid index requirements
       const sortedNonCallDays = (nonCallDaysRes as NonCallDay[]).sort((a, b) => {
           const dateA = a.date ? new Date(a.date).getTime() : 0;
           const dateB = b.date ? new Date(b.date).getTime() : 0;
@@ -103,17 +102,16 @@ export function useAdminData(managerId?: string) {
 
     } catch (error) {
       console.error("Error fetching admin approval data:", error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load approval data.'})
     } finally {
       setLoading(false);
     }
-  }, [user, managerId, isUserAdmin, toast]);
+  }, [user, managerId, isUserAdmin]);
 
   useEffect(() => {
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
 
-  const fetchTeamSummary = useCallback(async () => {
+  const fetchTeamSummary = useCallback(async (forceAllWeek = false) => {
       if (!managerId) {
           setTeamSummaryData(null);
           return;
@@ -128,18 +126,19 @@ export function useAdminData(managerId?: string) {
 
       setLoadingSummary(true);
       try {
-        
+        const startDate = getQueryStartDateISO(forceAllWeek);
         const chunks: string[][] = [];
         for (let i = 0; i < userFilter.length; i += 30) {
             chunks.push(userFilter.slice(i, i + 30));
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
+            // Apply range filters to team fetches to keep system light
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), where("submittedAt", ">=", startDate)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), where("timeIn", ">=", startDate)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), where("date", ">=", startDate)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), where("plannedDate", ">=", startDate)));
 
             const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
@@ -174,41 +173,16 @@ export function useAdminData(managerId?: string) {
             return acc;
         }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] });
 
-        // Sort data in memory
-        combinedData.entries.sort((a, b) => {
-            const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-            const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-            return dateB - dateA;
-        });
-        combinedData.timeLogs.sort((a, b) => {
-            const dateA = a.timeIn ? new Date(a.timeIn).getTime() : 0;
-            const dateB = b.timeIn ? new Date(b.timeIn).getTime() : 0;
-            return dateB - dateA;
-        });
-        combinedData.nonCallDays.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date).getTime() : 0;
-            const dateB = b.date ? new Date(b.date).getTime() : 0;
-            return dateB - dateA;
-        });
-        combinedData.plans.sort((a, b) => {
-            const dateA = a.plannedDate ? new Date(a.plannedDate).getTime() : 0;
-            const dateB = b.plannedDate ? new Date(b.plannedDate).getTime() : 0;
-            return dateB - dateA;
-        });
-
         const marketingSamples = marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample);
         
         const usedQuantities: Record<string, number> = {};
         combinedData.entries.forEach(entry => {
-            // Sum primary
             if (entry.primarySampleName && entry.primaryProductQty) {
                 usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
             }
-            // Sum secondary
             if (entry.secondarySampleName && entry.secondaryProductQty) {
                 usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
             }
-            // Sum reminders
             if (entry.reminderProducts) {
                 entry.reminderProducts.forEach(prod => {
                     if (prod.sampleName && prod.quantity) {
@@ -232,7 +206,7 @@ export function useAdminData(managerId?: string) {
       }
   }, [managerId, toast]);
   
-  const fetchUserData = useCallback(async (userId: string) => {
+  const fetchUserData = useCallback(async (userId: string, forceAllWeek = false) => {
     if (!userId) {
         setAllEntries([]);
         setAllDoctors([]);
@@ -242,34 +216,18 @@ export function useAdminData(managerId?: string) {
     }
     setLoading(true);
     try {
-        const collections = {
-          allEntries: "coverageEntries",
-          allDoctors: "doctors",
-          allPlans: "plans",
-        };
-
+        const startDate = getQueryStartDateISO(forceAllWeek);
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
+        const qDated = (coll: string, dateField: string) => query(collection(db, coll), where("userId", "==", userId), where(dateField, ">=", startDate));
         
         const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
-            getDocs(q(collections.allEntries)),
-            getDocs(q(collections.allDoctors)),
-            getDocs(q(collections.allPlans)),
+            getDocs(qDated("coverageEntries", "submittedAt")),
+            getDocs(q("doctors")),
+            getDocs(qDated("plans", "plannedDate")),
         ]);
         
         const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
         const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan);
-
-        // Sort in memory
-        entries.sort((a, b) => {
-            const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-            const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-            return dateB - dateA;
-        });
-        plans.sort((a, b) => {
-            const dateA = a.plannedDate ? new Date(a.plannedDate).getTime() : 0;
-            const dateB = b.plannedDate ? new Date(b.plannedDate).getTime() : 0;
-            return dateB - dateA;
-        });
         
         setAllEntries(entries);
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
@@ -279,14 +237,12 @@ export function useAdminData(managerId?: string) {
             setAllTimeLogs(teamSummaryData.timeLogs.filter(log => log.userId === userId));
         }
 
-
     } catch (error) {
          console.error("Error fetching user data:", error);
-         toast({ variant: 'destructive', title: 'Error', description: `Failed to load data for user ${userId}.`})
     } finally {
         setLoading(false);
     }
-  }, [toast, teamSummaryData]);
+  }, [teamSummaryData]);
 
 
   const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,9 +5,9 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { isToday, parseISO, isValid } from 'date-fns';
-import { isSyncWindowOpen, isCurrentWeek } from '@/lib/utils';
+import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
 
 export const useTimeLogs = () => {
   const { toast } = useToast();
@@ -26,30 +25,23 @@ export const useTimeLogs = () => {
     }
     setLoading(true);
     try {
-      const q = query(collection(db, "timeLogs"), where("userId", "==", user.uid));
+      const startDate = getQueryStartDateISO(forceAllWeek);
+      
+      const q = query(
+        collection(db, "timeLogs"), 
+        where("userId", "==", user.uid),
+        where("timeIn", ">=", startDate),
+        orderBy("timeIn", "desc")
+      );
+      
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
         fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
 
-      const isNightMode = forceAllWeek || isSyncWindowOpen();
-
-      const filtered = fetchedLogs.filter(log => {
-          const tDate = log.timeIn ? parseISO(log.timeIn) : null;
-          if (!tDate || !isValid(tDate)) return false;
-          
-          if (isNightMode) {
-              return isCurrentWeek(log.timeIn);
-          } else {
-              return isToday(tDate);
-          }
-      });
-
-      filtered.sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
-
-      setTodaysTimeIn(filtered.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
-      setTimeLogs(filtered);
+      setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+      setTimeLogs(fetchedLogs);
     } catch (error) {
       console.error("Error fetching time logs:", error);
     } finally {
