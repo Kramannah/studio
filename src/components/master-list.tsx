@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, UserCircle, Pill } from "lucide-react";
 import { Input } from "./ui/input";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -27,9 +27,23 @@ import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 
 type ProductKey = keyof Pick<Doctor, 'dapavid' | 'hofovir' | 'inox' | 'irinovid' | 'ondavid' | 'ricamTablet' | 'tocovid100mg' | 'tocovid200mg' | 'tocovidVitality' | 'virestCream' | 'virestTab'>;
+
+const productLabels: Record<ProductKey, string> = {
+    dapavid: "Dapavid",
+    hofovir: "Hofovir",
+    inox: "Inox",
+    irinovid: "Irinovid",
+    ondavid: "Ondavid",
+    ricamTablet: "Ricam Tablet",
+    tocovid100mg: "Tocovid 100mg",
+    tocovid200mg: "Tocovid 200mg",
+    tocovidVitality: "Tocovid Vitality",
+    virestCream: "Virest Cream",
+    virestTab: "Virest Tab",
+};
 
 const InlineInputCell = ({
   initialValue,
@@ -68,13 +82,12 @@ const InlineInputCell = ({
       onKeyDown={handleKeyDown}
       placeholder={placeholder}
       className={cn(
-        "h-8 w-full min-w-[120px] border-transparent bg-transparent px-1 transition-colors duration-300 ease-in-out hover:border-input focus:border-input focus:bg-background focus:ring-1 focus:ring-ring",
+        "h-8 w-full border-transparent bg-transparent px-1 transition-colors duration-300 ease-in-out hover:border-input focus:border-input focus:bg-background focus:ring-1 focus:ring-ring",
         className
       )}
     />
   );
 };
-
 
 const productPrescriberOptions = [
     "Non-Prescriber",
@@ -111,19 +124,21 @@ const ProductPrescriberSelect = ({ doctor, productKey, onUpdateDoctor }: { docto
     }
 
     return (
-        <Select onValueChange={handleValueChange} value={currentValue}>
-            <SelectTrigger className={cn("w-[180px]", colorClasses)}>
-                <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-                {productPrescriberOptions.map(option => (
-                    <SelectItem key={option} value={option}>{option}</SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <div className="space-y-1">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{productLabels[productKey]}</p>
+            <Select onValueChange={handleValueChange} value={currentValue}>
+                <SelectTrigger className={cn("w-full h-8 text-xs", colorClasses)}>
+                    <SelectValue placeholder="Select..." />
+                </SelectTrigger>
+                <SelectContent>
+                    {productPrescriberOptions.map(option => (
+                        <SelectItem key={option} value={option} className="text-xs">{option}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
     );
 };
-
 
 type InlineSelectProps<T> = {
     doctor: Doctor;
@@ -142,12 +157,12 @@ function InlineSelect<T extends string>({ doctor, field, options, onUpdateDoctor
 
     return (
         <Select onValueChange={handleValueChange} value={doctor[field] as string | undefined}>
-            <SelectTrigger className={cn("w-[110px]", className)}>
+            <SelectTrigger className={cn("h-8 text-xs", className)}>
                 <SelectValue placeholder={placeholder || "Select..."} />
             </SelectTrigger>
             <SelectContent>
                 {options.map(option => (
-                    <SelectItem key={String(option.value)} value={String(option.value)}>
+                    <SelectItem key={String(option.value)} value={String(option.value)} className="text-xs">
                         {option.label}
                     </SelectItem>
                 ))}
@@ -155,6 +170,162 @@ function InlineSelect<T extends string>({ doctor, field, options, onUpdateDoctor
         </Select>
     );
 }
+
+const DoctorRow = ({ 
+    doctor, 
+    onUpdateDoctor, 
+    readOnly, 
+    isSelected, 
+    onSelect 
+}: { 
+    doctor: Doctor; 
+    onUpdateDoctor: (d: Doctor) => void; 
+    readOnly: boolean; 
+    isSelected: boolean;
+    onSelect: (id: string, checked: boolean) => void;
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
+
+    const frequencyOptions = [
+        { value: '1x', label: '1x' },
+        { value: '2x', label: '2x' },
+        { value: '3x', label: '3x' },
+        { value: '4x', label: '4x' },
+    ];
+    const coverageTypeOptions = [
+        { value: 'inbase', label: 'Inbase' },
+        { value: 'outbase', label: 'Outbase' },
+    ];
+    const hacmeOptions = [
+        { value: 'YES', label: 'YES' },
+        { value: 'NO', label: 'NO' },
+    ];
+
+    return (
+        <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
+            <>
+            <TableRow className={cn(isOpen && "bg-muted/30")}>
+                {!readOnly && (
+                    <TableCell className="w-10">
+                        <Checkbox 
+                            checked={isSelected}
+                            onCheckedChange={(checked) => onSelect(doctor.id, !!checked)}
+                        />
+                    </TableCell>
+                )}
+                <TableCell className="font-medium">
+                    <div className="flex flex-col">
+                        <span>{doctor.firstName} {doctor.lastName}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{doctor.hcpCode || 'No HCP Code'}</span>
+                    </div>
+                </TableCell>
+                <TableCell>
+                    <InlineInputCell
+                        initialValue={doctor.specialty}
+                        onSave={(newValue) => onUpdateDoctor({ ...doctor, specialty: newValue })}
+                        placeholder="N/A"
+                        className="text-xs"
+                    />
+                </TableCell>
+                <TableCell className="w-24">
+                     <InlineSelect
+                        doctor={doctor}
+                        field="frequency"
+                        options={frequencyOptions}
+                        onUpdateDoctor={onUpdateDoctor}
+                        className="w-full"
+                    />
+                </TableCell>
+                <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                        {!readOnly && (
+                            <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} title="Toggle Details">
+                                {isOpen ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                            </Button>
+                        )}
+                    </div>
+                </TableCell>
+            </TableRow>
+            <CollapsibleContent asChild>
+                <TableRow className="bg-muted/10">
+                    <TableCell colSpan={readOnly ? 4 : 5} className="p-0">
+                        <div className="p-4 space-y-6">
+                            {/* Primary Details Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-tight">
+                                        <Building2 className="w-3 h-3" /> Facility Details
+                                    </div>
+                                    <InlineInputCell
+                                        initialValue={doctor.clinic}
+                                        onSave={(newValue) => onUpdateDoctor({ ...doctor, clinic: newValue })}
+                                        placeholder="Clinic/Hospital Name"
+                                        className="bg-background/50 text-xs"
+                                    />
+                                    <InlineInputCell
+                                        initialValue={doctor.placeOfPractice}
+                                        onSave={(newValue) => onUpdateDoctor({ ...doctor, placeOfPractice: newValue })}
+                                        placeholder="Place of Practice"
+                                        className="bg-background/50 text-xs"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-tight">
+                                        <MapPin className="w-3 h-3" /> Location
+                                    </div>
+                                    <p className="text-xs px-1 text-muted-foreground">
+                                        {[doctor.municipality, doctor.province].filter(Boolean).join(', ') || 'Address not set'}
+                                    </p>
+                                    <div className="flex gap-2 pt-1">
+                                        <div className="flex-1 space-y-1">
+                                            <p className="text-[10px] text-muted-foreground px-1">Coverage</p>
+                                            <InlineSelect
+                                                doctor={doctor}
+                                                field="coverageType"
+                                                options={coverageTypeOptions}
+                                                onUpdateDoctor={onUpdateDoctor}
+                                                className="w-full h-8"
+                                            />
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                             <p className="text-[10px] text-muted-foreground px-1">HACME</p>
+                                             <InlineSelect
+                                                doctor={doctor}
+                                                field="hacme"
+                                                options={hacmeOptions}
+                                                onUpdateDoctor={onUpdateDoctor}
+                                                className="w-full h-8"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col justify-end">
+                                     <Button variant="outline" size="sm" className="w-full" onClick={() => (window as any).editDoctor(doctor)}>
+                                        <Edit className="w-3 h-3 mr-2" /> Full Edit
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Product Ratings Grid */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-tight">
+                                    <Pill className="w-3 h-3" /> Product Prescriber Profile
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                                    {productKeys.map(key => (
+                                        <ProductPrescriberSelect key={key} doctor={doctor} productKey={key} onUpdateDoctor={onUpdateDoctor} />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </TableCell>
+                </TableRow>
+            </CollapsibleContent>
+            </>
+        </Collapsible>
+    );
+};
 
 type MasterListProps = {
   doctors: Doctor[];
@@ -177,16 +348,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
 
-
-    const visitCountsThisMonth = useMemo(() => {
-        return entries.reduce((acc, entry) => {
-            const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
-            acc[doctorName] = (acc[doctorName] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-    }, [entries]);
+    // Global exposure for the row-level edit button
+    useEffect(() => {
+        (window as any).editDoctor = (doctor: Doctor) => {
+            setSelectedDoctor(doctor);
+            setIsFormOpen(true);
+        };
+    }, []);
 
     const filteredDoctors = useMemo(() => {
         return doctors.filter(doctor =>
@@ -222,11 +391,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         setIsFormOpen(true);
     };
 
-    const handleEditClick = (doctor: Doctor) => {
-        setSelectedDoctor(doctor);
-        setIsFormOpen(true);
-    };
-
     const handleSaveDoctor = (doctor: Omit<Doctor, 'id'> | Doctor) => {
         if ('id' in doctor) {
             onUpdateDoctor(doctor);
@@ -254,11 +418,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                 const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
                 if (json.length < 2) {
-                    toast({
-                        variant: "destructive",
-                        title: "Empty File",
-                        description: "The Excel file is empty or has no data rows.",
-                    });
+                    toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
                     return;
                 }
 
@@ -299,19 +459,15 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                 };
 
                 if (colMap.firstName === -1 || colMap.lastName === -1) {
-                    toast({
-                        variant: "destructive",
-                        title: "Missing Required Columns",
-                        description: "Please ensure your file includes 'First Name' and 'Last Name' columns.",
-                    });
+                    toast({ variant: "destructive", title: "Missing Required Columns", description: "Please ensure your file includes 'First Name' and 'Last Name' columns." });
                     return;
                 }
 
                 const doctorsToUpload: Omit<Doctor, 'id' | 'userId'>[] = [];
+                const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
 
                 for (const row of bodyRows) {
                     const getVal = (i: number) => (i > -1 && row[i] ? String(row[i]).trim() : "");
-
                     const firstName = getVal(colMap.firstName);
                     const lastName = getVal(colMap.lastName);
                     if (!firstName || !lastName) continue;
@@ -320,63 +476,38 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     const hacmeValue = getVal(colMap.hacme).toUpperCase();
                     const coverageTypeValue = getVal(colMap.coverageType).toLowerCase();
 
-                    const doctorToUpload: Omit<Doctor, 'id' | 'userId'> = {
+                    const doctorToUpload: any = {
                         firstName,
                         lastName,
                         frequency: (["1x", "2x", "3x", "4x"].includes(frequencyValue) ? frequencyValue : "1x") as "1x" | "2x" | "3x" | "4x",
                         hacme: (["YES", "NO"].includes(hacmeValue) ? hacmeValue : "NO") as "YES" | "NO",
                     };
 
-                    const hcpCode = getVal(colMap.hcpCode);
-                    if (hcpCode) doctorToUpload.hcpCode = hcpCode;
-
-                    const specialty = getVal(colMap.specialty);
-                    if (specialty) doctorToUpload.specialty = specialty;
-
-                    const clinic = getVal(colMap.clinic);
-                    if (clinic) doctorToUpload.clinic = clinic;
-                    
-                    if (["inbase", "outbase"].includes(coverageTypeValue)) {
-                        doctorToUpload.coverageType = coverageTypeValue as 'inbase' | 'outbase';
-                    }
-                    
-                    const province = getVal(colMap.province);
-                    if (province) doctorToUpload.province = province;
-
-                    const municipality = getVal(colMap.municipality);
-                    if (municipality) doctorToUpload.municipality = municipality;
-
-                    const placeOfPractice = getVal(colMap.placeOfPractice);
-                    if (placeOfPractice) doctorToUpload.placeOfPractice = placeOfPractice;
+                    if (getVal(colMap.hcpCode)) doctorToUpload.hcpCode = getVal(colMap.hcpCode);
+                    if (getVal(colMap.specialty)) doctorToUpload.specialty = getVal(colMap.specialty);
+                    if (getVal(colMap.clinic)) doctorToUpload.clinic = getVal(colMap.clinic);
+                    if (["inbase", "outbase"].includes(coverageTypeValue)) doctorToUpload.coverageType = coverageTypeValue;
+                    if (getVal(colMap.province)) doctorToUpload.province = getVal(colMap.province);
+                    if (getVal(colMap.municipality)) doctorToUpload.municipality = getVal(colMap.municipality);
+                    if (getVal(colMap.placeOfPractice)) doctorToUpload.placeOfPractice = getVal(colMap.placeOfPractice);
 
                     productKeys.forEach(key => {
                         const productValue = getVal(colMap[key]);
-                        if(productValue) {
-                            (doctorToUpload as any)[key] = productValue;
-                        }
+                        if(productValue) doctorToUpload[key] = productValue;
                     });
 
                     doctorsToUpload.push(doctorToUpload);
                 }
 
                 if (doctorsToUpload.length === 0) {
-                    toast({
-                        variant: "destructive",
-                        title: "Upload Failed",
-                        description: "No valid doctor entries found in the file.",
-                    });
+                    toast({ variant: "destructive", title: "Upload Failed", description: "No valid doctor entries found in the file." });
                     return;
                 }
 
                 onAddDoctorsBulk(doctorsToUpload);
-
             } catch (error) {
                 console.error("Excel parse error", error);
-                toast({
-                    variant: "destructive",
-                    title: "Upload Failed",
-                    description: "Could not process your doctor master list file.",
-                });
+                toast({ variant: "destructive", title: "Upload Failed", description: "Could not process your doctor master list file." });
             } finally {
                 if (fileInputRef.current) fileInputRef.current.value = "";
             }
@@ -385,37 +516,11 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     };
 
     const handleDownloadTemplate = () => {
-        const headers = [
-            'First Name', 'Last Name', 'HCP Code', 'Specialty', 
-            'Clinic', 'Province', 'Municipality', 'Place of Practice', 
-            'Frequency', 'HACME', 'Coverage Type', 'Dapavid', 'Hofovir',
-            'Inox', 'Irinovid', 'Ondavid', 'Ricam Tablet', 'Tocovid 100mg',
-            'Tocovid 200mg', 'Tocovid Vitality', 'Virest Cream', 'Virest Tab'
-        ];
-        const sampleData = [
-            { 
-                'First Name': 'Juan', 'Last Name': 'Dela Cruz', 'HCP Code': '12345', 'Specialty': 'Cardiology',
-                'Clinic': 'Philippine Heart Center', 'Province': 'Metro Manila', 'Municipality': 'Quezon City', 
-                'Place of Practice': 'Hospital', 'Frequency': '3x', 'HACME': 'YES', 'Coverage Type': 'inbase',
-                'Dapavid': 'Rx', 'Hofovir': '', 'Inox': '', 'Irinovid': '', 'Ondavid': '', 
-                'Ricam Tablet': 'Sample', 'Tocovid 100mg': '', 'Tocovid 200mg': '', 'Tocovid Vitality': '',
-                'Virest Cream': '', 'Virest Tab': ''
-            }
-        ];
-
+        const headers = ['First Name', 'Last Name', 'HCP Code', 'Specialty', 'Clinic', 'Province', 'Municipality', 'Place of Practice', 'Frequency', 'HACME', 'Coverage Type', 'Dapavid', 'Hofovir', 'Inox', 'Irinovid', 'Ondavid', 'Ricam Tablet', 'Tocovid 100mg', 'Tocovid 200mg', 'Tocovid Vitality', 'Virest Cream', 'Virest Tab'];
+        const sampleData = [{ 'First Name': 'Juan', 'Last Name': 'Dela Cruz', 'HCP Code': '12345', 'Specialty': 'Cardiology', 'Clinic': 'Philippine Heart Center', 'Province': 'Metro Manila', 'Municipality': 'Quezon City', 'Place of Practice': 'Hospital', 'Frequency': '3x', 'HACME': 'YES', 'Coverage Type': 'inbase', 'Dapavid': 'Rx', 'Hofovir': '', 'Inox': '', 'Irinovid': '', 'Ondavid': '', 'Ricam Tablet': 'Sample', 'Tocovid 100mg': '', 'Tocovid 200mg': '', 'Tocovid Vitality': '', 'Virest Cream': '', 'Virest Tab': '' }];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
-
-        worksheet['!cols'] = [
-            { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 },
-            { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-            { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, 
-            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-            { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-            { wch: 15 }, { wch: 15 }
-        ];
-
         XLSX.writeFile(workbook, 'doctors_masterlist_template.xlsx');
     };
 
@@ -444,7 +549,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
             "Virest Cream": doctor.virestCream,
             "Virest Tab": doctor.virestTab,
         }));
-
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Doctor Masterlist");
@@ -452,40 +556,19 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     };
 
     const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filteredDoctors.map(d => d.id));
-        } else {
-            setSelectedIds([]);
-        }
+        if (checked) setSelectedIds(filteredDoctors.map(d => d.id));
+        else setSelectedIds([]);
     };
     
     const handleRowSelect = (id: string, checked: boolean) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, id]);
-        } else {
-            setSelectedIds(prev => prev.filter(i => i !== id));
-        }
+        if (checked) setSelectedIds(prev => [...prev, id]);
+        else setSelectedIds(prev => prev.filter(i => i !== id));
     };
 
     const handleDeleteSelected = () => {
         onDeleteDoctorsBulk(selectedIds);
         setSelectedIds([]);
     }
-
-    const frequencyOptions = [
-        { value: '1x', label: '1x' },
-        { value: '2x', label: '2x' },
-        { value: '3x', label: '3x' },
-        { value: '4x', label: '4x' },
-    ];
-    const coverageTypeOptions = [
-        { value: 'inbase', label: 'Inbase' },
-        { value: 'outbase', label: 'Outbase' },
-    ];
-    const hacmeOptions = [
-        { value: 'YES', label: 'YES' },
-        { value: 'NO', label: 'NO' },
-    ];
 
     return (
         <>
@@ -494,44 +577,33 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">Doctor Master List</CardTitle>
-                            <CardDescription>A complete list of all doctors in your territory.</CardDescription>
+                            <CardDescription>Territory data overview. Tap rows to view detailed product prescriber ratings.</CardDescription>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                             <Button onClick={handleDownloadExcel} variant="outline">
-                                <Download className="mr-2" />
-                                Download as Excel
+                             <Button onClick={handleDownloadExcel} variant="outline" size="sm">
+                                <Download className="mr-2 w-4 h-4" /> Export
                             </Button>
                             {!readOnly && (
                                 <>
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        onChange={handleFileChange}
-                                        className="hidden"
-                                        accept=".xlsx, .xls"
-                                    />
-                                    <Button onClick={handleDownloadTemplate} variant="outline">
-                                        <Download className="mr-2" />
-                                        Template
+                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                                    <Button onClick={handleDownloadTemplate} variant="outline" size="sm">
+                                        <Download className="mr-2 w-4 h-4" /> Template
                                     </Button>
-                                    <Button onClick={handleUploadClick}>
-                                        <Upload className="mr-2" />
-                                        Upload
+                                    <Button onClick={handleUploadClick} size="sm">
+                                        <Upload className="mr-2 w-4 h-4" /> Upload
                                     </Button>
-                                    <Button onClick={handleAddClick}>
-                                        <PlusCircle className="mr-2" />
-                                        Add Doctor
+                                    <Button onClick={handleAddClick} size="sm">
+                                        <PlusCircle className="mr-2 w-4 h-4" /> Add
                                     </Button>
                                 </>
                             )}
                         </div>
                     </div>
                     <div className="flex items-center gap-4 mt-4">
-                        <h3 className="text-sm font-semibold">Frequency Counts:</h3>
                         <div className="flex flex-wrap items-center gap-2">
                             {(Object.keys(frequencyCounts) as Array<keyof typeof frequencyCounts>).sort().map(freq => (
                                 frequencyCounts[freq] > 0 && (
-                                <Badge key={freq} variant="secondary" className="text-sm">
+                                <Badge key={freq} variant="secondary" className="text-[10px]">
                                     {freq}: <span className="ml-1 font-bold">{frequencyCounts[freq]}</span>
                                 </Badge>
                                 )
@@ -542,26 +614,24 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                         <div className="relative w-full max-w-sm">
                             <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Filter by name, specialty, or location..."
+                                placeholder="Filter by name, specialty, or clinic..."
                                 value={filter}
                                 onChange={(e) => setFilter(e.target.value)}
-                                className="pl-10"
+                                className="pl-10 h-9 text-sm"
                             />
                         </div>
                         {!readOnly && selectedIds.length > 0 && (
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="destructive">
-                                        <Trash2 className="mr-2" />
-                                        Delete Selected ({selectedIds.length})
+                                    <Button variant="destructive" size="sm">
+                                        <Trash2 className="mr-2 w-4 h-4" />
+                                        Delete ({selectedIds.length})
                                     </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This action cannot be undone. This will permanently delete {selectedIds.length} doctor(s) from your master list.
-                                        </AlertDialogDescription>
+                                        <AlertDialogDescription>This will permanently delete {selectedIds.length} doctor(s).</AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -573,138 +643,52 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="relative w-full overflow-auto border rounded-md">
+                    <div className="border rounded-md overflow-hidden">
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted hover:bg-muted">
                                     {!readOnly && (
-                                        <TableHead className="w-12">
+                                        <TableHead className="w-10">
                                             <Checkbox
-                                                checked={selectedIds.length > 0 && selectedIds.length === filteredDoctors.length}
+                                                checked={selectedIds.length > 0 && selectedIds.length === paginatedDoctors.length}
                                                 onCheckedChange={handleSelectAll}
                                             />
                                         </TableHead>
                                     )}
-                                    <TableHead>Name</TableHead>
+                                    <TableHead>Doctor</TableHead>
                                     <TableHead>Specialty</TableHead>
-                                    <TableHead>HCP Code</TableHead>
-                                    <TableHead>Clinic / Hospital</TableHead>
-                                    <TableHead>Location</TableHead>
-                                    <TableHead>Practice</TableHead>
                                     <TableHead>Target</TableHead>
-                                    <TableHead>Coverage</TableHead>
-                                    <TableHead>HACME</TableHead>
-                                    <TableHead>Dapavid</TableHead>
-                                    <TableHead>Hofovir</TableHead>
-                                    <TableHead>Inox</TableHead>
-                                    <TableHead>Irinovid</TableHead>
-                                    <TableHead>Ondavid</TableHead>
-                                    <TableHead>Ricam Tablet</TableHead>
-                                    <TableHead>Tocovid 100mg</TableHead>
-                                    <TableHead>Tocovid 200mg</TableHead>
-                                    <TableHead>Tocovid Vitality</TableHead>
-                                    <TableHead>Virest Cream</TableHead>
-                                    <TableHead>Virest Tab</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
-                            <TableBody>
-                                {paginatedDoctors.length > 0 ? (
-                                    paginatedDoctors.map((doctor) => {
-                                        return (
-                                        <TableRow key={doctor.id} data-state={selectedIds.includes(doctor.id) ? "selected" : ""}>
-                                            {!readOnly && (
-                                                <TableCell>
-                                                    <Checkbox 
-                                                        checked={selectedIds.includes(doctor.id)}
-                                                        onCheckedChange={(checked) => handleRowSelect(doctor.id, !!checked)}
-                                                    />
-                                                </TableCell>
-                                            )}
-                                            <TableCell className="font-medium">{doctor.firstName} {doctor.lastName}</TableCell>
-                                            <TableCell>
-                                                 <InlineInputCell
-                                                    initialValue={doctor.specialty}
-                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, specialty: newValue })}
-                                                    placeholder="N/A"
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <InlineInputCell
-                                                    initialValue={doctor.hcpCode}
-                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, hcpCode: newValue })}
-                                                    placeholder="N/A"
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <InlineInputCell
-                                                    initialValue={doctor.clinic}
-                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, clinic: newValue })}
-                                                    placeholder="N/A"
-                                                />
-                                            </TableCell>
-                                            <TableCell>{[doctor.municipality, doctor.province].filter(Boolean).join(', ') || 'N/A'}</TableCell>
-                                            <TableCell>
-                                                <InlineInputCell
-                                                    initialValue={doctor.placeOfPractice}
-                                                    onSave={(newValue) => onUpdateDoctor({ ...doctor, placeOfPractice: newValue })}
-                                                    placeholder="N/A"
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <InlineSelect
-                                                    doctor={doctor}
-                                                    field="frequency"
-                                                    options={frequencyOptions}
-                                                    onUpdateDoctor={onUpdateDoctor}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                 <InlineSelect
-                                                    doctor={doctor}
-                                                    field="coverageType"
-                                                    options={coverageTypeOptions}
-                                                    onUpdateDoctor={onUpdateDoctor}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <InlineSelect
-                                                    doctor={doctor}
-                                                    field="hacme"
-                                                    options={hacmeOptions}
-                                                    onUpdateDoctor={onUpdateDoctor}
-                                                    className="w-[80px]"
-                                                />
-                                            </TableCell>
-                                            {productKeys.map(key => (
-                                                <TableCell key={key}>
-                                                    <ProductPrescriberSelect doctor={doctor} productKey={key} onUpdateDoctor={onUpdateDoctor} />
-                                                </TableCell>
-                                            ))}
-                                            <TableCell className="text-right">
-                                                {!readOnly && (
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEditClick(doctor)} title="Edit Doctor Details">
-                                                        <Edit className="w-4 h-4"/>
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    )})
-                                ) : (
+                            {paginatedDoctors.length > 0 ? (
+                                paginatedDoctors.map((doctor) => (
+                                    <TableBody key={doctor.id}>
+                                        <DoctorRow 
+                                            doctor={doctor} 
+                                            onUpdateDoctor={onUpdateDoctor} 
+                                            readOnly={readOnly} 
+                                            isSelected={selectedIds.includes(doctor.id)}
+                                            onSelect={handleRowSelect}
+                                        />
+                                    </TableBody>
+                                ))
+                            ) : (
+                                <TableBody>
                                     <TableRow>
-                                        <TableCell colSpan={readOnly ? 21 : 22} className="h-24 text-center">
-                                            No doctors found.
+                                        <TableCell colSpan={readOnly ? 4 : 5} className="h-32 text-center text-muted-foreground">
+                                            No doctors found matching your filters.
                                         </TableCell>
                                     </TableRow>
-                                )}
-                            </TableBody>
+                                </TableBody>
+                            )}
                         </Table>
                     </div>
                     
                     {totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4">
-                            <p className="text-sm text-muted-foreground">
-                                Showing {Math.min(filteredDoctors.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredDoctors.length, currentPage * itemsPerPage)} of {filteredDoctors.length} doctors
+                        <div className="flex items-center justify-between mt-4 px-1">
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                                {Math.min(filteredDoctors.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredDoctors.length, currentPage * itemsPerPage)} of {filteredDoctors.length}
                             </p>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -712,21 +696,21 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     size="sm"
                                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                                     disabled={currentPage === 1}
+                                    className="h-8 w-8 p-0"
                                 >
-                                    <ChevronLeft className="w-4 h-4 mr-1" />
-                                    Previous
+                                    <ChevronLeft className="w-4 h-4" />
                                 </Button>
-                                <span className="text-sm font-medium">
-                                    Page {currentPage} of {totalPages}
+                                <span className="text-[10px] font-bold">
+                                    {currentPage} / {totalPages}
                                 </span>
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                     disabled={currentPage === totalPages}
+                                    className="h-8 w-8 p-0"
                                 >
-                                    Next
-                                    <ChevronRight className="w-4 h-4 ml-1" />
+                                    <ChevronRight className="w-4 h-4" />
                                 </Button>
                             </div>
                         </div>
