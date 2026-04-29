@@ -527,7 +527,7 @@ export function PlanningCalendar({
                                                                 </div>
                                                             </div>
                                                             <Badge variant={isPlanned ? "outline" : "secondary"} className="text-xs font-black">
-                                                                {isPlanned ? 'ALREADY PLANNED' : `BAL: ${balance}`}
+                                                                {isPlanned ? 'ALREADY PLANNED' : `Remaining Visits: ${balance}`}
                                                             </Badge>
                                                         </div>
                                                     )
