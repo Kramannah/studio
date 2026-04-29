@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -308,11 +307,11 @@ export function PlanningCalendar({
     const PlanTable = ({ plansToRender }: { plansToRender: Plan[] }) => (
         <Table>
             <TableHeader>
-                <TableRow>
-                    <TableHead>Doctor</TableHead>
-                    <TableHead className="hidden md:table-cell">Location</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="bg-muted/50">
+                    <TableHead className="font-bold">Doctor</TableHead>
+                    <TableHead className="hidden md:table-cell font-bold">Location</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -333,11 +332,11 @@ export function PlanningCalendar({
                         const isRemovalDisabled = readOnly || isCovered;
 
                         return (
-                        <TableRow key={plan.id}>
+                        <TableRow key={plan.id} className="h-16">
                             <TableCell>
                                 <Button 
                                     variant="link" 
-                                    className="p-0 h-auto font-medium text-left text-sm"
+                                    className="p-0 h-auto font-bold text-left text-base text-primary hover:no-underline"
                                     onClick={() => handleLogCallClick(plan)}
                                     disabled={isLogCallDisabled}
                                 >
@@ -345,13 +344,13 @@ export function PlanningCalendar({
                                 </Button>
                             </TableCell>
                             <TableCell className="hidden md:table-cell">
-                                <span className="text-xs text-muted-foreground">{doctor.municipality}</span>
+                                <span className="text-sm text-muted-foreground font-medium">{doctor.municipality}</span>
                             </TableCell>
                              <TableCell>
                                 {isCovered ? (
-                                    <Badge variant="secondary" className="text-primary text-[10px] h-5 px-1.5">Covered</Badge>
+                                    <Badge variant="secondary" className="text-primary text-xs h-6 px-2 font-bold">Covered</Badge>
                                 ) : (
-                                    <Badge variant="outline" className="text-[10px] h-5 px-1.5">Planned</Badge>
+                                    <Badge variant="outline" className="text-xs h-6 px-2 font-bold">Planned</Badge>
                                 )}
                             </TableCell>
                             <TableCell className="text-right">
@@ -359,11 +358,11 @@ export function PlanningCalendar({
                                      <Button 
                                         variant="ghost" 
                                         size="icon" 
-                                        className="h-8 w-8"
+                                        className="h-10 w-10"
                                         onClick={() => onRemovePlan(plan.id)}
                                         disabled={isRemovalDisabled}
                                      >
-                                         <XCircle size={14} className="text-destructive"/>
+                                         <XCircle size={18} className="text-destructive opacity-70 hover:opacity-100 transition-opacity"/>
                                      </Button>
                                  )}
                             </TableCell>
@@ -371,7 +370,7 @@ export function PlanningCalendar({
                     )})
                 ) : (
                     <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={4} className="h-32 text-center text-muted-foreground text-lg italic">
                             No visits planned for this day.
                         </TableCell>
                     </TableRow>
@@ -382,25 +381,26 @@ export function PlanningCalendar({
 
     if (doctors.length === 0 && !readOnly) {
         return (
-            <Card>
-                <CardContent className="p-6 text-center">
-                    <p className="text-muted-foreground">You must add doctors to your masterlist before you can plan visits.</p>
+            <Card className="border-2 border-dashed">
+                <CardContent className="p-12 text-center">
+                    <p className="text-xl text-muted-foreground font-headline">You must add doctors to your masterlist before you can plan visits.</p>
                 </CardContent>
             </Card>
         );
     }
     
     return (
-        <Card className="border-none shadow-none bg-transparent">
-            <CardHeader className="px-0 pt-0">
+        <div className="w-full space-y-6 animate-in fade-in duration-500">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
-                    <CardTitle className="font-headline">Call Planning</CardTitle>
-                    <CardDescription>Schedule and manage your doctor visits.</CardDescription>
+                    <h2 className="text-3xl font-bold font-headline text-primary">Call Planning</h2>
+                    <p className="text-muted-foreground text-lg">Schedule and manage your doctor visits efficiently.</p>
                 </div>
-            </CardHeader>
-            <CardContent className="px-0">
-                <div className="flex flex-col lg:flex-row gap-6">
-                    <div className="w-full lg:w-auto">
+            </div>
+
+            <div className="flex flex-col xl:flex-row gap-8 items-start">
+                <div className="w-full xl:w-[500px] shrink-0">
+                    <Card className="shadow-md border-2 overflow-hidden">
                         <Calendar
                             mode="single"
                             selected={selectedDate}
@@ -411,18 +411,18 @@ export function PlanningCalendar({
                                 weekend: { dayOfWeek: [0, 6] }
                             }}
                             modifiersStyles={{
-                                planned: { border: '2px solid hsl(var(--primary))' },
-                                nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.1)', color: 'hsl(var(--destructive))' }
+                                planned: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
+                                nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))', fontWeight: 'bold' }
                             }}
                             components={{
                                 DayContent: ({ date, activeModifiers }) => {
                                     const dateString = format(date, 'yyyy-MM-dd');
                                     const count = plansByDate[dateString]?.length;
                                     return (
-                                        <div className="relative flex items-center justify-center w-full h-full">
+                                        <div className="relative flex items-center justify-center w-full h-full text-lg">
                                             {date.getDate()}
                                             {count && !activeModifiers.nonCall && (
-                                                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold">
+                                                <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[12px] text-primary-foreground font-black shadow-sm translate-x-1/4 -translate-y-1/4">
                                                     {count}
                                                 </span>
                                             )}
@@ -430,89 +430,108 @@ export function PlanningCalendar({
                                     );
                                 },
                             }}
-                            className="w-full p-4 border rounded-md bg-card"
+                            className="w-full p-6 bg-card"
                         />
-                    </div>
-                    <div className="flex-1 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <h3 className="text-lg font-semibold font-headline">
-                                    {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
-                                </h3>
-                                {renderWeekStatus()}
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm" onClick={() => setIsNonCallDialogOpen(true)} disabled={readOnly || !canPlanPlannedCalls}>
-                                    <CalendarOff className="w-4 h-4 mr-1.5" /> Leave
-                                </Button>
-                                <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button size="sm" disabled={readOnly || !canPlanPlannedCalls}>
-                                            <PlusCircle className="w-4 h-4 mr-1.5" /> Plan
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[90vw] max-w-md p-0" align="end">
-                                        <div className="p-4 space-y-4">
-                                            <div className="relative">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                                <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-9 h-9" />
-                                            </div>
-                                            <ScrollArea className="h-64">
-                                                <div className="space-y-1">
-                                                    {filteredDoctors.map(doctor => {
-                                                        const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                                        const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                        const target = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                        const balance = Math.max(0, target - visitCount);
-                                                        const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+                    </Card>
+                </div>
 
-                                                        return (
-                                                            <div key={doctor.id} className={cn("flex items-center justify-between p-2 rounded-md hover:bg-muted text-sm", isPlanned && "opacity-50")}>
-                                                                <div className="flex items-center gap-3">
-                                                                    <Checkbox 
-                                                                        checked={selectedDoctorIdsForPlan.includes(doctor.id)}
-                                                                        onCheckedChange={(checked) => {
-                                                                            if (checked) setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
-                                                                            else setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
-                                                                        }}
-                                                                        disabled={isPlanned}
-                                                                    />
-                                                                    <div>
-                                                                        <p className="font-medium">{doctor.firstName} {doctor.lastName}</p>
-                                                                        <p className="text-[10px] text-muted-foreground">{doctor.municipality}, {doctor.province}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <Badge variant="secondary" className="text-[10px]">{isPlanned ? 'Planned' : `Bal: ${balance}`}</Badge>
-                                                            </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            </ScrollArea>
-                                            <Button className="w-full" onClick={handleAddSelectedPlans} disabled={selectedDoctorIdsForPlan.length === 0}>
-                                                Add {selectedDoctorIdsForPlan.length} to Schedule
-                                            </Button>
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                        </div>
-                        {selectedDayNonCallEntry && (
-                                <div className="flex items-center justify-between p-3 border rounded-md bg-destructive/5">
-                                <div>
-                                    <p className="text-sm font-bold text-destructive">{selectedDayNonCallEntry.reason}</p>
-                                    <p className="text-[10px] text-muted-foreground">{dayTypeLabels[selectedDayNonCallEntry.dayType]}: {selectedDayNonCallEntry.remarks}</p>
-                                </div>
-                                <Badge variant="outline" className="h-6 text-[10px] capitalize gap-1.5">
-                                    <StatusIcon status={selectedDayNonCallEntry.status} /> {selectedDayNonCallEntry.status}
+                <div className="flex-1 w-full space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
+                        <div className="space-y-1">
+                            <h3 className="text-2xl font-black font-headline tracking-tight">
+                                {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                {renderWeekStatus()}
+                                <Badge variant="outline" className="font-mono text-xs uppercase tracking-tighter">
+                                    {selectedDayPlans.length} Planned Visits
                                 </Badge>
                             </div>
-                        )}
-                        <div className="border rounded-md bg-card">
-                            <PlanTable plansToRender={selectedDayPlans} />
+                        </div>
+                        <div className="flex gap-3">
+                            <Button variant="outline" size="lg" className="h-12 px-6 font-bold" onClick={() => setIsNonCallDialogOpen(true)} disabled={readOnly || !canPlanPlannedCalls}>
+                                <CalendarOff className="w-5 h-5 mr-2" /> Leave
+                            </Button>
+                            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button size="lg" className="h-12 px-8 font-bold text-lg" disabled={readOnly || !canPlanPlannedCalls}>
+                                        <PlusCircle className="w-5 h-5 mr-2" /> Add Plan
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[90vw] max-w-lg p-0 shadow-2xl border-2" align="end">
+                                    <div className="p-5 space-y-5">
+                                        <div className="relative">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                                            <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-12 h-12 text-lg rounded-xl" />
+                                        </div>
+                                        <ScrollArea className="h-[400px] border rounded-xl p-2 bg-muted/10">
+                                            <div className="space-y-2">
+                                                {filteredDoctors.map(doctor => {
+                                                    const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                    const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                                    const target = parseInt(doctor.frequency.replace('x', ''), 10);
+                                                    const balance = Math.max(0, target - visitCount);
+                                                    const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+
+                                                    return (
+                                                        <div key={doctor.id} className={cn("flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer")}>
+                                                            <div className="flex items-center gap-4">
+                                                                <Checkbox 
+                                                                    className="h-6 w-6 rounded-md"
+                                                                    checked={selectedDoctorIdsForPlan.includes(doctor.id)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
+                                                                        else setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
+                                                                    }}
+                                                                    disabled={isPlanned}
+                                                                />
+                                                                <div onClick={() => !isPlanned && setSelectedDoctorIdsForPlan(prev => prev.includes(doctor.id) ? prev.filter(i => i !== doctor.id) : [...prev, doctor.id])}>
+                                                                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
+                                                                    <p className="text-xs text-muted-foreground font-medium uppercase">{doctor.municipality}, {doctor.province}</p>
+                                                                </div>
+                                                            </div>
+                                                            <Badge variant={isPlanned ? "outline" : "secondary"} className="text-xs font-black">
+                                                                {isPlanned ? 'ALREADY PLANNED' : `BAL: ${balance}`}
+                                                            </Badge>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </ScrollArea>
+                                        <Button className="w-full h-14 text-xl font-black rounded-xl shadow-lg" onClick={handleAddSelectedPlans} disabled={selectedDoctorIdsForPlan.length === 0}>
+                                            Add {selectedDoctorIdsForPlan.length} to Schedule
+                                        </Button>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
+
+                    {selectedDayNonCallEntry && (
+                        <div className="flex items-center justify-between p-5 border-2 rounded-xl bg-destructive/5 animate-in slide-in-from-top-4 duration-300">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-destructive/10 rounded-full">
+                                    <CalendarOff className="w-6 h-6 text-destructive" />
+                                </div>
+                                <div>
+                                    <p className="text-xl font-black text-destructive leading-tight">{selectedDayNonCallEntry.reason}</p>
+                                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                                        {dayTypeLabels[selectedDayNonCallEntry.dayType]} {selectedDayNonCallEntry.remarks ? `• ${selectedDayNonCallEntry.remarks}` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            <Badge variant="outline" className="h-10 px-4 text-sm font-bold uppercase gap-2 border-2">
+                                <StatusIcon status={selectedDayNonCallEntry.status} /> {selectedDayNonCallEntry.status}
+                            </Badge>
+                        </div>
+                    )}
+
+                    <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
+                        <PlanTable plansToRender={selectedDayPlans} />
+                    </Card>
                 </div>
-            </CardContent>
+            </div>
+
             {selectedDate && <NonCallDayDialog 
                 isOpen={isNonCallDialogOpen}
                 onOpenChange={setIsNonCallDialogOpen}
@@ -525,6 +544,6 @@ export function PlanningCalendar({
                 onConfirm={handlePermissionRequest}
                 weekStartDate={startOfWeek(selectedDate, { weekStartsOn: 1})}
             />}
-        </Card>
+        </div>
     );
 }
