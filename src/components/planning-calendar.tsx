@@ -8,7 +8,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckDouble, ClipboardList } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -146,6 +146,27 @@ export function PlanningCalendar({
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
     }, [allEntries]);
+
+    const selectedDayStats = useMemo(() => {
+        if (!selectedDate) return { total: 0, covered: 0, remaining: 0 };
+        const dateString = format(selectedDate, 'yyyy-MM-dd');
+        const dayEntries = entriesByDate[dateString] || [];
+        
+        let covered = 0;
+        selectedDayPlans.forEach(plan => {
+            const isCovered = dayEntries.some(entry => 
+                entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
+                entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
+            );
+            if (isCovered) covered++;
+        });
+
+        return {
+            total: selectedDayPlans.length,
+            covered,
+            remaining: Math.max(0, selectedDayPlans.length - covered)
+        };
+    }, [selectedDate, selectedDayPlans, entriesByDate]);
     
     const selectedDayNonCallEntry = useMemo(() => {
         if (!selectedDate) return undefined;
@@ -437,15 +458,29 @@ export function PlanningCalendar({
 
                 <div className="flex-1 w-full space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
-                        <div className="space-y-1">
+                        <div className="space-y-3">
                             <h3 className="text-2xl font-black font-headline tracking-tight">
                                 {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                             </h3>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-3">
                                 {renderWeekStatus()}
-                                <Badge variant="outline" className="font-mono text-xs uppercase tracking-tighter">
-                                    {selectedDayPlans.length} Planned Visits
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/20 bg-background/50 flex gap-2 items-center">
+                                        <ClipboardList className="w-3.5 h-3.5 text-primary" />
+                                        <span className="text-primary">{selectedDayStats.total}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase">Planned</span>
+                                    </Badge>
+                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-green-500/20 bg-green-500/5 flex gap-2 items-center">
+                                        <CheckDouble className="w-3.5 h-3.5 text-green-500" />
+                                        <span className="text-green-500">{selectedDayStats.covered}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase">Covered</span>
+                                    </Badge>
+                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/20 bg-orange-500/5 flex gap-2 items-center">
+                                        <Clock className="w-3.5 h-3.5 text-orange-500" />
+                                        <span className="text-orange-500">{selectedDayStats.remaining}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase">Remaining</span>
+                                    </Badge>
+                                </div>
                             </div>
                         </div>
                         <div className="flex gap-3">
