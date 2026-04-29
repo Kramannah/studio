@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, UserCircle, Pill } from "lucide-react";
+import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, UserCircle, Pill, Settings2 } from "lucide-react";
 import { Input } from "./ui/input";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
@@ -580,23 +588,37 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                             <CardDescription>Territory data overview. Tap rows to view detailed product prescriber ratings.</CardDescription>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                             <Button onClick={handleDownloadExcel} variant="outline" size="sm">
-                                <Download className="mr-2 w-4 h-4" /> Export
-                            </Button>
-                            {!readOnly && (
-                                <>
-                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                                    <Button onClick={handleDownloadTemplate} variant="outline" size="sm">
-                                        <Download className="mr-2 w-4 h-4" /> Template
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        <Settings2 className="mr-2 w-4 h-4" />
+                                        Actions
+                                        <ChevronDown className="ml-2 w-4 h-4" />
                                     </Button>
-                                    <Button onClick={handleUploadClick} size="sm">
-                                        <Upload className="mr-2 w-4 h-4" /> Upload
-                                    </Button>
-                                    <Button onClick={handleAddClick} size="sm">
-                                        <PlusCircle className="mr-2 w-4 h-4" /> Add
-                                    </Button>
-                                </>
-                            )}
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuLabel>Data Management</DropdownMenuLabel>
+                                    <DropdownMenuItem onClick={handleDownloadExcel}>
+                                        <Download className="mr-2 w-4 h-4" /> Export Excel
+                                    </DropdownMenuItem>
+                                    {!readOnly && (
+                                        <>
+                                            <DropdownMenuItem onClick={handleDownloadTemplate}>
+                                                <Download className="mr-2 w-4 h-4" /> Download Template
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuLabel>Modification</DropdownMenuLabel>
+                                            <DropdownMenuItem onClick={handleUploadClick}>
+                                                <Upload className="mr-2 w-4 h-4" /> Upload Masterlist
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={handleAddClick}>
+                                                <PlusCircle className="mr-2 w-4 h-4" /> Add Single Doctor
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                     <div className="flex items-center gap-4 mt-4">
