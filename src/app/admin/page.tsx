@@ -28,6 +28,7 @@ const DynamicSkeleton = () => (
     </div>
 );
 
+// Dynamic loading of admin modules for faster initial load
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
 const AdminReportList = dynamic(() => import('@/components/admin-report-list').then(mod => mod.AdminReportList), { loading: () => <DynamicSkeleton /> });
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
@@ -94,6 +95,7 @@ export default function AdminPage() {
                 map.set(id, `User ${id.substring(0, 6)}...`);
             }
         });
+        // Sort alphabetically
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
     }, [managedUserIds]);
     

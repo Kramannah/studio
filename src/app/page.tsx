@@ -23,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
 import { isSyncWindowOpen, cn } from '@/lib/utils';
 
+// Optimized dynamic imports with skeletons for better perceived speed
 const DynamicSkeleton = () => (
   <div className="space-y-4">
     <Skeleton className="w-1/3 h-8" />
@@ -140,7 +141,8 @@ export default function Home() {
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
-    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage';
+    // Only show global loading on the first load or heavy switches, otherwise dynamic skeletons handle it
+    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master';
     if (isContentLoading) return <DynamicSkeleton />;
 
     switch (activeView) {
