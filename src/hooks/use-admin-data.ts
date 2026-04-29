@@ -200,12 +200,15 @@ export function useAdminData(managerId?: string) {
         
         const usedQuantities: Record<string, number> = {};
         combinedData.entries.forEach(entry => {
+            // Sum primary
             if (entry.primarySampleName && entry.primaryProductQty) {
                 usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
             }
+            // Sum secondary
             if (entry.secondarySampleName && entry.secondaryProductQty) {
                 usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
             }
+            // Sum reminders
             if (entry.reminderProducts) {
                 entry.reminderProducts.forEach(prod => {
                     if (prod.sampleName && prod.quantity) {
