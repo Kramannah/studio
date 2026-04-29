@@ -582,16 +582,39 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         <>
             <Card>
                 <CardHeader>
-                    <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline">Doctor Master List</CardTitle>
                             <CardDescription>Territory data overview. Tap rows to view detailed product prescriber ratings.</CardDescription>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {(Object.keys(frequencyCounts) as Array<keyof typeof frequencyCounts>).sort().map(freq => (
+                            frequencyCounts[freq] > 0 && (
+                            <Badge key={freq} variant="secondary" className="text-[10px]">
+                                {freq}: <span className="ml-1 font-bold">{frequencyCounts[freq]}</span>
+                            </Badge>
+                            )
+                        ))}
+                    </div>
+
+                    <div className="flex flex-col items-start gap-3 mt-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-1 items-center gap-2 w-full max-w-xl">
+                            <div className="relative flex-1">
+                                <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Filter by name, specialty, or clinic..."
+                                    value={filter}
+                                    onChange={(e) => setFilter(e.target.value)}
+                                    className="pl-10 h-9 text-sm w-full"
+                                />
+                            </div>
+                            
                             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm">
+                                    <Button variant="outline" size="sm" className="h-9">
                                         <Settings2 className="mr-2 w-4 h-4" />
                                         Actions
                                         <ChevronDown className="ml-2 w-4 h-4" />
@@ -620,32 +643,11 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-4 mt-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                            {(Object.keys(frequencyCounts) as Array<keyof typeof frequencyCounts>).sort().map(freq => (
-                                frequencyCounts[freq] > 0 && (
-                                <Badge key={freq} variant="secondary" className="text-[10px]">
-                                    {freq}: <span className="ml-1 font-bold">{frequencyCounts[freq]}</span>
-                                </Badge>
-                                )
-                            ))}
-                        </div>
-                    </div>
-                     <div className="flex flex-col items-start gap-4 mt-4 md:flex-row md:items-center md:justify-between">
-                        <div className="relative w-full max-w-sm">
-                            <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Filter by name, specialty, or clinic..."
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
-                                className="pl-10 h-9 text-sm"
-                            />
-                        </div>
+
                         {!readOnly && selectedIds.length > 0 && (
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="sm">
+                                    <Button variant="destructive" size="sm" className="h-9">
                                         <Trash2 className="mr-2 w-4 h-4" />
                                         Delete ({selectedIds.length})
                                     </Button>
