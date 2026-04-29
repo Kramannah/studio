@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -8,7 +9,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckDouble, ClipboardList } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckCheck, ClipboardList } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   Popover,
@@ -471,7 +472,7 @@ export function PlanningCalendar({
                                         <span className="text-[10px] text-muted-foreground uppercase">Planned</span>
                                     </Badge>
                                     <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-green-500/20 bg-green-500/5 flex gap-2 items-center">
-                                        <CheckDouble className="w-3.5 h-3.5 text-green-500" />
+                                        <CheckCheck className="w-3.5 h-3.5 text-green-500" />
                                         <span className="text-green-500">{selectedDayStats.covered}</span>
                                         <span className="text-[10px] text-muted-foreground uppercase">Covered</span>
                                     </Badge>
