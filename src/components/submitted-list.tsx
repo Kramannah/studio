@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -330,8 +329,8 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-6">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                     <SelectTrigger className="w-full sm:w-[200px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline">
                         <SelectValue placeholder="Select month" />
@@ -353,20 +352,16 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                         className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                    <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0">
-                        <TabsTrigger value="list" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                            <List className="w-9 h-9" />
-                        </TabsTrigger>
-                        <TabsTrigger value="calendar" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                            <CalendarIcon className="w-9 h-9" />
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto">
+                    <TabsTrigger value="list" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
+                        <List className="w-9 h-9" />
+                    </TabsTrigger>
+                    <TabsTrigger value="calendar" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
+                        <CalendarIcon className="w-9 h-9" />
+                    </TabsTrigger>
+                </TabsList>
             </div>
-        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsContent value="list" className="mt-0">
                 <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
                     <Table>
