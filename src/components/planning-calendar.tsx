@@ -663,7 +663,7 @@ export function PlanningCalendar({
                                                     <div>
                                                         <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
                                                         <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
-                                                            {doctor.municipality} • {doctor.specialty}
+                                                            {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
                                                         </p>
                                                     </div>
                                                 </div>
