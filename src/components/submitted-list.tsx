@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -265,6 +265,8 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     const [activeTab, setActiveTab] = useState("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     
     const availableMonths = useMemo(() => {
         const monthSet = new Set<string>();
@@ -281,7 +283,12 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     useEffect(() => {
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
         setSelectedDate(monthDate);
+        setCurrentPage(1); // Reset page on month change
     }, [selectedMonth]);
+
+    useEffect(() => {
+        setCurrentPage(1); // Reset page on tab or search change
+    }, [activeTab, searchQuery]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -326,6 +333,12 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
 
         return res;
     }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const paginatedEntries = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, currentPage]);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
@@ -382,8 +395,8 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                                     <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
-                            {filtered.length > 0 ? (
-                                filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                            {paginatedEntries.length > 0 ? (
+                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
                             ) : (
                                 <TableBody>
                                     <TableRow>
@@ -396,6 +409,40 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                         </Table>
                     </div>
                 </Card>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-6 px-1">
+                        <p className="text-sm text-muted-foreground font-medium">
+                            Showing <span className="text-foreground font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-foreground font-bold">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of <span className="text-foreground font-bold">{filtered.length}</span> reports
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="h-9 px-4 border-2 rounded-lg font-headline"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-2" />
+                                Previous
+                            </Button>
+                            <Badge variant="secondary" className="h-9 px-4 rounded-lg font-bold text-sm">
+                                Page {currentPage} of {totalPages}
+                            </Badge>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="h-9 px-4 border-2 rounded-lg font-headline"
+                            >
+                                Next
+                                <ChevronRight className="w-4 h-4 ml-2" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </TabsContent>
             
             <TabsContent value="calendar" className="mt-0 w-full">
