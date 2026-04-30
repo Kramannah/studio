@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -355,10 +356,10 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
                     <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0">
                         <TabsTrigger value="list" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                            <List className="w-7 h-7" />
+                            <List className="w-9 h-9" />
                         </TabsTrigger>
                         <TabsTrigger value="calendar" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                            <CalendarIcon className="w-7 h-7" />
+                            <CalendarIcon className="w-9 h-9" />
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
