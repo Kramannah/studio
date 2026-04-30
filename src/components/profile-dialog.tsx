@@ -14,9 +14,11 @@ import {
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { auth } from "@/lib/firebase"
+import { auth, db } from "@/lib/firebase"
 import { verifyBeforeUpdateEmail } from "firebase/auth"
-import { Loader2, Mail, User } from "lucide-react"
+import { Loader2, Mail, User, DatabaseZap } from "lucide-react"
+import { collection, addDoc, writeBatch, doc } from "firebase/firestore"
+import { addDays, startOfWeek } from "date-fns"
 
 type ProfileDialogProps = {
   isOpen: boolean;
@@ -27,7 +29,71 @@ type ProfileDialogProps = {
 export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDialogProps) {
     const [newEmail, setNewEmail] = useState(currentEmail);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSeeding, setIsSeeding] = useState(false);
     const { toast } = useToast();
+
+    const handleSeedData = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        setIsSeeding(true);
+        try {
+            const batch = writeBatch(db);
+            const doctorsColl = collection(db, "doctors");
+            const plansColl = collection(db, "plans");
+
+            // 1. Create Sample Doctors
+            const sampleDoctors = [
+                { firstName: "Maria", lastName: "Santos", specialty: "Cardiology", clinic: "St. Lukes", frequency: "3x", municipality: "Quezon City", province: "Metro Manila", hacme: "YES", userId: user.uid },
+                { firstName: "Juan", lastName: "Dela Cruz", specialty: "Pediatrics", clinic: "Makati Med", frequency: "2x", municipality: "Makati", province: "Metro Manila", hacme: "NO", userId: user.uid },
+                { firstName: "Elena", lastName: "Reyes", specialty: "Internal Medicine", clinic: "Asian Hospital", frequency: "4x", municipality: "Muntinlupa", province: "Metro Manila", hacme: "YES", userId: user.uid },
+                { firstName: "Roberto", lastName: "Gomez", specialty: "Dermatology", clinic: "VMC", frequency: "1x", municipality: "Pasig", province: "Metro Manila", hacme: "NO", userId: user.uid },
+            ];
+
+            const createdDoctorIds: { id: string, first: string, last: string }[] = [];
+
+            for (const docData of sampleDoctors) {
+                const docRef = doc(doctorsColl);
+                batch.set(docRef, docData);
+                createdDoctorIds.push({ id: docRef.id, first: docData.firstName, last: docData.lastName });
+            }
+
+            // 2. Plot Visits (Plans) across this week
+            const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+            
+            createdDoctorIds.forEach((doctor, index) => {
+                // Plot two visits for each doctor on different days
+                [0, 2].forEach(dayOffset => {
+                    const planRef = doc(plansColl);
+                    batch.set(planRef, {
+                        userId: user.uid,
+                        doctorId: doctor.id,
+                        doctorFirstName: doctor.first,
+                        doctorLastName: doctor.last,
+                        plannedDate: addDays(weekStart, index + dayOffset).toISOString(),
+                        callType: 'planned'
+                    });
+                });
+            });
+
+            await batch.commit();
+            
+            toast({
+                title: "Data Seeded Successfully",
+                description: "Sample doctors and plotted visits have been added to your account. Please refresh or navigate to see changes.",
+            });
+            onOpenChange(false);
+        } catch (error: any) {
+            console.error("Seeding failed:", error);
+            toast({
+                variant: "destructive",
+                title: "Seeding Failed",
+                description: error.message || "An error occurred while generating sample data.",
+            });
+        } finally {
+            setIsSeeding(false);
+        }
+    };
 
     const handleSubmit = async () => {
         if (!newEmail.trim() || newEmail === currentEmail) {
@@ -39,7 +105,6 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
         try {
             const user = auth.currentUser;
             if (user) {
-                // verifyBeforeUpdateEmail is the recommended way to update emails in Firebase v10+
                 await verifyBeforeUpdateEmail(user, newEmail);
                 toast({
                     title: "Verification Sent",
@@ -78,10 +143,10 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
                         Account Settings
                     </DialogTitle>
                     <DialogDescription>
-                        Update your login email address. You will receive a verification link to confirm the change.
+                        Manage your account profile and test data.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-6 py-4">
                     <div className="grid w-full items-center gap-1.5">
                         <Label htmlFor="email">Email Address</Label>
                         <Input 
@@ -91,17 +156,31 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
                             onChange={(e) => setNewEmail(e.target.value)}
                             disabled={isSubmitting}
                         />
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                            Note: Changing your email requires verification before your next login.
+                        </p>
+                        <Button onClick={handleSubmit} disabled={isSubmitting || newEmail === currentEmail} className="mt-2">
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                            Update Email
+                        </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
-                        Note: Changing your email will require you to verify the new address before your next login.
-                    </p>
+                    
+                    <div className="pt-4 border-t">
+                        <Label className="text-primary font-bold">Developer Tools</Label>
+                        <p className="text-xs text-muted-foreground mb-3">Add sample doctors and "plotted" visits to this account for testing.</p>
+                        <Button 
+                            variant="outline" 
+                            className="w-full border-dashed border-primary/50 text-primary hover:bg-primary/5" 
+                            onClick={handleSeedData}
+                            disabled={isSeeding}
+                        >
+                            {isSeeding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DatabaseZap className="mr-2 h-4 w-4" />}
+                            Seed Test Plotted Visits
+                        </Button>
+                    </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                        Update Email
-                    </Button>
+                    <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting || isSeeding}>Close</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
