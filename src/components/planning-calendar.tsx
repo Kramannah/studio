@@ -9,13 +9,24 @@ import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckCheck, ClipboardList } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckCheck, ClipboardList, ChevronDown, Settings2 } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
@@ -73,7 +84,7 @@ export function PlanningCalendar({
     onPermissionRequest
 }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
@@ -82,11 +93,11 @@ export function PlanningCalendar({
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
     useEffect(() => {
-        if (!isPopoverOpen) {
+        if (!isAddPlanDialogOpen) {
             setSelectedDoctorIdsForPlan([]);
             setDoctorFilter("");
         }
-    }, [isPopoverOpen]);
+    }, [isAddPlanDialogOpen]);
 
 
     const visitCountsThisMonth = useMemo(() => {
@@ -200,7 +211,7 @@ export function PlanningCalendar({
             doctorsToAdd.forEach(doctor => {
                 onAddPlan(doctor, selectedDate);
             });
-            setIsPopoverOpen(false);
+            setIsAddPlanDialogOpen(false);
         }
     };
     
@@ -319,10 +330,9 @@ export function PlanningCalendar({
         }
 
         return (
-            <Button variant="destructive" size="sm" className="capitalize h-7 px-2 text-[10px]" onClick={() => setIsPermissionDialogOpen(true)}>
-                <Lock className="w-3 h-3 mr-1.5" />
-                Locked (Request Unlock)
-            </Button>
+             <Badge variant='destructive' className="capitalize">
+                <Lock className="w-3 h-3 mr-1.5" /> Locked
+            </Badge>
         );
     }
 
@@ -400,6 +410,12 @@ export function PlanningCalendar({
             </TableBody>
         </Table>
     );
+
+    const isPastWkLocked = useMemo(() => {
+        if (!selectedDate) return false;
+        const isPastWk = isBefore(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 }));
+        return isPastWk && currentWeekRequest?.status !== 'approved';
+    }, [selectedDate, today, currentWeekRequest]);
 
     if (doctors.length === 0 && !readOnly) {
         return (
@@ -485,61 +501,48 @@ export function PlanningCalendar({
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <Button variant="outline" size="lg" className="h-12 px-6 font-bold" onClick={() => setIsNonCallDialogOpen(true)} disabled={readOnly || !canPlanPlannedCalls}>
-                                <CalendarOff className="w-5 h-5 mr-2" /> Leave
-                            </Button>
-                            <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                                <PopoverTrigger asChild>
-                                    <Button size="lg" className="h-12 px-8 font-bold text-lg" disabled={readOnly || !canPlanPlannedCalls}>
-                                        <PlusCircle className="w-5 h-5 mr-2" /> Add Plan
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button size="lg" className="h-12 px-6 font-bold text-lg gap-2" disabled={readOnly}>
+                                        <Settings2 className="w-5 h-5" />
+                                        Schedule Actions
+                                        <ChevronDown className="w-4 h-4 ml-1 opacity-70" />
                                     </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[90vw] max-w-lg p-0 shadow-2xl border-2" align="end">
-                                    <div className="p-5 space-y-5">
-                                        <div className="relative">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                                            <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-12 h-12 text-lg rounded-xl" />
-                                        </div>
-                                        <ScrollArea className="h-[400px] border rounded-xl p-2 bg-muted/10">
-                                            <div className="space-y-2">
-                                                {filteredDoctors.map(doctor => {
-                                                    const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                                    const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                                    const target = parseInt(doctor.frequency.replace('x', ''), 10);
-                                                    const balance = Math.max(0, target - visitCount);
-                                                    const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
-
-                                                    return (
-                                                        <div key={doctor.id} className={cn("flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer")}>
-                                                            <div className="flex items-center gap-4">
-                                                                <Checkbox 
-                                                                    className="h-6 w-6 rounded-md"
-                                                                    checked={selectedDoctorIdsForPlan.includes(doctor.id)}
-                                                                    onCheckedChange={(checked) => {
-                                                                        if (checked) setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
-                                                                        else setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
-                                                                    }}
-                                                                    disabled={isPlanned}
-                                                                />
-                                                                <div onClick={() => !isPlanned && setSelectedDoctorIdsForPlan(prev => prev.includes(doctor.id) ? prev.filter(i => i !== doctor.id) : [...prev, doctor.id])}>
-                                                                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
-                                                                    <p className="text-xs text-muted-foreground font-medium uppercase">{doctor.municipality}, {doctor.province}</p>
-                                                                </div>
-                                                            </div>
-                                                            <Badge variant={isPlanned ? "outline" : "secondary"} className="text-xs font-black">
-                                                                {isPlanned ? 'ALREADY PLANNED' : `Remaining Visits: ${balance}`}
-                                                            </Badge>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </ScrollArea>
-                                        <Button className="w-full h-14 text-xl font-black rounded-xl shadow-lg" onClick={handleAddSelectedPlans} disabled={selectedDoctorIdsForPlan.length === 0}>
-                                            Add {selectedDoctorIdsForPlan.length} to Schedule
-                                        </Button>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
+                                    <DropdownMenuItem 
+                                        onClick={() => setIsAddPlanDialogOpen(true)}
+                                        disabled={!canPlanPlannedCalls}
+                                        className="gap-2 py-3"
+                                    >
+                                        <PlusCircle className="w-4 h-4 text-primary" />
+                                        Add Visit Plans
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                        onClick={() => setIsNonCallDialogOpen(true)}
+                                        disabled={!canPlanPlannedCalls}
+                                        className="gap-2 py-3"
+                                    >
+                                        <CalendarOff className="w-4 h-4 text-orange-500" />
+                                        Log Leave / Non-Call
+                                    </DropdownMenuItem>
+                                    
+                                    {isPastWkLocked && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuLabel>Permissions</DropdownMenuLabel>
+                                            <DropdownMenuItem 
+                                                onClick={() => setIsPermissionDialogOpen(true)}
+                                                className="gap-2 py-3 text-destructive focus:text-destructive"
+                                            >
+                                                <Lock className="w-4 h-4" />
+                                                Request Week Unlock
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
 
@@ -567,6 +570,89 @@ export function PlanningCalendar({
                     </Card>
                 </div>
             </div>
+
+            <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
+                <DialogContent className="sm:max-w-lg p-0 border-none overflow-hidden">
+                    <DialogHeader className="p-6 pb-0">
+                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
+                        <DialogDescription>Search and select doctors to add to your schedule for {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 space-y-5">
+                        <div className="relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <Input 
+                                placeholder="Search by name, specialty, or location..." 
+                                value={doctorFilter} 
+                                onChange={(e) => setDoctorFilter(e.target.value)} 
+                                className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary" 
+                                autoFocus
+                            />
+                        </div>
+                        <ScrollArea className="h-[400px] border rounded-xl p-2 bg-muted/10">
+                            <div className="space-y-2">
+                                {filteredDoctors.length > 0 ? (
+                                    filteredDoctors.map(doctor => {
+                                        const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                        const visitCount = visitCountsThisMonth[doctorName] || 0;
+                                        const target = parseInt(doctor.frequency.replace('x', ''), 10);
+                                        const balance = Math.max(0, target - visitCount);
+                                        const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+
+                                        return (
+                                            <div 
+                                                key={doctor.id} 
+                                                className={cn(
+                                                    "flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", 
+                                                    isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer border-border/50"
+                                                )}
+                                                onClick={() => {
+                                                    if (!isPlanned) {
+                                                        const isSelected = selectedDoctorIdsForPlan.includes(doctor.id);
+                                                        if (isSelected) setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
+                                                        else setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <Checkbox 
+                                                        className="h-6 w-6 rounded-md"
+                                                        checked={selectedDoctorIdsForPlan.includes(doctor.id)}
+                                                        disabled={isPlanned}
+                                                        onCheckedChange={() => {}} // Handled by div click
+                                                    />
+                                                    <div>
+                                                        <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
+                                                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+                                                            {doctor.municipality} • {doctor.specialty}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
+                                                    {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
+                                                </Badge>
+                                            </div>
+                                        )
+                                    })
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                                        <Search className="w-8 h-8 mb-2 opacity-20" />
+                                        <p>No doctors found.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                    <DialogFooter className="p-6 pt-0">
+                        <Button 
+                            className="w-full h-14 text-xl font-black rounded-xl shadow-lg" 
+                            onClick={handleAddSelectedPlans} 
+                            disabled={selectedDoctorIdsForPlan.length === 0}
+                        >
+                            Add {selectedDoctorIdsForPlan.length} to Schedule
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {selectedDate && <NonCallDayDialog 
                 isOpen={isNonCallDialogOpen}
