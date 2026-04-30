@@ -16,7 +16,7 @@ import { Label } from "./ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { auth, db } from "@/lib/firebase"
 import { verifyBeforeUpdateEmail } from "firebase/auth"
-import { Loader2, Mail, User, DatabaseZap } from "lucide-react"
+import { Loader2, Mail, User, DatabaseZap, AlertTriangle } from "lucide-react"
 import { collection, addDoc, writeBatch, doc } from "firebase/firestore"
 import { addDays, startOfWeek } from "date-fns"
 
@@ -80,7 +80,7 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
             
             toast({
                 title: "Data Seeded Successfully",
-                description: "Sample doctors and plotted visits have been added to your account. Please refresh or navigate to see changes.",
+                description: "Sample doctors and plotted visits have been added to your account.",
             });
             onOpenChange(false);
         } catch (error: any) {
@@ -108,7 +108,7 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
                 await verifyBeforeUpdateEmail(user, newEmail);
                 toast({
                     title: "Verification Sent",
-                    description: `A verification link has been sent to ${newEmail}. Please check your inbox and verify the address before logging in again with the new email.`,
+                    description: `A verification link has been sent to ${newEmail}. Please verify before your next login.`,
                 });
                 onOpenChange(false);
             }
@@ -118,10 +118,6 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
             
             if (error.code === 'auth/requires-recent-login') {
                 message = "For security reasons, please log out and sign back in before attempting to change your email.";
-            } else if (error.code === 'auth/invalid-email') {
-                message = "The email address is invalid.";
-            } else if (error.code === 'auth/email-already-in-use') {
-                message = "This email address is already registered to another account.";
             }
 
             toast({
@@ -165,9 +161,19 @@ export function ProfileDialog({ isOpen, onOpenChange, currentEmail }: ProfileDia
                         </Button>
                     </div>
                     
-                    <div className="pt-4 border-t">
-                        <Label className="text-primary font-bold">Developer Tools</Label>
-                        <p className="text-xs text-muted-foreground mb-3">Add sample doctors and "plotted" visits to this account for testing.</p>
+                    <div className="pt-4 border-t space-y-3">
+                        <div>
+                            <Label className="text-primary font-bold">Developer Tools</Label>
+                            <p className="text-xs text-muted-foreground">Add sample doctors and "plotted" visits to this account for testing.</p>
+                        </div>
+                        
+                        <div className="bg-destructive/10 p-3 rounded-md flex items-start gap-2 border border-destructive/20">
+                            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-destructive leading-tight font-medium">
+                                <strong>WARNING:</strong> This action writes directly to the live Firebase database. Use only for initial testing or demonstration.
+                            </p>
+                        </div>
+
                         <Button 
                             variant="outline" 
                             className="w-full border-dashed border-primary/50 text-primary hover:bg-primary/5" 
