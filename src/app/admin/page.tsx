@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, Database, Loader2 } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,7 +20,6 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { seedTestData } from '../../../scripts/add-test-data';
 import { useToast } from '@/hooks/use-toast';
 
 const DynamicSkeleton = () => (
@@ -45,7 +43,6 @@ export default function AdminPage() {
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
-    const [isSeeding, setIsSeeding] = useState(false);
 
     const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
@@ -174,22 +171,6 @@ export default function AdminPage() {
         return success;
     }
 
-    const handleSeedData = async () => {
-        if (!user) return;
-        setIsSeeding(true);
-        const result = await seedTestData(user.uid);
-        if (result.success) {
-            toast({ title: "Success", description: result.message });
-            // Refresh all data
-            if (selectedManagerId) fetchTeamSummary();
-            refreshAllEntries();
-            refetchMarketingSamples();
-        } else {
-            toast({ variant: "destructive", title: "Error", description: result.message });
-        }
-        setIsSeeding(false);
-    }
-
     if (loading && !selectedManagerId) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
@@ -301,10 +282,6 @@ export default function AdminPage() {
                     {user && <span className="text-sm text-muted-foreground hidden lg:inline font-medium">{user.email}</span>}
                      {isUserAdmin && (
                         <>
-                            <Button size="sm" variant="outline" className="font-headline border-2 gap-2" onClick={handleSeedData} disabled={isSeeding}>
-                                {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                                Seed Test Data
-                            </Button>
                             <Link href="/">
                                 <Button size="sm" variant="outline" className="font-headline border-2">
                                     User View
