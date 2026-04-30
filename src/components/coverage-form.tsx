@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter } from "date-fns"
-import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
+import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Info } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -38,6 +38,7 @@ import { Autocomplete } from "./autocomplete"
 import { ScrollArea } from "./ui/scroll-area"
 import { Calendar } from "./ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
+import { Badge } from "./ui/badge"
 
 
 const formSchema = z.object({
@@ -117,6 +118,7 @@ type CoverageFormProps = {
   todaysPlans: Plan[];
   offlineEntries: CoverageEntry[];
   initialDate?: Date | null;
+  usedQuantities?: Record<string, number>;
 }
 
 const productList = [
@@ -161,12 +163,8 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
             const aspect = img.height / img.width;
             canvas.width = Math.min(img.width, maxWidth);
             canvas.height = canvas.width * aspect;
-            
             const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                return reject(new Error('Failed to get canvas context'));
-            }
-            
+            if (!ctx) return reject(new Error('Failed to get canvas context'));
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
@@ -174,7 +172,22 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
-export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate }: CoverageFormProps) {
+export function CoverageForm({ 
+    onSave, 
+    onUpdate, 
+    onAddPlan, 
+    isOnline, 
+    doctors, 
+    marketingSamples, 
+    masterEntries, 
+    initialDoctor, 
+    onFormSubmit, 
+    todaysPlans, 
+    offlineEntries, 
+    entryToEdit, 
+    initialDate,
+    usedQuantities = {}
+}: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -467,11 +480,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         }
 
         if (alreadyCoveredToday) {
-            toast({
-                variant: "destructive",
-                title: "Duplicate Coverage",
-                description: `A report for Dr. ${values.firstName} ${values.lastName} has already been submitted for today.`,
-            });
+            toast({ variant: "destructive", title: "Duplicate Coverage", description: `Report for today already exists for this doctor.` });
             setIsSubmitting(false);
             return;
         }
@@ -479,11 +488,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         if (doctorInMasterlist) {
             const freqTarget = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
             if (coveragesInMonth >= freqTarget) {
-              toast({
-                variant: "destructive",
-                title: "Submission Limit Reached",
-                description: `${values.firstName} ${values.lastName} has met the frequency of ${doctorInMasterlist.frequency} for ${format(newCoverageDate, 'MMMM')}.`,
-              });
+              toast({ variant: "destructive", title: "Submission Limit Reached", description: `${values.firstName} ${values.lastName} has met the monthly frequency limit.` });
               setIsSubmitting(false);
               return; 
             }
@@ -520,7 +525,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       onFormSubmit?.(savedOnline);
     } catch (error) {
       console.error("Submission failed", error);
-      toast({ variant: 'destructive', title: 'Submission Error', description: 'Please check your connection and try again.' });
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'Check connection.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -801,7 +806,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                               <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
                                                           <SelectContent>
-                                                              {primarySampleOptions.map(s => <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>)}
+                                                              {primarySampleOptions.map(s => {
+                                                                  const used = usedQuantities[s.materialName] || 0;
+                                                                  const bal = s.allocationQuantity - used;
+                                                                  return (
+                                                                    <SelectItem key={s.id} value={s.materialName}>
+                                                                        <div className="flex justify-between w-full gap-4">
+                                                                            <span>{s.materialName}</span>
+                                                                            <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                  )
+                                                              })}
                                                           </SelectContent>
                                                       </Select>
                                                       <FormMessage />
@@ -832,7 +848,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                               <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
                                                           <SelectContent>
-                                                              {secondarySampleOptions.map(s => <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>)}
+                                                              {secondarySampleOptions.map(s => {
+                                                                  const used = usedQuantities[s.materialName] || 0;
+                                                                  const bal = s.allocationQuantity - used;
+                                                                  return (
+                                                                    <SelectItem key={s.id} value={s.materialName}>
+                                                                        <div className="flex justify-between w-full gap-4">
+                                                                            <span>{s.materialName}</span>
+                                                                            <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                  )
+                                                              })}
                                                           </SelectContent>
                                                       </Select>
                                                       <FormMessage />
@@ -884,9 +911,18 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                         <Select onValueChange={f.onChange} value={f.value} disabled={!reminderProducts?.[index]?.productName}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                {marketingSamples.filter(s => s.productGroup === reminderProducts?.[index]?.productName).map(s => (
-                                                                    <SelectItem key={s.id} value={s.materialName}>{s.materialName}</SelectItem>
-                                                                ))}
+                                                                {marketingSamples.filter(s => s.productGroup === reminderProducts?.[index]?.productName).map(s => {
+                                                                    const used = usedQuantities[s.materialName] || 0;
+                                                                    const bal = s.allocationQuantity - used;
+                                                                    return (
+                                                                        <SelectItem key={s.id} value={s.materialName}>
+                                                                             <div className="flex justify-between w-full gap-2">
+                                                                                <span>{s.materialName}</span>
+                                                                                <span className="text-[10px] opacity-70">Bal: {bal}</span>
+                                                                            </div>
+                                                                        </SelectItem>
+                                                                    )
+                                                                })}
                                                             </SelectContent>
                                                         </Select>
                                                         </FormItem>
@@ -1008,9 +1044,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         isOpen={signatureState.isOpen}
         onOpenChange={(open) => {
             setSignatureState(s => ({ ...s, isOpen: open }));
-            if (!open) {
-                form.trigger(signatureState.target!);
-            }
+            if (!open) form.trigger(signatureState.target!);
         }}
         onSave={(sig) => {
             if (signatureState.target) {

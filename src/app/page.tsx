@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -21,7 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 
-// Optimized dynamic imports with skeletons for better perceived speed
+// Optimized dynamic imports
 const DynamicSkeleton = () => (
   <div className="space-y-4 w-full">
     <Skeleton className="w-1/3 h-8" />
@@ -67,9 +68,7 @@ export default function Home() {
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
   useEffect(() => {
-    if (isOnline) {
-      if(syncAllOfflinePlans) syncAllOfflinePlans();
-    }
+    if (isOnline && syncAllOfflinePlans) syncAllOfflinePlans();
   }, [isOnline, syncAllOfflinePlans]);
 
   const handleManualSync = useCallback(async () => {
@@ -108,19 +107,26 @@ export default function Home() {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
-    if (savedOnline) {
-        refetchMarketingSamples();
-    }
+    if (savedOnline) refetchMarketingSamples();
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, [refetchMarketingSamples]);
 
+  /**
+   * Merges server-side usage with pending local usage for accurate inventory tracking.
+   */
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
     offlineEntries.forEach(entry => {
-        if (entry.primarySampleName && entry.primaryProductQty) quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
-        if (entry.secondarySampleName && entry.secondaryProductQty) quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+        if (entry.primarySampleName && entry.primaryProductQty) {
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+        }
+        if (entry.secondarySampleName && entry.secondaryProductQty) {
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+        }
         entry.reminderProducts?.forEach(prod => {
-            if (prod.sampleName && prod.quantity) quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+            if (prod.sampleName && prod.quantity) {
+                quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+            }
         });
     });
     return quantities;
@@ -149,7 +155,7 @@ export default function Home() {
 
     switch (activeView) {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={marketingSamples} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={marketingSamples} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} onAddSamplesBulk={async () => false} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} readOnly={true} />;

@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -13,10 +14,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PackageX } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Badge } from "./ui/badge";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -43,7 +45,6 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
     );
   }, [samples, filter]);
 
-  // Reset to first page when filtering
   useEffect(() => {
     setCurrentPage(1);
   }, [filter]);
@@ -73,92 +74,47 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json<any>(worksheet);
 
-        const requiredFields: (keyof Omit<MarketingSample, 'id'>)[] = ['productGroup', 'materialName', 'allocationQuantity'];
-        
         const mappedData = json.map(row => ({
-            productGroup: row['ProdGroupProdSubGroup'],
-            materialName: row['DisplayMaterialName'],
-            allocationQuantity: row['AllocationQuantity']
+            productGroup: row['ProdGroupProdSubGroup'] || row['Product Group'],
+            materialName: row['DisplayMaterialName'] || row['Material Name'],
+            allocationQuantity: Number(row['AllocationQuantity'] || row['Allocated']) || 0
         }));
 
-        const isValid = mappedData.every(row => requiredFields.every(field => row[field] !== undefined));
-
-        if (!isValid) {
-          toast({
-            variant: "destructive",
-            title: "Upload Failed",
-            description: "The Excel file is missing required columns (ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity) or contains invalid data.",
-          });
-          return;
-        }
+        if (mappedData.length === 0) throw new Error("File empty");
 
         const success = await onAddSamplesBulk(mappedData);
-        if (success && onRefresh) {
-            onRefresh();
-        }
+        if (success && onRefresh) onRefresh();
 
       } catch (error) {
-        console.error("Failed to parse Excel file", error);
-        toast({
-          variant: "destructive",
-          title: "Upload Failed",
-          description: "There was an error processing the Excel file. Please ensure it is a valid .xlsx or .xls file.",
-        });
+        toast({ variant: "destructive", title: "Upload Failed", description: "Invalid Excel format." });
       } finally {
         setIsUploading(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
+        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const handleDownloadTemplate = () => {
-    const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
-    const sampleData = [
-      { ProdGroupProdSubGroup: 'Anti-Fungals - Inox', DisplayMaterialName: 'PQ3_Integumentary System Notepad', AllocationQuantity: 10 },
-      { ProdGroupProdSubGroup: 'Anti-Fungals - Ketovid', DisplayMaterialName: 'SQ1_Ketovid 15g-CF03080-2/28/2028', AllocationQuantity: 30 }
-    ];
-    
-    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Samples Template');
-  
-    worksheet['!cols'] = [
-      { wch: 30 },
-      { wch: 40 },
-      { wch: 20 },
-    ];
-
-    XLSX.writeFile(workbook, 'marketing_samples_template.xlsx');
-  };
-
   return (
-    <Card>
+    <Card className="shadow-lg border-2">
       <CardHeader>
         <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <CardTitle className="font-headline">Marketing Samples Inventory</CardTitle>
-            <CardDescription>{readOnly ? 'A list of all available marketing materials and their balances.' : 'Upload and manage the company-wide marketing promotional materials.'}</CardDescription>
+            <CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary">
+                <PackageCheck className="w-6 h-6" />
+                Marketing Samples Inventory
+            </CardTitle>
+            <CardDescription className="text-base">
+                Real-time tracking of promotional materials. Deductions are processed automatically from coverage reports.
+            </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             {!readOnly && (
                 <>
-                    <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    className="hidden"
-                    accept=".xlsx, .xls"
-                    />
-                    <Button onClick={handleDownloadTemplate} variant="outline" disabled={isUploading}>
-                        <Download className="mr-2" />
-                        Download Template
-                    </Button>
-                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading}>
+                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading} className="font-headline">
                         {isUploading ? <RefreshCw className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
-                        {isUploading ? 'Uploading...' : 'Upload Masterlist'}
+                        {isUploading ? 'Updating...' : 'Update Masterlist'}
                     </Button>
                 </>
             )}
@@ -171,52 +127,66 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         </div>
         <div className="mt-4">
           <Input 
-            placeholder="Filter by product group or material name..."
+            placeholder="Filter by product or material name..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="max-w-sm"
+            className="max-w-md h-11 border-2"
           />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="border rounded-md">
+        <div className="border-2 rounded-xl overflow-hidden shadow-sm">
             <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50 h-14">
                     <TableRow>
-                        <TableHead>Product Group</TableHead>
-                        <TableHead>Material Name</TableHead>
-                        <TableHead className="text-center">Allocated</TableHead>
-                        <TableHead className="text-center">Used</TableHead>
-                        <TableHead className="text-center">Balance</TableHead>
+                        <TableHead className="font-bold text-foreground">Product Group</TableHead>
+                        <TableHead className="font-bold text-foreground">Material Name</TableHead>
+                        <TableHead className="text-center font-bold text-foreground">Allocated</TableHead>
+                        <TableHead className="text-center font-bold text-foreground">Used / Given</TableHead>
+                        <TableHead className="text-center font-bold text-foreground">Balance</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                      {loading ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
-                                <RefreshCw className="inline-block mr-2 animate-spin" /> Loading samples...
+                            <TableCell colSpan={5} className="h-64 text-center">
+                                <RefreshCw className="inline-block mr-2 animate-spin text-primary" />
+                                <span className="font-headline text-lg">Recalculating stock...</span>
                             </TableCell>
                         </TableRow>
                     ) : paginatedSamples.length > 0 ? (
                         paginatedSamples.map((sample) => {
                             const used = usedQuantities[sample.materialName] || 0;
                             const balance = sample.allocationQuantity - used;
-                            const isLowStock = balance <= 0;
+                            const isOutOfStock = balance <= 0;
+                            const isLowStock = !isOutOfStock && balance <= 5;
                           
                             return (
-                                <TableRow key={sample.id} className={cn(isLowStock && "bg-destructive/10")}>
-                                    <TableCell className="font-medium">{sample.productGroup}</TableCell>
-                                    <TableCell>{sample.materialName}</TableCell>
-                                    <TableCell className="text-center">{sample.allocationQuantity}</TableCell>
-                                    <TableCell className="text-center">{used}</TableCell>
-                                    <TableCell className={cn("text-center font-bold", isLowStock ? "text-destructive" : "text-primary")}>{balance}</TableCell>
+                                <TableRow key={sample.id} className={cn("h-16 hover:bg-muted/30 transition-colors", isOutOfStock && "bg-destructive/5")}>
+                                    <TableCell className="font-bold text-primary">{sample.productGroup}</TableCell>
+                                    <TableCell className="font-medium">{sample.materialName}</TableCell>
+                                    <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                    <TableCell className="text-center">
+                                        <Badge variant="secondary" className="font-mono text-sm px-3">{used}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className={cn(
+                                                "font-black font-mono text-lg", 
+                                                isOutOfStock ? "text-destructive" : (isLowStock ? "text-orange-500" : "text-green-500")
+                                            )}>
+                                                {balance}
+                                            </span>
+                                            {isOutOfStock && <span className="text-[10px] font-black text-destructive uppercase tracking-tighter">OUT OF STOCK</span>}
+                                        </div>
+                                    </TableCell>
                                 </TableRow>
                             );
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
-                                {samples.length > 0 ? "No samples match your filter." : "No marketing samples loaded. An admin needs to upload a masterlist."}
+                            <TableCell colSpan={5} className="h-48 text-center text-muted-foreground italic text-lg">
+                                {samples.length > 0 ? "No materials match your filter." : "Inventory list is empty."}
                             </TableCell>
                         </TableRow>
                     )}
@@ -225,9 +195,9 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         </div>
         
         {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-muted-foreground">
-                    Showing {Math.min(filteredSamples.length, (currentPage - 1) * itemsPerPage + 1)} to {Math.min(filteredSamples.length, currentPage * itemsPerPage)} of {filteredSamples.length} samples
+            <div className="flex items-center justify-between mt-6 px-1">
+                <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">
+                    Viewing <span className="text-foreground font-bold">{Math.min(filteredSamples.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredSamples.length, currentPage * itemsPerPage)}</span> of {filteredSamples.length} materials
                 </p>
                 <div className="flex items-center gap-2">
                     <Button
@@ -235,21 +205,19 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                         size="sm"
                         onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                         disabled={currentPage === 1}
+                        className="h-9 rounded-lg border-2 font-headline"
                     >
-                        <ChevronLeft className="w-4 h-4 mr-1" />
-                        Previous
+                        <ChevronLeft className="w-4 h-4 mr-2" /> Previous
                     </Button>
-                    <span className="text-sm font-medium">
-                        Page {currentPage} of {totalPages}
-                    </span>
+                    <Badge className="h-9 px-4 rounded-lg font-bold text-sm bg-muted/50 text-foreground border-2">{currentPage} / {totalPages}</Badge>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                         disabled={currentPage === totalPages}
+                        className="h-9 rounded-lg border-2 font-headline"
                     >
-                        Next
-                        <ChevronRight className="w-4 h-4 ml-1" />
+                        Next <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
                 </div>
             </div>

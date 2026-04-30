@@ -7,6 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
 
+/**
+ * Hook to manage marketing sample inventory and usage calculation.
+ */
 export const useMarketingSamples = () => {
   const { toast } = useToast();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
@@ -16,7 +19,7 @@ export const useMarketingSamples = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all marketing samples
+      // Fetch all marketing samples (Inventory)
       const samplesQuery = query(collection(db, "marketingSamples"));
       const samplesSnapshot = await getDocs(samplesQuery);
       const fetchedSamples: MarketingSample[] = [];
@@ -25,8 +28,7 @@ export const useMarketingSamples = () => {
       });
       setMarketingSamples(fetchedSamples);
 
-      // Fetch all coverage entries to calculate usage
-      // We fetch all to ensure global balance is accurate
+      // Fetch all coverage entries to calculate global usage
       const entriesQuery = query(collection(db, "coverageEntries"));
       const entriesSnapshot = await getDocs(entriesQuery);
       const fetchedEntries: CoverageEntry[] = [];
@@ -47,29 +49,34 @@ export const useMarketingSamples = () => {
     fetchData();
   }, [fetchData]);
 
+  /**
+   * Aggregates usage across all reports.
+   * Checks primary, secondary, and reminder products.
+   */
   const usedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
     
-    const processEntry = (entry: CoverageEntry) => {
-        // Sum primary
+    allEntries.forEach(entry => {
+        // Track primary sample usage
         if (entry.primarySampleName && entry.primaryProductQty) {
-            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+            const qty = Number(entry.primaryProductQty);
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
         }
-        // Sum secondary
+        // Track secondary sample usage
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            const qty = Number(entry.secondaryProductQty);
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + qty;
         }
-        // Sum reminders
+        // Track reminder products usage
         if (entry.reminderProducts && entry.reminderProducts.length > 0) {
             entry.reminderProducts.forEach(prod => {
                 if (prod.sampleName && prod.quantity) {
-                    quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+                    const qty = Number(prod.quantity);
+                    quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
                 }
             });
         }
-    };
-
-    allEntries.forEach(processEntry);
+    });
     
     return quantities;
   }, [allEntries]);
@@ -85,14 +92,14 @@ export const useAdminMarketingSamples = () => {
     try {
       const batch = writeBatch(db);
       
-      // Clear existing list first
+      // Clear existing list first to ensure a clean master update
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       querySnapshot.forEach(doc => {
           batch.delete(doc.ref);
       });
 
-      // Add new ones in safe chunks
+      // Add new ones
       samplesData.forEach(sample => {
         const docRef = doc(collection(db, "marketingSamples"));
         batch.set(docRef, { 
@@ -105,14 +112,14 @@ export const useAdminMarketingSamples = () => {
 
       toast({
           title: "Upload Successful",
-          description: `${samplesData.length} marketing samples have been uploaded and replaced the old list.`,
+          description: `${samplesData.length} marketing samples updated.`,
       });
 
       return true;
 
     } catch (error) {
       console.error("Error adding marketing samples in bulk:", error);
-      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not add marketing samples.' });
+      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not update samples list.' });
       return false;
     }
 
