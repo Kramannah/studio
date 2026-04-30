@@ -354,11 +354,11 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                 </div>
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
                     <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0">
-                        <TabsTrigger value="list" className="rounded-lg h-full">
-                            <LayoutList className="w-5 h-5" />
+                        <TabsTrigger value="list" className="rounded-lg h-full px-4">
+                            <LayoutList className="w-6 h-6" />
                         </TabsTrigger>
-                        <TabsTrigger value="calendar" className="rounded-lg h-full">
-                            <CalendarIcon className="w-5 h-5" />
+                        <TabsTrigger value="calendar" className="rounded-lg h-full px-4">
+                            <CalendarIcon className="w-6 h-6" />
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
