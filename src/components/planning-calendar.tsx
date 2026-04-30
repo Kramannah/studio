@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -193,7 +192,7 @@ export function PlanningCalendar({
     }, [allEntries]);
 
     const selectedDayStats = useMemo(() => {
-        if (!selectedDate) return { total: 0, covered: 0, remaining: 0 };
+        if (!selectedDate) return { total: 0, covered: 0, notYetCovered: 0 };
         const dateString = format(selectedDate, 'yyyy-MM-dd');
         const dayEntries = entriesByDate[dateString] || [];
         
@@ -209,7 +208,7 @@ export function PlanningCalendar({
         return {
             total: selectedDayPlans.length,
             covered,
-            remaining: Math.max(0, selectedDayPlans.length - covered)
+            notYetCovered: Math.max(0, selectedDayPlans.length - covered)
         };
     }, [selectedDate, selectedDayPlans, entriesByDate]);
     
@@ -419,8 +418,8 @@ export function PlanningCalendar({
                                     </Badge>
                                     <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/20 bg-orange-500/5 flex gap-2 items-center">
                                         <Clock className="w-3.5 h-3.5 text-orange-500" />
-                                        <span className="text-orange-500">{selectedDayStats.remaining}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase">Remaining</span>
+                                        <span className="text-orange-500">{selectedDayStats.notYetCovered}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase">Not Yet Covered</span>
                                     </Badge>
                                 </div>
                             </div>
