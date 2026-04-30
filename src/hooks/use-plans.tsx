@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -41,7 +42,7 @@ export const usePlans = () => {
       try {
         const startDate = getQueryStartDateISO();
         
-        // Optimize query to only fetch relevant plans for the current month
+        // Fetch plans and permission requests for current month
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
