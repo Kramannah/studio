@@ -603,21 +603,6 @@ export function PlanningCalendar({
                             </div>
                         </div>
                     </DialogHeader>
-                    
-                    {/* Coverage Reach Status Bar */}
-                    <div className="px-6 py-2 bg-muted/50 border-y flex items-center justify-between overflow-x-auto no-scrollbar gap-4">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase whitespace-nowrap">Monthly Reach:</span>
-                        <div className="flex items-center gap-3">
-                            {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
-                                <div key={freq} className="flex items-center gap-1.5">
-                                    <span className="text-[10px] font-black text-primary">{freq}:</span>
-                                    <span className="text-[11px] font-bold tabular-nums">
-                                        {categoryProgress[freq].covered}/{categoryProgress[freq].total}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
 
                     <div className="p-6 space-y-5">
                         <div className="relative">
@@ -630,7 +615,20 @@ export function PlanningCalendar({
                                 autoFocus
                             />
                         </div>
-                        <ScrollArea className="h-[400px] border rounded-xl p-2 bg-muted/10">
+
+                        {/* Enlarged Category Progress Bar */}
+                        <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 py-4 px-2 border-2 border-primary/10 rounded-2xl bg-primary/5 shadow-inner">
+                            {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
+                                <div key={freq} className="flex flex-col items-center">
+                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">{freq}</span>
+                                    <span className="text-lg font-black text-primary tabular-nums leading-none">
+                                        {categoryProgress[freq].covered}/{categoryProgress[freq].total}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <ScrollArea className="h-[350px] border rounded-xl p-2 bg-muted/10">
                             <div className="space-y-2">
                                 {filteredDoctors.length > 0 ? (
                                     filteredDoctors.map(doctor => {
