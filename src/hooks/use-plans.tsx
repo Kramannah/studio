@@ -5,7 +5,8 @@ import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, orderBy } from 'firebase/firestore';
-import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
+import { getQueryStartDateISO } from '@/lib/utils';
+import { useAuth } from './use-auth';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -32,15 +33,15 @@ export const usePlans = () => {
     };
   }, []);
 
-  const fetchData = useCallback(async (forceAllWeek = false) => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
     if (isOnline) {
       try {
-        const startDate = getQueryStartDateISO(forceAllWeek);
+        const startDate = getQueryStartDateISO();
         
-        // Optimize query to only fetch relevant plans for the current period
+        // Optimize query to only fetch relevant plans for the current month
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
@@ -137,5 +138,3 @@ export const usePlans = () => {
       fetchData
   };
 };
-
-import { useAuth } from './use-auth';

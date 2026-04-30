@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -18,10 +17,9 @@ import { ADMIN_UIDS, MANAGER_TEAMS, HELPDESK_EMAIL } from "@/lib/admins";
 import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
-import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
-import { isSyncWindowOpen, cn } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 // Optimized dynamic imports with skeletons for better perceived speed
 const DynamicSkeleton = () => (
@@ -78,11 +76,11 @@ export default function Home() {
       setIsManualSyncing(true);
       try {
           await Promise.all([
-              syncAllOfflineEntries(true),
+              syncAllOfflineEntries(),
               syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
-              refreshPlans(true),
-              fetchTimeLogs(true),
-              fetchNonCallDays(true),
+              refreshPlans(),
+              fetchTimeLogs(),
+              fetchNonCallDays(),
               refetchMarketingSamples()
           ]);
       } catch (e) {
@@ -223,8 +221,8 @@ export default function Home() {
         </div>
       </div>
       <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />
-      <HelpdeskDialog isOpen={isHelpdeskOpen} onOpenChange={setIsHelpdeskOpen} adminEmail={HELPDESK_EMAIL} userEmail={user.email || ''} />
-      <ProfileDialog isOpen={isProfileOpen} onOpenChange={setIsProfileOpen} currentEmail={user.email || ''} />
+      <HelpdeskDialog isOpen={isHelpdeskOpen} onOpenChange={setIsHelpdeskOpen} adminEmail={HELPDESK_EMAIL} userEmail={user?.email || ''} />
+      <ProfileDialog isOpen={isProfileOpen} onOpenChange={setIsProfileOpen} currentEmail={user?.email || ''} />
     </SidebarProvider>
   );
 }

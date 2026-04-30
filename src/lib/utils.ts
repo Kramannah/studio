@@ -1,31 +1,18 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { getHours, startOfWeek, isSameWeek, parseISO, isValid, startOfDay } from "date-fns"
+import { startOfWeek, isSameWeek, parseISO, isValid, startOfMonth } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * Returns true if the current time is between 8:00 PM and 5:00 AM.
- * This is the window for historical data syncing and reporting.
+ * Returns the ISO string for the start of the current period.
+ * Defaulting to the start of the month for broad visibility without restrictions.
  */
-export function isSyncWindowOpen(): boolean {
-  const currentHour = getHours(new Date());
-  return currentHour >= 20 || currentHour < 5;
-}
-
-/**
- * Returns the ISO string for the start of the current period based on the 8 PM rule.
- * During the day: Start of Today.
- * During the sync window: Start of the Week.
- */
-export function getQueryStartDateISO(forceAllWeek: boolean = false): string {
+export function getQueryStartDateISO(): string {
   const now = new Date();
-  if (forceAllWeek || isSyncWindowOpen()) {
-    return startOfWeek(now, { weekStartsOn: 1 }).toISOString();
-  }
-  return startOfDay(now).toISOString();
+  return startOfMonth(now).toISOString();
 }
 
 /**

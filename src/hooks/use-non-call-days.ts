@@ -1,14 +1,12 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { NonCallDay } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { format, isToday, parseISO, isValid } from 'date-fns';
+import { parseISO, isValid, startOfMonth, isAfter } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
-import { isSyncWindowOpen, isCurrentWeek } from '@/lib/utils';
 
 export const useNonCallDays = () => {
   const { toast } = useToast();
@@ -16,7 +14,7 @@ export const useNonCallDays = () => {
   const [nonCallDays, setNonCallDays] = useState<NonCallDay[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchNonCallDays = useCallback(async (forceAllWeek = false) => {
+  const fetchNonCallDays = useCallback(async () => {
     if (!user) {
       setNonCallDays([]);
       setLoading(false);
@@ -31,17 +29,12 @@ export const useNonCallDays = () => {
         fetched.push({ id: doc.id, ...doc.data() } as NonCallDay);
       });
 
-      const isNightMode = forceAllWeek || isSyncWindowOpen();
+      const monthStart = startOfMonth(new Date());
 
+      // Show non-call days from the current month onwards
       const filtered = fetched.filter(d => {
           const dDate = d.date ? parseISO(d.date) : null;
-          if (!dDate || !isValid(dDate)) return false;
-          
-          if (isNightMode) {
-              return isCurrentWeek(d.date);
-          } else {
-              return isToday(dDate);
-          }
+          return dDate && isValid(dDate) && isAfter(dDate, monthStart);
       });
 
       setNonCallDays(filtered);

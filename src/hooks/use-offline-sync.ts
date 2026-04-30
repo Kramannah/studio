@@ -5,7 +5,7 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, orderBy } from 'firebase/firestore';
-import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
+import { getQueryStartDateISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -35,15 +35,15 @@ export const useOfflineSync = (userId?: string) => {
     };
   }, []);
 
-  const fetchMasterEntries = useCallback(async (forceAllWeek = false) => {
+  const fetchMasterEntries = useCallback(async () => {
     if (!userId || !isOnline) {
       setLoading(false);
       return;
     }
     try {
-      const startDate = getQueryStartDateISO(forceAllWeek);
+      const startDate = getQueryStartDateISO();
       
-      // Perform server-side range query for high performance
+      // Fetch all entries for the current month
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId),
@@ -60,10 +60,6 @@ export const useOfflineSync = (userId?: string) => {
       setMasterEntries(entries);
     } catch (error) {
       console.error("Error fetching master entries:", error);
-      // Fallback for missing index during development or range errors
-      if (error instanceof Error && error.message.includes('index')) {
-          console.warn("Firestore index required for optimized range query.");
-      }
     } finally {
         setLoading(false);
     }
@@ -125,12 +121,9 @@ export const useOfflineSync = (userId?: string) => {
     toast({ title: "Saved Locally", description: "Offline mode active." });
   }
 
-  const syncAllOfflineEntries = useCallback(async (force = false) => {
+  const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || offlineEntries.length === 0) return;
     
-    // Automatic sync only happens after 8 PM unless forced
-    if (!isSyncWindowOpen() && !force) return;
-
     if (isSyncing) return;
     setIsSyncing(true);
 
@@ -148,7 +141,7 @@ export const useOfflineSync = (userId?: string) => {
     try {
         await batch.commit();
         updateOfflineInStorage([]);
-        await fetchMasterEntries(force);
+        await fetchMasterEntries();
         toast({ title: 'Sync Complete', description: `${chunkIds.length} entries synced.` });
     } catch (error) {
         console.error("Sync failed:", error);
@@ -159,7 +152,7 @@ export const useOfflineSync = (userId?: string) => {
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
 
   useEffect(() => {
-    if (isOnline && offlineEntries.length > 0 && isSyncWindowOpen()) {
+    if (isOnline && offlineEntries.length > 0) {
         syncAllOfflineEntries();
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);

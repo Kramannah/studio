@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -14,8 +13,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { isSyncWindowOpen } from "@/lib/utils";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -270,8 +267,6 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
     
-    const isNight = isSyncWindowOpen();
-
     const availableMonths = useMemo(() => {
         const monthSet = new Set<string>();
         entries.forEach(entry => {
@@ -335,18 +330,10 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        {!isNight && (
-            <Alert className="border-2 border-primary/20 bg-primary/5">
-                <CircleAlert className="h-4 w-4 text-primary" />
-                <AlertTitle className="font-headline font-bold text-primary">Working Mode Active</AlertTitle>
-                <AlertDescription className="text-sm">Currently showing today's reports only. Full weekly history is automatically visible during the synchronization window after 8:00 PM.</AlertDescription>
-            </Alert>
-        )}
-        
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
                 <h2 className="text-3xl font-bold font-headline text-primary">Submitted Reports</h2>
-                <p className="text-muted-foreground text-lg">{isNight ? "Complete Weekly Timeline" : "Your Daily Submission Progress"}</p>
+                <p className="text-muted-foreground text-lg">Full Submission History</p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>

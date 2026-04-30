@@ -6,8 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, orderBy } from 'firebase/firestore';
-import { isToday, parseISO, isValid } from 'date-fns';
-import { isSyncWindowOpen, getQueryStartDateISO } from '@/lib/utils';
+import { isToday, parseISO } from 'date-fns';
+import { getQueryStartDateISO } from '@/lib/utils';
 
 export const useTimeLogs = () => {
   const { toast } = useToast();
@@ -16,7 +16,7 @@ export const useTimeLogs = () => {
   const [loading, setLoading] = useState(true);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
-  const fetchTimeLogs = useCallback(async (forceAllWeek = false) => {
+  const fetchTimeLogs = useCallback(async () => {
     if (!user) {
       setTimeLogs([]);
       setTodaysTimeIn(null);
@@ -25,7 +25,7 @@ export const useTimeLogs = () => {
     }
     setLoading(true);
     try {
-      const startDate = getQueryStartDateISO(forceAllWeek);
+      const startDate = getQueryStartDateISO();
       
       const q = query(
         collection(db, "timeLogs"), 
