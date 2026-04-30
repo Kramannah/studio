@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -40,7 +39,6 @@ const SubmittedList = dynamic(() => import('@/components/submitted-list').then(m
 const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
-const ProfileDialog = dynamic(() => import('@/components/profile-dialog').then(mod => mod.ProfileDialog), { ssr: false });
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master';
 
@@ -63,7 +61,6 @@ export default function Home() {
   const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
@@ -218,7 +215,6 @@ export default function Home() {
             </SidebarContent>
             <SidebarFooter>
                  {hasAdminAccess && <Link href="/admin" className="w-full mb-2"><Button size="sm" variant="outline" className="w-full font-headline"><LayoutDashboard className="mr-2" />{isUserAdmin ? 'Admin View' : 'Manager View'}</Button></Link>}
-                 <Button variant="ghost" size="sm" onClick={() => setIsProfileOpen(true)} className="w-full justify-start mb-1"><User size={16} className="mr-2" />Account Settings</Button>
                  <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start"><LogOut className="mr-2" />Logout</Button>
             </SidebarFooter>
           </Sidebar>
@@ -229,7 +225,6 @@ export default function Home() {
       </div>
       <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />
       <HelpdeskDialog isOpen={isHelpdeskOpen} onOpenChange={setIsHelpdeskOpen} adminEmail={HELPDESK_EMAIL} userEmail={user?.email || ''} />
-      <ProfileDialog isOpen={isProfileOpen} onOpenChange={setIsProfileOpen} currentEmail={user?.email || ''} />
     </SidebarProvider>
   );
 }
