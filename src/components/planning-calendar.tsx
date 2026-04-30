@@ -1,15 +1,14 @@
-
 "use client"
 
-import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
+import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid } from "date-fns";
+import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
 import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2 } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   DropdownMenu,
@@ -29,13 +28,16 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
-import { cn } from "@/lib/utils";
+import { PlanningPermissionDialog } from "./planning-permission-dialog";
+import { cn, isPastWeek, getWeekMonday, isCurrentWeek } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
 
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
   plans: Plan[];
+  planningRequests: PlanningPermissionRequest[];
+  onRequestUnlock: (week: Date, reason: string) => Promise<boolean>;
   entries: CoverageEntry[];
   offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
@@ -68,6 +70,8 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
 export function PlanningCalendar({ 
     doctors, 
     plans, 
+    planningRequests,
+    onRequestUnlock,
     entries, 
     offlineEntries = [],
     onAddPlan, 
@@ -80,6 +84,7 @@ export function PlanningCalendar({
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
+    const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
 
@@ -92,6 +97,19 @@ export function PlanningCalendar({
         }
     }, [isAddPlanDialogOpen]);
 
+    const isLocked = useMemo(() => {
+        if (!selectedDate) return false;
+        if (isCurrentWeek(selectedDate)) return false;
+        if (!isPastWeek(selectedDate)) return false;
+
+        const monday = getWeekMonday(selectedDate);
+        const hasApproval = planningRequests.some(req => 
+            req.status === 'approved' && 
+            isSameDay(parseISO(req.weekStartDate), monday)
+        );
+        
+        return !hasApproval;
+    }, [selectedDate, planningRequests]);
 
     const visitCountsThisMonth = useMemo(() => {
         const thisMonthEntries = allEntries.filter(e => {
@@ -273,7 +291,7 @@ export function PlanningCalendar({
                         );
                         
                         const isLogCallDisabled = readOnly || isCovered;
-                        const isRemovalDisabled = readOnly || isCovered;
+                        const isRemovalDisabled = readOnly || isLocked || isCovered;
 
                         return (
                         <TableRow key={plan.id} className="h-16">
@@ -382,8 +400,9 @@ export function PlanningCalendar({
                 <div className="flex-1 w-full space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
                         <div className="space-y-3">
-                            <h3 className="text-2xl font-black font-headline tracking-tight">
+                            <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
                                 {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                                {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
                             <div className="flex flex-wrap items-center gap-3">
                                 <div className="flex items-center gap-2">
@@ -416,16 +435,27 @@ export function PlanningCalendar({
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-56">
                                     <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
-                                    <DropdownMenuItem 
-                                        onClick={() => setIsAddPlanDialogOpen(true)}
-                                        className="gap-2 py-3"
-                                    >
-                                        <PlusCircle className="w-4 h-4 text-primary" />
-                                        Add Visit Plans
-                                    </DropdownMenuItem>
+                                    {isLocked ? (
+                                        <DropdownMenuItem 
+                                            onClick={() => setIsUnlockDialogOpen(true)}
+                                            className="gap-2 py-3"
+                                        >
+                                            <Unlock className="w-4 h-4 text-primary" />
+                                            Unlock Planning
+                                        </DropdownMenuItem>
+                                    ) : (
+                                        <DropdownMenuItem 
+                                            onClick={() => setIsAddPlanDialogOpen(true)}
+                                            className="gap-2 py-3"
+                                        >
+                                            <PlusCircle className="w-4 h-4 text-primary" />
+                                            Add Visit Plans
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem 
                                         onClick={() => setIsNonCallDialogOpen(true)}
                                         className="gap-2 py-3"
+                                        disabled={isLocked}
                                     >
                                         <CalendarOff className="w-4 h-4 text-orange-500" />
                                         Log Leave / Non-Call
@@ -565,6 +595,13 @@ export function PlanningCalendar({
                 onOpenChange={setIsNonCallDialogOpen}
                 onSave={handleSaveNonCallDay}
                 selectedDate={selectedDate}
+            />}
+
+            {selectedDate && <PlanningPermissionDialog
+                isOpen={isUnlockDialogOpen}
+                onOpenChange={setIsUnlockDialogOpen}
+                onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)}
+                weekStartDate={getWeekMonday(selectedDate)}
             />}
         </div>
     );
