@@ -4,9 +4,9 @@
 import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isValid, isToday, set, startOfDay, isBefore, isSameDay } from "date-fns";
+import { format, parseISO, isValid, isToday, set, startOfDay, isBefore, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -22,6 +22,7 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
@@ -184,7 +185,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         }
     }, [doctorName]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (isOpen && doctorName) {
             fetchHistory();
         } else {
@@ -267,23 +268,56 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [activeTab, setActiveTab] = useState("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
     
     const isNight = isSyncWindowOpen();
+
+    const availableMonths = useMemo(() => {
+        const monthSet = new Set<string>();
+        entries.forEach(entry => {
+            const date = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+            if (date && isValid(date)) {
+                monthSet.add(format(date, 'yyyy-MM'));
+            }
+        });
+        monthSet.add(format(new Date(), 'yyyy-MM'));
+        return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+    }, [entries]);
+
+    useEffect(() => {
+        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+        setSelectedDate(monthDate);
+    }, [selectedMonth]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
         setIsHistoryOpen(true);
     };
 
+    const monthRange = useMemo(() => {
+        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+        return {
+            start: startOfMonth(monthDate),
+            end: endOfMonth(monthDate)
+        };
+    }, [selectedMonth]);
+
+    const filteredByMonth = useMemo(() => {
+        return entries.filter(e => {
+            const date = e.coverageDate ? parseISO(e.coverageDate) : null;
+            return date && isValid(date) && isWithinInterval(date, monthRange);
+        });
+    }, [entries, monthRange]);
+
     const entryDates = useMemo(() => {
-        return entries.map(e => {
+        return filteredByMonth.map(e => {
             const d = e.coverageDate ? parseISO(e.coverageDate) : null;
             return d && isValid(d) ? d : null;
         }).filter((d): d is Date => d !== null);
-    }, [entries]);
+    }, [filteredByMonth]);
 
     const filtered = useMemo(() => {
-        let res = [...entries];
+        let res = [...filteredByMonth];
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             res = res.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) || e.clinic?.toLowerCase().includes(q));
@@ -297,7 +331,7 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
         }
 
         return res;
-    }, [entries, searchQuery, activeTab, selectedDate]);
+    }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
@@ -315,6 +349,18 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                 <p className="text-muted-foreground text-lg">{isNight ? "Complete Weekly Timeline" : "Your Daily Submission Progress"}</p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3">
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger className="w-full sm:w-[180px] h-11 border-2 rounded-xl">
+                        <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableMonths.map(month => (
+                            <SelectItem key={month} value={month}>
+                                {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
                 <div className="relative w-full sm:w-[300px]">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -370,6 +416,7 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
+                                month={parse(selectedMonth, 'yyyy-MM', new Date())}
                                 modifiers={{ 
                                     hasEntry: entryDates,
                                 }}
