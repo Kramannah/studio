@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isValid, isToday, set, startOfDay, isBefore, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -60,67 +60,92 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     return (
          <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
             <TableBody>
-            <TableRow>
+            <TableRow className="h-16">
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span>{entry.firstName} {entry.lastName}</span>
-                        <span className="text-xs text-muted-foreground">{entry.specialty}</span>
+                        <span className="font-bold text-primary">{entry.firstName} {entry.lastName}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{entry.specialty}</span>
                     </div>
                 </TableCell>
-                <TableCell>{entry.clinic}</TableCell>
-                <TableCell>{subDate && isValid(subDate) ? format(subDate, "PPP") : 'Invalid Date'}</TableCell>
-                <TableCell>{doctor?.frequency || 'N/A'}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                    <span className="text-sm font-medium">{entry.clinic}</span>
+                </TableCell>
+                <TableCell>
+                    <span className="text-sm tabular-nums">
+                        {subDate && isValid(subDate) ? format(subDate, "MMM d") : 'N/A'}
+                    </span>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                    <Badge variant="secondary" className="text-[10px] font-bold">{doctor?.frequency || 'N/A'}</Badge>
+                </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
-                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={32} height={32} className="rounded-full object-cover border" />}
-                        {entry.signature && <div className="p-1 bg-white border rounded"><Image src={entry.signature} alt="sig" width={32} height={16} /></div>}
+                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={32} height={32} className="rounded-md object-cover border-2 border-primary/20" />}
+                        {entry.signature && <div className="p-1 bg-white border rounded shadow-sm"><Image src={entry.signature} alt="sig" width={32} height={16} /></div>}
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                         <AlertDialog>
                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal /></Button></DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || '', entry.lastName || '')}>
-                                        <History className="mr-2 h-4 w-4"/> Visits History
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><MoreHorizontal /></Button></DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || '', entry.lastName || '')} className="gap-2 py-3">
+                                        <History className="w-4 h-4 text-primary"/> Visits History
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable}>
-                                        <Edit className="mr-2 h-4 w-4"/> Edit
+                                    <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable} className="gap-2 py-3">
+                                        <Edit className="w-4 h-4 text-primary"/> Edit Report
                                     </DropdownMenuItem>
-                                    {!readOnly && <AlertDialogTrigger asChild><DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-4 w-4"/> Delete</DropdownMenuItem></AlertDialogTrigger>}
+                                    {!readOnly && (
+                                        <>
+                                            <DropdownMenuItem className="text-destructive focus:text-destructive gap-2 py-3">
+                                                <AlertDialogTrigger className="flex items-center gap-2 w-full">
+                                                    <Trash2 className="w-4 h-4"/> Delete Entry
+                                                </AlertDialogTrigger>
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                             <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>Delete entry?</AlertDialogTitle></AlertDialogHeader>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete this report?</AlertDialogTitle>
+                                    <AlertDialogDescription>This action cannot be undone. This visit will be removed from your monthly totals.</AlertDialogDescription>
+                                </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => onDelete(entry.id)}>Delete</AlertDialogAction>
+                                    <AlertDialogAction onClick={() => onDelete(entry.id)} className="bg-destructive text-destructive-foreground">Delete Permanentely</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <CollapsibleTrigger asChild><Button variant="ghost" size="icon">{isOpen ? <ChevronUp /> : <ChevronDown />}</Button></CollapsibleTrigger>
+                        <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-10 w-10">
+                                {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </Button>
+                        </CollapsibleTrigger>
                     </div>
                 </TableCell>
             </TableRow>
             <CollapsibleContent asChild>
-                <TableRow>
-                    <TableCell colSpan={6} className="p-0">
-                        <div className="p-6 bg-muted/30 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <TableRow className="bg-muted/10">
+                    <TableCell colSpan={6} className="p-0 border-b">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-4">
-                                <h4 className="font-bold text-primary">Details</h4>
+                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><List className="w-3 h-3" /> Call Details</h4>
                                 <DetailItem label="Objective" value={entry.callObjective} />
-                                <DetailItem label="Type" value={entry.coverageType} />
+                                <DetailItem label="Coverage Type" value={entry.coverageType} />
+                                {entry.clinic && <DetailItem label="Clinic Address" value={entry.clinic} />}
                             </div>
                             <div className="space-y-4">
-                                <h4 className="font-bold text-primary">Products</h4>
-                                <DetailItem label="Primary" value={entry.primaryProduct} />
-                                <DetailItem label="Qty" value={entry.primaryProductQty} />
+                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
+                                <DetailItem label="Primary Product" value={entry.primaryProduct} />
+                                <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
+                                {entry.secondaryProduct && <DetailItem label="Secondary Product" value={entry.secondaryProduct} />}
                             </div>
                             <div className="space-y-4">
-                                <h4 className="font-bold text-primary">Analysis</h4>
-                                <DetailItem label="Issues" value={entry.doctorsIssue} />
-                                <DetailItem label="Action" value={entry.planOfAction} />
+                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
+                                <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
+                                <DetailItem label="Next Steps / Plan" value={entry.planOfAction} />
                             </div>
                         </div>
                     </TableCell>
@@ -169,47 +194,47 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Visits History</DialogTitle>
-                    <DialogDescription>
-                        Full coverage timeline for Dr. {doctorName?.first} {doctorName?.last}
+            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 border-none overflow-hidden">
+                <DialogHeader className="p-6 bg-muted/20 border-b">
+                    <DialogTitle className="text-2xl font-black font-headline">Visits History</DialogTitle>
+                    <DialogDescription className="text-lg">
+                        Full coverage timeline for <span className="font-bold text-foreground">Dr. {doctorName?.first} {doctorName?.last}</span>
                     </DialogDescription>
                 </DialogHeader>
                 
-                <div className="flex-1 overflow-hidden mt-4">
+                <div className="flex-1 overflow-hidden">
                     {loading ? (
-                        <div className="flex flex-col items-center justify-center h-64 gap-4">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                            <p className="text-muted-foreground">Fetching past visits...</p>
+                        <div className="flex flex-col items-center justify-center h-80 gap-4">
+                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                            <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs">Accessing Archives...</p>
                         </div>
                     ) : history.length > 0 ? (
-                        <ScrollArea className="h-[60vh] pr-4">
+                        <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => (
-                                    <Card key={entry.id} className="overflow-hidden">
-                                        <CardHeader className="bg-muted/30 py-3">
-                                            <div className="flex justify-between items-center">
-                                                <CardTitle className="text-sm font-headline">
-                                                    {entry.coverageDate ? format(parseISO(entry.coverageDate), "PPP") : "N/A"}
-                                                </CardTitle>
-                                                <Badge variant="outline" className="capitalize">{entry.coverageType}</Badge>
-                                            </div>
+                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
+                                        <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
+                                            <CardTitle className="text-base font-black font-headline text-primary">
+                                                {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "Date Missing"}
+                                            </CardTitle>
+                                            <Badge variant="secondary" className="capitalize font-bold border border-primary/20">{entry.coverageType}</Badge>
                                         </CardHeader>
-                                        <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
+                                        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-3">
                                                 <DetailItem label="Objective" value={entry.callObjective} />
-                                                <DetailItem label="Primary Product" value={entry.primaryProduct} />
-                                                <DetailItem label="Secondary Product" value={entry.secondaryProduct} />
+                                                <div className="flex gap-4">
+                                                    <DetailItem label="Primary Product" value={entry.primaryProduct} />
+                                                    <DetailItem label="Qty" value={entry.primaryProductQty} />
+                                                </div>
                                             </div>
-                                            <div className="space-y-2">
-                                                <DetailItem label="Issues" value={entry.doctorsIssue} />
-                                                <DetailItem label="Next Steps" value={entry.planOfAction} />
+                                            <div className="space-y-3">
+                                                <DetailItem label="Doctor Concerns" value={entry.doctorsIssue} />
+                                                <DetailItem label="Agreed Plan" value={entry.planOfAction} />
                                                 <div className="pt-2">
-                                                    <p className="text-xs font-semibold text-muted-foreground mb-1">Proof</p>
+                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Proof of Call</p>
                                                     <div className="flex gap-2">
-                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={48} height={48} className="rounded object-cover border" />}
-                                                        {entry.signature && <div className="p-1 bg-white border rounded"><Image src={entry.signature} alt="sig" width={48} height={24} /></div>}
+                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={60} height={60} className="rounded-md object-cover border-2" />}
+                                                        {entry.signature && <div className="p-1 bg-white border-2 rounded-md shadow-sm"><Image src={entry.signature} alt="sig" width={80} height={40} /></div>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -219,8 +244,9 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                             </div>
                         </ScrollArea>
                     ) : (
-                        <div className="text-center py-12 text-muted-foreground">
-                            No other historical visits found for this provider.
+                        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                            <History className="w-12 h-12 mb-4 opacity-20" />
+                            <p className="text-lg italic">No other historical visits found for this provider.</p>
                         </div>
                     )}
                 </div>
@@ -274,101 +300,132 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     }, [entries, searchQuery, activeTab, selectedDate]);
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-6 animate-in fade-in duration-500">
         {!isNight && (
-            <Alert>
-                <CircleAlert className="h-4 w-4" />
-                <AlertTitle>Working Mode</AlertTitle>
-                <AlertDescription>Showing today's reports only. Full weekly history will be visible after 8:00 PM.</AlertDescription>
+            <Alert className="border-2 border-primary/20 bg-primary/5">
+                <CircleAlert className="h-4 w-4 text-primary" />
+                <AlertTitle className="font-headline font-bold text-primary">Working Mode Active</AlertTitle>
+                <AlertDescription className="text-sm">Currently showing today's reports only. Full weekly history is automatically visible during the synchronization window after 8:00 PM.</AlertDescription>
             </Alert>
         )}
-        <Card>
-            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-                <div>
-                    <CardTitle className="font-headline">Submitted Reports</CardTitle>
-                    <CardDescription>{isNight ? "Weekly History" : "Today's Work"}</CardDescription>
+        
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h2 className="text-3xl font-bold font-headline text-primary">Submitted Reports</h2>
+                <p className="text-muted-foreground text-lg">{isNight ? "Complete Weekly Timeline" : "Your Daily Submission Progress"}</p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative w-full sm:w-[300px]">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        placeholder="Search by name or clinic..." 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                        className="pl-10 h-11 text-base rounded-xl focus-visible:ring-primary border-2 shadow-sm" 
+                    />
                 </div>
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <div className="relative w-full sm:w-[250px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search MD..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+                    <TabsList className="grid grid-cols-2 h-11 p-1 bg-muted/50 rounded-xl border-2">
+                        <TabsTrigger value="list" className="rounded-lg font-bold"><List className="w-4 h-4 mr-2" /> List</TabsTrigger>
+                        <TabsTrigger value="calendar" className="rounded-lg font-bold"><CalendarIcon className="w-4 h-4 mr-2" /> Calendar</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </div>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsContent value="list" className="mt-0">
+                <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50 h-12">
+                                <TableHead className="font-bold">Provider</TableHead>
+                                <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
+                                <TableHead className="font-bold">Date</TableHead>
+                                <TableHead className="hidden sm:table-cell font-bold text-center">Target</TableHead>
+                                <TableHead className="font-bold">Proof</TableHead>
+                                <TableHead className="text-right font-bold">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        {filtered.length > 0 ? (
+                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                        ) : (
+                            <TableBody>
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-64 text-center text-muted-foreground text-lg italic">
+                                        No matching reports found in the current view.
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        )}
+                    </Table>
+                </Card>
+            </TabsContent>
+            
+            <TabsContent value="calendar" className="mt-0">
+                <div className="flex flex-col xl:flex-row gap-8 items-start">
+                    <div className="w-full xl:w-[400px] shrink-0">
+                        <Card className="shadow-md border-2 overflow-hidden">
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                modifiers={{ 
+                                    hasEntry: entryDates,
+                                }}
+                                modifiersStyles={{
+                                    hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' }
+                                }}
+                                className="w-full p-4 bg-card"
+                            />
+                        </Card>
+                        <div className="mt-4 p-4 rounded-xl bg-primary/5 border-2 border-primary/10">
+                            <p className="text-xs font-black text-primary uppercase tracking-widest mb-1">Calendar Guide</p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">Dates highlighted with a <span className="text-primary font-bold">green border</span> contain submitted reports. Select a date to view individual details.</p>
+                        </div>
                     </div>
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                        <TabsList className="grid grid-cols-2 h-9">
-                            <TabsTrigger value="list" className="px-3"><List className="w-4 h-4 mr-2" /> List</TabsTrigger>
-                            <TabsTrigger value="calendar" className="px-3"><CalendarIcon className="w-4 h-4 mr-2" /> Calendar</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsContent value="list" className="mt-0">
-                        <div className="border rounded-md">
+                    
+                    <div className="flex-1 w-full space-y-6">
+                        <div className="bg-muted/30 p-5 rounded-xl border-2">
+                             <h3 className="text-2xl font-black font-headline tracking-tight">
+                                {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                            </h3>
+                            <div className="mt-3">
+                                <Badge variant="outline" className="h-9 px-4 font-bold border-2 border-primary/20 bg-background/50 flex gap-3 items-center w-fit">
+                                    <CheckCheck className="w-4 h-4 text-primary" />
+                                    <span className="text-primary text-base">{filtered.length}</span>
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Reports Filed</span>
+                                </Badge>
+                            </div>
+                        </div>
+
+                        <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
                             <Table>
                                 <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Provider</TableHead>
-                                        <TableHead>Clinic</TableHead>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead>Freq</TableHead>
-                                        <TableHead>Proof</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50 h-12">
+                                        <TableHead className="font-bold">Provider</TableHead>
+                                        <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
+                                        <TableHead className="font-bold">Proof</TableHead>
+                                        <TableHead className="text-right font-bold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 {filtered.length > 0 ? (
                                     filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
                                 ) : (
-                                    <TableBody><TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No reports found.</TableCell></TableRow></TableBody>
+                                    <TableBody>
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-48 text-center text-muted-foreground text-lg italic">
+                                                No activity recorded for this date.
+                                            </TableCell>
+                                        </TableRow>
+                                    </TableBody>
                                 )}
                             </Table>
-                        </div>
-                    </TabsContent>
-                    <TabsContent value="calendar" className="mt-0">
-                        <div className="flex flex-col lg:flex-row gap-6">
-                            <div className="w-full lg:w-auto">
-                                <Calendar
-                                    mode="single"
-                                    selected={selectedDate}
-                                    onSelect={setSelectedDate}
-                                    modifiers={{ 
-                                        hasEntry: entryDates,
-                                    }}
-                                    modifiersStyles={{
-                                        hasEntry: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' }
-                                    }}
-                                    className="border rounded-md bg-card"
-                                />
-                            </div>
-                            <div className="flex-1">
-                                <div className="mb-4">
-                                    <h3 className="text-lg font-semibold font-headline">
-                                        {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "Select a date"}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">{filtered.length} report(s) found</p>
-                                </div>
-                                <div className="border rounded-md">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Provider</TableHead>
-                                                <TableHead>Clinic</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        {filtered.length > 0 ? (
-                                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                                        ) : (
-                                            <TableBody><TableRow><TableCell colSpan={3} className="h-32 text-center text-muted-foreground">No entries for this date.</TableCell></TableRow></TableBody>
-                                        )}
-                                    </Table>
-                                </div>
-                            </div>
-                        </div>
-                    </TabsContent>
-                </Tabs>
-            </CardContent>
-        </Card>
+                        </Card>
+                    </div>
+                </div>
+            </TabsContent>
+        </Tabs>
 
         <DoctorHistoryDialog 
             doctorName={historyDoctor} 
