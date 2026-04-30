@@ -112,6 +112,28 @@ export function PlanningCalendar({
         }, {} as Record<string, number>);
     }, [allEntries]);
 
+    const categoryProgress = useMemo(() => {
+        const stats = {
+            '1x': { covered: 0, total: 0 },
+            '2x': { covered: 0, total: 0 },
+            '3x': { covered: 0, total: 0 },
+            '4x': { covered: 0, total: 0 },
+        };
+        
+        doctors.forEach(d => {
+            const freq = d.frequency;
+            if (stats[freq]) {
+                stats[freq].total += 1;
+                const nameKey = `${d.firstName} ${d.lastName}`.toLowerCase();
+                // A doctor is considered "covered" if they have at least one visit this month
+                if ((visitCountsThisMonth[nameKey] || 0) > 0) {
+                    stats[freq].covered += 1;
+                }
+            }
+        });
+        return stats;
+    }, [doctors, visitCountsThisMonth]);
+
     const plansByDate = useMemo(() => {
         return plans.reduce((acc, plan) => {
             const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
@@ -574,9 +596,29 @@ export function PlanningCalendar({
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
                 <DialogContent className="sm:max-w-lg p-0 border-none overflow-hidden">
                     <DialogHeader className="p-6 pb-0">
-                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
-                        <DialogDescription>Search and select doctors to add to your schedule for {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
+                                <DialogDescription>Search and select doctors for {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
+                            </div>
+                        </div>
                     </DialogHeader>
+                    
+                    {/* Coverage Reach Status Bar */}
+                    <div className="px-6 py-2 bg-muted/50 border-y flex items-center justify-between overflow-x-auto no-scrollbar gap-4">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase whitespace-nowrap">Monthly Reach:</span>
+                        <div className="flex items-center gap-3">
+                            {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
+                                <div key={freq} className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-black text-primary">{freq}:</span>
+                                    <span className="text-[11px] font-bold tabular-nums">
+                                        {categoryProgress[freq].covered}/{categoryProgress[freq].total}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="p-6 space-y-5">
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -628,7 +670,7 @@ export function PlanningCalendar({
                                                     </div>
                                                 </div>
                                                 <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
-                                                    {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
+                                                    {isPlanned ? 'SCHEDULED' : `Remaining Visits: ${balance}`}
                                                 </Badge>
                                             </div>
                                         )
