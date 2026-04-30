@@ -1,13 +1,12 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -330,14 +329,10 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-                <h2 className="text-3xl font-bold font-headline text-primary">Submitted Reports</h2>
-                <p className="text-muted-foreground text-lg">Full Submission History</p>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-[180px] h-11 border-2 rounded-xl">
+                    <SelectTrigger className="w-full sm:w-[200px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline">
                         <SelectValue placeholder="Select month" />
                     </SelectTrigger>
                     <SelectContent>
@@ -348,19 +343,23 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                         ))}
                     </SelectContent>
                 </Select>
-                <div className="relative w-full sm:w-[300px]">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <div className="relative w-full">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input 
                         placeholder="Search by name or clinic..." 
                         value={searchQuery} 
                         onChange={(e) => setSearchQuery(e.target.value)} 
-                        className="pl-10 h-11 text-base rounded-xl focus-visible:ring-primary border-2 shadow-sm" 
+                        className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-                    <TabsList className="grid grid-cols-2 h-11 p-1 bg-muted/50 rounded-xl border-2">
-                        <TabsTrigger value="list" className="rounded-lg font-bold"><List className="w-4 h-4 mr-2" /> List</TabsTrigger>
-                        <TabsTrigger value="calendar" className="rounded-lg font-bold"><CalendarIcon className="w-4 h-4 mr-2" /> Calendar</TabsTrigger>
+                    <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0">
+                        <TabsTrigger value="list" className="rounded-lg font-black uppercase text-[10px] tracking-widest gap-2">
+                            <LayoutList className="w-4 h-4" /> List
+                        </TabsTrigger>
+                        <TabsTrigger value="calendar" className="rounded-lg font-black uppercase text-[10px] tracking-widest gap-2">
+                            <CalendarIcon className="w-4 h-4" /> Calendar
+                        </TabsTrigger>
                     </TabsList>
                 </Tabs>
             </div>
