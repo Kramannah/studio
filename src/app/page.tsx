@@ -214,8 +214,24 @@ export default function Home() {
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter>
-                 {hasAdminAccess && <Link href="/admin" className="w-full mb-2"><Button size="sm" variant="outline" className="w-full font-headline"><LayoutDashboard className="mr-2" />{isUserAdmin ? 'Admin View' : 'Manager View'}</Button></Link>}
-                 <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start"><LogOut className="mr-2" />Logout</Button>
+                 <div className="px-3 py-2 mb-2 bg-muted/50 rounded-lg mx-2 border">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1 leading-none">Account</p>
+                    <p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p>
+                 </div>
+                 {hasAdminAccess && (
+                    <Link href="/admin" className="w-full px-2 mb-2">
+                        <Button size="sm" variant="outline" className="w-full font-headline">
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            {isUserAdmin ? 'Admin View' : 'Manager View'}
+                        </Button>
+                    </Link>
+                 )}
+                 <div className="px-2 w-full">
+                    <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout
+                    </Button>
+                 </div>
             </SidebarFooter>
           </Sidebar>
           <main className="flex-1 w-full overflow-x-hidden">
