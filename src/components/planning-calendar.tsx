@@ -1,15 +1,15 @@
 
 "use client"
 
-import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
+import type { Doctor, Plan, NonCallDay, CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isToday, isThisMonth, startOfToday, isBefore, isValid, isSameWeek, startOfWeek, endOfWeek, isAfter } from "date-fns";
+import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid } from "date-fns";
 import { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Lock, Unlock, List, Calendar as CalendarIcon, CheckCheck, ClipboardList, ChevronDown, Settings2 } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2 } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   DropdownMenu,
@@ -30,8 +30,6 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "./ui/tooltip";
-import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { Checkbox } from "./ui/checkbox";
 
 
@@ -46,8 +44,6 @@ type PlanningCalendarProps = {
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
-  planningRequests?: PlanningPermissionRequest[];
-  onPermissionRequest?: (weekStartDate: Date, reason: string) => Promise<boolean>;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -80,13 +76,10 @@ export function PlanningCalendar({
     nonCallDays, 
     onAddNonCallDay, 
     readOnly = false,
-    planningRequests,
-    onPermissionRequest
 }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
-    const [isPermissionDialogOpen, setIsPermissionDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
 
@@ -125,7 +118,6 @@ export function PlanningCalendar({
             if (stats[freq]) {
                 stats[freq].total += 1;
                 const nameKey = `${d.firstName} ${d.lastName}`.toLowerCase();
-                // A doctor is considered "covered" if they have at least one visit this month
                 if ((visitCountsThisMonth[nameKey] || 0) > 0) {
                     stats[freq].covered += 1;
                 }
@@ -256,108 +248,6 @@ export function PlanningCalendar({
         }
     }
 
-    const today = startOfToday();
-    
-    const currentWeekRequest = useMemo(() => {
-        if (!selectedDate || !planningRequests) return null;
-        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        return planningRequests.find(req => {
-             const reqDate = parseISO(req.weekStartDate);
-             return isValid(reqDate) && isSameDay(reqDate, weekStart);
-        });
-    }, [planningRequests, selectedDate]);
-    
-    const canPlanPlannedCalls = useMemo(() => {
-        if (!selectedDate) return false;
-        
-        const weekStartOfSelected = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const weekStartOfToday = startOfWeek(startOfToday(), { weekStartsOn: 1 });
-        
-        if (!isBefore(weekStartOfSelected, weekStartOfToday)) {
-            return true;
-        }
-        
-        if (currentWeekRequest?.status === 'approved') {
-            return true;
-        }
-
-        return false;
-
-    }, [selectedDate, currentWeekRequest]);
-    
-    const canLogCallForDate = (date: Date) => {
-        if (!isBefore(date, today)) return true;
-        if (isSameWeek(date, today, { weekStartsOn: 1 })) return true;
-        const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-        const request = planningRequests?.find(req => {
-            const reqDate = parseISO(req.weekStartDate);
-            return isValid(reqDate) && isSameDay(reqDate, weekStart);
-        });
-        return request?.status === 'approved';
-    }
-
-    const handlePermissionRequest = async (reason: string) => {
-        if(selectedDate && onPermissionRequest) {
-            const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-            return await onPermissionRequest(weekStart, reason);
-        }
-        return false;
-    };
-
-    const renderWeekStatus = () => {
-        if (!selectedDate || readOnly) return null;
-
-        const isPastWk = isBefore(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 }));
-
-        if (!isPastWk) {
-            return (
-                <Badge variant='secondary' className="capitalize">
-                    <Unlock className="w-3 h-3 mr-1.5" /> Unlocked
-                </Badge>
-            );
-        }
-
-        if (currentWeekRequest?.status === 'approved') {
-            return (
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger>
-                            <Badge variant='secondary' className="capitalize">
-                                <Unlock className="w-3 h-3 mr-1.5" /> Unlocked (Approved)
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>This past week has been unlocked for planning.</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            );
-        }
-
-        if (currentWeekRequest?.status === 'pending') {
-            return (
-                 <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger>
-                             <Badge variant='destructive' className="capitalize cursor-not-allowed">
-                                <Lock className="w-3 h-3 mr-1.5" /> Locked (Pending)
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Your request to unlock this week is pending approval.</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-            );
-        }
-
-        return (
-             <Badge variant='destructive' className="capitalize">
-                <Lock className="w-3 h-3 mr-1.5" /> Locked
-            </Badge>
-        );
-    }
-
     const PlanTable = ({ plansToRender }: { plansToRender: Plan[] }) => (
         <Table>
             <TableHeader>
@@ -382,7 +272,7 @@ export function PlanningCalendar({
                             entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
                         );
                         
-                        const isLogCallDisabled = readOnly || isCovered || !canLogCallForDate(planDate);
+                        const isLogCallDisabled = readOnly || isCovered;
                         const isRemovalDisabled = readOnly || isCovered;
 
                         return (
@@ -432,12 +322,6 @@ export function PlanningCalendar({
             </TableBody>
         </Table>
     );
-
-    const isPastWkLocked = useMemo(() => {
-        if (!selectedDate) return false;
-        const isPastWk = isBefore(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(today, { weekStartsOn: 1 }));
-        return isPastWk && currentWeekRequest?.status !== 'approved';
-    }, [selectedDate, today, currentWeekRequest]);
 
     if (doctors.length === 0 && !readOnly) {
         return (
@@ -502,7 +386,6 @@ export function PlanningCalendar({
                                 {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                             </h3>
                             <div className="flex flex-wrap items-center gap-3">
-                                {renderWeekStatus()}
                                 <div className="flex items-center gap-2">
                                     <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/20 bg-background/50 flex gap-2 items-center">
                                         <ClipboardList className="w-3.5 h-3.5 text-primary" />
@@ -535,7 +418,6 @@ export function PlanningCalendar({
                                     <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
                                     <DropdownMenuItem 
                                         onClick={() => setIsAddPlanDialogOpen(true)}
-                                        disabled={!canPlanPlannedCalls}
                                         className="gap-2 py-3"
                                     >
                                         <PlusCircle className="w-4 h-4 text-primary" />
@@ -543,26 +425,11 @@ export function PlanningCalendar({
                                     </DropdownMenuItem>
                                     <DropdownMenuItem 
                                         onClick={() => setIsNonCallDialogOpen(true)}
-                                        disabled={!canPlanPlannedCalls}
                                         className="gap-2 py-3"
                                     >
                                         <CalendarOff className="w-4 h-4 text-orange-500" />
                                         Log Leave / Non-Call
                                     </DropdownMenuItem>
-                                    
-                                    {isPastWkLocked && (
-                                        <>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuLabel>Permissions</DropdownMenuLabel>
-                                            <DropdownMenuItem 
-                                                onClick={() => setIsPermissionDialogOpen(true)}
-                                                className="gap-2 py-3 text-destructive focus:text-destructive"
-                                            >
-                                                <Lock className="w-4 h-4" />
-                                                Request Week Unlock
-                                            </DropdownMenuItem>
-                                        </>
-                                    )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -616,7 +483,6 @@ export function PlanningCalendar({
                             />
                         </div>
 
-                        {/* Enlarged Category Progress Bar */}
                         <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 py-4 px-2 border-2 border-primary/10 rounded-2xl bg-primary/5 shadow-inner">
                             {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
                                 <div key={freq} className="flex flex-col items-center">
@@ -658,7 +524,7 @@ export function PlanningCalendar({
                                                         className="h-6 w-6 rounded-md"
                                                         checked={selectedDoctorIdsForPlan.includes(doctor.id)}
                                                         disabled={isPlanned}
-                                                        onCheckedChange={() => {}} // Handled by div click
+                                                        onCheckedChange={() => {}} 
                                                     />
                                                     <div>
                                                         <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
@@ -699,12 +565,6 @@ export function PlanningCalendar({
                 onOpenChange={setIsNonCallDialogOpen}
                 onSave={handleSaveNonCallDay}
                 selectedDate={selectedDate}
-            />}
-            {selectedDate && <PlanningPermissionDialog
-                isOpen={isPermissionDialogOpen}
-                onOpenChange={setIsPermissionDialogOpen}
-                onConfirm={handlePermissionRequest}
-                weekStartDate={startOfWeek(selectedDate, { weekStartsOn: 1})}
             />}
         </div>
     );

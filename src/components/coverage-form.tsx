@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter, startOfWeek, isSameWeek } from "date-fns"
+import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter } from "date-fns"
 import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignatureDialog } from "./signature-dialog"
-import type { CoverageEntry, Doctor, MarketingSample, PlanningPermissionRequest, Plan } from "@/lib/types"
+import type { CoverageEntry, Doctor, MarketingSample, Plan } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
@@ -117,7 +117,6 @@ type CoverageFormProps = {
   todaysPlans: Plan[];
   offlineEntries: CoverageEntry[];
   initialDate?: Date | null;
-  planningRequests?: PlanningPermissionRequest[];
 }
 
 const productList = [
@@ -175,7 +174,7 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
-export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate, planningRequests }: CoverageFormProps) {
+export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, marketingSamples, masterEntries, initialDoctor, onFormSubmit, todaysPlans, offlineEntries, entryToEdit, initialDate }: CoverageFormProps) {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [autocompleteValue, setAutocompleteValue] = useState('');
@@ -441,7 +440,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
       const newCoverageDate = values.coverageDate || new Date();
 
       if (!isEditMode) {
-        // High-performance single-pass validation check
         const docFirstNameLower = values.firstName?.toLowerCase();
         const docLastNameLower = values.lastName?.toLowerCase();
         
@@ -724,14 +722,7 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
                                                     onSelect={field.onChange}
                                                     disabled={(date) => {
                                                         const today = startOfToday();
-                                                        if (isAfter(date, today)) return true;
-                                                        if (isSameWeek(date, today, { weekStartsOn: 1 })) return false;
-                                                        const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-                                                        const matchingRequest = planningRequests?.find(req => {
-                                                            const reqDate = parseISO(req.weekStartDate);
-                                                            return isValid(reqDate) && isSameDay(reqDate, weekStart);
-                                                        });
-                                                        return matchingRequest?.status !== 'approved';
+                                                        return isAfter(date, today);
                                                     }}
                                                     initialFocus
                                                 />
@@ -1017,7 +1008,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         isOpen={signatureState.isOpen}
         onOpenChange={(open) => {
             setSignatureState(s => ({ ...s, isOpen: open }));
-            // Force re-validation when the dialog closes to ensure "signature needed" message clears
             if (!open) {
                 form.trigger(signatureState.target!);
             }
@@ -1025,7 +1015,6 @@ export function CoverageForm({ onSave, onUpdate, onAddPlan, isOnline, doctors, m
         onSave={(sig) => {
             if (signatureState.target) {
                 form.setValue(signatureState.target, sig, { shouldValidate: true, shouldDirty: true });
-                // Important: Trigger validation on the field immediately
                 form.trigger(signatureState.target);
             }
         }}

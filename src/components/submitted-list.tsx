@@ -1,9 +1,10 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isValid, isToday, set, startOfDay, isBefore, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck } from "lucide-react";
@@ -49,8 +50,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
         if (readOnly) return false;
         const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
         if (!subDate || !isValid(subDate)) return false;
-        const endOfEditWindow = set(startOfDay(new Date()), { hours: 23 }); 
-        return isToday(subDate) && isBefore(new Date(), endOfEditWindow);
+        return isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
     const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
@@ -150,7 +150,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                 </TableRow>
             </CollapsibleContent>
             </TableBody>
-        </Collapsible>
+         </Collapsible>
     )
 }
 
