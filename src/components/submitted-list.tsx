@@ -26,7 +26,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     return (
         <div>
             <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-            <p className="text-sm">{value}</p>
+            <p className="text-sm font-medium text-foreground">{value}</p>
         </div>
     )
 }
@@ -57,7 +57,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     return (
          <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
             <TableBody>
-            <TableRow className="h-16">
+            <TableRow className="h-16 hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
                         <span className="font-bold text-primary">{entry.firstName} {entry.lastName}</span>
@@ -85,7 +85,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                     <div className="flex items-center justify-end gap-1">
                         <AlertDialog>
                             <DropdownMenu>
-                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><MoreHorizontal /></Button></DropdownMenuTrigger>
+                                <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><MoreHorizontal className="w-5 h-5"/></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48">
                                     <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || '', entry.lastName || '')} className="gap-2 py-3">
                                         <History className="w-4 h-4 text-primary"/> Visits History
@@ -193,7 +193,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 border-none overflow-hidden">
                 <DialogHeader className="p-6 bg-muted/20 border-b">
-                    <DialogTitle className="text-2xl font-black font-headline">Visits History</DialogTitle>
+                    <DialogTitle className="text-2xl font-black font-headline text-primary">Visits History</DialogTitle>
                     <DialogDescription className="text-lg">
                         Full coverage timeline for <span className="font-bold text-foreground">Dr. {doctorName?.first} {doctorName?.last}</span>
                     </DialogDescription>
@@ -203,13 +203,13 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-80 gap-4">
                             <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                            <p className="text-muted-foreground font-bold uppercase tracking-widest text-xs">Accessing Archives...</p>
+                            <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px]">Accessing Archives...</p>
                         </div>
                     ) : history.length > 0 ? (
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => (
-                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
+                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm hover:border-primary/30 transition-colors">
                                         <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
                                             <CardTitle className="text-base font-black font-headline text-primary">
                                                 {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "Date Missing"}
@@ -230,7 +230,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                                                 <div className="pt-2">
                                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Proof of Call</p>
                                                     <div className="flex gap-2">
-                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={60} height={60} className="rounded-md object-cover border-2" />}
+                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={60} height={60} className="rounded-md object-cover border-2 border-primary/20" />}
                                                         {entry.signature && <div className="p-1 bg-white border-2 rounded-md shadow-sm"><Image src={entry.signature} alt="sig" width={80} height={40} /></div>}
                                                     </div>
                                                 </div>
@@ -242,8 +242,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                         </ScrollArea>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                            <History className="w-12 h-12 mb-4 opacity-20" />
-                            <p className="text-lg italic">No other historical visits found for this provider.</p>
+                            <History className="w-16 h-16 mb-4 opacity-10" />
+                            <p className="text-lg italic font-headline">No other historical visits found for this provider.</p>
                         </div>
                     )}
                 </div>
@@ -328,11 +328,11 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
 
     return (
-      <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-6 animate-in fade-in duration-500 w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-6">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-8">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-[200px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline">
+                    <SelectTrigger className="w-full sm:w-[220px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline text-base">
                         <SelectValue placeholder="Select month" />
                     </SelectTrigger>
                     <SelectContent>
@@ -355,51 +355,53 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                 <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
                     <TabsTrigger 
                         value="list" 
-                        className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
+                        className="rounded-lg h-full px-5 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
                     >
                         <List className="w-7 h-7" />
                     </TabsTrigger>
                     <TabsTrigger 
                         value="calendar" 
-                        className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
+                        className="rounded-lg h-full px-5 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
                     >
                         <CalendarIcon className="w-7 h-7" />
                     </TabsTrigger>
                 </TabsList>
             </div>
 
-            <TabsContent value="list" className="mt-0">
-                <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/50 hover:bg-muted/50 h-12">
-                                <TableHead className="font-bold">Provider</TableHead>
-                                <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
-                                <TableHead className="font-bold">Date</TableHead>
-                                <TableHead className="hidden sm:table-cell font-bold text-center">Target</TableHead>
-                                <TableHead className="font-bold">Proof</TableHead>
-                                <TableHead className="text-right font-bold">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        {filtered.length > 0 ? (
-                            filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                        ) : (
-                            <TableBody>
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-64 text-center text-muted-foreground text-lg italic">
-                                        No matching reports found in the current view.
-                                    </TableCell>
+            <TabsContent value="list" className="mt-0 w-full">
+                <Card className="shadow-lg border-2 rounded-xl overflow-hidden w-full">
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
+                                    <TableHead className="font-bold text-foreground">Provider</TableHead>
+                                    <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
+                                    <TableHead className="font-bold text-foreground">Date</TableHead>
+                                    <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
+                                    <TableHead className="font-bold text-foreground">Proof</TableHead>
+                                    <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
                                 </TableRow>
-                            </TableBody>
-                        )}
-                    </Table>
+                            </TableHeader>
+                            {filtered.length > 0 ? (
+                                filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                            ) : (
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic font-headline">
+                                            No matching reports found in the current view.
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            )}
+                        </Table>
+                    </div>
                 </Card>
             </TabsContent>
             
-            <TabsContent value="calendar" className="mt-0">
-                <div className="flex flex-col xl:flex-row gap-8 items-start">
-                    <div className="w-full xl:w-[400px] shrink-0">
-                        <Card className="shadow-md border-2 overflow-hidden">
+            <TabsContent value="calendar" className="mt-0 w-full">
+                <div className="flex flex-col xl:flex-row gap-8 items-start w-full">
+                    <div className="w-full xl:w-[420px] shrink-0">
+                        <Card className="shadow-md border-2 overflow-hidden bg-card">
                             <Calendar
                                 mode="single"
                                 selected={selectedDate}
@@ -411,51 +413,51 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                                 modifiersStyles={{
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' }
                                 }}
-                                className="w-full p-4 bg-card"
+                                className="w-full p-4"
                             />
                         </Card>
-                        <div className="mt-4 p-4 rounded-xl bg-primary/5 border-2 border-primary/10">
-                            <p className="text-xs font-black text-primary uppercase tracking-widest mb-1">Calendar Guide</p>
-                            <p className="text-xs text-muted-foreground leading-relaxed">Dates highlighted with a <span className="text-primary font-bold">green border</span> contain submitted reports. Select a date to view individual details.</p>
+                        <div className="mt-6 p-5 rounded-2xl bg-primary/5 border-2 border-primary/10">
+                            <p className="text-xs font-black text-primary uppercase tracking-widest mb-2 leading-none">Calendar Guide</p>
+                            <p className="text-sm text-muted-foreground leading-relaxed">Dates highlighted with a <span className="text-primary font-bold">green border</span> contain submitted reports. Tap a date to filter the report list.</p>
                         </div>
                     </div>
                     
                     <div className="flex-1 w-full space-y-6">
-                        <div className="bg-muted/30 p-5 rounded-xl border-2">
-                             <h3 className="text-2xl font-black font-headline tracking-tight">
+                        <div className="bg-muted/30 p-6 rounded-2xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                             <h3 className="text-2xl font-black font-headline tracking-tight text-foreground">
                                 {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                             </h3>
-                            <div className="mt-3">
-                                <Badge variant="outline" className="h-9 px-4 font-bold border-2 border-primary/20 bg-background/50 flex gap-3 items-center w-fit">
-                                    <CheckCheck className="w-4 h-4 text-primary" />
-                                    <span className="text-primary text-base">{filtered.length}</span>
-                                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Reports Filed</span>
-                                </Badge>
-                            </div>
+                            <Badge variant="outline" className="h-10 px-5 font-bold border-2 border-primary/20 bg-background/50 flex gap-3 items-center w-fit">
+                                <CheckCheck className="w-5 h-5 text-primary" />
+                                <span className="text-primary text-lg tabular-nums">{filtered.length}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Reports Filed</span>
+                            </Badge>
                         </div>
 
-                        <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50 hover:bg-muted/50 h-12">
-                                        <TableHead className="font-bold">Provider</TableHead>
-                                        <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
-                                        <TableHead className="font-bold">Proof</TableHead>
-                                        <TableHead className="text-right font-bold">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                {filtered.length > 0 ? (
-                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                                ) : (
-                                    <TableBody>
-                                        <TableRow>
-                                            <TableCell colSpan={4} className="h-48 text-center text-muted-foreground text-lg italic">
-                                                No activity recorded for this date.
-                                            </TableCell>
+                        <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
+                                            <TableHead className="font-bold text-foreground">Provider</TableHead>
+                                            <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
+                                            <TableHead className="font-bold text-foreground">Proof</TableHead>
+                                            <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
                                         </TableRow>
-                                    </TableBody>
-                                )}
-                            </Table>
+                                    </TableHeader>
+                                    {filtered.length > 0 ? (
+                                        filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                    ) : (
+                                        <TableBody>
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="h-56 text-center text-muted-foreground text-lg italic font-headline">
+                                                    No activity recorded for this date.
+                                                </TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    )}
+                                </Table>
+                            </div>
                         </Card>
                     </div>
                 </div>

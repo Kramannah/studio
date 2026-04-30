@@ -23,10 +23,10 @@ import { cn } from '@/lib/utils';
 
 // Optimized dynamic imports with skeletons for better perceived speed
 const DynamicSkeleton = () => (
-  <div className="space-y-4">
+  <div className="space-y-4 w-full">
     <Skeleton className="w-1/3 h-8" />
     <Skeleton className="w-2/3 h-6" />
-    <Skeleton className="w-full h-96" />
+    <Skeleton className="w-full h-[600px]" />
   </div>
 );
 
@@ -144,7 +144,6 @@ export default function Home() {
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
-    // Only show global loading on the first load or heavy switches, otherwise dynamic skeletons handle it
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master';
     if (isContentLoading) return <DynamicSkeleton />;
 
@@ -162,8 +161,8 @@ export default function Home() {
 
   return (
     <SidebarProvider>
-      <div className="flex flex-col min-h-screen bg-background text-foreground">
-         <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
+      <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
+         <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
             <div className="flex items-center gap-4">
               <SidebarTrigger/>
               <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
@@ -187,7 +186,7 @@ export default function Home() {
             </div>
         </header>
 
-        <div className="flex flex-1">
+        <div className="flex flex-1 w-full">
           <Sidebar>
             <SidebarContent>
               <SidebarMenu>
@@ -217,7 +216,9 @@ export default function Home() {
                  <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start"><LogOut className="mr-2" />Logout</Button>
             </SidebarFooter>
           </Sidebar>
-          <main className="flex-1 w-full overflow-x-hidden"><div className="w-full h-full p-4 md:p-6">{renderContent()}</div></main>
+          <main className="flex-1 w-full overflow-x-hidden">
+            <div className="w-full h-full p-4 md:p-6 lg:p-8">{renderContent()}</div>
+          </main>
         </div>
       </div>
       <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />

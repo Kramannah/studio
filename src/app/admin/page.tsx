@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -20,15 +19,15 @@ import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import dynamic from 'next/dynamic';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const DynamicSkeleton = () => (
-    <div className="flex items-center justify-center mt-10">
+    <div className="flex items-center justify-center mt-10 w-full">
         <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-        <p className="ml-4">Loading Component...</p>
+        <p className="ml-4 font-headline">Loading Module...</p>
     </div>
 );
 
-// Dynamic loading of admin modules for faster initial load
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
 const AdminReportList = dynamic(() => import('@/components/admin-report-list').then(mod => mod.AdminReportList), { loading: () => <DynamicSkeleton /> });
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
@@ -95,20 +94,15 @@ export default function AdminPage() {
                 map.set(id, `User ${id.substring(0, 6)}...`);
             }
         });
-        // Sort alphabetically
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
     }, [managedUserIds]);
     
-    const pendingNonCallApprovals = useMemo(() => {
-        return (allNonCallDays || []).filter(ncd => ncd.status === 'pending');
-    }, [allNonCallDays]);
-    
-    const pendingPlanningRequests = useMemo(() => {
-        return (allPlanningRequests || []).filter(req => req.status === 'pending');
-    }, [allPlanningRequests]);
+    const totalPendingApprovals = useMemo(() => {
+        const pendingNCD = (allNonCallDays || []).filter(ncd => ncd.status === 'pending').length;
+        const pendingPR = (allPlanningRequests || []).filter(req => req.status === 'pending').length;
+        return pendingNCD + pendingPR;
+    }, [allNonCallDays, allPlanningRequests]);
 
-    const totalPendingApprovals = pendingNonCallApprovals.length + pendingPlanningRequests.length;
-    
     const selectedUserData = useMemo(() => {
         if (!selectedUserId) return null;
         return {
@@ -177,9 +171,9 @@ export default function AdminPage() {
 
     if (loading && !selectedManagerId) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
+            <div className="flex items-center justify-center min-h-screen bg-background">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                <p className="ml-4">Loading Dashboard...</p>
+                <p className="ml-4 font-headline">Loading Dashboard...</p>
             </div>
         );
     }
@@ -191,17 +185,17 @@ export default function AdminPage() {
     const renderDistrictReportsContent = () => {
          if (dataLoading && selectedUserId) {
             return (
-                <div className="flex items-center justify-center mt-10">
+                <div className="flex items-center justify-center mt-10 w-full">
                     <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                     <p className="ml-4">Loading User Data...</p>
+                     <p className="ml-4 font-headline">Loading User Data...</p>
                 </div>
             )
         }
         if (!selectedManagerId) {
              return (
-                 <Card className="mt-6">
-                    <CardContent className="p-6 text-center">
-                        <p className="text-muted-foreground">Please select a DSM to view their team's data.</p>
+                 <Card className="mt-6 border-2 border-dashed">
+                    <CardContent className="p-12 text-center">
+                        <p className="text-muted-foreground text-lg font-headline">Please select a District Sales Manager (DSM) to view their team's data.</p>
                     </CardContent>
                 </Card>
              );
@@ -232,9 +226,9 @@ export default function AdminPage() {
 
         if (loadingSummary) {
             return (
-                <div className="flex items-center justify-center mt-10">
+                <div className="flex items-center justify-center mt-10 w-full">
                     <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                    <p className="ml-4">Loading Team Summary...</p>
+                    <p className="ml-4 font-headline">Loading Team Summary...</p>
                 </div>
             );
         }
@@ -253,111 +247,112 @@ export default function AdminPage() {
                         userMap={USER_DATA_MAP}
                         isAdminView={true}
                         onAddDoctor={(doctor) => {
-                            // When adding a doctor from the team view, it should probably be assigned to a specific user.
-                            // This functionality needs clarification. For now, we can assign to the manager.
                             addDoctor({ ...doctor, userId: selectedManagerId })
                         }}
                         onUpdateDoctor={updateDoctor}
                         onDeleteDoctor={deleteDoctor}
                         onDeleteDoctorsBulk={deleteDoctorsBulk}
-                        onAddDoctorsBulk={(doctors) => addDoctorsBulk(doctors.map(d => ({ ...d, userId: selectedManagerId })))}
+                        onAddDoctorsBulk={(doctors) => addDoctorsBulk(doctors.map(d => ({ ...d, userId: selectedUserId || selectedManagerId })))}
                     />;
         }
         
         return (
-            <Alert className="mt-6">
-                <Users className="w-4 h-4" />
-                <AlertTitle>Select a User</AlertTitle>
-                <AlertDescription>
-                    Select a user from the dropdown to view their detailed dashboard, or review the team summary below.
+            <Alert className="mt-6 border-2">
+                <Users className="w-4 h-4 text-primary" />
+                <AlertTitle className="font-headline">Select a User</AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                    Select a PMR from the filter to view their detailed performance dashboard, or review the combined team summary.
                 </AlertDescription>
             </Alert>
         );
     }
 
     return (
-        <div className="flex flex-col min-h-screen bg-background text-foreground">
-             <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm">
+        <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
+             <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
                 <div className="flex items-center gap-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
-                    <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">
+                    <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
                         {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    {user && <span className="text-sm text-muted-foreground hidden sm:inline">{user.email}</span>}
+                    {user && <span className="text-sm text-muted-foreground hidden lg:inline font-medium">{user.email}</span>}
                      {isUserAdmin && (
                         <Link href="/">
-                            <Button size="sm" variant="outline" className="font-headline">
+                            <Button size="sm" variant="outline" className="font-headline border-2">
                                 User View
                             </Button>
                         </Link>
                      )}
-                    <Button size="sm" variant="outline" className="font-headline" onClick={logout}>
-                        <LogOut className="mr-2"/>
+                    <Button size="sm" variant="destructive" className="font-headline shadow-sm" onClick={logout}>
+                        <LogOut className="mr-2 h-4 w-4"/>
                         Logout
                     </Button>
                 </div>
             </header>
-            <main className="flex-1 p-4 md:p-6">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                     <TabsList>
-                        <TabsTrigger value="district-reports">District Reports</TabsTrigger>
-                         {isUserAdmin && <TabsTrigger value="all-reports">All Reports</TabsTrigger>}
-                        <TabsTrigger value="approvals" className="relative">
-                            <Bell className="mr-2"/>
-                            Approvals
-                            {totalPendingApprovals > 0 && <Badge className="absolute -right-2 -top-2" variant="destructive">{totalPendingApprovals}</Badge>}
-                        </TabsTrigger>
-                        {isUserAdmin && <TabsTrigger value="marketing">Marketing Samples</TabsTrigger>}
-                    </TabsList>
-                    <TabsContent value="district-reports" className="mt-6">
-                        <Card className="mb-6">
+            <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto overflow-x-hidden">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
+                        <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit">
+                            <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                            {isUserAdmin && <TabsTrigger value="all-reports" className="px-6 rounded-lg font-headline">All Reports</TabsTrigger>}
+                            <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
+                                <Bell className="mr-2 h-4 w-4"/>
+                                Approvals
+                                {totalPendingApprovals > 0 && <Badge className="absolute -right-1 -top-1 px-1.5 min-w-[20px]" variant="destructive">{totalPendingApprovals}</Badge>}
+                            </TabsTrigger>
+                            {isUserAdmin && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>}
+                        </TabsList>
+                    </div>
+
+                    <TabsContent value="district-reports" className="mt-8">
+                        <Card className="mb-8 border-2 shadow-sm">
                             <CardHeader>
-                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                                     <div>
-                                        <CardTitle className="flex items-center gap-2 font-headline">
-                                            <UserSquare />
+                                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                                     <div className="space-y-3">
+                                        <CardTitle className="flex items-center gap-2 font-headline text-xl">
+                                            <UserSquare className="text-primary" />
                                             DSM Filter
                                         </CardTitle>
-                                        <CardDescription>Select a DSM to view their team's data.</CardDescription>
+                                        <CardDescription className="text-base">Select a DSM to access their specific district's performance data.</CardDescription>
                                         <div className="flex items-center gap-2 pt-2">
                                              <Select onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin}>
-                                                <SelectTrigger className="w-[350px]">
+                                                <SelectTrigger className="w-full sm:w-[350px] h-11 border-2 text-base font-headline">
                                                     <SelectValue placeholder="Select a DSM..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {managers.map(manager => (
-                                                        <SelectItem key={manager.uid} value={manager.uid}>{manager.name}</SelectItem>
+                                                        <SelectItem key={manager.uid} value={manager.uid} className="font-headline">{manager.name}</SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
                                             {selectedManagerId && isUserAdmin && (
-                                                <Button variant="ghost" size="icon" onClick={() => setSelectedManagerId(undefined)}>
+                                                <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setSelectedManagerId(undefined)}>
                                                     <X className="w-5 h-5"/>
                                                 </Button>
                                             )}
                                         </div>
                                     </div>
-                                    <div className={!selectedManagerId ? "opacity-50 pointer-events-none" : ""}>
-                                        <CardTitle className="flex items-center gap-2 font-headline">
-                                            <Users />
+                                    <div className={cn("space-y-3", !selectedManagerId && "opacity-50 pointer-events-none")}>
+                                        <CardTitle className="flex items-center gap-2 font-headline text-xl">
+                                            <Users className="text-primary" />
                                             PMR Filter
                                         </CardTitle>
-                                        <CardDescription>Select a PMR to view their detailed dashboard.</CardDescription>
+                                        <CardDescription className="text-base">Drill down into a specific medical representative's daily reporting.</CardDescription>
                                         <div className="flex items-center gap-2 pt-2">
                                             <Select onValueChange={handleUserSelect} value={selectedUserId || ''}>
-                                                <SelectTrigger className="w-[350px]">
-                                                    <SelectValue placeholder="Select a user..." />
+                                                <SelectTrigger className="w-full sm:w-[350px] h-11 border-2 text-base font-headline">
+                                                    <SelectValue placeholder="Select a representative..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {Array.from(userMap.entries()).map(([uid, displayName]) => (
-                                                        <SelectItem key={uid} value={uid}>{displayName}</SelectItem>
+                                                        <SelectItem key={uid} value={uid} className="font-headline">{displayName}</SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
                                             {selectedUserId && (
-                                                <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}>
+                                                <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setSelectedUserId(null)}>
                                                     <X className="w-5 h-5"/>
                                                 </Button>
                                             )}
@@ -369,12 +364,14 @@ export default function AdminPage() {
 
                         {renderDistrictReportsContent()}
                     </TabsContent>
+                    
                     {isUserAdmin && (
-                        <TabsContent value="all-reports" className="mt-6">
+                        <TabsContent value="all-reports" className="mt-8 w-full">
                             <AdminReportList entries={allEntries} onDelete={deleteAllUsersEntry} />
                         </TabsContent>
                     )}
-                    <TabsContent value="approvals" className="mt-6 space-y-6">
+                    
+                    <TabsContent value="approvals" className="mt-8 space-y-8 w-full">
                         <NonCallDayApprovals 
                             nonCallDays={(allNonCallDays || [])}
                             onUpdateStatus={updateNonCallDayStatus}
@@ -386,8 +383,9 @@ export default function AdminPage() {
                             userMap={USER_DATA_MAP}
                         />
                     </TabsContent>
+                    
                     {isUserAdmin && (
-                        <TabsContent value="marketing" className="mt-6">
+                        <TabsContent value="marketing" className="mt-8 w-full">
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
@@ -402,5 +400,4 @@ export default function AdminPage() {
             </main>
         </div>
     );
-    
 }
