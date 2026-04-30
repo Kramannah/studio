@@ -352,12 +352,18 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
                         className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
-                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto">
-                    <TabsTrigger value="list" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                        <List className="w-9 h-9" />
+                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
+                    <TabsTrigger 
+                        value="list" 
+                        className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
+                    >
+                        <List className="w-7 h-7" />
                     </TabsTrigger>
-                    <TabsTrigger value="calendar" className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-background data-[state=active]:shadow-md">
-                        <CalendarIcon className="w-9 h-9" />
+                    <TabsTrigger 
+                        value="calendar" 
+                        className="rounded-lg h-full px-4 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
+                    >
+                        <CalendarIcon className="w-7 h-7" />
                     </TabsTrigger>
                 </TabsList>
             </div>
