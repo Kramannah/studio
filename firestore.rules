@@ -67,9 +67,10 @@ service cloud.firestore {
       allow update: if request.auth != null && isAuthorized();
     }
     
-    // Marketing Samples: Allow write access to any authenticated user who can access the feature.
+    // Marketing Samples: Allow read and full write access to any authenticated user.
     match /marketingSamples/{sampleId} {
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow create, update, delete: if request.auth != null;
     }
 
     // Time logs: Managed by the owner.

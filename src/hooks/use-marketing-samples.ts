@@ -54,17 +54,17 @@ export const useMarketingSamples = () => {
     
     allEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
-            const qty = Math.round(Number(entry.primaryProductQty));
+            const qty = Math.round(Number(entry.primaryProductQty)) || 0;
             quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            const qty = Math.round(Number(entry.secondaryProductQty));
+            const qty = Math.round(Number(entry.secondaryProductQty)) || 0;
             quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + qty;
         }
         if (entry.reminderProducts && entry.reminderProducts.length > 0) {
             entry.reminderProducts.forEach(prod => {
                 if (prod.sampleName && prod.quantity) {
-                    const qty = Math.round(Number(prod.quantity));
+                    const qty = Math.round(Number(prod.quantity)) || 0;
                     quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
                 }
             });
@@ -90,9 +90,7 @@ export const useAdminMarketingSamples = () => {
           return false;
       }
 
-      // Simplified: If you have access to the UI, you can write to the database.
-      // Database security rules will still ensure you are a logged-in user.
-      
+      // 1. Fetch existing samples to determine if we update or create
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       const existingMap = new Map<string, string>(); 
@@ -104,34 +102,59 @@ export const useAdminMarketingSamples = () => {
         }
       });
 
-      const batch = writeBatch(db);
+      // 2. Prepare operations
+      const operations: { type: 'set' | 'update'; docRef: any; data: any }[] = [];
       let updatedCount = 0;
       let addedCount = 0;
       
       samplesData.forEach(sample => {
         const materialNameLower = sample.materialName.toLowerCase().trim();
-        const roundedQty = Math.round(Number(sample.allocationQuantity)) || 0;
+        const rawQty = Number(sample.allocationQuantity);
+        const roundedQty = isNaN(rawQty) ? 0 : Math.round(rawQty);
         const existingId = existingMap.get(materialNameLower);
         
         if (existingId) {
           const docRef = doc(db, "marketingSamples", existingId);
-          batch.update(docRef, { 
-            productGroup: sample.productGroup,
-            allocationQuantity: roundedQty 
+          operations.push({
+            type: 'update',
+            docRef,
+            data: { 
+              productGroup: sample.productGroup,
+              allocationQuantity: roundedQty 
+            }
           });
           updatedCount++;
         } else {
           const docRef = doc(collection(db, "marketingSamples"));
-          batch.set(docRef, { 
-            productGroup: sample.productGroup,
-            materialName: sample.materialName,
-            allocationQuantity: roundedQty
+          operations.push({
+            type: 'set',
+            docRef,
+            data: { 
+              productGroup: sample.productGroup,
+              materialName: sample.materialName,
+              allocationQuantity: roundedQty
+            }
           });
           addedCount++;
         }
       });
 
-      await batch.commit();
+      // 3. Process in chunks of 400 (Firebase batch limit is 500)
+      const chunkSize = 400;
+      for (let i = 0; i < operations.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        const chunk = operations.slice(i, i + chunkSize);
+        
+        chunk.forEach(op => {
+          if (op.type === 'update') {
+            batch.update(op.docRef, op.data);
+          } else {
+            batch.set(op.docRef, op.data);
+          }
+        });
+        
+        await batch.commit();
+      }
 
       toast({
           title: "Update Successful",
@@ -143,10 +166,17 @@ export const useAdminMarketingSamples = () => {
     } catch (error: any) {
       console.error("Database Operation Failed:", error);
       
+      let errorMessage = "Could not update inventory. Please try again.";
+      if (error.code === 'permission-denied') {
+        errorMessage = "Permission Denied. Your account is not authorized to modify samples.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
       toast({ 
           variant: 'destructive', 
           title: 'Operation Failed', 
-          description: "Could not update inventory. Please verify your connection." 
+          description: errorMessage
       });
       return false;
     }
