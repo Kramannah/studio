@@ -10,12 +10,15 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
+import * as XLSX from 'xlsx';
+import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
+import { useToast } from "@/hooks/use-toast";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -29,6 +32,10 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { addMarketingSamplesBulk } = useAdminMarketingSamples();
+  const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -48,6 +55,104 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
     return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSamples, currentPage]);
 
+  const handleUploadClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleDownloadTemplate = () => {
+      const headers = ['Product Group', 'Material Name', 'Allocation Quantity'];
+      const sampleData = [
+          {
+              'Product Group': 'Tocovid',
+              'Material Name': 'Tocovid 100mg',
+              'Allocation Quantity': 100
+          }
+      ];
+      const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+      XLSX.writeFile(workbook, "marketing_samples_template.xlsx");
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setIsUploading(true);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+          try {
+              const data = new Uint8Array(e.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, { type: 'array' });
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+              if (json.length < 2) {
+                  toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
+                  setIsUploading(false);
+                  return;
+              }
+
+              const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim());
+              const bodyRows = json.slice(1);
+
+              const findColIndex = (possibleNames: string[]) => {
+                  for (const name of possibleNames) {
+                      const index = headerRow.findIndex((h) => h.includes(name.toLowerCase()));
+                      if (index > -1) return index;
+                  }
+                  return -1;
+              };
+
+              const colMap = {
+                  group: findColIndex(['product group', 'product', 'group', 'category']),
+                  name: findColIndex(['material name', 'material', 'name', 'item', 'description']),
+                  qty: findColIndex(['allocation quantity', 'allocation', 'quantity', 'qty', 'stock'])
+              };
+
+              if (colMap.name === -1 || colMap.qty === -1) {
+                  toast({ variant: "destructive", title: "Missing Columns", description: "Please ensure your file includes 'Material Name' and 'Allocation Quantity' columns." });
+                  setIsUploading(false);
+                  return;
+              }
+
+              const samplesToAdd: Omit<MarketingSample, 'id'>[] = [];
+              for (const row of bodyRows) {
+                  const name = String(row[colMap.name] || '').trim();
+                  const qty = Number(row[colMap.qty]);
+                  const group = colMap.group > -1 ? String(row[colMap.group] || '').trim() : "Uncategorized";
+
+                  if (name && !isNaN(qty)) {
+                      samplesToAdd.push({
+                          productGroup: group,
+                          materialName: name,
+                          allocationQuantity: Math.round(qty)
+                      });
+                  }
+              }
+
+              if (samplesToAdd.length === 0) {
+                  toast({ variant: "destructive", title: "No Data", description: "No valid items found in the file." });
+                  setIsUploading(false);
+                  return;
+              }
+
+              const success = await addMarketingSamplesBulk(samplesToAdd);
+              if (success && onRefresh) {
+                  onRefresh();
+              }
+          } catch (error) {
+              console.error("Excel processing error:", error);
+              toast({ variant: "destructive", title: "Upload Failed", description: "Could not process the Excel file. Please check the format." });
+          } finally {
+              setIsUploading(false);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+          }
+      };
+      reader.readAsArrayBuffer(file);
+  };
+
   return (
     <Card className="shadow-lg border-2">
       <CardHeader>
@@ -62,9 +167,17 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+            <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
+                <Download className="mr-2 h-4 w-4" /> Template
+            </Button>
+            <Button onClick={handleUploadClick} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
+                {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                Add Sample
+            </Button>
             {onRefresh && (
-                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading} className="border-2">
-                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
+                    <RefreshCw className={cn("h-4 w-4", (loading || isUploading) && "animate-spin")} />
                 </Button>
             )}
           </div>
