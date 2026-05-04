@@ -4,13 +4,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // UNIVERSAL ACCESS FOR MARKETING SAMPLES
-    // This is prioritized at the top to ensure your account has full access.
+    // 1. MARKETING SAMPLES - GLOBAL ACCESS FOR LOGGED-IN USERS
+    // This is placed at the top and simplified to ensure no authorization barriers for inventory management.
     match /marketingSamples/{document=**} {
         allow read, write, create, update, delete: if request.auth != null;
     }
 
-    // Centralized check for Admin or Manager status.
+    // Centralized check for Admin or Manager status for other collections.
     function isAuthorized() {
       if (request.auth == null) return false;
       

@@ -42,10 +42,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
   // Run auto-seed only once when the list is first loaded and data is missing
   useEffect(() => {
     const performSeed = async () => {
-        if (samples.length === 0 && !loading && !readOnly) {
-            console.log("Database appears empty. Executing silent seed for screenshot samples...");
-            await runAutoSeed();
-            if (onRefresh) onRefresh();
+        // Only run auto-seed if we are in admin mode (not readOnly) and inventory seems empty
+        if (!readOnly && samples.length === 0 && !loading) {
+            console.log("Admin session detected. Executing silent seed for request samples...");
+            const success = await runAutoSeed();
+            if (success && onRefresh) onRefresh();
         }
     };
     performSeed();
@@ -80,6 +81,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
               'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup',
               'DisplayMaterialName': 'PQ3_Frutos Candy',
               'AllocationQuantity': 180
+          },
+          {
+              'ProdGroupProdSubGroup': 'Antihistamine - Ricam Tablet',
+              'DisplayMaterialName': 'PQ3_Pistachio with Ricam Sticker',
+              'AllocationQuantity': 675
           }
       ];
       const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -165,11 +171,9 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
               if (success) {
                 toast({ title: "Upload Successful", description: "Inventory has been updated." });
                 if (onRefresh) onRefresh();
-              } else {
-                toast({ variant: "destructive", title: "Upload Failed", description: "Check permissions or file format." });
               }
           } catch (error) {
-              toast({ variant: "destructive", title: "Upload Error" });
+              toast({ variant: "destructive", title: "Upload Error", description: "An unexpected error occurred during processing." });
           } finally {
               setIsUploading(false);
               if (fileInputRef.current) fileInputRef.current.value = "";

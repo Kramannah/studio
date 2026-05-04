@@ -82,6 +82,7 @@ export const useAdminMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
+        toast({ variant: "destructive", title: "Auth Error", description: "You must be logged in to modify samples." });
         return false;
     }
 
@@ -100,8 +101,10 @@ export const useAdminMarketingSamples = () => {
           const materialName = (sample.materialName || "").trim();
           if (!materialName) return;
 
-          // Generating a robust, clean ID
+          // Generating a robust, clean ID (alphanumeric only) to prevent technical rejections
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!docId) return; // Skip if ID is empty after sanitization
+
           const docRef = doc(db, "marketingSamples", docId);
           
           const allocation = Math.round(Number(sample.allocationQuantity) || 0);
@@ -123,9 +126,14 @@ export const useAdminMarketingSamples = () => {
 
     } catch (error: any) {
       console.error("UPLOAD ERROR:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Update Failed", 
+        description: error.message || "Missing or insufficient permissions. Please try logging out and back in."
+      });
       return false;
     }
-  }, []);
+  }, [toast]);
   
   const runAutoSeed = useCallback(async () => {
     const screenshotData = [
