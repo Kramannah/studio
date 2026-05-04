@@ -6,6 +6,7 @@ import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
 import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
+import { ADMIN_EMAILS, ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
@@ -86,14 +87,22 @@ export const useAdminMarketingSamples = () => {
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     try {
       const currentUser = auth.currentUser;
-      console.log("Starting additive marketing sample upload. User:", currentUser?.uid, "Email:", currentUser?.email);
-
+      
       if (!currentUser) {
           toast({ variant: 'destructive', title: 'Session Expired', description: 'Please log in again.' });
           return false;
       }
+
+      // Final check for authorization status before attempting write
+      const isAdmin = ADMIN_UIDS.includes(currentUser.uid) || (currentUser.email && ADMIN_EMAILS.includes(currentUser.email));
+      const isManager = Object.keys(MANAGER_TEAMS).includes(currentUser.uid);
+
+      if (!isAdmin && !isManager) {
+          toast({ variant: 'destructive', title: 'Action Blocked', description: 'Your account does not have permission to modify inventory.' });
+          return false;
+      }
       
-      // 1. Fetch existing samples
+      // 1. Fetch existing samples to determine updates vs creates
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       const existingMap = new Map<string, string>(); 
@@ -109,7 +118,7 @@ export const useAdminMarketingSamples = () => {
       let updatedCount = 0;
       let addedCount = 0;
       
-      // 2. Process data additively
+      // 2. Process data additively (Upsert)
       samplesData.forEach(sample => {
         const materialNameLower = sample.materialName.toLowerCase().trim();
         const roundedQty = Math.round(Number(sample.allocationQuantity)) || 0;
@@ -134,7 +143,6 @@ export const useAdminMarketingSamples = () => {
       });
 
       await batch.commit();
-      console.log(`Inventory sync complete. Added: ${addedCount}, Updated: ${updatedCount}`);
 
       toast({
           title: "Add Sample Successful",
@@ -146,9 +154,9 @@ export const useAdminMarketingSamples = () => {
     } catch (error: any) {
       console.error("Critical error in addMarketingSamplesBulk:", error);
       
-      let errorMessage = "Could not update inventory. Please check console for details.";
+      let errorMessage = "Could not update inventory. Please verify your connection.";
       if (error.code === 'permission-denied') {
-          errorMessage = "PERMISSION DENIED. PLEASE ENSURE YOU ARE LOGGED IN AS ADMIN/MANAGER";
+          errorMessage = "PERMISSION DENIED: Database access blocked. Please ensure you are using an authorized @hovidinc.com account.";
       }
 
       toast({ 
