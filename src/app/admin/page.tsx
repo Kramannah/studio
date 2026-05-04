@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, PackagePlus, ListChecks } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,6 +34,7 @@ const AdminReportList = dynamic(() => import('@/components/admin-report-list').t
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
 const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
 const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
+const AddMarketingSamples = dynamic(() => import('@/components/add-marketing-samples').then(mod => mod.AddMarketingSamples), { loading: () => <DynamicSkeleton /> });
 
 
 export default function AdminPage() {
@@ -297,7 +297,14 @@ export default function AdminPage() {
                                 Approvals
                                 {totalPendingApprovals > 0 && <Badge className="absolute -right-1 -top-1 px-1.5 min-w-[20px]" variant="destructive">{totalPendingApprovals}</Badge>}
                             </TabsTrigger>
-                            {hasAdminAccess && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>}
+                            {hasAdminAccess && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">
+                                <ListChecks className="mr-2 h-4 w-4" />
+                                Marketing Samples
+                            </TabsTrigger>}
+                            {hasAdminAccess && <TabsTrigger value="add-marketing" className="px-6 rounded-lg font-headline">
+                                <PackagePlus className="mr-2 h-4 w-4" />
+                                Add Marketing Samples
+                            </TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -384,10 +391,16 @@ export default function AdminPage() {
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
-                                readOnly={false}
+                                readOnly={true}
                                 loading={marketingSamplesLoading}
                                 onRefresh={refetchMarketingSamples}
                             />
+                        </TabsContent>
+                    )}
+
+                    {hasAdminAccess && (
+                        <TabsContent value="add-marketing" className="mt-8 w-full">
+                            <AddMarketingSamples onRefresh={refetchMarketingSamples} />
                         </TabsContent>
                     )}
                 </Tabs>

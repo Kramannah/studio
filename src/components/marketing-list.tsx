@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -11,16 +10,14 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, Download, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
-import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
-import { useToast } from "@/hooks/use-toast";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -30,26 +27,10 @@ type MarketingListProps = {
   onRefresh?: () => void;
 }
 
-export function MarketingList({ samples, usedQuantities, readOnly = false, loading = false, onRefresh }: MarketingListProps) {
+export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { addMarketingSamplesBulk, runAutoSeed } = useAdminMarketingSamples();
-  const { toast } = useToast();
-  
-  const [isUploading, setIsUploading] = useState(false);
-
-  // Run auto-seed only once when the list is first loaded and data is missing
-  useEffect(() => {
-    const performSeed = async () => {
-        if (!readOnly && samples.length === 0 && !loading) {
-            const success = await runAutoSeed();
-            if (success && onRefresh) onRefresh();
-        }
-    };
-    performSeed();
-  }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -69,21 +50,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
     return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSamples, currentPage]);
 
-  const handleUploadClick = () => {
-      fileInputRef.current?.click();
-  };
-
-  const handleDownloadTemplate = () => {
-      const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
-      const sampleData = [
-          { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
-      ];
-      const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-      XLSX.writeFile(workbook, "marketing_samples_template.xlsx");
-  };
-
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => ({
         "ProdGroupProdSubGroup": sample.productGroup,
@@ -93,74 +59,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Samples");
-    XLSX.writeFile(workbook, `existing_marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      setIsUploading(true);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-          try {
-              const data = new Uint8Array(e.target?.result as ArrayBuffer);
-              const workbook = XLSX.read(data, { type: 'array' });
-              const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-              const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-              if (json.length < 2) {
-                  toast({ variant: "destructive", title: "Empty File" });
-                  setIsUploading(false);
-                  return;
-              }
-
-              const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim());
-              const bodyRows = json.slice(1);
-
-              const findColIndex = (possibleNames: string[]) => {
-                  for (const name of possibleNames) {
-                      const index = headerRow.findIndex((h) => h.includes(name.toLowerCase()));
-                      if (index > -1) return index;
-                  }
-                  return -1;
-              };
-
-              const colMap = {
-                  group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group']),
-                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name']),
-                  qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty'])
-              };
-
-              if (colMap.name === -1 || colMap.qty === -1) {
-                  toast({ variant: "destructive", title: "Missing Columns", description: "Please use the template format." });
-                  setIsUploading(false);
-                  return;
-              }
-
-              const samplesToAdd: Omit<MarketingSample, 'id'>[] = [];
-              for (const row of bodyRows) {
-                  const name = String(row[colMap.name] || '').trim();
-                  const qty = Number(row[colMap.qty]);
-                  const group = colMap.group > -1 ? String(row[colMap.group] || '').trim() : "Uncategorized";
-                  if (name && !isNaN(qty)) {
-                      samplesToAdd.push({ productGroup: group, materialName: name, allocationQuantity: Math.round(qty) });
-                  }
-              }
-
-              const success = await addMarketingSamplesBulk(samplesToAdd);
-              if (success) {
-                toast({ title: "Upload Successful" });
-                if (onRefresh) onRefresh();
-              }
-          } catch (error) {
-              toast({ variant: "destructive", title: "Upload Error" });
-          } finally {
-              setIsUploading(false);
-              if (fileInputRef.current) fileInputRef.current.value = "";
-          }
-      };
-      reader.readAsArrayBuffer(file);
+    XLSX.writeFile(workbook, `inventory_export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   return (
@@ -176,25 +75,16 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
                 Real-time tracking of promotional materials.
             </CardDescription>
           </div>
-          {!readOnly && (
-            <div className="flex flex-wrap gap-2">
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
-                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
-                </Button>
-                <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
-                    <Download className="mr-2 h-4 w-4" /> Template
-                </Button>
-                <Button onClick={handleUploadClick} variant="secondary" disabled={isUploading} className="font-headline h-11 border-2">
-                    <Download className="mr-2 h-4 w-4 rotate-180" /> Import Excel
-                </Button>
-                {onRefresh && (
-                    <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
-                        <RefreshCw className={cn("h-4 w-4", (loading || isUploading) && "animate-spin")} />
-                    </Button>
-                )}
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2">
+              <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
+                  <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
+              </Button>
+              {onRefresh && (
+                  <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading} className="border-2 h-11 w-11">
+                      <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                  </Button>
+              )}
+          </div>
         </div>
         <div className="mt-4">
           <Input 
