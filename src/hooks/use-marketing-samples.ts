@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,9 +37,12 @@ export const useMarketingSamples = () => {
       });
       setAllEntries(fetchedEntries);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching marketing data:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch marketing samples or usage data." });
+      // Only toast if it's a critical failure, but keep it quiet for simple read errors
+      if (error.code !== 'permission-denied') {
+        toast({ variant: "destructive", title: "Sync Issue", description: "Check your connection to refresh inventory." });
+      }
     } finally {
       setLoading(false);
     }
@@ -89,9 +93,9 @@ export const useAdminMarketingSamples = () => {
   
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     try {
-      console.log("Starting bulk marketing sample upsert with", samplesData.length, "items.");
+      console.log("Starting additive marketing sample upload:", samplesData.length, "items.");
       
-      // 1. Fetch existing samples to create a map for checking duplicates/updates
+      // 1. Fetch existing samples to determine which ones to update vs create
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       const existingMap = new Map<string, string>(); // materialName (lowercase) -> docId
@@ -107,14 +111,14 @@ export const useAdminMarketingSamples = () => {
       let updatedCount = 0;
       let addedCount = 0;
       
-      // 2. Process the new data additively (Upsert)
+      // 2. Process data additively (Upsert)
       samplesData.forEach(sample => {
         const materialNameLower = sample.materialName.toLowerCase().trim();
         const roundedQty = Math.round(Number(sample.allocationQuantity)) || 0;
         const existingId = existingMap.get(materialNameLower);
         
         if (existingId) {
-          // Update existing product: Update group and quantity
+          // Update existing product
           const docRef = doc(db, "marketingSamples", existingId);
           batch.update(docRef, { 
             productGroup: sample.productGroup,
@@ -133,22 +137,29 @@ export const useAdminMarketingSamples = () => {
         }
       });
 
+      // Commit the batch write
       await batch.commit();
-      console.log(`Upsert complete. Added: ${addedCount}, Updated: ${updatedCount}`);
+      console.log(`Inventory sync complete. Added: ${addedCount}, Updated: ${updatedCount}`);
 
       toast({
-          title: "Add Sample Complete",
-          description: `${addedCount} new product(s) added, ${updatedCount} existing product(s) updated.`,
+          title: "Add Sample Successful",
+          description: `${addedCount} new product(s) added, ${updatedCount} updated.`,
       });
 
       return true;
 
     } catch (error: any) {
       console.error("Critical error in addMarketingSamplesBulk:", error);
+      
+      let errorMessage = "Could not update inventory. Please try again.";
+      if (error.code === 'permission-denied') {
+          errorMessage = "Permission Denied. Please ensure you are logged in as an Admin/Manager.";
+      }
+
       toast({ 
           variant: 'destructive', 
-          title: 'Action Failed', 
-          description: error.message || 'Could not process the samples file.' 
+          title: 'Upload Failed', 
+          description: errorMessage 
       });
       return false;
     }
