@@ -79,19 +79,19 @@ export const useAdminMarketingSamples = () => {
   const { toast } = useToast();
   
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
+    const currentUser = auth.currentUser;
+    
+    if (!currentUser) {
+        toast({ variant: 'destructive', title: 'Session Error', description: 'User not logged in.' });
+        return false;
+    }
+
+    console.log("DIAGNOSTIC: Attempting upload as user:", currentUser.email);
+    console.log("DIAGNOSTIC: Items to process:", samplesData.length);
+
     try {
-      const currentUser = auth.currentUser;
-      
-      if (!currentUser) {
-          console.error("No authenticated user found in Auth module.");
-          toast({ variant: 'destructive', title: 'Session Expired', description: 'Please log in again.' });
-          return false;
-      }
-
-      console.log(`Starting bulk upload for ${samplesData.length} items. User: ${currentUser.email}`);
-
-      // Process in chunks to respect Firestore batch limits (500)
-      const chunkSize = 400;
+      // Process in smaller chunks to guarantee database performance
+      const chunkSize = 300;
       let totalProcessed = 0;
 
       for (let i = 0; i < samplesData.length; i += chunkSize) {
@@ -99,52 +99,49 @@ export const useAdminMarketingSamples = () => {
         const chunk = samplesData.slice(i, i + chunkSize);
         
         chunk.forEach(sample => {
-          const materialName = (sample.materialName || "Unknown Material").trim();
+          const materialName = (sample.materialName || "").trim();
           if (!materialName) return;
 
-          // Create a predictable document ID from the material name
+          // Create unique ID from material name for efficient upserts
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '-');
           const docRef = doc(db, "marketingSamples", docId);
           
-          const roundedQty = Math.round(Number(sample.allocationQuantity) || 0);
-          const productGroup = (sample.productGroup || "Uncategorized").trim();
+          const allocation = Math.round(Number(sample.allocationQuantity) || 0);
+          const group = (sample.productGroup || "General").trim();
           
-          // Use set with merge: true to handle both creation and updates.
-          // Explicitly ensuring no undefined values are passed.
           batch.set(docRef, { 
-            productGroup: productGroup,
+            productGroup: group,
             materialName: materialName,
-            allocationQuantity: roundedQty
+            allocationQuantity: allocation
           }, { merge: true });
         });
         
         await batch.commit();
         totalProcessed += chunk.length;
+        console.log(`DIAGNOSTIC: Successfully committed batch. Total processed: ${totalProcessed}`);
       }
 
       toast({
-          title: "Update Successful",
-          description: `Successfully processed ${totalProcessed} inventory items.`,
+          title: "Upload Successful",
+          description: `Inventory updated with ${totalProcessed} items.`,
       });
-
       return true;
 
     } catch (error: any) {
-      console.error("Bulk Upload Error:", error);
+      console.error("CRITICAL UPLOAD ERROR:", error);
       
-      let errorMsg = error.message || "Permissions check failed.";
+      let errorMsg = error.message || "An unknown database error occurred.";
       if (error.code === 'permission-denied') {
-          errorMsg = "Database access denied. Please contact support to verify your account permissions.";
+          errorMsg = "Database rejected the request. Please ensure you are logged in correctly.";
       }
 
       toast({ 
           variant: 'destructive', 
-          title: 'Upload Failed', 
+          title: 'Update Failed', 
           description: errorMsg
       });
       return false;
     }
-
   }, [toast]);
   
   return { addMarketingSamplesBulk };

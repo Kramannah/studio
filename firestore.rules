@@ -4,22 +4,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 1. Marketing Samples: ABSOLUTE ACCESS for all authenticated users
+    // Placed at the very top to ensure it is evaluated before any other rules.
+    match /marketingSamples/{sampleId} {
+        allow read, write, create, update, delete: if request.auth != null;
+    }
+
     // Centralized check for Admin or Manager status.
     function isAuthorized() {
-      // Safe access to auth and email
-      let userAuth = request.auth;
-      let userEmail = userAuth.token.email;
-      let uid = userAuth.uid;
+      if (request.auth == null) return false;
+      
+      let userEmail = request.auth.token.email.lower();
+      let uid = request.auth.uid;
 
-      if (userAuth == null) {
-        return false;
-      }
-
-      // Case-insensitive check for admin email or domain
-      let isAdmin = userEmail != null && (
-        userEmail.lower() == 'mbustamante@hovidinc.com' ||
-        userEmail.lower().matches('.*@hovidinc\\.com$')
-      );
+      // Direct whitelist for primary admin
+      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.matches('.*@hovidinc\\.com$');
 
       // List of authorized UIDs (Managers).
       let isWhitelistedUid = uid in [
@@ -31,12 +30,6 @@ service cloud.firestore {
       ];
 
       return isAdmin || isWhitelistedUid;
-    }
-
-    // 1. Marketing Samples: OPEN ACCESS for all authenticated users
-    // Placed at the top to avoid inheritance issues
-    match /marketingSamples/{sampleId} {
-        allow read, write: if request.auth != null;
     }
 
     // 2. Doctor Masterlist: Users manage their own; Admins/Managers manage all.

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -46,7 +47,8 @@ export default function AdminPage() {
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
-        return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+        const normalizedEmail = user.email?.toLowerCase() || '';
+        return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
     }, [user]);
 
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
