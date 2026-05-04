@@ -92,13 +92,18 @@ export const useAdminMarketingSamples = () => {
       }
 
       const userEmail = currentUser.email?.toLowerCase() || '';
-      const isAdmin = ADMIN_UIDS.includes(currentUser.uid) || 
+      console.log("Authorizing User:", userEmail, "UID:", currentUser.uid);
+
+      // Force absolute authorization for mbustamante@hovidinc.com
+      const isAdmin = userEmail === 'mbustamante@hovidinc.com' ||
                       ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail) ||
+                      ADMIN_UIDS.includes(currentUser.uid) || 
                       userEmail.endsWith('@hovidinc.com');
                       
       const isManager = Object.keys(MANAGER_TEAMS).includes(currentUser.uid);
 
       if (!isAdmin && !isManager) {
+          console.warn("Client-side permission check failed for:", userEmail);
           toast({ variant: 'destructive', title: 'Action Blocked', description: 'Your account does not have permission to modify inventory.' });
           return false;
       }
@@ -144,18 +149,18 @@ export const useAdminMarketingSamples = () => {
       await batch.commit();
 
       toast({
-          title: "Add Sample Successful",
+          title: "Update Successful",
           description: `${addedCount} new product(s) added, ${updatedCount} updated.`,
       });
 
       return true;
 
     } catch (error: any) {
-      console.error("DEBUG: Firestore Permission Denied. Details:", error);
+      console.error("Firestore Permission Denied. Details:", error);
       
       let errorMessage = "Could not update inventory. Please verify your connection.";
       if (error.code === 'permission-denied') {
-          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure your email is spelled correctly in the admin list.`;
+          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure you are logged in correctly.`;
       }
 
       toast({ 
