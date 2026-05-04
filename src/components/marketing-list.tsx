@@ -86,18 +86,18 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         const json = XLSX.utils.sheet_to_json<any>(worksheet);
 
         const mappedData = json.map(row => ({
-            productGroup: row['ProdGroupProdSubGroup'] || row['Product Group'],
-            materialName: row['DisplayMaterialName'] || row['Material Name'],
+            productGroup: String(row['ProdGroupProdSubGroup'] || row['Product Group'] || "").trim(),
+            materialName: String(row['DisplayMaterialName'] || row['Material Name'] || "").trim(),
             allocationQuantity: Math.round(Number(row['AllocationQuantity'] || row['Allocated'])) || 0
-        }));
+        })).filter(s => s.materialName && s.productGroup);
 
-        if (mappedData.length === 0) throw new Error("File empty");
+        if (mappedData.length === 0) throw new Error("File empty or missing required columns.");
 
         const success = await onAddSamplesBulk(mappedData);
         if (success && onRefresh) onRefresh();
 
-      } catch (error) {
-        toast({ variant: "destructive", title: "Upload Failed", description: "Invalid Excel format." });
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Upload Failed", description: error.message || "Invalid Excel format." });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -129,7 +129,7 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                     </Button>
                     <Button onClick={handleUploadClick} variant="outline" disabled={isUploading} className="font-headline border-2">
                         {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
-                        {isUploading ? 'Updating...' : 'Update Masterlist'}
+                        {isUploading ? 'Adding...' : 'Add Sample'}
                     </Button>
                 </>
             )}

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -90,36 +89,55 @@ export const useAdminMarketingSamples = () => {
   
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     try {
-      const batch = writeBatch(db);
-      
-      // Clear existing list first to ensure a clean master update
+      // 1. Fetch existing samples to create a map for checking duplicates/updates
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
-      querySnapshot.forEach(doc => {
-          batch.delete(doc.ref);
+      const existingMap = new Map<string, string>(); // materialName -> docId
+      querySnapshot.forEach(docSnap => {
+        existingMap.set(docSnap.data().materialName, docSnap.id);
       });
 
-      // Add new ones
+      const batch = writeBatch(db);
+      let updatedCount = 0;
+      let addedCount = 0;
+      
+      // 2. Process the new data additively
       samplesData.forEach(sample => {
-        const docRef = doc(collection(db, "marketingSamples"));
-        batch.set(docRef, { 
-            ...sample,
-            allocationQuantity: Math.round(Number(sample.allocationQuantity)) || 0
-        });
+        const roundedQty = Math.round(Number(sample.allocationQuantity)) || 0;
+        const existingId = existingMap.get(sample.materialName);
+        
+        if (existingId) {
+          // Update existing product
+          const docRef = doc(db, "marketingSamples", existingId);
+          batch.update(docRef, { 
+            productGroup: sample.productGroup,
+            allocationQuantity: roundedQty 
+          });
+          updatedCount++;
+        } else {
+          // Add new product
+          const docRef = doc(collection(db, "marketingSamples"));
+          batch.set(docRef, { 
+            productGroup: sample.productGroup,
+            materialName: sample.materialName,
+            allocationQuantity: roundedQty
+          });
+          addedCount++;
+        }
       });
 
       await batch.commit();
 
       toast({
-          title: "Upload Successful",
-          description: `${samplesData.length} marketing samples updated.`,
+          title: "Add Sample Complete",
+          description: `${addedCount} new products added, ${updatedCount} existing products updated.`,
       });
 
       return true;
 
     } catch (error) {
       console.error("Error adding marketing samples in bulk:", error);
-      toast({ variant: 'destructive', title: 'Bulk Add Failed', description: 'Could not update samples list.' });
+      toast({ variant: 'destructive', title: 'Action Failed', description: 'Could not process the samples file.' });
       return false;
     }
 
