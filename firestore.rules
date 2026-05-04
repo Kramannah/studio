@@ -5,9 +5,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // 1. MARKETING SAMPLES - GLOBAL ACCESS FOR LOGGED-IN USERS
-    // This is placed at the top and simplified to ensure no authorization barriers for inventory management.
+    // Placed at the top with maximum permissions to bypass any role-based blocks.
     match /marketingSamples/{document=**} {
-        allow read, write, create, update, delete: if request.auth != null;
+        allow read, write: if request.auth != null;
     }
 
     // Centralized check for Admin or Manager status for other collections.
@@ -18,7 +18,7 @@ service cloud.firestore {
       let userEmail = (email == null) ? "" : email.lower();
       let uid = request.auth.uid;
 
-      // Direct whitelist for primary admin with case-insensitive protection
+      // Direct whitelist for primary admin
       let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.matches('(?i).*@hovidinc\\.com$');
 
       // List of authorized UIDs (Managers).

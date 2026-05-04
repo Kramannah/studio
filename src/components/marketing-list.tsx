@@ -14,22 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet, Save, X } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, Download, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Label } from "./ui/label";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -48,14 +39,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
   const { toast } = useToast();
   
   const [isUploading, setIsUploading] = useState(false);
-  const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
-  
-  // Manual Entry Form State
-  const [manualSample, setManualSample] = useState({
-      productGroup: '',
-      materialName: '',
-      allocationQuantity: ''
-  });
 
   // Run auto-seed only once when the list is first loaded and data is missing
   useEffect(() => {
@@ -88,28 +71,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
 
   const handleUploadClick = () => {
       fileInputRef.current?.click();
-  };
-
-  const handleManualSave = async () => {
-      if (!manualSample.productGroup || !manualSample.materialName || !manualSample.allocationQuantity) {
-          toast({ variant: "destructive", title: "Missing Fields", description: "Please fill in all details." });
-          return;
-      }
-
-      setIsUploading(true);
-      const success = await addMarketingSamplesBulk([{
-          productGroup: manualSample.productGroup,
-          materialName: manualSample.materialName,
-          allocationQuantity: Number(manualSample.allocationQuantity)
-      }]);
-
-      if (success) {
-          toast({ title: "Sample Added", description: `${manualSample.materialName} has been saved.` });
-          setIsManualDialogOpen(false);
-          setManualSample({ productGroup: '', materialName: '', allocationQuantity: '' });
-          if (onRefresh) onRefresh();
-      }
-      setIsUploading(false);
   };
 
   const handleDownloadTemplate = () => {
@@ -227,9 +188,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
                 <Button onClick={handleUploadClick} variant="secondary" disabled={isUploading} className="font-headline h-11 border-2">
                     <Download className="mr-2 h-4 w-4 rotate-180" /> Import Excel
                 </Button>
-                <Button onClick={() => setIsManualDialogOpen(true)} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
-                    <PlusCircle className="mr-2 h-4 w-4" /> Add Sample
-                </Button>
                 {onRefresh && (
                     <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
                         <RefreshCw className={cn("h-4 w-4", (loading || isUploading) && "animate-spin")} />
@@ -264,7 +222,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
                         <TableRow>
                             <TableCell colSpan={5} className="h-64 text-center">
                                 <RefreshCw className="inline-block mr-2 animate-spin text-primary" />
-                                <span className="font-headline text-lg">Recalculating stock...</span>
+                                <span className="font-headline text-lg">Loading inventory...</span>
                             </TableCell>
                         </TableRow>
                     ) : paginatedSamples.length > 0 ? (
@@ -337,52 +295,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
             </div>
         )}
       </CardContent>
-
-      <Dialog open={isManualDialogOpen} onOpenChange={setIsManualDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                  <DialogTitle className="font-headline text-2xl text-primary">Add New Sample</DialogTitle>
-                  <DialogDescription>Manually enter details for a single promotional item.</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-6 py-4">
-                  <div className="grid gap-2">
-                      <Label htmlFor="productGroup" className="font-headline">Product Group</Label>
-                      <Input 
-                        id="productGroup" 
-                        placeholder="e.g. Tocovid" 
-                        value={manualSample.productGroup}
-                        onChange={(e) => setManualSample({...manualSample, productGroup: e.target.value})}
-                      />
-                  </div>
-                  <div className="grid gap-2">
-                      <Label htmlFor="materialName" className="font-headline">Material Name</Label>
-                      <Input 
-                        id="materialName" 
-                        placeholder="e.g. PQ3_Umbrella" 
-                        value={manualSample.materialName}
-                        onChange={(e) => setManualSample({...manualSample, materialName: e.target.value})}
-                      />
-                  </div>
-                  <div className="grid gap-2">
-                      <Label htmlFor="allocationQuantity" className="font-headline">Allocation Quantity</Label>
-                      <Input 
-                        id="allocationQuantity" 
-                        type="number" 
-                        placeholder="0" 
-                        value={manualSample.allocationQuantity}
-                        onChange={(e) => setManualSample({...manualSample, allocationQuantity: e.target.value})}
-                      />
-                  </div>
-              </div>
-              <DialogFooter>
-                  <Button variant="ghost" onClick={() => setIsManualDialogOpen(false)} disabled={isUploading}>Cancel</Button>
-                  <Button onClick={handleManualSave} disabled={isUploading} className="font-headline">
-                      {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Sample
-                  </Button>
-              </DialogFooter>
-          </DialogContent>
-      </Dialog>
     </Card>
   );
 }

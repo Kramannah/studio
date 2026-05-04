@@ -9,6 +9,7 @@ import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore'
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
+ * Optimized for speed using parallel fetching.
  */
 export const useMarketingSamples = () => {
   const { toast } = useToast();
@@ -19,20 +20,16 @@ export const useMarketingSamples = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const samplesQuery = query(collection(db, "marketingSamples"));
-      const samplesSnapshot = await getDocs(samplesQuery);
-      const fetchedSamples: MarketingSample[] = [];
-      samplesSnapshot.forEach((doc) => {
-        fetchedSamples.push({ id: doc.id, ...doc.data() } as MarketingSample);
-      });
-      setMarketingSamples(fetchedSamples);
+      // Parallel fetch for significant speed improvement
+      const [samplesSnap, entriesSnap] = await Promise.all([
+        getDocs(query(collection(db, "marketingSamples"))),
+        getDocs(query(collection(db, "coverageEntries")))
+      ]);
 
-      const entriesQuery = query(collection(db, "coverageEntries"));
-      const entriesSnapshot = await getDocs(entriesQuery);
-      const fetchedEntries: CoverageEntry[] = [];
-      entriesSnapshot.forEach((doc) => {
-        fetchedEntries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
-      });
+      const fetchedSamples = samplesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MarketingSample));
+      const fetchedEntries = entriesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
+
+      setMarketingSamples(fetchedSamples);
       setAllEntries(fetchedEntries);
 
     } catch (error: any) {
@@ -91,8 +88,6 @@ export const useAdminMarketingSamples = () => {
       await currentUser.getIdToken(true);
       
       const chunkSize = 300;
-      let totalProcessed = 0;
-
       for (let i = 0; i < samplesData.length; i += chunkSize) {
         const batch = writeBatch(db);
         const chunk = samplesData.slice(i, i + chunkSize);
@@ -101,12 +96,11 @@ export const useAdminMarketingSamples = () => {
           const materialName = (sample.materialName || "").trim();
           if (!materialName) return;
 
-          // Generating a robust, clean ID (alphanumeric only) to prevent technical rejections
+          // Alphanumeric ID only to prevent technical rejections
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!docId) return; // Skip if ID is empty after sanitization
+          if (!docId) return;
 
           const docRef = doc(db, "marketingSamples", docId);
-          
           const allocation = Math.round(Number(sample.allocationQuantity) || 0);
           const group = (sample.productGroup || "Uncategorized").trim();
           
@@ -119,7 +113,6 @@ export const useAdminMarketingSamples = () => {
         });
         
         await batch.commit();
-        totalProcessed += chunk.length;
       }
 
       return true;
@@ -129,7 +122,7 @@ export const useAdminMarketingSamples = () => {
       toast({ 
         variant: "destructive", 
         title: "Update Failed", 
-        description: error.message || "Missing or insufficient permissions. Please try logging out and back in."
+        description: error.message || "Database rejected the upload. Check your connection."
       });
       return false;
     }
