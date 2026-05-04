@@ -391,7 +391,7 @@ export default function AdminPage() {
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
-                                readOnly={true}
+                                readOnly={false}
                                 loading={marketingSamplesLoading}
                                 onRefresh={refetchMarketingSamples}
                             />

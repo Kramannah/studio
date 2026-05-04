@@ -10,14 +10,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, Download, Upload, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
+import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
+import { useToast } from "@/hooks/use-toast";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -28,9 +30,26 @@ type MarketingListProps = {
 }
 
 export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
+  const { addMarketingSamplesBulk, runAutoSeed } = useAdminMarketingSamples();
+  const { toast } = useToast();
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
+
+  // Bring back automatic seeding logic for screenshot data
+  useEffect(() => {
+    const performSeed = async () => {
+      // If the list is empty and we aren't loading, seed the 4 screenshot samples
+      if (samples.length === 0 && !loading && !readOnly) {
+          console.log("Seeding screenshot samples automatically...");
+          const success = await runAutoSeed();
+          if (success && onRefresh) onRefresh();
+      }
+    };
+    performSeed();
+  }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -62,6 +81,88 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     XLSX.writeFile(workbook, `inventory_export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
+    const templateData = [
+        { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(templateData, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.writeFile(workbook, "marketing_samples_template.xlsx");
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+        if (json.length < 2) {
+          toast({ variant: "destructive", title: "Empty File", description: "Your Excel file has no data rows." });
+          setIsUploading(false);
+          return;
+        }
+
+        const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim());
+        const bodyRows = json.slice(1);
+
+        const findColIndex = (possibleNames: string[]) => {
+          for (const name of possibleNames) {
+            const index = headerRow.findIndex((h) => h.includes(name.toLowerCase()));
+            if (index > -1) return index;
+          }
+          return -1;
+        };
+
+        const colMap = {
+          group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group']),
+          name: findColIndex(['displaymaterialname', 'material name', 'material', 'name']),
+          qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty'])
+        };
+
+        if (colMap.name === -1 || colMap.qty === -1) {
+          toast({ variant: "destructive", title: "Missing Columns", description: "Headers must be: ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity" });
+          setIsUploading(false);
+          return;
+        }
+
+        const samplesToAdd: Omit<MarketingSample, 'id'>[] = [];
+        for (const row of bodyRows) {
+          const name = String(row[colMap.name] || '').trim();
+          const qty = Number(row[colMap.qty]);
+          const group = colMap.group > -1 ? String(row[colMap.group] || '').trim() : "Uncategorized";
+          if (name && !isNaN(qty)) {
+            samplesToAdd.push({ productGroup: group, materialName: name, allocationQuantity: Math.round(qty) });
+          }
+        }
+
+        const success = await addMarketingSamplesBulk(samplesToAdd);
+        if (success) {
+          toast({ title: "Import Successful", description: `${samplesToAdd.length} materials processed.` });
+          if (onRefresh) onRefresh();
+        }
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Technical Error", description: error.message || "Failed to process file." });
+      } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   return (
     <Card className="shadow-lg border-2">
       <CardHeader>
@@ -76,6 +177,18 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+              {!readOnly && (
+                  <>
+                      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                      <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
+                          <Download className="mr-2 h-4 w-4" /> Template
+                      </Button>
+                      <Button onClick={handleUploadClick} disabled={isUploading || loading} className="border-2 font-headline h-11 shadow-md">
+                          {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          Import Excel
+                      </Button>
+                  </>
+              )}
               <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                   <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
               </Button>
