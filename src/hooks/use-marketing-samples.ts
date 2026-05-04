@@ -87,23 +87,30 @@ export const useAdminMarketingSamples = () => {
     }
 
     console.log("DIAGNOSTIC: Attempting upload as user:", currentUser.email);
-    console.log("DIAGNOSTIC: Items to process:", samplesData.length);
+    console.log("DIAGNOSTIC: Total items to process:", samplesData.length);
 
     try {
-      // Process in smaller chunks to guarantee database performance
-      const chunkSize = 300;
+      // Small chunk size to avoid batch timeouts or size rejections
+      const chunkSize = 250;
       let totalProcessed = 0;
 
       for (let i = 0; i < samplesData.length; i += chunkSize) {
         const batch = writeBatch(db);
         const chunk = samplesData.slice(i, i + chunkSize);
         
+        let chunkHasValidItems = false;
+
         chunk.forEach(sample => {
           const materialName = (sample.materialName || "").trim();
-          if (!materialName) return;
+          if (!materialName) {
+            console.warn("Skipping item with empty DisplayMaterialName");
+            return;
+          }
 
-          // Create unique ID from material name for efficient upserts
+          // Create a safe unique document ID
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+          if (!docId) return;
+
           const docRef = doc(db, "marketingSamples", docId);
           
           const allocation = Math.round(Number(sample.allocationQuantity) || 0);
@@ -112,27 +119,40 @@ export const useAdminMarketingSamples = () => {
           batch.set(docRef, { 
             productGroup: group,
             materialName: materialName,
-            allocationQuantity: allocation
+            allocationQuantity: allocation,
+            lastUpdatedBy: currentUser.email,
+            updatedAt: new Date().toISOString()
           }, { merge: true });
+          
+          chunkHasValidItems = true;
         });
         
-        await batch.commit();
-        totalProcessed += chunk.length;
-        console.log(`DIAGNOSTIC: Successfully committed batch. Total processed: ${totalProcessed}`);
+        if (chunkHasValidItems) {
+            console.log(`DIAGNOSTIC: Committing batch chunk ${Math.floor(i/chunkSize) + 1}...`);
+            await batch.commit();
+            totalProcessed += chunk.length;
+        }
       }
 
       toast({
           title: "Upload Successful",
-          description: `Inventory updated with ${totalProcessed} items.`,
+          description: `Inventory synced with ${totalProcessed} items processed.`,
       });
       return true;
 
     } catch (error: any) {
-      console.error("CRITICAL UPLOAD ERROR:", error);
+      console.error("CRITICAL DATABASE ERROR:", error);
       
-      let errorMsg = error.message || "An unknown database error occurred.";
+      let errorMsg = error.message || "An unexpected error occurred.";
+      
+      // If we see permission-denied, it means Firestore rules are still blocking
       if (error.code === 'permission-denied') {
-          errorMsg = "Database rejected the request. Please ensure you are logged in correctly.";
+          errorMsg = "Database access denied. This is usually a security rule conflict. Technical code: " + error.code;
+          console.error("PERMISSION ERROR DETAILS:", {
+              code: error.code,
+              email: currentUser.email,
+              uid: currentUser.uid
+          });
       }
 
       toast({ 

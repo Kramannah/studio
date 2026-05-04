@@ -4,8 +4,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. Marketing Samples: ABSOLUTE ACCESS for all authenticated users
-    // Placed at the very top to ensure it is evaluated before any other rules.
+    // 1. Marketing Samples: UNIVERSAL ACCESS for all authenticated users
+    // This is the absolute priority. No complex logic, just login verification.
     match /marketingSamples/{sampleId} {
         allow read, write, create, update, delete: if request.auth != null;
     }
@@ -14,11 +14,13 @@ service cloud.firestore {
     function isAuthorized() {
       if (request.auth == null) return false;
       
-      let userEmail = request.auth.token.email.lower();
+      // Safety check: ensure email exists in token before trying to use it
+      let email = request.auth.token.email;
+      let userEmail = (email == null) ? "" : email.lower();
       let uid = request.auth.uid;
 
-      // Direct whitelist for primary admin
-      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.matches('.*@hovidinc\\.com$');
+      // Direct whitelist for primary admin with case-insensitive protection
+      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.matches('(?i).*@hovidinc\\.com$');
 
       // List of authorized UIDs (Managers).
       let isWhitelistedUid = uid in [
