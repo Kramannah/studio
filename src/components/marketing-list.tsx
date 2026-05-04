@@ -60,12 +60,12 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
   };
 
   const handleDownloadTemplate = () => {
-      const headers = ['Product Group', 'Material Name', 'Allocation Quantity'];
+      const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
       const sampleData = [
           {
-              'Product Group': 'Tocovid',
-              'Material Name': 'Tocovid 100mg',
-              'Allocation Quantity': 100
+              'ProdGroupProdSubGroup': 'Tocovid',
+              'DisplayMaterialName': 'Tocovid 100mg',
+              'AllocationQuantity': 100
           }
       ];
       const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -106,13 +106,13 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
               };
 
               const colMap = {
-                  group: findColIndex(['product group', 'product', 'group', 'category']),
-                  name: findColIndex(['material name', 'material', 'name', 'item', 'description']),
-                  qty: findColIndex(['allocation quantity', 'allocation', 'quantity', 'qty', 'stock'])
+                  group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group', 'category']),
+                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name', 'item', 'description']),
+                  qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty', 'stock'])
               };
 
               if (colMap.name === -1 || colMap.qty === -1) {
-                  toast({ variant: "destructive", title: "Missing Columns", description: "Please ensure your file includes 'Material Name' and 'Allocation Quantity' columns." });
+                  toast({ variant: "destructive", title: "Missing Columns", description: "Please ensure your file includes 'DisplayMaterialName' and 'AllocationQuantity' columns." });
                   setIsUploading(false);
                   return;
               }
