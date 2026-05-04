@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, orderBy, where, limit } from 'firebase/firestore';
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
@@ -17,9 +17,10 @@ export const useMarketingSamples = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Optimized: Fetching inventory and only relevant usage data to prevent timeouts
       const [samplesSnap, entriesSnap] = await Promise.all([
-        getDocs(query(collection(db, "marketingSamples"))),
-        getDocs(query(collection(db, "coverageEntries")))
+        getDocs(query(collection(db, "marketingSamples"), orderBy("materialName", "asc"))),
+        getDocs(query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(2000))) 
       ]);
 
       const fetchedSamples = samplesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MarketingSample));
@@ -37,14 +38,6 @@ export const useMarketingSamples = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "coverageEntries"), (snap) => {
-        const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-        setAllEntries(entries);
-    });
-    return () => unsub();
-  }, []);
 
   const usedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
@@ -78,7 +71,9 @@ export const useAdminMarketingSamples = () => {
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     try {
         const currentUser = auth.currentUser;
-        if (!currentUser) throw new Error("Please log in first.");
+        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+          throw new Error("Administrative permission required.");
+        }
 
         const docRef = await addDoc(collection(db, "marketingSamples"), {
             ...data,
@@ -119,13 +114,13 @@ export const useAdminMarketingSamples = () => {
 
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     const currentUser = auth.currentUser;
-    if (!currentUser) {
-        toast({ variant: "destructive", title: "Session Error", description: "No active session. Please re-login." });
+    if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+        toast({ variant: "destructive", title: "Permission Denied", description: "Verify you are logged in as mbustamante@hovidinc.com" });
         return false;
     }
 
     try {
-      // FORCE Token refresh to ensure server rules recognize the current authenticated state
+      // Force refresh auth state before heavy write
       await currentUser.getIdToken(true);
       
       const batch = writeBatch(db);
@@ -135,7 +130,6 @@ export const useAdminMarketingSamples = () => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
 
-        // SANITIZED Document ID to prevent path/character rejections
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!docId) return;
 
@@ -161,7 +155,7 @@ export const useAdminMarketingSamples = () => {
       console.error("BATCH ERROR:", error);
       toast({ 
         variant: "destructive", 
-        title: "Database Error", 
+        title: "Bulk Update Failed", 
         description: error.message || "Insufficient permissions or connection error."
       });
       return false;
