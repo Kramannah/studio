@@ -214,12 +214,17 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Tocovid - Tocovid D'Repair", materialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10 },
       { productGroup: "Tocovid - Tocovid 200mg", materialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60 },
       { productGroup: "Dermatology - Hovicor", materialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24 },
+      // Added specific samples requested
+      { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
+      { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
+      { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
+      { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Elite Marks & Spencer Set", allocationQuantity: 218 },
     ];
     
     const currentUser = auth.currentUser;
     if (currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com') {
         const res = await addMarketingSamplesBulk(newData);
-        if (res) toast({ title: "Inventory Initialized", description: "50 products added to database." });
+        if (res) toast({ title: "Inventory Initialized", description: "54 products added to database." });
         return res;
     }
     return false;
