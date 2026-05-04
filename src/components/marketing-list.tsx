@@ -14,13 +14,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "./ui/label";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -37,14 +46,21 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addMarketingSamplesBulk, runAutoSeed } = useAdminMarketingSamples();
   const { toast } = useToast();
+  
   const [isUploading, setIsUploading] = useState(false);
+  const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
+  
+  // Manual Entry Form State
+  const [manualSample, setManualSample] = useState({
+      productGroup: '',
+      materialName: '',
+      allocationQuantity: ''
+  });
 
   // Run auto-seed only once when the list is first loaded and data is missing
   useEffect(() => {
     const performSeed = async () => {
-        // Only run auto-seed if we are in admin mode (not readOnly) and inventory seems empty
         if (!readOnly && samples.length === 0 && !loading) {
-            console.log("Admin session detected. Executing silent seed for request samples...");
             const success = await runAutoSeed();
             if (success && onRefresh) onRefresh();
         }
@@ -74,19 +90,32 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
       fileInputRef.current?.click();
   };
 
+  const handleManualSave = async () => {
+      if (!manualSample.productGroup || !manualSample.materialName || !manualSample.allocationQuantity) {
+          toast({ variant: "destructive", title: "Missing Fields", description: "Please fill in all details." });
+          return;
+      }
+
+      setIsUploading(true);
+      const success = await addMarketingSamplesBulk([{
+          productGroup: manualSample.productGroup,
+          materialName: manualSample.materialName,
+          allocationQuantity: Number(manualSample.allocationQuantity)
+      }]);
+
+      if (success) {
+          toast({ title: "Sample Added", description: `${manualSample.materialName} has been saved.` });
+          setIsManualDialogOpen(false);
+          setManualSample({ productGroup: '', materialName: '', allocationQuantity: '' });
+          if (onRefresh) onRefresh();
+      }
+      setIsUploading(false);
+  };
+
   const handleDownloadTemplate = () => {
       const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
       const sampleData = [
-          {
-              'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup',
-              'DisplayMaterialName': 'PQ3_Frutos Candy',
-              'AllocationQuantity': 180
-          },
-          {
-              'ProdGroupProdSubGroup': 'Antihistamine - Ricam Tablet',
-              'DisplayMaterialName': 'PQ3_Pistachio with Ricam Sticker',
-              'AllocationQuantity': 675
-          }
+          { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
       ];
       const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
       const workbook = XLSX.utils.book_new();
@@ -95,14 +124,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
   };
 
   const handleExportExcel = () => {
-    const dataToExport = filteredSamples.map(sample => {
-      return {
+    const dataToExport = filteredSamples.map(sample => ({
         "ProdGroupProdSubGroup": sample.productGroup,
         "DisplayMaterialName": sample.materialName,
         "AllocationQuantity": Math.round(sample.allocationQuantity || 0),
-      };
-    });
-
+    }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Samples");
@@ -119,12 +145,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
           try {
               const data = new Uint8Array(e.target?.result as ArrayBuffer);
               const workbook = XLSX.read(data, { type: 'array' });
-              const sheetName = workbook.SheetNames[0];
-              const worksheet = workbook.Sheets[sheetName];
+              const worksheet = workbook.Sheets[workbook.SheetNames[0]];
               const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
               if (json.length < 2) {
-                  toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty." });
+                  toast({ variant: "destructive", title: "Empty File" });
                   setIsUploading(false);
                   return;
               }
@@ -142,12 +167,12 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
 
               const colMap = {
                   group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group']),
-                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name', 'item']),
+                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name']),
                   qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty'])
               };
 
               if (colMap.name === -1 || colMap.qty === -1) {
-                  toast({ variant: "destructive", title: "Missing Columns", description: "Use the provided template headers." });
+                  toast({ variant: "destructive", title: "Missing Columns", description: "Please use the template format." });
                   setIsUploading(false);
                   return;
               }
@@ -157,23 +182,18 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
                   const name = String(row[colMap.name] || '').trim();
                   const qty = Number(row[colMap.qty]);
                   const group = colMap.group > -1 ? String(row[colMap.group] || '').trim() : "Uncategorized";
-
                   if (name && !isNaN(qty)) {
-                      samplesToAdd.push({
-                          productGroup: group,
-                          materialName: name,
-                          allocationQuantity: Math.round(qty)
-                      });
+                      samplesToAdd.push({ productGroup: group, materialName: name, allocationQuantity: Math.round(qty) });
                   }
               }
 
               const success = await addMarketingSamplesBulk(samplesToAdd);
               if (success) {
-                toast({ title: "Upload Successful", description: "Inventory has been updated." });
+                toast({ title: "Upload Successful" });
                 if (onRefresh) onRefresh();
               }
           } catch (error) {
-              toast({ variant: "destructive", title: "Upload Error", description: "An unexpected error occurred during processing." });
+              toast({ variant: "destructive", title: "Upload Error" });
           } finally {
               setIsUploading(false);
               if (fileInputRef.current) fileInputRef.current.value = "";
@@ -204,9 +224,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
                 <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
                     <Download className="mr-2 h-4 w-4" /> Template
                 </Button>
-                <Button onClick={handleUploadClick} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
-                    {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                    Add Sample
+                <Button onClick={handleUploadClick} variant="secondary" disabled={isUploading} className="font-headline h-11 border-2">
+                    <Download className="mr-2 h-4 w-4 rotate-180" /> Import Excel
+                </Button>
+                <Button onClick={() => setIsManualDialogOpen(true)} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Sample
                 </Button>
                 {onRefresh && (
                     <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
@@ -315,6 +337,52 @@ export function MarketingList({ samples, usedQuantities, readOnly = false, loadi
             </div>
         )}
       </CardContent>
+
+      <Dialog open={isManualDialogOpen} onOpenChange={setIsManualDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                  <DialogTitle className="font-headline text-2xl text-primary">Add New Sample</DialogTitle>
+                  <DialogDescription>Manually enter details for a single promotional item.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-6 py-4">
+                  <div className="grid gap-2">
+                      <Label htmlFor="productGroup" className="font-headline">Product Group</Label>
+                      <Input 
+                        id="productGroup" 
+                        placeholder="e.g. Tocovid" 
+                        value={manualSample.productGroup}
+                        onChange={(e) => setManualSample({...manualSample, productGroup: e.target.value})}
+                      />
+                  </div>
+                  <div className="grid gap-2">
+                      <Label htmlFor="materialName" className="font-headline">Material Name</Label>
+                      <Input 
+                        id="materialName" 
+                        placeholder="e.g. PQ3_Umbrella" 
+                        value={manualSample.materialName}
+                        onChange={(e) => setManualSample({...manualSample, materialName: e.target.value})}
+                      />
+                  </div>
+                  <div className="grid gap-2">
+                      <Label htmlFor="allocationQuantity" className="font-headline">Allocation Quantity</Label>
+                      <Input 
+                        id="allocationQuantity" 
+                        type="number" 
+                        placeholder="0" 
+                        value={manualSample.allocationQuantity}
+                        onChange={(e) => setManualSample({...manualSample, allocationQuantity: e.target.value})}
+                      />
+                  </div>
+              </div>
+              <DialogFooter>
+                  <Button variant="ghost" onClick={() => setIsManualDialogOpen(false)} disabled={isUploading}>Cancel</Button>
+                  <Button onClick={handleManualSave} disabled={isUploading} className="font-headline">
+                      {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Sample
+                  </Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </Card>
   );
 }
