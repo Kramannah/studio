@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
@@ -39,6 +39,15 @@ export const useMarketingSamples = () => {
     fetchData();
   }, [fetchData]);
 
+  // Real-time listener for entries to keep balances accurate
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "coverageEntries"), (snap) => {
+        const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
+        setAllEntries(entries);
+    });
+    return () => unsub();
+  }, []);
+
   const usedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
     allEntries.forEach(entry => {
@@ -68,18 +77,51 @@ export const useMarketingSamples = () => {
 export const useAdminMarketingSamples = () => {
   const { toast } = useToast();
   
-  const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-        toast({ variant: "destructive", title: "Not Logged In", description: "Please sign in to your account." });
+  const addSample = async (data: Omit<MarketingSample, 'id'>) => {
+    try {
+        const docRef = await addDoc(collection(db, "marketingSamples"), {
+            ...data,
+            updatedAt: new Date().toISOString()
+        });
+        toast({ title: "Sample Added", description: `${data.materialName} is now in the inventory.` });
+        return { id: docRef.id, ...data };
+    } catch (error) {
+        toast({ variant: "destructive", title: "Add Failed", description: "Insufficient permissions or technical error." });
+        return null;
+    }
+  }
+
+  const updateSample = async (id: string, data: Partial<MarketingSample>) => {
+    try {
+        await updateDoc(doc(db, "marketingSamples", id), {
+            ...data,
+            updatedAt: new Date().toISOString()
+        });
+        toast({ title: "Updated Successfully" });
+        return true;
+    } catch (error) {
+        toast({ variant: "destructive", title: "Update Failed" });
         return false;
     }
+  }
+
+  const deleteSample = async (id: string) => {
+    try {
+        await deleteDoc(doc(db, "marketingSamples", id));
+        toast({ variant: "destructive", title: "Sample Deleted" });
+        return true;
+    } catch (error) {
+        toast({ variant: "destructive", title: "Delete Failed" });
+        return false;
+    }
+  }
+
+  const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return false;
 
     try {
-      console.log("REFRESHING AUTH TOKEN...");
       await currentUser.getIdToken(true);
-      console.log("AUTH REFRESHED. ATTEMPTING BATCH WRITE AS:", currentUser.email);
-      
       const batch = writeBatch(db);
       let addedCount = 0;
 
@@ -87,7 +129,6 @@ export const useAdminMarketingSamples = () => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
 
-        // Create a clean doc ID
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!docId) return;
 
@@ -104,15 +145,13 @@ export const useAdminMarketingSamples = () => {
       if (addedCount === 0) return false;
 
       await batch.commit();
-      console.log("BATCH COMMIT SUCCESSFUL");
       return true;
 
     } catch (error: any) {
-      console.error("FIRESTORE REJECTION DETAILS:", error);
       toast({ 
         variant: "destructive", 
-        title: "Update Failed", 
-        description: `Access Denied: The database rules rejected this update. Verify you are logged in as mbustamante@hovidinc.com.`
+        title: "Bulk Update Failed", 
+        description: `Access Denied: Verify you are logged in as mbustamante@hovidinc.com.`
       });
       return false;
     }
@@ -128,5 +167,5 @@ export const useAdminMarketingSamples = () => {
     return await addMarketingSamplesBulk(screenshotData);
   }, [addMarketingSamplesBulk]);
 
-  return { addMarketingSamplesBulk, runAutoSeed };
+  return { addSample, updateSample, deleteSample, addMarketingSamplesBulk, runAutoSeed };
 }

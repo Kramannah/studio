@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -5,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,6 +34,7 @@ const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(m
 const AdminReportList = dynamic(() => import('@/components/admin-report-list').then(mod => mod.AdminReportList), { loading: () => <DynamicSkeleton /> });
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
 const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
+const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 
 
 export default function AdminPage() {
@@ -297,6 +299,9 @@ export default function AdminPage() {
                     <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                            <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                <Package className="h-4 w-4" /> Marketing Samples
+                            </TabsTrigger>
                             {isUserAdmin && <TabsTrigger value="all-reports" className="px-6 rounded-lg font-headline">All Reports</TabsTrigger>}
                             <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
                                 <Bell className="mr-2 h-4 w-4"/>
@@ -363,6 +368,16 @@ export default function AdminPage() {
                         </Card>
 
                         {renderDistrictReportsContent()}
+                    </TabsContent>
+
+                    <TabsContent value="marketing-samples" className="mt-8">
+                        <MarketingList 
+                            samples={marketingSamples} 
+                            usedQuantities={usedQuantities} 
+                            readOnly={!hasAdminAccess} 
+                            loading={marketingSamplesLoading} 
+                            onRefresh={refetchMarketingSamples}
+                        />
                     </TabsContent>
                     
                     {isUserAdmin && (
