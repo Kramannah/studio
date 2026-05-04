@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, orderBy, limit, where } from 'firebase/firestore';
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
@@ -16,27 +16,55 @@ export const useMarketingSamples = () => {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    const currentUser = auth.currentUser;
+    
     try {
-      // Optimized: Fetching inventory and only relevant usage data to prevent timeouts
-      const [samplesSnap, entriesSnap] = await Promise.all([
-        getDocs(query(collection(db, "marketingSamples"), orderBy("materialName", "asc"))),
-        getDocs(query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(2000))) 
-      ]);
-
+      // 1. Fetch Inventory - This should always work for authenticated users
+      const samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("materialName", "asc")));
       const fetchedSamples = samplesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MarketingSample));
-      const fetchedEntries = entriesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-
       setMarketingSamples(fetchedSamples);
-      setAllEntries(fetchedEntries);
+
+      // 2. Fetch Usage - Non-admins might be restricted from querying ALL entries.
+      // We try to fetch the most recent entries we have access to.
+      try {
+        let entriesQuery;
+        const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com';
+        
+        if (isAdmin) {
+          // Admins fetch global usage (capped at 2000 for performance)
+          entriesQuery = query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(2000));
+        } else if (currentUser) {
+          // PMRs fetch their own usage to ensure calculation works for them
+          entriesQuery = query(collection(db, "coverageEntries"), where("userId", "==", currentUser.uid), orderBy("submittedAt", "desc"));
+        }
+
+        if (entriesQuery) {
+          const entriesSnap = await getDocs(entriesQuery);
+          const fetchedEntries = entriesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
+          setAllEntries(fetchedEntries);
+        }
+      } catch (usageError) {
+        console.warn("Could not fetch global usage data. Showing personal usage/inventory only.", usageError);
+      }
+
     } catch (error: any) {
-      console.error("Error fetching marketing data:", error);
+      console.error("Critical error fetching marketing data:", error);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchData();
+      } else {
+        setMarketingSamples([]);
+        setAllEntries([]);
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
   }, [fetchData]);
 
   const usedQuantities = useMemo(() => {
@@ -231,4 +259,4 @@ export const useAdminMarketingSamples = () => {
   }, [addMarketingSamplesBulk, toast]);
 
   return { addSample, updateSample, deleteSample, addMarketingSamplesBulk, runAutoSeed };
-}
+};
