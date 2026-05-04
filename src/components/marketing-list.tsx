@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet, Zap } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
@@ -35,9 +35,20 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { addMarketingSamplesBulk, runEmergencyImport } = useAdminMarketingSamples();
+  const { addMarketingSamplesBulk, runAutoSeed } = useAdminMarketingSamples();
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
+
+  // Run auto-seed only once when the list is first loaded
+  useEffect(() => {
+    const performSeed = async () => {
+        if (samples.length === 0 && !loading && !readOnly) {
+            await runAutoSeed();
+            if (onRefresh) onRefresh();
+        }
+    };
+    performSeed();
+  }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -59,13 +70,6 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
 
   const handleUploadClick = () => {
       fileInputRef.current?.click();
-  };
-
-  const handleEmergencySync = async () => {
-    setIsUploading(true);
-    const success = await runEmergencyImport();
-    if (success && onRefresh) onRefresh();
-    setIsUploading(false);
   };
 
   const handleDownloadTemplate = () => {
@@ -157,9 +161,14 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
               }
 
               const success = await addMarketingSamplesBulk(samplesToAdd);
-              if (success && onRefresh) onRefresh();
+              if (success) {
+                toast({ title: "Upload Successful", description: "Inventory has been updated." });
+                if (onRefresh) onRefresh();
+              } else {
+                toast({ variant: "destructive", title: "Upload Failed", description: "Check permissions or file format." });
+              }
           } catch (error) {
-              toast({ variant: "destructive", title: "Upload Failed" });
+              toast({ variant: "destructive", title: "Upload Error" });
           } finally {
               setIsUploading(false);
               if (fileInputRef.current) fileInputRef.current.value = "";
@@ -178,13 +187,10 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
                 Marketing Samples Inventory
             </CardTitle>
             <CardDescription className="text-base">
-                Real-time tracking of promotional materials. Use "Emergency Sync" if Excel upload fails.
+                Real-time tracking of promotional materials.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handleEmergencySync} variant="destructive" disabled={isUploading} className="font-headline shadow-md h-11 border-2 border-white/20">
-                <Zap className="mr-2 h-4 w-4" /> Emergency Sync (Screenshot Data)
-            </Button>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
             <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data

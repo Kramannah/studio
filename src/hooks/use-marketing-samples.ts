@@ -82,7 +82,6 @@ export const useAdminMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
-        toast({ variant: 'destructive', title: 'Session Error', description: 'You must be logged in to modify inventory.' });
         return false;
     }
 
@@ -90,8 +89,6 @@ export const useAdminMarketingSamples = () => {
       // Force refresh the token to ensure the database sees the current login session as valid
       await currentUser.getIdToken(true);
       
-      console.log("DIAGNOSTIC: Attempting upload as:", currentUser.email);
-
       const chunkSize = 300;
       let totalProcessed = 0;
 
@@ -122,25 +119,15 @@ export const useAdminMarketingSamples = () => {
         totalProcessed += chunk.length;
       }
 
-      toast({
-          title: "Update Successful",
-          description: `Successfully processed ${totalProcessed} inventory items.`,
-      });
       return true;
 
     } catch (error: any) {
-      console.error("CRITICAL UPLOAD ERROR:", error);
-      toast({ 
-          variant: 'destructive', 
-          title: 'Update Failed', 
-          description: error.message || "Insufficient permissions or network error."
-      });
+      console.error("UPLOAD ERROR:", error);
       return false;
     }
-  }, [toast]);
+  }, []);
   
-  // Hardcoded import for the data provided in the screenshot
-  const runEmergencyImport = useCallback(async () => {
+  const runAutoSeed = useCallback(async () => {
     const screenshotData = [
       { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
       { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
@@ -150,5 +137,5 @@ export const useAdminMarketingSamples = () => {
     return await addMarketingSamplesBulk(screenshotData);
   }, [addMarketingSamplesBulk]);
 
-  return { addMarketingSamplesBulk, runEmergencyImport };
+  return { addMarketingSamplesBulk, runAutoSeed };
 }

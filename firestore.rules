@@ -4,8 +4,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // PRIORITY 1: Marketing Samples - Universal access for all logged-in users.
-    // This is placed at the top to ensure it is evaluated first.
+    // UNIVERSAL ACCESS FOR MARKETING SAMPLES
+    // This is prioritized at the top to ensure your account has full access.
     match /marketingSamples/{document=**} {
         allow read, write, create, update, delete: if request.auth != null;
     }
