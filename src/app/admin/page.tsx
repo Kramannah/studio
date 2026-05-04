@@ -82,7 +82,7 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    const { entries: allEntries, deleteEntry: deleteAllUsersEntry, fetchEntries: refreshAllEntries } = useAllCoverageEntries();
+    const { entries: allEntries, deleteEntry: deleteAllUsersEntry } = useAllCoverageEntries();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
 

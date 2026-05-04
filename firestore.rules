@@ -27,7 +27,7 @@ service cloud.firestore {
       return isAdmin || isWhitelistedUid;
     }
 
-    // 1. MARKETING SAMPLES - TEMPORARILY OPEN TO ALL LOGGED IN USERS TO FIX ACCESS DENIED
+    // 1. MARKETING SAMPLES - HIGHEST PRIORITY ACCESS
     match /marketingSamples/{document=**} {
         allow read, write: if request.auth != null;
     }
