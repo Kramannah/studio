@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -111,6 +110,7 @@ export default function Home() {
 
   /**
    * Merges server-side usage with pending local usage for accurate inventory tracking.
+   * Ensures whole numbers throughout.
    */
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
@@ -221,25 +221,28 @@ export default function Home() {
                  <SidebarMenuItem><SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}><LifeBuoy />Helpdesk</SidebarMenuButton></SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
-            <SidebarFooter>
-                 <div className="px-3 py-2 mb-2 bg-muted/50 rounded-lg mx-2 border">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1 leading-none">Account</p>
+            <SidebarFooter className="p-4 border-t bg-muted/20">
+                 <div className="px-3 py-2 bg-background rounded-lg border shadow-sm mb-2">
+                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 leading-none">Logged in as</p>
                     <p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p>
                  </div>
                  {hasAdminAccess && (
-                    <Link href="/admin" className="w-full px-2 mb-2">
-                        <Button size="sm" variant="outline" className="w-full font-headline">
-                            <LayoutDashboard className="mr-2 h-4 w-4" />
-                            {isUserAdmin ? 'Admin View' : 'Manager View'}
+                    <Link href="/admin" className="w-full mb-2 block">
+                        <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
+                            <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
+                            {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
                         </Button>
                     </Link>
                  )}
-                 <div className="px-2 w-full">
-                    <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Logout
-                    </Button>
-                 </div>
+                 <Button 
+                    variant="destructive" 
+                    size="lg" 
+                    onClick={logout} 
+                    className="w-full font-headline shadow-lg hover:shadow-destructive/20 transition-all active:scale-95"
+                 >
+                    <LogOut className="mr-2 h-5 w-5" />
+                    Log Out
+                </Button>
             </SidebarFooter>
           </Sidebar>
           <main className="flex-1 w-full overflow-x-hidden">
