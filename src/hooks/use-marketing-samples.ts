@@ -83,9 +83,12 @@ export const useAdminMarketingSamples = () => {
       const currentUser = auth.currentUser;
       
       if (!currentUser) {
+          console.error("No authenticated user found in Auth module.");
           toast({ variant: 'destructive', title: 'Session Expired', description: 'Please log in again.' });
           return false;
       }
+
+      console.log(`Starting bulk upload for ${samplesData.length} items. User: ${currentUser.email}`);
 
       // Process in chunks to respect Firestore batch limits (500)
       const chunkSize = 400;
@@ -96,16 +99,20 @@ export const useAdminMarketingSamples = () => {
         const chunk = samplesData.slice(i, i + chunkSize);
         
         chunk.forEach(sample => {
-          const materialName = sample.materialName.trim();
-          // Create a predictable document ID from the material name to handle updates efficiently
+          const materialName = (sample.materialName || "Unknown Material").trim();
+          if (!materialName) return;
+
+          // Create a predictable document ID from the material name
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '-');
           const docRef = doc(db, "marketingSamples", docId);
           
           const roundedQty = Math.round(Number(sample.allocationQuantity) || 0);
+          const productGroup = (sample.productGroup || "Uncategorized").trim();
           
-          // Use set with merge: true to handle both creation and updates in one go
+          // Use set with merge: true to handle both creation and updates.
+          // Explicitly ensuring no undefined values are passed.
           batch.set(docRef, { 
-            productGroup: sample.productGroup,
+            productGroup: productGroup,
             materialName: materialName,
             allocationQuantity: roundedQty
           }, { merge: true });
@@ -117,18 +124,23 @@ export const useAdminMarketingSamples = () => {
 
       toast({
           title: "Update Successful",
-          description: `Processed ${totalProcessed} inventory items successfully.`,
+          description: `Successfully processed ${totalProcessed} inventory items.`,
       });
 
       return true;
 
     } catch (error: any) {
-      console.error("Critical Inventory Update Failed:", error);
+      console.error("Bulk Upload Error:", error);
       
+      let errorMsg = error.message || "Permissions check failed.";
+      if (error.code === 'permission-denied') {
+          errorMsg = "Database access denied. Please contact support to verify your account permissions.";
+      }
+
       toast({ 
           variant: 'destructive', 
-          title: 'Update Failed', 
-          description: error.message || "Permissions check failed. Please ensure your account is authorized."
+          title: 'Upload Failed', 
+          description: errorMsg
       });
       return false;
     }
