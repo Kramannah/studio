@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -13,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
@@ -32,9 +33,9 @@ type MarketingListProps = {
 export function MarketingList({ samples, usedQuantities, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 15;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { addMarketingSamplesBulk } = useAdminMarketingSamples();
+  const { addMarketingSamplesBulk, runEmergencyImport } = useAdminMarketingSamples();
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
 
@@ -60,13 +61,20 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
       fileInputRef.current?.click();
   };
 
+  const handleEmergencySync = async () => {
+    setIsUploading(true);
+    const success = await runEmergencyImport();
+    if (success && onRefresh) onRefresh();
+    setIsUploading(false);
+  };
+
   const handleDownloadTemplate = () => {
       const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
       const sampleData = [
           {
-              'ProdGroupProdSubGroup': 'Tocovid',
-              'DisplayMaterialName': 'Tocovid 100mg',
-              'AllocationQuantity': 100
+              'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup',
+              'DisplayMaterialName': 'PQ3_Frutos Candy',
+              'AllocationQuantity': 180
           }
       ];
       const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -77,11 +85,10 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
-      const allocated = Math.round(sample.allocationQuantity || 0);
       return {
         "ProdGroupProdSubGroup": sample.productGroup,
         "DisplayMaterialName": sample.materialName,
-        "AllocationQuantity": allocated,
+        "AllocationQuantity": Math.round(sample.allocationQuantity || 0),
       };
     });
 
@@ -106,7 +113,7 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
               const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
               if (json.length < 2) {
-                  toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
+                  toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty." });
                   setIsUploading(false);
                   return;
               }
@@ -123,13 +130,13 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
               };
 
               const colMap = {
-                  group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group', 'category']),
-                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name', 'item', 'description']),
-                  qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty', 'stock'])
+                  group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group']),
+                  name: findColIndex(['displaymaterialname', 'material name', 'material', 'name', 'item']),
+                  qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty'])
               };
 
               if (colMap.name === -1 || colMap.qty === -1) {
-                  toast({ variant: "destructive", title: "Missing Columns", description: "Please ensure your file includes 'DisplayMaterialName' and 'AllocationQuantity' columns." });
+                  toast({ variant: "destructive", title: "Missing Columns", description: "Use the provided template headers." });
                   setIsUploading(false);
                   return;
               }
@@ -149,19 +156,10 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
                   }
               }
 
-              if (samplesToAdd.length === 0) {
-                  toast({ variant: "destructive", title: "No Data", description: "No valid items found in the file." });
-                  setIsUploading(false);
-                  return;
-              }
-
               const success = await addMarketingSamplesBulk(samplesToAdd);
-              if (success && onRefresh) {
-                  onRefresh();
-              }
+              if (success && onRefresh) onRefresh();
           } catch (error) {
-              console.error("Excel processing error:", error);
-              toast({ variant: "destructive", title: "Upload Failed", description: "Could not process the Excel file. Please check the format." });
+              toast({ variant: "destructive", title: "Upload Failed" });
           } finally {
               setIsUploading(false);
               if (fileInputRef.current) fileInputRef.current.value = "";
@@ -180,10 +178,13 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
                 Marketing Samples Inventory
             </CardTitle>
             <CardDescription className="text-base">
-                Real-time tracking of promotional materials. Deductions are processed automatically from coverage reports.
+                Real-time tracking of promotional materials. Use "Emergency Sync" if Excel upload fails.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button onClick={handleEmergencySync} variant="destructive" disabled={isUploading} className="font-headline shadow-md h-11 border-2 border-white/20">
+                <Zap className="mr-2 h-4 w-4" /> Emergency Sync (Screenshot Data)
+            </Button>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
             <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data

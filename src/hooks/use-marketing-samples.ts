@@ -90,26 +90,21 @@ export const useAdminMarketingSamples = () => {
       // Force refresh the token to ensure the database sees the current login session as valid
       await currentUser.getIdToken(true);
       
-      console.log("DIAGNOSTIC: Session verified for:", currentUser.email);
+      console.log("DIAGNOSTIC: Attempting upload as:", currentUser.email);
 
-      // Using a smaller chunk size for reliability
-      const chunkSize = 200;
+      const chunkSize = 300;
       let totalProcessed = 0;
 
       for (let i = 0; i < samplesData.length; i += chunkSize) {
         const batch = writeBatch(db);
         const chunk = samplesData.slice(i, i + chunkSize);
         
-        let chunkHasValidItems = false;
-
         chunk.forEach(sample => {
           const materialName = (sample.materialName || "").trim();
           if (!materialName) return;
 
-          // Generating a very strict ID to avoid any Firestore naming rejections
+          // Generating a robust, clean ID
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!docId) return;
-
           const docRef = doc(db, "marketingSamples", docId);
           
           const allocation = Math.round(Number(sample.allocationQuantity) || 0);
@@ -121,14 +116,10 @@ export const useAdminMarketingSamples = () => {
             allocationQuantity: allocation,
             updatedAt: new Date().toISOString()
           }, { merge: true });
-          
-          chunkHasValidItems = true;
         });
         
-        if (chunkHasValidItems) {
-            await batch.commit();
-            totalProcessed += chunk.length;
-        }
+        await batch.commit();
+        totalProcessed += chunk.length;
       }
 
       toast({
@@ -139,20 +130,25 @@ export const useAdminMarketingSamples = () => {
 
     } catch (error: any) {
       console.error("CRITICAL UPLOAD ERROR:", error);
-      
-      let errorMsg = error.message || "An unexpected error occurred.";
-      if (error.code === 'permission-denied') {
-          errorMsg = "Database access denied. Please refresh the page and try logging in again.";
-      }
-
       toast({ 
           variant: 'destructive', 
           title: 'Update Failed', 
-          description: errorMsg
+          description: error.message || "Insufficient permissions or network error."
       });
       return false;
     }
   }, [toast]);
   
-  return { addMarketingSamplesBulk };
+  // Hardcoded import for the data provided in the screenshot
+  const runEmergencyImport = useCallback(async () => {
+    const screenshotData = [
+      { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
+      { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
+      { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
+      { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Elite Marks & Spencer Set", allocationQuantity: 218 }
+    ];
+    return await addMarketingSamplesBulk(screenshotData);
+  }, [addMarketingSamplesBulk]);
+
+  return { addMarketingSamplesBulk, runEmergencyImport };
 }

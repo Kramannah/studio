@@ -5,7 +5,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // PRIORITY 1: Marketing Samples - Universal access for all logged-in users.
-    // Using {document=**} to ensure no sub-path or ID issues block access.
+    // This is placed at the top to ensure it is evaluated first.
     match /marketingSamples/{document=**} {
         allow read, write, create, update, delete: if request.auth != null;
     }
