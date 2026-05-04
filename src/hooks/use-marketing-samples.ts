@@ -39,7 +39,6 @@ export const useMarketingSamples = () => {
     fetchData();
   }, [fetchData]);
 
-  // Real-time listener for entries to keep balances accurate
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "coverageEntries"), (snap) => {
         const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
@@ -91,7 +90,7 @@ export const useAdminMarketingSamples = () => {
         toast({ title: "Sample Added", description: `${data.materialName} is now in the inventory.` });
         return { id: docRef.id, ...data };
     } catch (error: any) {
-        toast({ variant: "destructive", title: "Add Failed", description: error.message || "Insufficient permissions." });
+        toast({ variant: "destructive", title: "Add Failed", description: error.message });
         return null;
     }
   }
@@ -144,7 +143,7 @@ export const useAdminMarketingSamples = () => {
     }
 
     try {
-      // Force refresh the token to ensure the email claim is fresh
+      // Force token refresh for fresh email claim validation in firestore.rules
       await currentUser.getIdToken(true);
       
       const batch = writeBatch(db);
@@ -154,6 +153,7 @@ export const useAdminMarketingSamples = () => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
 
+        // Create a predictable document ID to prevent duplicates
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!docId) return;
 
