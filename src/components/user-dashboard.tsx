@@ -7,7 +7,6 @@ import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
-import { MarketingList } from "./marketing-list";
 
 interface UserDashboardProps {
     userId: string;
@@ -35,9 +34,7 @@ export function UserDashboard({
     allPlans, 
     allNonCallDays, 
     allTimeLogs, 
-    allMarketingSamples, 
     onDeleteEntry = () => {},
-    usedQuantities,
     isAdminView = false,
     userMap,
     onAddDoctor = () => {},
@@ -50,12 +47,11 @@ export function UserDashboard({
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
               <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
               <TabsTrigger value="planning" className="font-headline">Call Planning</TabsTrigger>
               <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
-              <TabsTrigger value="marketing" className="font-headline">Marketing Samples</TabsTrigger>
             </TabsList>
             
             <TabsContent value="summary" className="mt-6">
@@ -94,13 +90,6 @@ export function UserDashboard({
                     onDeleteDoctor={onDeleteDoctor}
                     onDeleteDoctorsBulk={onDeleteDoctorsBulk}
                     readOnly={!isAdminView}
-                />
-            </TabsContent>
-            <TabsContent value="marketing" className="mt-6">
-                <MarketingList 
-                    samples={allMarketingSamples}
-                    usedQuantities={usedQuantities || {}}
-                    readOnly={true}
                 />
             </TabsContent>
           </Tabs>

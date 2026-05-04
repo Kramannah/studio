@@ -37,11 +37,10 @@ const MasterList = dynamic(() => import('@/components/master-list').then(mod => 
 const CallSummary = dynamic(() => import('@/components/call-summary').then(mod => mod.CallSummary), { loading: () => <DynamicSkeleton /> });
 const PlanningCalendar = dynamic(() => import('@/components/planning-calendar').then(mod => mod.PlanningCalendar), { loading: () => <DynamicSkeleton /> });
 const SubmittedList = dynamic(() => import('@/components/submitted-list').then(mod => mod.SubmittedList), { loading: () => <DynamicSkeleton /> });
-const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 'summary' | 'master';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -163,7 +162,7 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const handleCrmClick = () => {
-    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
+    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master'];
     if (!crmViews.includes(activeView)) setActiveView('planning');
   };
   
@@ -178,7 +177,6 @@ export default function Home() {
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={marketingSamples} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
-      case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} readOnly={true} />;
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       default: return null;
@@ -230,7 +228,6 @@ export default function Home() {
                        <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
-                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
                  <SidebarMenuItem><SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}><LifeBuoy />Helpdesk</SidebarMenuButton></SidebarMenuItem>
