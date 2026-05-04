@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -79,9 +78,7 @@ export const useAdminMarketingSamples = () => {
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     try {
         const currentUser = auth.currentUser;
-        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-            throw new Error("Access restricted to mbustamante@hovidinc.com");
-        }
+        if (!currentUser) throw new Error("Please log in first.");
 
         const docRef = await addDoc(collection(db, "marketingSamples"), {
             ...data,
@@ -97,11 +94,6 @@ export const useAdminMarketingSamples = () => {
 
   const updateSample = async (id: string, data: Partial<MarketingSample>) => {
     try {
-        const currentUser = auth.currentUser;
-        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-            throw new Error("Access restricted to mbustamante@hovidinc.com");
-        }
-
         await updateDoc(doc(db, "marketingSamples", id), {
             ...data,
             updatedAt: new Date().toISOString()
@@ -116,11 +108,6 @@ export const useAdminMarketingSamples = () => {
 
   const deleteSample = async (id: string) => {
     try {
-        const currentUser = auth.currentUser;
-        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-            throw new Error("Access restricted to mbustamante@hovidinc.com");
-        }
-
         await deleteDoc(doc(db, "marketingSamples", id));
         toast({ variant: "destructive", title: "Sample Deleted" });
         return true;
@@ -133,17 +120,12 @@ export const useAdminMarketingSamples = () => {
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
-        toast({ variant: "destructive", title: "Session Error", description: "No user found. Please re-login." });
-        return false;
-    }
-
-    if (currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-        toast({ variant: "destructive", title: "Access Denied", description: "Only mbustamante@hovidinc.com can perform bulk uploads." });
+        toast({ variant: "destructive", title: "Session Error", description: "No active session. Please re-login." });
         return false;
     }
 
     try {
-      // Force token refresh for fresh email claim validation in firestore.rules
+      // FORCE Token refresh to ensure server rules recognize the current authenticated state
       await currentUser.getIdToken(true);
       
       const batch = writeBatch(db);
@@ -153,7 +135,7 @@ export const useAdminMarketingSamples = () => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
 
-        // Create a predictable document ID to prevent duplicates
+        // SANITIZED Document ID to prevent path/character rejections
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!docId) return;
 
@@ -176,11 +158,11 @@ export const useAdminMarketingSamples = () => {
       return true;
 
     } catch (error: any) {
-      console.error("Bulk upload technical error:", error);
+      console.error("BATCH ERROR:", error);
       toast({ 
         variant: "destructive", 
         title: "Database Error", 
-        description: error.message || "Failed to commit changes to the database."
+        description: error.message || "Insufficient permissions or connection error."
       });
       return false;
     }

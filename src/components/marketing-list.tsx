@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -179,11 +178,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
       setIsFormOpen(true);
   }
 
-  const handleAdd = () => {
-      setSelectedSample(undefined);
-      setIsFormOpen(true);
-  }
-
   return (
     <div className="space-y-6">
       <Card className="shadow-lg border-2">
@@ -195,19 +189,14 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                   Marketing Samples Inventory
               </CardTitle>
               <CardDescription className="text-base">
-                  Manage product groups, material names, and stock allocations.
+                  Live stock monitoring and batch inventory updates.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
                 {!readOnly && (
-                    <>
-                        <Button onClick={handleAdd} className="border-2 font-headline h-11">
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Sample
-                        </Button>
-                        <Button onClick={() => setShowImport(!showImport)} variant="secondary" className="border-2 font-headline h-11">
-                            <Upload className="mr-2 h-4 w-4" /> Bulk Import
-                        </Button>
-                    </>
+                    <Button onClick={() => setShowImport(!showImport)} variant="secondary" className="border-2 font-headline h-11">
+                        <Upload className="mr-2 h-4 w-4" /> Bulk Import
+                    </Button>
                 )}
                 <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
@@ -242,7 +231,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
           <div className="mt-4">
             <Input 
-              placeholder="Filter by product or material name..."
+              placeholder="Search product or material..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               className="max-w-md h-11 border-2"
@@ -256,8 +245,8 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       <TableRow>
                           <TableHead className="font-bold text-foreground">Product Group</TableHead>
                           <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                          <TableHead className="text-center font-bold text-foreground">Allocation Qty</TableHead>
-                          <TableHead className="text-center font-bold text-foreground">Remaining Qty</TableHead>
+                          <TableHead className="text-center font-bold text-foreground">Allocation</TableHead>
+                          <TableHead className="text-center font-bold text-foreground">Remaining</TableHead>
                           {!readOnly && <TableHead className="text-right font-bold text-foreground">Actions</TableHead>}
                       </TableRow>
                   </TableHeader>
@@ -289,7 +278,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                                               )}>
                                                   {balance}
                                               </span>
-                                              {isOutOfStock && <span className="text-[10px] font-black text-destructive uppercase tracking-tighter leading-none">EMPTY</span>}
                                           </div>
                                       </TableCell>
                                       {!readOnly && (
@@ -308,7 +296,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                                                           <AlertDialogHeader>
                                                               <AlertDialogTitle>Delete Sample?</AlertDialogTitle>
                                                               <AlertDialogDescription>
-                                                                  This will remove <strong>{sample.materialName}</strong> from the master inventory list. This cannot be undone.
+                                                                  Remove <strong>{sample.materialName}</strong> from the inventory?
                                                               </AlertDialogDescription>
                                                           </AlertDialogHeader>
                                                           <AlertDialogFooter>
