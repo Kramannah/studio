@@ -20,7 +20,6 @@ export const useMarketingSamples = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all marketing samples (Inventory)
       const samplesQuery = query(collection(db, "marketingSamples"));
       const samplesSnapshot = await getDocs(samplesQuery);
       const fetchedSamples: MarketingSample[] = [];
@@ -29,7 +28,6 @@ export const useMarketingSamples = () => {
       });
       setMarketingSamples(fetchedSamples);
 
-      // Fetch all coverage entries to calculate global usage
       const entriesQuery = query(collection(db, "coverageEntries"));
       const entriesSnapshot = await getDocs(entriesQuery);
       const fetchedEntries: CoverageEntry[] = [];
@@ -93,8 +91,6 @@ export const useAdminMarketingSamples = () => {
           return false;
       }
 
-      // Final check for authorization status before attempting write
-      // Use case-insensitive comparison for emails
       const userEmail = currentUser.email?.toLowerCase() || '';
       const isAdmin = ADMIN_UIDS.includes(currentUser.uid) || 
                       ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail) ||
@@ -107,7 +103,6 @@ export const useAdminMarketingSamples = () => {
           return false;
       }
       
-      // 1. Fetch existing samples to determine updates vs creates
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
       const existingMap = new Map<string, string>(); 
@@ -123,7 +118,6 @@ export const useAdminMarketingSamples = () => {
       let updatedCount = 0;
       let addedCount = 0;
       
-      // 2. Process data additively (Upsert)
       samplesData.forEach(sample => {
         const materialNameLower = sample.materialName.toLowerCase().trim();
         const roundedQty = Math.round(Number(sample.allocationQuantity)) || 0;
@@ -157,11 +151,11 @@ export const useAdminMarketingSamples = () => {
       return true;
 
     } catch (error: any) {
-      console.error("Critical error in addMarketingSamplesBulk:", error);
+      console.error("DEBUG: Firestore Permission Denied. Details:", error);
       
       let errorMessage = "Could not update inventory. Please verify your connection.";
       if (error.code === 'permission-denied') {
-          errorMessage = "PERMISSION DENIED: Database access blocked. Ensure your email (mbustamante@hovidinc.com) is correctly authenticated.";
+          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure your email is spelled correctly in the admin list.`;
       }
 
       toast({ 
