@@ -1,11 +1,12 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Doctor } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "./use-auth";
 import { db } from "@/lib/firebase";
+import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import {
   collection,
   addDoc,
@@ -18,14 +19,16 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
-// List of admin UIDs (must match Firestore Rules)
-const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
-
 export const useDoctors = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+  }, [user]);
 
   /** ------------------------
    * Fetch Doctors
@@ -41,7 +44,7 @@ export const useDoctors = () => {
     try {
       let q;
       // Admins can see all doctors
-      if (ADMIN_UIDS.includes(user.uid)) {
+      if (isUserAdmin) {
         q = query(collection(db, "doctors"));
       } else {
         // Regular users only see their own
@@ -65,7 +68,7 @@ export const useDoctors = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user, isUserAdmin, toast]);
 
   useEffect(() => {
     fetchDoctors();

@@ -5,9 +5,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Centralized check for Admin or Manager status.
-    // Matches the UIDs defined in admins.ts
     function isAuthorized() {
       return request.auth != null && (
+        request.auth.token.email == 'mbustamante@hovidinc.com' ||
         request.auth.token.email.endsWith('@hovidinc.com') || 
         request.auth.uid in [
           // Admins

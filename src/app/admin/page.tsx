@@ -4,7 +4,7 @@
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
 import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
@@ -45,7 +45,11 @@ export default function AdminPage() {
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
 
-    const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+    const isUserAdmin = useMemo(() => {
+        if (!user) return false;
+        return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+    }, [user]);
+
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
     const hasAdminAccess = isUserAdmin || isUserManager;
     

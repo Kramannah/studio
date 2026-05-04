@@ -86,7 +86,7 @@ export const useAdminMarketingSamples = () => {
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     try {
       const currentUser = auth.currentUser;
-      console.log("Starting additive marketing sample upload. User:", currentUser?.uid);
+      console.log("Starting additive marketing sample upload. User:", currentUser?.uid, "Email:", currentUser?.email);
 
       if (!currentUser) {
           toast({ variant: 'destructive', title: 'Session Expired', description: 'Please log in again.' });

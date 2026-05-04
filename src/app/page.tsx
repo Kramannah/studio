@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -13,7 +14,7 @@ import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
-import { ADMIN_UIDS, MANAGER_TEAMS, HELPDESK_EMAIL } from "@/lib/admins";
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS, HELPDESK_EMAIL } from "@/lib/admins";
 import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
@@ -46,7 +47,11 @@ type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 's
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const { toast } = useToast();
-  const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+  }, [user]);
+
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
   const hasAdminAccess = isUserAdmin || isUserManager;
 

@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { ADMIN_UIDS, MANAGER_TEAMS } from "@/lib/admins";
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getQueryStartDateISO } from "@/lib/utils";
@@ -33,7 +33,11 @@ export function useAdminData(managerId?: string) {
   const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
-  const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
+  
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+  }, [user]);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user) {
