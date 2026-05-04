@@ -4,13 +4,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. MARKETING SAMPLES - GLOBAL ACCESS FOR LOGGED-IN USERS
-    // Placed at the top with maximum permissions to bypass any role-based blocks.
-    match /marketingSamples/{document=**} {
-        allow read, write: if request.auth != null;
-    }
-
-    // Centralized check for Admin or Manager status for other collections.
+    // Centralized check for Admin or Manager status.
+    // Handles email domain verification and UID whitelist.
     function isAuthorized() {
       if (request.auth == null) return false;
       
@@ -18,8 +13,8 @@ service cloud.firestore {
       let userEmail = (email == null) ? "" : email.lower();
       let uid = request.auth.uid;
 
-      // Direct whitelist for primary admin
-      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.matches('(?i).*@hovidinc\\.com$');
+      // Direct whitelist for primary admin and hovid domain
+      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.endsWith('@hovidinc.com');
 
       // List of authorized UIDs (Managers).
       let isWhitelistedUid = uid in [
@@ -31,6 +26,12 @@ service cloud.firestore {
       ];
 
       return isAdmin || isWhitelistedUid;
+    }
+
+    // 1. MARKETING SAMPLES - Explicit Admin-Only Write Access
+    match /marketingSamples/{document=**} {
+        allow read: if request.auth != null;
+        allow write: if isAuthorized();
     }
 
     // 2. Doctor Masterlist

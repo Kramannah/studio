@@ -79,15 +79,17 @@ export const useAdminMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
-        toast({ variant: "destructive", title: "Auth Error", description: "You must be logged in to modify samples." });
+        toast({ variant: "destructive", title: "Auth Error", description: "You must be logged in as an Admin to modify inventory." });
         return false;
     }
 
     try {
-      // Force refresh the token to ensure the database sees the current login session as valid
+      console.log(`Starting bulk upload for ${samplesData.length} items as ${currentUser.email}...`);
+      
+      // Force refresh the token to ensure the database sees the current login session as valid and "fresh"
       await currentUser.getIdToken(true);
       
-      const chunkSize = 300;
+      const chunkSize = 400; // Safe chunk size below Firestore limit of 500
       for (let i = 0; i < samplesData.length; i += chunkSize) {
         const batch = writeBatch(db);
         const chunk = samplesData.slice(i, i + chunkSize);
@@ -96,7 +98,7 @@ export const useAdminMarketingSamples = () => {
           const materialName = (sample.materialName || "").trim();
           if (!materialName) return;
 
-          // Alphanumeric ID only to prevent technical rejections
+          // Generate a clean alphanumeric ID
           const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (!docId) return;
 
@@ -112,17 +114,27 @@ export const useAdminMarketingSamples = () => {
           }, { merge: true });
         });
         
+        console.log(`Committing batch ${Math.floor(i / chunkSize) + 1}...`);
         await batch.commit();
       }
 
+      console.log("Bulk upload completed successfully.");
       return true;
 
     } catch (error: any) {
-      console.error("UPLOAD ERROR:", error);
+      console.error("FIRESTORE UPLOAD REJECTED:", error);
+      
+      let friendlyMessage = "Insufficient permissions. Please ensure your account has Admin rights.";
+      if (error.code === 'permission-denied') {
+          friendlyMessage = "Access Denied: The database rules rejected this update. Verify you are logged in as mbustamante@hovidinc.com.";
+      } else if (error.code === 'unavailable') {
+          friendlyMessage = "Network error: The database is currently unreachable. Check your internet connection.";
+      }
+
       toast({ 
         variant: "destructive", 
         title: "Update Failed", 
-        description: error.message || "Database rejected the upload. Check your connection."
+        description: friendlyMessage
       });
       return false;
     }
