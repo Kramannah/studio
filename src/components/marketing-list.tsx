@@ -10,32 +10,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileDown } from "lucide-react";
-import * as XLSX from 'xlsx';
-import { useToast } from "@/hooks/use-toast";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 
 type MarketingListProps = {
   samples: MarketingSample[];
   usedQuantities: Record<string, number>;
-  onAddSamplesBulk: (samples: Omit<MarketingSample, 'id'>[]) => Promise<boolean>;
   readOnly?: boolean;
   loading?: boolean;
   onRefresh?: () => void;
 }
 
-export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readOnly = false, loading = false, onRefresh }: MarketingListProps) {
+export function MarketingList({ samples, usedQuantities, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
-  const [isUploading, setIsUploading] = useState(false);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -55,83 +48,6 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
     return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSamples, currentPage]);
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleDownloadTemplate = () => {
-    const headers = ['Product Group', 'Material Name', 'Allocated'];
-    const sampleData = [
-      { 'Product Group': 'Anti-Viral - Hofovir', 'Material Name': 'Hofovir 300mg Tab 10s Sample', 'Allocated': 50 },
-      { 'Product Group': 'Tocovid - Tocovid 200mg', 'Material Name': 'Tocovid 200mg Softgel 30s', 'Allocated': 100 }
-    ];
-    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Marketing Template');
-    XLSX.writeFile(workbook, 'marketing_samples_template.xlsx');
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // Use raw objects to allow case-insensitive header matching
-        const json = XLSX.utils.sheet_to_json<any>(worksheet);
-        console.log("Parsed Excel rows:", json.length);
-
-        if (json.length === 0) throw new Error("Excel file appears to be empty.");
-
-        const mappedData = json.map((row, index) => {
-            // Find keys regardless of casing
-            const findKey = (search: string) => {
-                return Object.keys(row).find(k => k.toLowerCase().trim() === search.toLowerCase().trim());
-            };
-
-            const pgKey = findKey('Product Group') || findKey('ProdGroupProdSubGroup') || '';
-            const mnKey = findKey('Material Name') || findKey('DisplayMaterialName') || '';
-            const qtyKey = findKey('Allocated') || findKey('AllocationQuantity') || '';
-
-            const productGroup = String(row[pgKey] || "").trim();
-            const materialName = String(row[mnKey] || "").trim();
-            const rawQty = row[qtyKey];
-            const allocationQuantity = Math.round(Number(rawQty)) || 0;
-
-            return { productGroup, materialName, allocationQuantity };
-        }).filter(s => s.materialName && s.productGroup);
-
-        console.log("Mapped items for upload:", mappedData.length);
-
-        if (mappedData.length === 0) {
-            throw new Error("No valid products found. Ensure columns match the template ('Product Group', 'Material Name', 'Allocated').");
-        }
-
-        const success = await onAddSamplesBulk(mappedData);
-        if (success && onRefresh) onRefresh();
-
-      } catch (error: any) {
-        console.error("Excel processing error:", error);
-        toast({ 
-            variant: "destructive", 
-            title: "Upload Failed", 
-            description: error.message || "Invalid Excel format." 
-        });
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
   return (
     <Card className="shadow-lg border-2">
       <CardHeader>
@@ -146,19 +62,6 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            {!readOnly && (
-                <>
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                    <Button onClick={handleDownloadTemplate} variant="outline" className="font-headline border-2">
-                        <FileDown className="mr-2 h-4 w-4" />
-                        Download Template
-                    </Button>
-                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading} className="font-headline border-2">
-                        {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
-                        {isUploading ? 'Adding...' : 'Add Sample'}
-                    </Button>
-                </>
-            )}
             {onRefresh && (
                  <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading} className="border-2">
                     <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />

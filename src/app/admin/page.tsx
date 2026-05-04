@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -12,7 +11,7 @@ import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
-import { useAdminMarketingSamples, useMarketingSamples } from '@/hooks/use-marketing-samples';
+import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { USER_DATA_MAP } from '@/lib/user-data';
 import { Badge } from '@/components/ui/badge';
@@ -84,7 +83,6 @@ export default function AdminPage() {
     const { entries: allEntries, deleteEntry: deleteAllUsersEntry, fetchEntries: refreshAllEntries } = useAllCoverageEntries();
     
     const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
-    const { addMarketingSamplesBulk } = useAdminMarketingSamples();
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
@@ -161,14 +159,6 @@ export default function AdminPage() {
             fetchUserData(selectedUserId);
         }
     }, [selectedUserId, fetchUserData]);
-    
-    const handleAddSamples = async (samples: any) => {
-        const success = await addMarketingSamplesBulk(samples);
-        if (success) {
-            refetchMarketingSamples();
-        }
-        return success;
-    }
 
     if (loading && !selectedManagerId) {
         return (
@@ -392,7 +382,6 @@ export default function AdminPage() {
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
-                                onAddSamplesBulk={handleAddSamples}
                                 readOnly={!hasAdminAccess}
                                 loading={marketingSamplesLoading}
                                 onRefresh={refetchMarketingSamples}

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -101,7 +100,6 @@ export function UserDashboard({
                 <MarketingList 
                     samples={allMarketingSamples}
                     usedQuantities={usedQuantities || {}}
-                    onAddSamplesBulk={async () => false}
                     readOnly={true}
                 />
             </TabsContent>
