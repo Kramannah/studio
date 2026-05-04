@@ -4,9 +4,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. Marketing Samples: UNIVERSAL ACCESS for all authenticated users
-    // This is the absolute priority. No complex logic, just login verification.
-    match /marketingSamples/{sampleId} {
+    // PRIORITY 1: Marketing Samples - Universal access for all logged-in users.
+    // Using {document=**} to ensure no sub-path or ID issues block access.
+    match /marketingSamples/{document=**} {
         allow read, write, create, update, delete: if request.auth != null;
     }
 
@@ -14,7 +14,6 @@ service cloud.firestore {
     function isAuthorized() {
       if (request.auth == null) return false;
       
-      // Safety check: ensure email exists in token before trying to use it
       let email = request.auth.token.email;
       let userEmail = (email == null) ? "" : email.lower();
       let uid = request.auth.uid;
@@ -34,27 +33,27 @@ service cloud.firestore {
       return isAdmin || isWhitelistedUid;
     }
 
-    // 2. Doctor Masterlist: Users manage their own; Admins/Managers manage all.
+    // 2. Doctor Masterlist
     match /doctors/{doctorId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAuthorized());
       allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAuthorized());
     }
 
-    // 3. Coverage Reports: Users create their own; Admins/Managers manage all.
+    // 3. Coverage Reports
     match /coverageEntries/{entryId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (request.auth.uid == resource.data.userId || isAuthorized());
     }
     
-    // 4. Call Plans: Users manage their own.
+    // 4. Call Plans
     match /plans/{planId} {
       allow read, create: if request.auth != null;
       allow delete, update: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    // 5. Non-Call Days & Planning Requests: User creates; Admin/Manager approves.
+    // 5. Non-Call Days & Planning Requests
     match /nonCallDays/{dayId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
@@ -67,7 +66,7 @@ service cloud.firestore {
       allow update: if request.auth != null && isAuthorized();
     }
 
-    // 6. Time logs: Managed by the owner.
+    // 6. Time logs
     match /timeLogs/{logId} {
         allow read: if request.auth != null;
         allow create, update: if request.auth != null && request.auth.uid == request.resource.data.userId;

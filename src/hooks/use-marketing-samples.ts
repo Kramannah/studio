@@ -82,16 +82,18 @@ export const useAdminMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
-        toast({ variant: 'destructive', title: 'Session Error', description: 'User not logged in.' });
+        toast({ variant: 'destructive', title: 'Session Error', description: 'You must be logged in to modify inventory.' });
         return false;
     }
 
-    console.log("DIAGNOSTIC: Attempting upload as user:", currentUser.email);
-    console.log("DIAGNOSTIC: Total items to process:", samplesData.length);
-
     try {
-      // Small chunk size to avoid batch timeouts or size rejections
-      const chunkSize = 250;
+      // Force refresh the token to ensure the database sees the current login session as valid
+      await currentUser.getIdToken(true);
+      
+      console.log("DIAGNOSTIC: Session verified for:", currentUser.email);
+
+      // Using a smaller chunk size for reliability
+      const chunkSize = 200;
       let totalProcessed = 0;
 
       for (let i = 0; i < samplesData.length; i += chunkSize) {
@@ -102,25 +104,21 @@ export const useAdminMarketingSamples = () => {
 
         chunk.forEach(sample => {
           const materialName = (sample.materialName || "").trim();
-          if (!materialName) {
-            console.warn("Skipping item with empty DisplayMaterialName");
-            return;
-          }
+          if (!materialName) return;
 
-          // Create a safe unique document ID
-          const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+          // Generating a very strict ID to avoid any Firestore naming rejections
+          const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (!docId) return;
 
           const docRef = doc(db, "marketingSamples", docId);
           
           const allocation = Math.round(Number(sample.allocationQuantity) || 0);
-          const group = (sample.productGroup || "General").trim();
+          const group = (sample.productGroup || "Uncategorized").trim();
           
           batch.set(docRef, { 
             productGroup: group,
             materialName: materialName,
             allocationQuantity: allocation,
-            lastUpdatedBy: currentUser.email,
             updatedAt: new Date().toISOString()
           }, { merge: true });
           
@@ -128,31 +126,23 @@ export const useAdminMarketingSamples = () => {
         });
         
         if (chunkHasValidItems) {
-            console.log(`DIAGNOSTIC: Committing batch chunk ${Math.floor(i/chunkSize) + 1}...`);
             await batch.commit();
             totalProcessed += chunk.length;
         }
       }
 
       toast({
-          title: "Upload Successful",
-          description: `Inventory synced with ${totalProcessed} items processed.`,
+          title: "Update Successful",
+          description: `Successfully processed ${totalProcessed} inventory items.`,
       });
       return true;
 
     } catch (error: any) {
-      console.error("CRITICAL DATABASE ERROR:", error);
+      console.error("CRITICAL UPLOAD ERROR:", error);
       
       let errorMsg = error.message || "An unexpected error occurred.";
-      
-      // If we see permission-denied, it means Firestore rules are still blocking
       if (error.code === 'permission-denied') {
-          errorMsg = "Database access denied. This is usually a security rule conflict. Technical code: " + error.code;
-          console.error("PERMISSION ERROR DETAILS:", {
-              code: error.code,
-              email: currentUser.email,
-              uid: currentUser.uid
-          });
+          errorMsg = "Database access denied. Please refresh the page and try logging in again.";
       }
 
       toast({ 
