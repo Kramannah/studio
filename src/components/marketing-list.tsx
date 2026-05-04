@@ -30,7 +30,7 @@ type MarketingListProps = {
   onRefresh?: () => void;
 }
 
-export function MarketingList({ samples, usedQuantities, loading = false, onRefresh }: MarketingListProps) {
+export function MarketingList({ samples, usedQuantities, readOnly = false, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -39,10 +39,11 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
 
-  // Run auto-seed only once when the list is first loaded
+  // Run auto-seed only once when the list is first loaded and data is missing
   useEffect(() => {
     const performSeed = async () => {
         if (samples.length === 0 && !loading && !readOnly) {
+            console.log("Database appears empty. Executing silent seed for screenshot samples...");
             await runAutoSeed();
             if (onRefresh) onRefresh();
         }
@@ -190,24 +191,26 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
                 Real-time tracking of promotional materials.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-            <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
-            </Button>
-            <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
-                <Download className="mr-2 h-4 w-4" /> Template
-            </Button>
-            <Button onClick={handleUploadClick} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
-                {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                Add Sample
-            </Button>
-            {onRefresh && (
-                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
-                    <RefreshCw className={cn("h-4 w-4", (loading || isUploading) && "animate-spin")} />
+          {!readOnly && (
+            <div className="flex flex-wrap gap-2">
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
                 </Button>
-            )}
-          </div>
+                <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
+                    <Download className="mr-2 h-4 w-4" /> Template
+                </Button>
+                <Button onClick={handleUploadClick} disabled={isUploading} className="font-headline shadow-md h-11 px-6">
+                    {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                    Add Sample
+                </Button>
+                {onRefresh && (
+                    <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading || isUploading} className="border-2 h-11 w-11">
+                        <RefreshCw className={cn("h-4 w-4", (loading || isUploading) && "animate-spin")} />
+                    </Button>
+                )}
+            </div>
+          )}
         </div>
         <div className="mt-4">
           <Input 
