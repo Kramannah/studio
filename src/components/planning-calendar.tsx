@@ -491,8 +491,8 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="sm:max-w-lg p-0 border-none overflow-hidden">
-                    <DialogHeader className="p-6 pb-0">
+                <DialogContent className="max-w-xl w-[95vw] max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden">
+                    <DialogHeader className="p-6 pb-2 shrink-0">
                         <div className="flex justify-between items-start">
                             <div>
                                 <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
@@ -501,19 +501,19 @@ export function PlanningCalendar({
                         </div>
                     </DialogHeader>
 
-                    <div className="p-6 space-y-5">
-                        <div className="relative">
+                    <div className="flex-1 overflow-hidden p-6 pt-0 flex flex-col space-y-4">
+                        <div className="relative shrink-0">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Search by name, specialty, or location..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
-                                className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary" 
+                                className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2" 
                                 autoFocus
                             />
                         </div>
 
-                        <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 py-4 px-2 border-2 border-primary/10 rounded-2xl bg-primary/5 shadow-inner">
+                        <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 py-4 px-2 border-2 border-primary/10 rounded-2xl bg-primary/5 shadow-inner shrink-0">
                             {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
                                 <div key={freq} className="flex flex-col items-center">
                                     <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">{freq}</span>
@@ -524,7 +524,7 @@ export function PlanningCalendar({
                             ))}
                         </div>
 
-                        <ScrollArea className="h-[350px] border rounded-xl p-2 bg-muted/10">
+                        <ScrollArea className="flex-1 border rounded-xl p-2 bg-muted/10 min-h-[200px]">
                             <div className="space-y-2">
                                 {filteredDoctors.length > 0 ? (
                                     filteredDoctors.map(doctor => {
@@ -564,7 +564,7 @@ export function PlanningCalendar({
                                                     </div>
                                                 </div>
                                                 <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
-                                                    {isPlanned ? 'SCHEDULED' : `Remaining Visits: ${balance}`}
+                                                    {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
                                                 </Badge>
                                             </div>
                                         )
@@ -578,7 +578,7 @@ export function PlanningCalendar({
                             </div>
                         </ScrollArea>
                     </div>
-                    <DialogFooter className="p-6 pt-0">
+                    <DialogFooter className="p-6 shrink-0 bg-muted/20 border-t">
                         <Button 
                             className="w-full h-14 text-xl font-black rounded-xl shadow-lg" 
                             onClick={handleAddSelectedPlans} 
