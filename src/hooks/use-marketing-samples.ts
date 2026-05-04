@@ -37,9 +37,7 @@ export const useMarketingSamples = () => {
 
     } catch (error: any) {
       console.error("Error fetching marketing data:", error);
-      if (error.code !== 'permission-denied') {
-        toast({ variant: "destructive", title: "Sync Issue", description: "Check your connection to refresh inventory." });
-      }
+      // Don't show toast for initial sync issues unless it's critical
     } finally {
       setLoading(false);
     }
@@ -158,7 +156,7 @@ export const useAdminMarketingSamples = () => {
 
       toast({
           title: "Update Successful",
-          description: `${addedCount} new product(s) added, ${updatedCount} updated.`,
+          description: `${addedCount} new items added, ${updatedCount} updated.`,
       });
 
       return true;
@@ -166,12 +164,8 @@ export const useAdminMarketingSamples = () => {
     } catch (error: any) {
       console.error("Database Operation Failed:", error);
       
-      let errorMessage = "Could not update inventory. Please try again.";
-      if (error.code === 'permission-denied') {
-        errorMessage = "Permission Denied. Your account is not authorized to modify samples.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      // Removed hardcoded permission strings to show real error messages
+      const errorMessage = error.message || "Could not update inventory. Please check your file format and connection.";
 
       toast({ 
           variant: 'destructive', 
