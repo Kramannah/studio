@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, PackagePlus, ListChecks } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, PackagePlus, ListChecks, User } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -270,7 +270,15 @@ export default function AdminPage() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    {user && <span className="text-sm text-muted-foreground hidden lg:inline font-medium">{user.email}</span>}
+                    {user && (
+                        <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
+                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-0.5">Logged in as</span>
+                            <div className="flex items-center gap-1.5">
+                                <User className="w-3 h-3 text-primary" />
+                                <span className="text-sm font-bold text-primary truncate max-w-[200px] leading-tight">{user.email}</span>
+                            </div>
+                        </div>
+                    )}
                      {isUserAdmin && (
                         <>
                             <Link href="/">
