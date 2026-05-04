@@ -79,49 +79,74 @@ export const useAdminMarketingSamples = () => {
   
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     try {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+            throw new Error("Access restricted to mbustamante@hovidinc.com");
+        }
+
         const docRef = await addDoc(collection(db, "marketingSamples"), {
             ...data,
             updatedAt: new Date().toISOString()
         });
         toast({ title: "Sample Added", description: `${data.materialName} is now in the inventory.` });
         return { id: docRef.id, ...data };
-    } catch (error) {
-        toast({ variant: "destructive", title: "Add Failed", description: "Insufficient permissions or technical error." });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Add Failed", description: error.message || "Insufficient permissions." });
         return null;
     }
   }
 
   const updateSample = async (id: string, data: Partial<MarketingSample>) => {
     try {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+            throw new Error("Access restricted to mbustamante@hovidinc.com");
+        }
+
         await updateDoc(doc(db, "marketingSamples", id), {
             ...data,
             updatedAt: new Date().toISOString()
         });
         toast({ title: "Updated Successfully" });
         return true;
-    } catch (error) {
-        toast({ variant: "destructive", title: "Update Failed" });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Update Failed", description: error.message });
         return false;
     }
   }
 
   const deleteSample = async (id: string) => {
     try {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+            throw new Error("Access restricted to mbustamante@hovidinc.com");
+        }
+
         await deleteDoc(doc(db, "marketingSamples", id));
         toast({ variant: "destructive", title: "Sample Deleted" });
         return true;
-    } catch (error) {
-        toast({ variant: "destructive", title: "Delete Failed" });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Delete Failed", description: error.message });
         return false;
     }
   }
 
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     const currentUser = auth.currentUser;
-    if (!currentUser) return false;
+    if (!currentUser) {
+        toast({ variant: "destructive", title: "Session Error", description: "No user found. Please re-login." });
+        return false;
+    }
+
+    if (currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
+        toast({ variant: "destructive", title: "Access Denied", description: "Only mbustamante@hovidinc.com can perform bulk uploads." });
+        return false;
+    }
 
     try {
+      // Force refresh the token to ensure the email claim is fresh
       await currentUser.getIdToken(true);
+      
       const batch = writeBatch(db);
       let addedCount = 0;
 
@@ -142,16 +167,20 @@ export const useAdminMarketingSamples = () => {
         addedCount++;
       });
       
-      if (addedCount === 0) return false;
+      if (addedCount === 0) {
+        toast({ variant: "destructive", title: "Empty Data", description: "No valid products found in file." });
+        return false;
+      }
 
       await batch.commit();
       return true;
 
     } catch (error: any) {
+      console.error("Bulk upload technical error:", error);
       toast({ 
         variant: "destructive", 
-        title: "Bulk Update Failed", 
-        description: `Access Denied: Verify you are logged in as mbustamante@hovidinc.com.`
+        title: "Database Error", 
+        description: error.message || "Failed to commit changes to the database."
       });
       return false;
     }
@@ -164,7 +193,12 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Elite Marks & Spencer Set", allocationQuantity: 218 }
     ];
-    return await addMarketingSamplesBulk(screenshotData);
+    
+    const currentUser = auth.currentUser;
+    if (currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com') {
+        return await addMarketingSamplesBulk(screenshotData);
+    }
+    return false;
   }, [addMarketingSamplesBulk]);
 
   return { addSample, updateSample, deleteSample, addMarketingSamplesBulk, runAutoSeed };
