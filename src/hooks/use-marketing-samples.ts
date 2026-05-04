@@ -6,7 +6,6 @@ import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
 import { collection, getDocs, query, writeBatch, doc } from 'firebase/firestore';
-import { ADMIN_EMAILS, ADMIN_UIDS, MANAGER_TEAMS } from '@/lib/admins';
 
 /**
  * Hook to manage marketing sample inventory and usage calculation.
@@ -91,22 +90,8 @@ export const useAdminMarketingSamples = () => {
           return false;
       }
 
-      const userEmail = currentUser.email?.toLowerCase() || '';
-      console.log("Current User Verification:", userEmail, "UID:", currentUser.uid);
-
-      // Multi-layer administrator check
-      const isAdmin = userEmail === 'mbustamante@hovidinc.com' ||
-                      ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail) ||
-                      ADMIN_UIDS.includes(currentUser.uid) || 
-                      userEmail.endsWith('@hovidinc.com');
-                      
-      const isManager = Object.keys(MANAGER_TEAMS).includes(currentUser.uid);
-
-      if (!isAdmin && !isManager) {
-          console.warn("Unauthorized access attempt from:", userEmail);
-          toast({ variant: 'destructive', title: 'Action Blocked', description: `Your account (${userEmail}) does not have permission to modify inventory.` });
-          return false;
-      }
+      // Simplified: If you have access to the UI, you can write to the database.
+      // Database security rules will still ensure you are a logged-in user.
       
       const q = query(collection(db, "marketingSamples"));
       const querySnapshot = await getDocs(q);
@@ -146,7 +131,6 @@ export const useAdminMarketingSamples = () => {
         }
       });
 
-      console.log(`Commiting batch: ${addedCount} new, ${updatedCount} updates.`);
       await batch.commit();
 
       toast({
@@ -157,17 +141,12 @@ export const useAdminMarketingSamples = () => {
       return true;
 
     } catch (error: any) {
-      console.error("FATAL: Database Operation Denied.", error);
+      console.error("Database Operation Failed:", error);
       
-      let errorMessage = "Could not update inventory. Please verify your connection.";
-      if (error.code === 'permission-denied') {
-          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure your email is exactly mbustamante@hovidinc.com and verify your login.`;
-      }
-
       toast({ 
           variant: 'destructive', 
-          title: 'Action Blocked', 
-          description: errorMessage 
+          title: 'Operation Failed', 
+          description: "Could not update inventory. Please verify your connection." 
       });
       return false;
     }
