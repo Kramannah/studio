@@ -5,7 +5,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Package } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -37,10 +37,11 @@ const MasterList = dynamic(() => import('@/components/master-list').then(mod => 
 const CallSummary = dynamic(() => import('@/components/call-summary').then(mod => mod.CallSummary), { loading: () => <DynamicSkeleton /> });
 const PlanningCalendar = dynamic(() => import('@/components/planning-calendar').then(mod => mod.PlanningCalendar), { loading: () => <DynamicSkeleton /> });
 const SubmittedList = dynamic(() => import('@/components/submitted-list').then(mod => mod.SubmittedList), { loading: () => <DynamicSkeleton /> });
+const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'marketing';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -162,7 +163,7 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const handleCrmClick = () => {
-    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master'];
+    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
     if (!crmViews.includes(activeView)) setActiveView('planning');
   };
   
@@ -179,6 +180,7 @@ export default function Home() {
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
+      case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} readOnly={true} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} />;
       default: return null;
     }
   }
@@ -227,6 +229,7 @@ export default function Home() {
                       </SidebarMenuSubItem>
                        <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
