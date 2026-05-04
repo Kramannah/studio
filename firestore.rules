@@ -4,71 +4,66 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper to check if the user is a top-level Admin or has a corporate email.
-    function isAdmin() {
+    // Centralized check for Admin or Manager status.
+    // Matches the UIDs defined in admins.ts
+    function isAuthorized() {
       return request.auth != null && (
         request.auth.token.email.endsWith('@hovidinc.com') || 
-        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"]
+        request.auth.uid in [
+          // Admins
+          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
+          // Managers (DSMs)
+          "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
+          "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
+          "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2", 
+          "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
+        ]
       );
     }
-    
-    // Helper to check if the user is a designated Manager (DSM).
-    function isManager() {
-      return request.auth != null && request.auth.uid in [
-        "e11qs3XD1vW3JWHfEaJI2DXcCEj2", 
-        "UmyUP0VwccRKLfrej67idFukFz42", 
-        "tb73WEIzndUrPEaD1q4H0VQfQaD3", 
-        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
-        "x8u4kvWvieZIVc9NdgiWmG01nts2", 
-        "MlE49ceLEDbzvKAsisKnW07fGfW2", 
-        "r19lVIqk4xTtzxvbs4W0kprHSvD2", 
-        "lDprIWp1acWrMElyzk2uTjQ4q4m1"
-      ];
-    }
 
-    // Allow users to manage their own doctor masterlist.
-    // Admins and Managers can also manage for others.
+    // Doctor Masterlist: Users manage their own; Admins/Managers manage all.
     match /doctors/{doctorId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAdmin() || isManager());
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
+      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAuthorized());
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAuthorized());
     }
 
-    // Allow users to manage their own coverage entries.
+    // Coverage Reports: Users create their own; Admins/Managers manage all.
     match /coverageEntries/{entryId} {
-      allow read, create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.userId || isAuthorized());
     }
     
-    // Allow users to manage their own call plans.
+    // Call Plans: Users manage their own.
     match /plans/{planId} {
       allow read, create: if request.auth != null;
       allow delete, update: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    // Users create/read their own non-call days. Admins/Managers update (approve/reject).
+    // Non-Call Days & Planning Requests: User creates; Admin/Manager approves.
     match /nonCallDays/{dayId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && (isAdmin() || isManager());
+      allow update: if request.auth != null && isAuthorized();
     }
     
-    // Users create/read their own planning requests. Admins/Managers update (approve/reject).
     match /planningRequests/{requestId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && (isAdmin() || isManager());
+      allow update: if request.auth != null && isAuthorized();
     }
     
-    // Marketing samples are read-only for general users. Admins and Managers have full write access.
+    // Marketing Samples: Read-only for reps; Full access for Admins/Managers.
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null && (isAdmin() || isManager());
+        allow write: if request.auth != null && isAuthorized();
     }
 
-    // Time logs can be created/updated by the owner.
+    // Time logs: Managed by the owner.
     match /timeLogs/{logId} {
-        allow read, create, update: if request.auth != null && request.auth.uid == request.resource.data.userId;
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
   }
 }
