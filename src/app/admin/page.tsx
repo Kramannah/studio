@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, PackageSearch } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -296,11 +296,6 @@ export default function AdminPage() {
                                 {totalPendingApprovals > 0 && <Badge className="absolute -right-1 -top-1 px-1.5 min-w-[20px]" variant="destructive">{totalPendingApprovals}</Badge>}
                             </TabsTrigger>
                             {hasAdminAccess && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>}
-                            {hasAdminAccess && (
-                                <TabsTrigger value="new-marketing" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                    <PackageSearch className="w-4 h-4" /> New Marketing Samples
-                                </TabsTrigger>
-                            )}
                         </TabsList>
                     </div>
 
@@ -384,25 +379,6 @@ export default function AdminPage() {
                     
                     {hasAdminAccess && (
                         <TabsContent value="marketing" className="mt-8 w-full">
-                            <MarketingList
-                                samples={marketingSamples || []}
-                                usedQuantities={usedQuantities || {}}
-                                readOnly={false}
-                                loading={marketingSamplesLoading}
-                                onRefresh={refetchMarketingSamples}
-                            />
-                        </TabsContent>
-                    )}
-
-                    {hasAdminAccess && (
-                        <TabsContent value="new-marketing" className="mt-8 w-full">
-                            <div className="bg-primary/5 p-4 rounded-xl border-2 border-primary/20 mb-6 flex items-center gap-3">
-                                <PackageSearch className="text-primary w-6 h-6" />
-                                <div>
-                                    <h3 className="font-headline font-bold text-primary">New Marketing Samples Test Page</h3>
-                                    <p className="text-sm text-muted-foreground">This is a diagnostic mirror page to test upload permissions. Changes here reflect globally.</p>
-                                </div>
-                            </div>
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
