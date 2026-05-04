@@ -77,7 +77,7 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         const mappedData = json.map(row => ({
             productGroup: row['ProdGroupProdSubGroup'] || row['Product Group'],
             materialName: row['DisplayMaterialName'] || row['Material Name'],
-            allocationQuantity: Number(row['AllocationQuantity'] || row['Allocated']) || 0
+            allocationQuantity: Math.round(Number(row['AllocationQuantity'] || row['Allocated'])) || 0
         }));
 
         if (mappedData.length === 0) throw new Error("File empty");
@@ -156,8 +156,9 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                         </TableRow>
                     ) : paginatedSamples.length > 0 ? (
                         paginatedSamples.map((sample) => {
-                            const used = usedQuantities[sample.materialName] || 0;
-                            const balance = sample.allocationQuantity - used;
+                            const used = Math.round(usedQuantities[sample.materialName] || 0);
+                            const allocated = Math.round(sample.allocationQuantity || 0);
+                            const balance = allocated - used;
                             const isOutOfStock = balance <= 0;
                             const isLowStock = !isOutOfStock && balance <= 5;
                           
@@ -165,7 +166,7 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
                                 <TableRow key={sample.id} className={cn("h-16 hover:bg-muted/30 transition-colors", isOutOfStock && "bg-destructive/5")}>
                                     <TableCell className="font-bold text-primary">{sample.productGroup}</TableCell>
                                     <TableCell className="font-medium">{sample.materialName}</TableCell>
-                                    <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                    <TableCell className="text-center font-mono">{allocated}</TableCell>
                                     <TableCell className="text-center">
                                         <Badge variant="secondary" className="font-mono text-sm px-3">{used}</Badge>
                                     </TableCell>

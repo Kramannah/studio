@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -115,16 +116,23 @@ export default function Home() {
     const quantities = { ...usedQuantities };
     offlineEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
-            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+            const qty = Math.round(Number(entry.primaryProductQty));
+            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            const qty = Math.round(Number(entry.secondaryProductQty));
+            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + qty;
         }
         entry.reminderProducts?.forEach(prod => {
             if (prod.sampleName && prod.quantity) {
-                quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + Number(prod.quantity);
+                const qty = Math.round(Number(prod.quantity));
+                quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
             }
         });
+    });
+    // Ensure all values are rounded for safety
+    Object.keys(quantities).forEach(key => {
+        quantities[key] = Math.round(quantities[key]);
     });
     return quantities;
   }, [usedQuantities, offlineEntries]);

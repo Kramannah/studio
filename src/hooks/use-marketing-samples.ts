@@ -59,19 +59,19 @@ export const useMarketingSamples = () => {
     allEntries.forEach(entry => {
         // Track primary sample usage
         if (entry.primarySampleName && entry.primaryProductQty) {
-            const qty = Number(entry.primaryProductQty);
+            const qty = Math.round(Number(entry.primaryProductQty));
             quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
         }
         // Track secondary sample usage
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            const qty = Number(entry.secondaryProductQty);
+            const qty = Math.round(Number(entry.secondaryProductQty));
             quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + qty;
         }
         // Track reminder products usage
         if (entry.reminderProducts && entry.reminderProducts.length > 0) {
             entry.reminderProducts.forEach(prod => {
                 if (prod.sampleName && prod.quantity) {
-                    const qty = Number(prod.quantity);
+                    const qty = Math.round(Number(prod.quantity));
                     quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
                 }
             });
@@ -104,7 +104,7 @@ export const useAdminMarketingSamples = () => {
         const docRef = doc(collection(db, "marketingSamples"));
         batch.set(docRef, { 
             ...sample,
-            allocationQuantity: Number(sample.allocationQuantity) || 0
+            allocationQuantity: Math.round(Number(sample.allocationQuantity)) || 0
         });
       });
 

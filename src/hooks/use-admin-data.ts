@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -178,15 +179,18 @@ export function useAdminData(managerId?: string) {
         const usedQuantities: Record<string, number> = {};
         combinedData.entries.forEach(entry => {
             if (entry.primarySampleName && entry.primaryProductQty) {
-                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+                const qty = Math.round(Number(entry.primaryProductQty));
+                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + qty;
             }
             if (entry.secondarySampleName && entry.secondaryProductQty) {
-                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+                const qty = Math.round(Number(entry.secondaryProductQty));
+                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + qty;
             }
             if (entry.reminderProducts) {
                 entry.reminderProducts.forEach(prod => {
                     if (prod.sampleName && prod.quantity) {
-                        usedQuantities[prod.sampleName] = (usedQuantities[prod.sampleName] || 0) + Number(prod.quantity);
+                        const qty = Math.round(Number(prod.quantity));
+                        usedQuantities[prod.sampleName] = (usedQuantities[prod.sampleName] || 0) + qty;
                     }
                 });
             }
