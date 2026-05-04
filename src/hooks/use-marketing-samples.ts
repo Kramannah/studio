@@ -92,9 +92,9 @@ export const useAdminMarketingSamples = () => {
       }
 
       const userEmail = currentUser.email?.toLowerCase() || '';
-      console.log("Authorizing User:", userEmail, "UID:", currentUser.uid);
+      console.log("Current User Verification:", userEmail, "UID:", currentUser.uid);
 
-      // Force absolute authorization for mbustamante@hovidinc.com
+      // Multi-layer administrator check
       const isAdmin = userEmail === 'mbustamante@hovidinc.com' ||
                       ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail) ||
                       ADMIN_UIDS.includes(currentUser.uid) || 
@@ -103,8 +103,8 @@ export const useAdminMarketingSamples = () => {
       const isManager = Object.keys(MANAGER_TEAMS).includes(currentUser.uid);
 
       if (!isAdmin && !isManager) {
-          console.warn("Client-side permission check failed for:", userEmail);
-          toast({ variant: 'destructive', title: 'Action Blocked', description: 'Your account does not have permission to modify inventory.' });
+          console.warn("Unauthorized access attempt from:", userEmail);
+          toast({ variant: 'destructive', title: 'Action Blocked', description: `Your account (${userEmail}) does not have permission to modify inventory.` });
           return false;
       }
       
@@ -146,6 +146,7 @@ export const useAdminMarketingSamples = () => {
         }
       });
 
+      console.log(`Commiting batch: ${addedCount} new, ${updatedCount} updates.`);
       await batch.commit();
 
       toast({
@@ -156,11 +157,11 @@ export const useAdminMarketingSamples = () => {
       return true;
 
     } catch (error: any) {
-      console.error("Firestore Permission Denied. Details:", error);
+      console.error("FATAL: Database Operation Denied.", error);
       
       let errorMessage = "Could not update inventory. Please verify your connection.";
       if (error.code === 'permission-denied') {
-          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure you are logged in correctly.`;
+          errorMessage = `PERMISSION DENIED: Database access blocked for ${auth.currentUser?.email}. Please ensure your email is exactly mbustamante@hovidinc.com and verify your login.`;
       }
 
       toast({ 

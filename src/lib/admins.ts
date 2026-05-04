@@ -1,10 +1,8 @@
 
 // This is a temporary list of admin UIDs.
-// In a production environment, you should manage roles in a more robust way,
-// for example, using a 'roles' collection in Firestore or custom claims.
 export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
-// Explicit list of administrator emails
+// Explicit list of administrator emails (Case-insensitive matching is handled in code)
 export const ADMIN_EMAILS = ["mbustamante@hovidinc.com"];
 
 // Centralized helpdesk contact email
@@ -12,10 +10,7 @@ export const HELPDESK_EMAIL = "mbustamante@hovidinc.com";
 
 
 // Defines which users a manager can see in their admin dashboard.
-// The key is the manager's UID, and the value is an array of their team members' UIDs.
 export const MANAGER_TEAMS: Record<string, string[]> = {
-    // Example Manager UID -> Team Member UIDs
-    // "manager_uid_1": ["user_uid_1", "user_uid_2"],
     "e11qs3XD1vW3JWHfEaJI2DXcCEj2": [
         "XNfz4EiMrIRQ4NwLlkdUXUvBzSH2",
         "mdLCjhNVnYas96aW4IkrPWip7RS2",

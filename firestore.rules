@@ -6,20 +6,32 @@ service cloud.firestore {
 
     // Centralized check for Admin or Manager status.
     function isAuthorized() {
-      // Direct, reliable check for the primary administrator email and the company domain.
-      return request.auth != null && (
-        request.auth.token.email == 'mbustamante@hovidinc.com' ||
-        request.auth.token.email.matches('.*@hovidinc\\.com$') ||
-        request.auth.uid in [
-          // Admins
-          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
-          // Managers (DSMs)
-          "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
-          "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
-          "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2", 
-          "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
-        ]
+      // Ensure the user is authenticated.
+      if (request.auth == null) {
+        return false;
+      }
+
+      let userEmail = request.auth.token.email;
+      let uid = request.auth.uid;
+
+      // Check if email matches mbustamante@hovidinc.com or the company domain (case-insensitive).
+      let isHovidAdmin = userEmail != null && (
+        userEmail.matches('(?i)^mbustamante@hovidinc\\.com$') ||
+        userEmail.matches('(?i).*@hovidinc\\.com$')
       );
+
+      // List of authorized UIDs (Admins and Managers).
+      let isWhitelistedUid = uid in [
+        // Admins
+        "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
+        // Managers (DSMs)
+        "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
+        "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
+        "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2", 
+        "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
+      ];
+
+      return isHovidAdmin || isWhitelistedUid;
     }
 
     // Doctor Masterlist: Users manage their own; Admins/Managers manage all.
@@ -58,7 +70,7 @@ service cloud.firestore {
     // Marketing Samples: Full access for authorized Admins/Managers.
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null && isAuthorized();
+        allow write: if request.auth != null && isAuthorized();
     }
 
     // Time logs: Managed by the owner.
