@@ -13,10 +13,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PlusCircle, Download, FileSpreadsheet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
+import { format } from "date-fns";
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
 import { useToast } from "@/hooks/use-toast";
 
@@ -72,6 +73,22 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
       XLSX.writeFile(workbook, "marketing_samples_template.xlsx");
+  };
+
+  const handleExportExcel = () => {
+    const dataToExport = filteredSamples.map(sample => {
+      const allocated = Math.round(sample.allocationQuantity || 0);
+      return {
+        "ProdGroupProdSubGroup": sample.productGroup,
+        "DisplayMaterialName": sample.materialName,
+        "AllocationQuantity": allocated,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Samples");
+    XLSX.writeFile(workbook, `existing_marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,6 +185,9 @@ export function MarketingList({ samples, usedQuantities, loading = false, onRefr
           </div>
           <div className="flex flex-wrap gap-2">
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+            <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
+            </Button>
             <Button onClick={handleDownloadTemplate} variant="outline" className="border-2 font-headline h-11">
                 <Download className="mr-2 h-4 w-4" /> Template
             </Button>
