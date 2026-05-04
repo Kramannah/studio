@@ -83,21 +83,47 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
+        
+        // Use raw objects to allow case-insensitive header matching
         const json = XLSX.utils.sheet_to_json<any>(worksheet);
+        console.log("Parsed Excel rows:", json.length);
 
-        const mappedData = json.map(row => ({
-            productGroup: String(row['ProdGroupProdSubGroup'] || row['Product Group'] || "").trim(),
-            materialName: String(row['DisplayMaterialName'] || row['Material Name'] || "").trim(),
-            allocationQuantity: Math.round(Number(row['AllocationQuantity'] || row['Allocated'])) || 0
-        })).filter(s => s.materialName && s.productGroup);
+        if (json.length === 0) throw new Error("Excel file appears to be empty.");
 
-        if (mappedData.length === 0) throw new Error("File empty or missing required columns.");
+        const mappedData = json.map((row, index) => {
+            // Find keys regardless of casing
+            const findKey = (search: string) => {
+                return Object.keys(row).find(k => k.toLowerCase().trim() === search.toLowerCase().trim());
+            };
+
+            const pgKey = findKey('Product Group') || findKey('ProdGroupProdSubGroup') || '';
+            const mnKey = findKey('Material Name') || findKey('DisplayMaterialName') || '';
+            const qtyKey = findKey('Allocated') || findKey('AllocationQuantity') || '';
+
+            const productGroup = String(row[pgKey] || "").trim();
+            const materialName = String(row[mnKey] || "").trim();
+            const rawQty = row[qtyKey];
+            const allocationQuantity = Math.round(Number(rawQty)) || 0;
+
+            return { productGroup, materialName, allocationQuantity };
+        }).filter(s => s.materialName && s.productGroup);
+
+        console.log("Mapped items for upload:", mappedData.length);
+
+        if (mappedData.length === 0) {
+            throw new Error("No valid products found. Ensure columns match the template ('Product Group', 'Material Name', 'Allocated').");
+        }
 
         const success = await onAddSamplesBulk(mappedData);
         if (success && onRefresh) onRefresh();
 
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Upload Failed", description: error.message || "Invalid Excel format." });
+        console.error("Excel processing error:", error);
+        toast({ 
+            variant: "destructive", 
+            title: "Upload Failed", 
+            description: error.message || "Invalid Excel format." 
+        });
       } finally {
         setIsUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
