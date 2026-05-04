@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -14,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight, PackageCheck, PackageX } from "lucide-react";
+import { Upload, Download, RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileDown } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -58,6 +57,18 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = ['Product Group', 'Material Name', 'Allocated'];
+    const sampleData = [
+      { 'Product Group': 'Anti-Viral - Hofovir', 'Material Name': 'Hofovir 300mg Tab 10s Sample', 'Allocated': 50 },
+      { 'Product Group': 'Tocovid - Tocovid 200mg', 'Material Name': 'Tocovid 200mg Softgel 30s', 'Allocated': 100 }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Marketing Template');
+    XLSX.writeFile(workbook, 'marketing_samples_template.xlsx');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,15 +123,19 @@ export function MarketingList({ samples, usedQuantities, onAddSamplesBulk, readO
             {!readOnly && (
                 <>
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading} className="font-headline">
-                        {isUploading ? <RefreshCw className="mr-2 animate-spin"/> : <Upload className="mr-2" />}
+                    <Button onClick={handleDownloadTemplate} variant="outline" className="font-headline border-2">
+                        <FileDown className="mr-2 h-4 w-4" />
+                        Download Template
+                    </Button>
+                    <Button onClick={handleUploadClick} variant="outline" disabled={isUploading} className="font-headline border-2">
+                        {isUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
                         {isUploading ? 'Updating...' : 'Update Masterlist'}
                     </Button>
                 </>
             )}
             {onRefresh && (
-                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading}>
-                    <RefreshCw className={cn(loading && "animate-spin")} />
+                 <Button onClick={onRefresh} variant="outline" size="icon" disabled={loading} className="border-2">
+                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
                 </Button>
             )}
           </div>
