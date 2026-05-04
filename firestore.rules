@@ -4,17 +4,32 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper to check if the user is a top-level Admin or has a corporate email.
     function isAdmin() {
-      // Admin check: either by a specific email domain or by being in the list of hardcoded admin UIDs.
-      return request.auth.token.email.endsWith('@hovidinc.com') || request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+      return request.auth.token.email.endsWith('@hovidinc.com') || 
+             request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+    }
+    
+    // Helper to check if the user is a designated Manager (DSM).
+    function isManager() {
+      return request.auth.uid in [
+        "e11qs3XD1vW3JWHfEaJI2DXcCEj2", 
+        "UmyUP0VwccRKLfrej67idFukFz42", 
+        "tb73WEIzndUrPEaD1q4H0VQfQaD3", 
+        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
+        "x8u4kvWvieZIVc9NdgiWmG01nts2", 
+        "MlE49ceLEDbzvKAsisKnW07fGfW2", 
+        "r19lVIqk4xTtzxvbs4W0kprHSvD2", 
+        "lDprIWp1acWrMElyzk2uTjQ4q4m1"
+      ];
     }
 
-    // Allow users to read, create, update, and delete their own doctor masterlist.
-    // Admins can also create, update, and delete for other users.
+    // Allow users to manage their own doctor masterlist.
+    // Admins and Managers can also manage for others.
     match /doctors/{doctorId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAdmin());
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null && (request.resource.data.userId == request.auth.uid || isAdmin() || isManager());
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin() || isManager());
     }
 
     // Allow users to manage their own coverage entries.
@@ -26,31 +41,30 @@ service cloud.firestore {
     // Allow users to manage their own call plans.
     match /plans/{planId} {
       allow read, create: if request.auth != null;
-      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow update: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow delete, update: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
-    // A user can create/read their own non-call days. Only an admin can update (approve/reject).
+    // Users create/read their own non-call days. Admins/Managers update (approve/reject).
     match /nonCallDays/{dayId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && isAdmin();
+      allow update: if request.auth != null && (isAdmin() || isManager());
     }
     
-    // A user can create/read their own planning requests. Only an admin can update (approve/reject).
+    // Users create/read their own planning requests. Admins/Managers update (approve/reject).
     match /planningRequests/{requestId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && isAdmin();
+      allow update: if request.auth != null && (isAdmin() || isManager());
     }
     
-    // Marketing samples are read-only for users, but writable for admins.
+    // Marketing samples are read-only for users. Admins and Managers can write.
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
-        allow write: if request.auth != null && isAdmin(); // Use isAdmin function
+        allow write: if request.auth != null && (isAdmin() || isManager());
     }
 
-    // Time logs can be created and updated by the user who owns them.
+    // Time logs can be created/updated by the owner.
     match /timeLogs/{logId} {
         allow read, create, update: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }

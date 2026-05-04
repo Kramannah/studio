@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -143,12 +144,6 @@ export default function AdminPage() {
             router.push('/');
         }
     }, [user, loading, hasAdminAccess, router]);
-
-    useEffect(() => {
-        if (isUserManager && activeTab === 'marketing') {
-            setActiveTab('district-reports');
-        }
-    }, [isUserManager, activeTab]);
 
     useEffect(() => {
         setSelectedUserId(null);
@@ -306,7 +301,7 @@ export default function AdminPage() {
                                 Approvals
                                 {totalPendingApprovals > 0 && <Badge className="absolute -right-1 -top-1 px-1.5 min-w-[20px]" variant="destructive">{totalPendingApprovals}</Badge>}
                             </TabsTrigger>
-                            {isUserAdmin && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>}
+                            {hasAdminAccess && <TabsTrigger value="marketing" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -388,13 +383,13 @@ export default function AdminPage() {
                         />
                     </TabsContent>
                     
-                    {isUserAdmin && (
+                    {hasAdminAccess && (
                         <TabsContent value="marketing" className="mt-8 w-full">
                             <MarketingList
                                 samples={marketingSamples || []}
                                 usedQuantities={usedQuantities || {}}
                                 onAddSamplesBulk={handleAddSamples}
-                                readOnly={!isUserAdmin}
+                                readOnly={!hasAdminAccess}
                                 loading={marketingSamplesLoading}
                                 onRefresh={refetchMarketingSamples}
                             />
