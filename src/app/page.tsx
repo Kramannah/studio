@@ -20,6 +20,7 @@ import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButt
 import { Skeleton } from '@/components/ui/skeleton';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 // Optimized dynamic imports
 const DynamicSkeleton = () => (
@@ -44,6 +45,7 @@ type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'marketing' | 's
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
+  const { toast } = useToast();
   const isUserAdmin = useMemo(() => user && ADMIN_UIDS.includes(user.uid), [user]);
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
   const hasAdminAccess = isUserAdmin || isUserManager;
@@ -79,12 +81,21 @@ export default function Home() {
               fetchNonCallDays(),
               refetchMarketingSamples()
           ]);
+          toast({
+              title: "Sync Finished",
+              description: "All pending data uploaded and server records refreshed.",
+          });
       } catch (e) {
           console.error("Manual sync failed", e);
+          toast({
+              variant: "destructive",
+              title: "Sync Error",
+              description: "There was a problem refreshing your data. Please check your connection.",
+          });
       } finally {
           setIsManualSyncing(false);
       }
-  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchMarketingSamples]);
+  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchMarketingSamples, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
