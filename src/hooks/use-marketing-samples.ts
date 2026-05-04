@@ -37,11 +37,10 @@ export const useMarketingSamples = () => {
 
     } catch (error: any) {
       console.error("Error fetching marketing data:", error);
-      // Don't show toast for initial sync issues unless it's critical
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -88,89 +87,48 @@ export const useAdminMarketingSamples = () => {
           return false;
       }
 
-      // 1. Fetch existing samples to determine if we update or create
-      const q = query(collection(db, "marketingSamples"));
-      const querySnapshot = await getDocs(q);
-      const existingMap = new Map<string, string>(); 
-      
-      querySnapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.materialName) {
-            existingMap.set(data.materialName.toLowerCase().trim(), docSnap.id);
-        }
-      });
-
-      // 2. Prepare operations
-      const operations: { type: 'set' | 'update'; docRef: any; data: any }[] = [];
-      let updatedCount = 0;
-      let addedCount = 0;
-      
-      samplesData.forEach(sample => {
-        const materialNameLower = sample.materialName.toLowerCase().trim();
-        const rawQty = Number(sample.allocationQuantity);
-        const roundedQty = isNaN(rawQty) ? 0 : Math.round(rawQty);
-        const existingId = existingMap.get(materialNameLower);
-        
-        if (existingId) {
-          const docRef = doc(db, "marketingSamples", existingId);
-          operations.push({
-            type: 'update',
-            docRef,
-            data: { 
-              productGroup: sample.productGroup,
-              allocationQuantity: roundedQty 
-            }
-          });
-          updatedCount++;
-        } else {
-          const docRef = doc(collection(db, "marketingSamples"));
-          operations.push({
-            type: 'set',
-            docRef,
-            data: { 
-              productGroup: sample.productGroup,
-              materialName: sample.materialName,
-              allocationQuantity: roundedQty
-            }
-          });
-          addedCount++;
-        }
-      });
-
-      // 3. Process in chunks of 400 (Firebase batch limit is 500)
+      // Process in chunks to respect Firestore batch limits (500)
       const chunkSize = 400;
-      for (let i = 0; i < operations.length; i += chunkSize) {
+      let totalProcessed = 0;
+
+      for (let i = 0; i < samplesData.length; i += chunkSize) {
         const batch = writeBatch(db);
-        const chunk = operations.slice(i, i + chunkSize);
+        const chunk = samplesData.slice(i, i + chunkSize);
         
-        chunk.forEach(op => {
-          if (op.type === 'update') {
-            batch.update(op.docRef, op.data);
-          } else {
-            batch.set(op.docRef, op.data);
-          }
+        chunk.forEach(sample => {
+          const materialName = sample.materialName.trim();
+          // Create a predictable document ID from the material name to handle updates efficiently
+          const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+          const docRef = doc(db, "marketingSamples", docId);
+          
+          const roundedQty = Math.round(Number(sample.allocationQuantity) || 0);
+          
+          // Use set with merge: true to handle both creation and updates in one go
+          batch.set(docRef, { 
+            productGroup: sample.productGroup,
+            materialName: materialName,
+            allocationQuantity: roundedQty
+          }, { merge: true });
         });
         
         await batch.commit();
+        totalProcessed += chunk.length;
       }
 
       toast({
           title: "Update Successful",
-          description: `${addedCount} new items added, ${updatedCount} updated.`,
+          description: `Processed ${totalProcessed} inventory items successfully.`,
       });
 
       return true;
 
     } catch (error: any) {
-      console.error("Database Operation Failed:", error);
+      console.error("Critical Inventory Update Failed:", error);
       
-      // Removed hardcoded permission strings to show real error messages
-      const errorMessage = error.message || "Could not update inventory. Please check your file format and connection.";
-
       toast({ 
           variant: 'destructive', 
-          title: 'Operation Failed', 
-          description: errorMessage
+          title: 'Update Failed', 
+          description: error.message || "Permissions check failed. Please ensure your account is authorized."
       });
       return false;
     }

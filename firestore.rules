@@ -10,7 +10,8 @@ service cloud.firestore {
         return false;
       }
 
-      let userEmail = request.auth.token.email;
+      // Safe access to email
+      let userEmail = request.auth.token.get('email', '');
       let uid = request.auth.uid;
 
       // Case-insensitive check for admin email or domain
@@ -19,11 +20,9 @@ service cloud.firestore {
         userEmail.matches('(?i).*@hovidinc\\.com$')
       );
 
-      // List of authorized UIDs (Admins and Managers).
+      // List of authorized UIDs (Managers).
       let isWhitelistedUid = uid in [
-        // Admins
         "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
-        // Managers (DSMs)
         "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
         "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1", 
         "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2", 
@@ -36,7 +35,7 @@ service cloud.firestore {
     // Marketing Samples: OPEN ACCESS for all authenticated users
     // This allows anyone logged in to update inventory as requested.
     match /marketingSamples/{sampleId} {
-        allow read, create, update, delete: if request.auth != null;
+        allow read, write: if request.auth != null;
     }
 
     // Doctor Masterlist: Users manage their own; Admins/Managers manage all.
