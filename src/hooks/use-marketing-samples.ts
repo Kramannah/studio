@@ -94,7 +94,12 @@ export const useAdminMarketingSamples = () => {
       }
 
       // Final check for authorization status before attempting write
-      const isAdmin = ADMIN_UIDS.includes(currentUser.uid) || (currentUser.email && ADMIN_EMAILS.includes(currentUser.email));
+      // Use case-insensitive comparison for emails
+      const userEmail = currentUser.email?.toLowerCase() || '';
+      const isAdmin = ADMIN_UIDS.includes(currentUser.uid) || 
+                      ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail) ||
+                      userEmail.endsWith('@hovidinc.com');
+                      
       const isManager = Object.keys(MANAGER_TEAMS).includes(currentUser.uid);
 
       if (!isAdmin && !isManager) {
@@ -156,7 +161,7 @@ export const useAdminMarketingSamples = () => {
       
       let errorMessage = "Could not update inventory. Please verify your connection.";
       if (error.code === 'permission-denied') {
-          errorMessage = "PERMISSION DENIED: Database access blocked. Please ensure you are using an authorized @hovidinc.com account.";
+          errorMessage = "PERMISSION DENIED: Database access blocked. Ensure your email (mbustamante@hovidinc.com) is correctly authenticated.";
       }
 
       toast({ 

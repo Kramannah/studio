@@ -7,8 +7,8 @@ service cloud.firestore {
     // Centralized check for Admin or Manager status.
     function isAuthorized() {
       return request.auth != null && (
-        request.auth.token.email == 'mbustamante@hovidinc.com' ||
-        request.auth.token.email.endsWith('@hovidinc.com') || 
+        request.auth.token.email.lower() == 'mbustamante@hovidinc.com' ||
+        request.auth.token.email.lower().endsWith('@hovidinc.com') || 
         request.auth.uid in [
           // Admins
           "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
