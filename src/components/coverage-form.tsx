@@ -224,18 +224,18 @@ export function CoverageForm({
   const plannedDoctorId = form.watch("plannedDoctorId");
 
   const dynamicProductList = useMemo(() => {
-    const categories = new Set(allocations.map(a => a.prodGroupProdSubGroup));
+    const categories = new Set(allocations.map(a => a.prodGroupProdSubGroup).filter(val => !!val && val.trim() !== ""));
     return Array.from(categories).sort();
   }, [allocations]);
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
-    return allocations.filter(s => s.prodGroupProdSubGroup === primaryProduct);
+    return allocations.filter(s => s.prodGroupProdSubGroup === primaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "");
   }, [primaryProduct, allocations]);
 
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
-    return allocations.filter(s => s.prodGroupProdSubGroup === secondaryProduct);
+    return allocations.filter(s => s.prodGroupProdSubGroup === secondaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "");
   }, [secondaryProduct, allocations]);
 
   useEffect(() => {
@@ -570,7 +570,7 @@ export function CoverageForm({
                                 render={({ field }) => (
                                     <FormItem>
                                     <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <Select onValueChange={field.onChange} value={field.value || undefined}>
                                         <FormControl>
                                             <SelectTrigger>
                                             <SelectValue placeholder="Select a doctor from today's plan..." />
@@ -664,7 +664,7 @@ export function CoverageForm({
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Type of Coverage</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value}>
+                                      <Select onValueChange={field.onChange} value={field.value || undefined}>
                                       <FormControl>
                                           <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                                       </FormControl>
@@ -743,7 +743,7 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Primary Product</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value}>
+                                                  <Select onValueChange={field.onChange} value={field.value || undefined}>
                                                       <FormControl>
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
@@ -761,7 +761,7 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value}>
+                                                  <Select onValueChange={field.onChange} value={field.value || undefined}>
                                                       <FormControl>
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
@@ -781,7 +781,7 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                       <FormLabel className="font-headline">Primary Samples</FormLabel>
-                                                      <Select onValueChange={field.onChange} value={field.value} disabled={!primaryProduct}>
+                                                      <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!primaryProduct}>
                                                           <FormControl>
                                                               <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
@@ -823,7 +823,7 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                       <FormLabel className="font-headline">Secondary Samples</FormLabel>
-                                                      <Select onValueChange={field.onChange} value={field.value} disabled={!secondaryProduct}>
+                                                      <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!secondaryProduct}>
                                                           <FormControl>
                                                               <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
                                                           </FormControl>
@@ -873,7 +873,7 @@ export function CoverageForm({
                                                     render={({ field }) => (
                                                         <FormItem className="md:col-span-2">
                                                         <FormLabel className="text-xs">Product</FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                        <Select onValueChange={field.onChange} value={field.value || undefined}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
                                                                 {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
@@ -888,10 +888,10 @@ export function CoverageForm({
                                                     render={({ field: f }) => (
                                                         <FormItem className="md:col-span-2">
                                                         <FormLabel className="text-xs">Sample</FormLabel>
-                                                        <Select onValueChange={f.onChange} value={f.value} disabled={!reminderProducts?.[index]?.productName}>
+                                                        <Select onValueChange={f.onChange} value={f.value || undefined} disabled={!reminderProducts?.[index]?.productName}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                {allocations.filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName).map(s => {
+                                                                {allocations.filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName && !!s.displayMaterialName && s.displayMaterialName.trim() !== "").map(s => {
                                                                     const used = usedQuantities[s.displayMaterialName] || 0;
                                                                     const bal = s.allocationQuantity - used;
                                                                     return (
@@ -973,7 +973,7 @@ export function CoverageForm({
                                       render={({ field }) => (
                                       <FormItem>
                                           <FormLabel className="font-headline">Joint Call With</FormLabel>
-                                          <Select onValueChange={field.onChange} value={field.value}>
+                                          <Select onValueChange={field.onChange} value={field.value || undefined}>
                                           <FormControl><SelectTrigger><SelectValue placeholder="Select companion..." /></SelectTrigger></FormControl>
                                           <SelectContent>
                                               {jointCallRoles.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}
