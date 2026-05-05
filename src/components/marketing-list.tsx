@@ -21,7 +21,6 @@ import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,10 +54,12 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
 
-  // Auto-seed if missing products (54 total)
+  // Auto-seed if missing products (Target total: 54)
   useEffect(() => {
-    if (samples.length < 54 && !loading && !readOnly) {
-        runAutoSeed().then(() => onRefresh?.());
+    if (!loading && !readOnly && samples.length < 54) {
+        runAutoSeed().then((success) => {
+            if (success && onRefresh) onRefresh();
+        });
     }
   }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
 
@@ -82,8 +83,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   const handleSyncSystemProducts = async () => {
     setIsUploading(true);
-    await runAutoSeed();
-    onRefresh?.();
+    const success = await runAutoSeed();
+    if (success) {
+        toast({ title: "Sync Successful", description: "54 system products updated." });
+        onRefresh?.();
+    }
     setIsUploading(false);
   };
 
@@ -102,17 +106,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
     XLSX.writeFile(workbook, `marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
-
-  const handleDownloadTemplate = () => {
-    const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
-    const sampleData = [
-        { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
-    ];
-    const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-    XLSX.writeFile(workbook, "marketing_samples_template.xlsx");
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -205,7 +198,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                     <>
                         <Button onClick={handleSyncSystemProducts} variant="secondary" className="border-2 font-headline h-11" disabled={isUploading}>
                            {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
-                           Sync System Products
+                           Sync 54 Products
                         </Button>
                         <Button onClick={() => setShowImport(!showImport)} variant="outline" className="border-2 font-headline h-11">
                             <Upload className="mr-2 h-4 w-4" /> Bulk Import
@@ -229,9 +222,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       <div className="space-y-2">
                           <h3 className="font-headline font-bold text-lg">Excel Bulk Upload</h3>
                           <p className="text-sm text-muted-foreground">Upload your .xlsx or .csv file to update multiple items at once.</p>
-                          <Button onClick={handleDownloadTemplate} variant="link" className="p-0 h-auto text-primary font-bold">
-                              <Download className="mr-2 h-3 w-3" /> Download Template
-                          </Button>
                       </div>
                       <div className="shrink-0">
                           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
@@ -328,7 +318,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  No materials found. {readOnly ? 'Contact admin to initialize inventory.' : 'Syncing system products...'}
+                                  No materials found. Syncing system database...
                               </TableCell>
                           </TableRow>
                       )}

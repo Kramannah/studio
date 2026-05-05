@@ -7,9 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
 import { collection, getDocs, query, writeBatch, doc, addDoc, updateDoc, deleteDoc, orderBy, limit, where } from 'firebase/firestore';
 
-/**
- * Hook to manage marketing sample inventory and usage calculation.
- */
 export const useMarketingSamples = () => {
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
@@ -20,12 +17,10 @@ export const useMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     try {
-      // 1. Fetch Inventory
       const samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("materialName", "asc")));
       const fetchedSamples = samplesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MarketingSample));
       setMarketingSamples(fetchedSamples);
 
-      // 2. Fetch Usage
       try {
         let entriesQuery;
         const normalizedEmail = currentUser?.email?.toLowerCase() || '';
@@ -138,12 +133,12 @@ export const useAdminMarketingSamples = () => {
     }
   }
 
-  const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
+  const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[], isSilent = false) => {
     const currentUser = auth.currentUser;
     const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
     
     if (!isAdmin) {
-        toast({ variant: "destructive", title: "Permission Denied", description: "Admin access required." });
+        if (!isSilent) toast({ variant: "destructive", title: "Permission Denied", description: "Admin access required." });
         return false;
     }
 
@@ -165,7 +160,7 @@ export const useAdminMarketingSamples = () => {
       return true;
     } catch (error: any) {
       console.error("BATCH ERROR:", error);
-      toast({ variant: "destructive", title: "Update Failed", description: error.message });
+      if (!isSilent) toast({ variant: "destructive", title: "Update Failed", description: error.message });
       return false;
     }
   }, [toast]);
@@ -222,17 +217,15 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Tocovid - Tocovid D'Repair", materialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10 },
       { productGroup: "Tocovid - Tocovid 200mg", materialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60 },
       { productGroup: "Dermatology - Hovicor", materialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24 },
-      // Added new items 51-54
+      // New 4 items
       { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
       { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Elite Marks & Spencer Set", allocationQuantity: 218 },
     ];
     
-    const res = await addMarketingSamplesBulk(newData);
-    if (res) toast({ title: "Sync Success", description: "54 products verified." });
-    return res;
-  }, [addMarketingSamplesBulk, toast]);
+    return await addMarketingSamplesBulk(newData, true);
+  }, [addMarketingSamplesBulk]);
 
   return { addSample, updateSample, deleteSample, addMarketingSamplesBulk, runAutoSeed };
 };
