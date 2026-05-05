@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -11,10 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Download, Upload, Database } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Database, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
@@ -33,7 +32,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
 
 type MarketingListProps = {
   samples: MarketingSample[];
@@ -44,12 +42,11 @@ type MarketingListProps = {
 }
 
 export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
-  const { deleteSample } = useAdminMarketingSamples();
-  const { toast } = useToast();
+  const { deleteSample, resetToSystemDefaults } = useAdminMarketingSamples();
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDialogOpen, setIsFormOpen] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [selectedSample, setSelectedSample] = useState<MarketingSample | undefined>(undefined);
   const itemsPerPage = 15;
 
@@ -88,20 +85,37 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     XLSX.writeFile(workbook, `marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const handleEdit = (sample: MarketingSample) => {
-      setSelectedSample(sample);
-      setIsFormOpen(true);
+  const handleReset = async () => {
+      setIsResetting(true);
+      const success = await resetToSystemDefaults();
+      if (success && onRefresh) onRefresh();
+      setIsResetting(false);
   }
-
-  const handleAddClick = () => {
-    setSelectedSample(undefined);
-    setIsFormOpen(true);
-  };
 
   return (
     <div className="space-y-6">
       {!readOnly && (
-          <AddMarketingSamples onRefresh={onRefresh} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                  <AddMarketingSamples onRefresh={onRefresh} />
+              </div>
+              <Card className="border-2 border-primary/20 bg-primary/5">
+                  <CardHeader>
+                      <CardTitle className="font-headline text-lg flex items-center gap-2">
+                          <Database className="w-5 h-5 text-primary" />
+                          System Reset
+                      </CardTitle>
+                      <CardDescription>Force load the default 54-item inventory list.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                      <p className="text-xs text-muted-foreground">Use this if the automated background updates are failing or if you want to restore the official product list.</p>
+                      <Button onClick={handleReset} variant="outline" className="w-full border-2 h-11 font-headline" disabled={isResetting}>
+                          {isResetting ? <RefreshCw className="mr-2 animate-spin" /> : <RefreshCw className="mr-2" />}
+                          Reset & Load 54 Items
+                      </Button>
+                  </CardContent>
+              </Card>
+          </div>
       )}
 
       <Card className="shadow-lg border-2">
@@ -118,7 +132,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             </div>
             <div className="flex flex-wrap gap-2">
                 {!readOnly && (
-                    <Button onClick={handleAddClick} variant="default" className="font-headline h-11">
+                    <Button onClick={() => { setSelectedSample(undefined); setIsFormOpen(true); }} variant="default" className="font-headline h-11">
                         <PlusCircle className="mr-2 h-4 w-4" /> Add Single
                     </Button>
                 )}
@@ -187,7 +201,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                                       {!readOnly && (
                                           <TableCell className="text-right">
                                               <div className="flex justify-end gap-1">
-                                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)}>
+                                                  <Button variant="ghost" size="icon" onClick={() => { setSelectedSample(sample); setIsFormOpen(true); }}>
                                                       <Edit2 className="h-4 w-4 text-primary" />
                                                   </Button>
                                                   <AlertDialog>
@@ -218,7 +232,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  {loading ? "Searching..." : "No items found. Use the management tool above to upload inventory."}
+                                  No items found. Use the management tool above to upload inventory.
                               </TableCell>
                           </TableRow>
                       )}

@@ -1,16 +1,14 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // MARKETING SAMPLES - ABSOLUTE PRIORITY
-    // Simple, direct rules for the marketing module to prevent permission deadlock.
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && (
           request.auth.uid == 'SgOR5cjCC6dZ0oABv4nXdntu6pI3' || 
-          (request.auth.token.email.lower() == 'mbustamante@hovidinc.com')
+          (request.auth.token.get('email', '').lower() == 'mbustamante@hovidinc.com')
         );
     }
 
@@ -48,7 +46,7 @@ service cloud.firestore {
     
     match /plans/{planId} {
       allow read, create: if request.auth != null;
-      allow delete, update: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow delete, update: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
 
     match /nonCallDays/{dayId} {
