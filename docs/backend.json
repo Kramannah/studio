@@ -1,0 +1,180 @@
+{
+  "entities": {
+    "Provider": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Provider",
+      "type": "object",
+      "description": "Represents a medical professional (MD) providing coverage information.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Provider entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the medical provider."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the medical provider."
+        },
+        "specialty": {
+          "type": "string",
+          "description": "The medical specialty or area of expertise of the provider."
+        },
+        "clinicName": {
+          "type": "string",
+          "description": "The name of the clinic or medical facility where the provider works."
+        },
+        "clinicAddress": {
+          "type": "string",
+          "description": "The physical address of the clinic or medical facility."
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "specialty",
+        "clinicName",
+        "clinicAddress"
+      ]
+    },
+    "CoverageEvent": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CoverageEvent",
+      "type": "object",
+      "description": "Records a specific coverage event, detailing its type, date, associated provider, and multimedia captures.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CoverageEvent entity."
+        },
+        "providerId": {
+          "type": "string",
+          "description": "Reference to the Provider who conducted this coverage event. (Relationship: Provider 1:N CoverageEvent)"
+        },
+        "coverageType": {
+          "type": "string",
+          "description": "The type of coverage provided, typically 'Inbase' or 'Outbase'."
+        },
+        "coverageDate": {
+          "type": "string",
+          "description": "The date and time when the coverage event occurred.",
+          "format": "date-time"
+        },
+        "photoUrls": {
+          "type": "array",
+          "description": "An array of URLs pointing to photos uploaded as evidence or documentation for this coverage event.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signatureUrl": {
+          "type": "string",
+          "description": "The URL pointing to the captured electronic signature image for this coverage event."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when this coverage event record was initially created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp indicating the last time this coverage event record was updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "providerId",
+        "coverageType",
+        "coverageDate",
+        "signatureUrl"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "user",
+          "schema": {
+            "$ref": "#/backend/entities/user"
+          },
+          "description": "Stores user profile data, acting as the root for all user-specific collections. Authorization is based on request.auth.uid == userId. (Note: The 'user' entity schema is assumed for this structure, but not explicitly provided in the input backend entities.)",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user (Firebase Authentication UID)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/providers/{providerId}",
+        "definition": {
+          "entityName": "Provider",
+          "schema": {
+            "$ref": "#/backend/entities/Provider"
+          },
+          "description": "Stores Provider entities, each exclusively owned by a specific user. Authorization is path-based (request.auth.uid == userId). This ensures Authorization Independence for Provider data and enables QAPs for listing a user's providers.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who owns this provider."
+            },
+            {
+              "name": "providerId",
+              "description": "The unique ID of the provider."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/coverageEvents/{coverageEventId}",
+        "definition": {
+          "entityName": "CoverageEvent",
+          "schema": {
+            "$ref": "#/backend/entities/CoverageEvent"
+          },
+          "description": "Stores CoverageEvent entities, each recorded by and owned by a specific user. The 'providerId' field within the document references a Provider entity within the same user's scope. Authorization is path-based (request.auth.uid == userId), ensuring Authorization Independence and enabling QAPs for listing a user's coverage events.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique ID of the user who recorded this coverage event."
+            },
+            {
+              "name": "coverageEventId",
+              "description": "The unique ID of the coverage event."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/admin_roles/{adminId}",
+        "definition": {
+          "entityName": "admin_role",
+          "schema": {
+            "$ref": "#/backend/entities/admin_role"
+          },
+          "description": "Dedicated collection for Database Access Control (DBAC) of global administrators. The mere existence of a document at /admin_roles/{uid} grants administrative privileges to that user. Authorization is based on request.auth.uid == adminId. (Note: The 'admin_role' entity schema is assumed for this structure, typically an empty document with an 'assignedAt' field, but not explicitly provided in the input backend entities.)",
+          "params": [
+            {
+              "name": "adminId",
+              "description": "The unique ID of the user designated as an administrator."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The recommended Firestore structure prioritizes Authorization Independence and Queryable Access Patterns (QAPs) by leveraging a user-centric, hierarchical path model. All primary application data (`Provider` and `CoverageEvent`) is nested under a user's unique ID (`userId`), making ownership explicit and simplifying security rules significantly.\n\n1.  **Authorization Independence:** This is critically achieved by nesting `Provider` entities under `/users/{userId}/providers/{providerId}` and `CoverageEvent` entities under `/users/{userId}/coverageEvents/{coverageEventId}`. For any document within these collections, the `userId` segment in its path directly identifies the owner. This means security rules can evaluate access without requiring expensive and problematic `get()` calls to parent documents or other collections. For instance, a rule can simply check `request.auth.uid == userId` for read/write access to a user's data. The `providerId` field within a `CoverageEvent` document is a data reference, not an authorization attribute, thus it does not violate authorization independence.\n\n2.  **Queryable Access Patterns (QAPs):** The hierarchical structure inherently supports QAPs for user-owned data. When a user queries their own `providers` collection (`/users/myUid/providers`) or `coverageEvents` collection (`/users/myUid/coverageEvents`), Firestore security rules can enforce `allow list: if request.auth.uid == userId;`. This ensures that `list` operations (queries) are naturally constrained by the path, eliminating the need for `where` clauses on an `ownerId` field (if `ownerId` were not part of the path) and preventing rules from acting as filters, which would lead to insecure or inefficient queries. For global administrative access (e.g., the 'Q4 Batch 1 Sample' view), a separate `admin_roles` collection allows for explicit DBAC. An admin could then use collection group queries (`db.collectionGroup('coverageEvents')`) with a corresponding rule that checks for admin status, enabling broad access for specific roles while maintaining security.\n\n3.  **Structural Segregation:** Each collection (`providers`, `coverageEvents`, `admin_roles`) is designed to contain documents with a homogeneous security posture. There is no mixing of public/private or different permission levels within a single collection, simplifying rule logic. For instance, all documents in `/users/{userId}/providers` are private to `userId`.\n\n4.  **DBAC (Database Access Control):** Global roles, such as administrators implied by the 'Admin Dashboard' request, are handled via the dedicated `/admin_roles/{adminId}` collection. The existence of a document at this path for a given `uid` grants administrative privileges. This aligns with the 'Existence over Content' principle for roles and avoids custom claims.\n\n5.  **Data Clarity and Predictability:** Wildcards are semantically named (`userId`, `providerId`, `coverageEventId`, `adminId`). Timestamps (`createdAt`, `updatedAt`) are available for `CoverageEvent` records, as per the schema. The `Provider` and `CoverageEvent` entities are directly mapped to specific, well-defined paths."
+  }
+}
