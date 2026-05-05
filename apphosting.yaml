@@ -3,7 +3,13 @@
 
 runConfig:
   # Standard resource allocation for Next.js builds with PWA and Genkit
-  maxInstances: 1
+  maxInstances: 2
   memory: 1024Mi
   cpu: 1
   concurrency: 80
+
+env:
+  - variable: NEXT_TELEMETRY_DISABLED
+    value: "1"
+  - variable: TZ
+    value: "Asia/Manila"

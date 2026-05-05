@@ -1,4 +1,3 @@
-
 /** @type {import('next').NextConfig} */
 
 // Safely handle PWA setup to ensure the app boots reliably
