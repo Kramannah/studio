@@ -1,8 +1,4 @@
-# Settings to manage and configure a Firebase App Hosting backend.
-# https://firebase.google.com/docs/app-hosting/configure
-
 runConfig:
-  # Standard resource allocation for Next.js builds with PWA and Genkit
   maxInstances: 2
   memory: 1024Mi
   cpu: 1
