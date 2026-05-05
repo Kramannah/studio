@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList, ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -20,6 +20,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import * as XLSX from 'xlsx';
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
@@ -340,8 +341,46 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
         return filtered.slice(start, start + itemsPerPage);
     }, [filtered, currentPage]);
 
+    const handleDownloadExcel = () => {
+        const dataToExport = filtered.map(entry => {
+            const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+            const covDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+            return {
+                "Doctor Name": `${entry.firstName} ${entry.lastName}`,
+                "Specialty": entry.specialty || "N/A",
+                "Clinic": entry.clinic || "N/A",
+                "Coverage Date": covDate && isValid(covDate) ? format(covDate, "yyyy-MM-dd") : "N/A",
+                "Submitted At": subDate && isValid(subDate) ? format(subDate, "yyyy-MM-dd HH:mm") : "N/A",
+                "Coverage Type": entry.coverageType || "N/A",
+                "Call Type": entry.callType || "N/A",
+                "Objective": entry.callObjective || "N/A",
+                "Primary Product": entry.primaryProduct || "N/A",
+                "Primary Qty": entry.primaryProductQty || 0,
+                "Secondary Product": entry.secondaryProduct || "N/A",
+                "Secondary Qty": entry.secondaryProductQty || 0,
+                "Topics Discussed": entry.topicsDiscussed || "N/A",
+                "Doctor Issues": entry.doctorsIssue || "N/A",
+                "Plan of Action": entry.planOfAction || "N/A",
+                "Reflection (Went Well)": entry.whatWentWell || "N/A",
+                "Reflection (Improvement)": entry.areasForImprovement || "N/A"
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "My Coverage");
+        XLSX.writeFile(workbook, `my_coverage_report_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
+            <Button onClick={handleDownloadExcel} variant="outline" className="border-2 font-headline h-11 w-full md:w-auto">
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Download as Excel
+            </Button>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-8">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
