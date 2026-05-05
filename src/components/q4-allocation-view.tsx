@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
@@ -20,7 +21,8 @@ import {
     Filter,
     Trash2,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    History
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
@@ -42,11 +44,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function Q4AllocationView() {
     const { allocations, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
     
+    const [activeQuarter, setActiveQuarter] = useState<'Q3' | 'Q4'>('Q4');
     const [search, setSearch] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [isFetchingUsage, setIsFetchingUsage] = useState(false);
@@ -90,11 +94,13 @@ export function Q4AllocationView() {
     }, [fetchAllUsage]);
 
     const filteredSamples = useMemo(() => {
-        return allocations.filter(s => 
-            s.displayMaterialName.toLowerCase().includes(search.toLowerCase()) ||
-            s.prodGroupProdSubGroup.toLowerCase().includes(search.toLowerCase())
-        );
-    }, [allocations, search]);
+        return allocations.filter(s => {
+            const matchesQuarter = s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4');
+            const matchesSearch = s.displayMaterialName.toLowerCase().includes(search.toLowerCase()) ||
+                                 s.prodGroupProdSubGroup.toLowerCase().includes(search.toLowerCase());
+            return matchesQuarter && matchesSearch;
+        });
+    }, [allocations, search, activeQuarter]);
 
     const totalPages = Math.ceil(filteredSamples.length / itemsPerPage);
     const paginatedSamples = useMemo(() => {
@@ -104,13 +110,15 @@ export function Q4AllocationView() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [search]);
+        setSelectedIds([]);
+    }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
+        const quarterAllocations = allocations.filter(s => s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4'));
         let totalAllocated = 0;
         let totalUsed = 0;
         
-        allocations.forEach(s => {
+        quarterAllocations.forEach(s => {
             totalAllocated += s.allocationQuantity || 0;
             totalUsed += usedQuantities[s.displayMaterialName] || 0;
         });
@@ -121,7 +129,7 @@ export function Q4AllocationView() {
             remaining: totalAllocated - totalUsed,
             percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
         };
-    }, [allocations, usedQuantities]);
+    }, [allocations, usedQuantities, activeQuarter]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -131,8 +139,8 @@ export function Q4AllocationView() {
         ];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Q4_Template");
-        XLSX.writeFile(workbook, "Q4_Batch1_Sample_Template.xlsx");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+        XLSX.writeFile(workbook, `${activeQuarter}_Allocation_Template.xlsx`);
     };
 
     const handleUploadClick = () => {
@@ -193,9 +201,9 @@ export function Q4AllocationView() {
                 }
 
                 if (samplesToAdd.length > 0) {
-                    const success = await addAllocationsBulk(samplesToAdd);
+                    const success = await addAllocationsBulk(samplesToAdd, activeQuarter);
                     if (success) {
-                        toast({ title: "Import Successful", description: `${samplesToAdd.length} items added.` });
+                        toast({ title: "Import Successful", description: `${samplesToAdd.length} items added to ${activeQuarter}.` });
                         refetch();
                     }
                 }
@@ -211,7 +219,7 @@ export function Q4AllocationView() {
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(filteredSamples.map(s => s.id));
+            setSelectedIds(paginatedSamples.map(s => s.id));
         } else {
             setSelectedIds([]);
         }
@@ -234,223 +242,187 @@ export function Q4AllocationView() {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-2 shadow-sm bg-primary/5">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="font-headline font-bold text-primary flex items-center gap-2 uppercase tracking-tighter">
-                            <PackageCheck className="w-4 h-4" /> Total Batch Allocation
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-black font-mono">{stats.totalAllocated} <span className="text-sm font-normal text-muted-foreground">units</span></div>
-                    </CardContent>
-                </Card>
-                <Card className="border-2 shadow-sm bg-orange-500/5">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="font-headline font-bold text-orange-500 flex items-center gap-2 uppercase tracking-tighter">
-                            <TrendingUp className="w-4 h-4" /> Current Distribution (Used)
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-black font-mono text-orange-500">{stats.totalUsed} <span className="text-sm font-normal text-muted-foreground">units ({stats.percent}%)</span></div>
-                    </CardContent>
-                </Card>
-                <Card className="border-2 shadow-sm bg-green-500/5">
-                    <CardHeader className="pb-2">
-                        <CardDescription className="font-headline font-bold text-green-500 flex items-center gap-2 uppercase tracking-tighter">
-                            <Filter className="w-4 h-4" /> Remaining Stock
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-black font-mono text-green-500">{stats.remaining} <span className="text-sm font-normal text-muted-foreground">units</span></div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    <Card className="border-2 shadow-lg overflow-hidden">
-                        <CardHeader className="bg-muted/30 border-b pb-6">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <CardTitle className="text-xl font-black font-headline">Q4 Allocation Oversight</CardTitle>
-                                        {(dataLoading || isFetchingUsage) && <RefreshCw className="h-4 w-4 animate-spin text-primary" />}
-                                    </div>
-                                    <CardDescription>Live monitoring of usage vs. allocation.</CardDescription>
-                                </div>
-                                <div className="flex items-center gap-2 w-full max-w-sm">
-                                    <div className="relative flex-1">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                        <Input 
-                                            placeholder="Search products..." 
-                                            className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
-                                            value={search}
-                                            onChange={(e) => setSearch(e.target.value)}
-                                        />
-                                    </div>
-                                    {selectedIds.length > 0 && (
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl">
-                                                    <Trash2 className="h-5 w-5" />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete Products?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        Are you sure you want to delete {selectedIds.length} selected product(s)? This action cannot be undone.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    )}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader className="bg-muted/20">
-                                        <TableRow className="h-12 hover:bg-transparent">
-                                            <TableHead className="w-12 pl-6">
-                                                <Checkbox 
-                                                    checked={selectedIds.length > 0 && selectedIds.length === filteredSamples.length}
-                                                    onCheckedChange={handleSelectAll}
-                                                />
-                                            </TableHead>
-                                            <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-32 pr-6">Remaining</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {dataLoading ? (
-                                            <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Loading Database...</p></TableCell></TableRow>
-                                        ) : paginatedSamples.length > 0 ? (
-                                            paginatedSamples.map((sample) => {
-                                                const used = usedQuantities[sample.displayMaterialName] || 0;
-                                                const balance = sample.allocationQuantity - used;
-                                                return (
-                                                    <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                        <TableCell className="pl-6">
-                                                            <Checkbox 
-                                                                checked={selectedIds.includes(sample.id)}
-                                                                onCheckedChange={(checked) => handleSelectRow(sample.id, !!checked)}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-medium text-sm">{sample.displayMaterialName}</span>
-                                                                <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
-                                                        <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
-                                                        <TableCell className="text-center pr-6">
-                                                            <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
-                                                                "font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center",
-                                                                balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
-                                                            )}>
-                                                                {balance}
-                                                            </Badge>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })
-                                        ) : (
-                                            <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found.</TableCell></TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
+             <Tabs value={activeQuarter} onValueChange={(v) => setActiveQuarter(v as any)} className="w-full">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <TabsList className="bg-muted/50 p-1 rounded-xl border-2 h-14 w-full sm:w-[300px]">
+                        <TabsTrigger value="Q3" className="flex-1 rounded-lg font-headline text-lg">Q3 Batch</TabsTrigger>
+                        <TabsTrigger value="Q4" className="flex-1 rounded-lg font-headline text-lg">Q4 Batch</TabsTrigger>
+                    </TabsList>
                     
-                    {/* Pagination Controls */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between px-1">
-                            <p className="text-sm text-muted-foreground">
-                                Showing <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> to <strong>{Math.min(currentPage * itemsPerPage, filteredSamples.length)}</strong> of <strong>{filteredSamples.length}</strong>
-                            </p>
-                            <div className="flex items-center gap-2">
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                    disabled={currentPage === 1}
-                                    className="border-2 rounded-xl"
-                                >
-                                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
-                                </Button>
-                                <span className="text-sm font-bold mx-2">Page {currentPage} of {totalPages}</span>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                    disabled={currentPage === totalPages}
-                                    className="border-2 rounded-xl"
-                                >
-                                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                                </Button>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 w-full">
+                        <Card className="border-2 shadow-sm bg-primary/5 p-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-primary uppercase tracking-widest">Initial</span>
+                                <span className="text-xl font-black font-mono leading-none">{stats.totalAllocated}</span>
                             </div>
-                        </div>
-                    )}
+                            <PackageCheck className="w-5 h-5 text-primary opacity-30" />
+                        </Card>
+                        <Card className="border-2 shadow-sm bg-orange-500/5 p-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Used</span>
+                                <span className="text-xl font-black font-mono leading-none text-orange-500">{stats.totalUsed}</span>
+                            </div>
+                            <TrendingUp className="w-5 h-5 text-orange-500 opacity-30" />
+                        </Card>
+                        <Card className="border-2 shadow-sm bg-green-500/5 p-3 flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Balance</span>
+                                <span className="text-xl font-black font-mono leading-none text-green-500">{stats.remaining}</span>
+                            </div>
+                            <History className="w-5 h-5 text-green-500 opacity-30" />
+                        </Card>
+                    </div>
                 </div>
 
-                <div className="space-y-6">
-                    <Card className="border-2 shadow-lg bg-primary/5">
-                        <CardHeader>
-                            <CardTitle className="font-headline text-lg flex items-center gap-2">
-                                <PackagePlus className="w-5 h-5 text-primary" />
-                                Bulk Import Q4
-                            </CardTitle>
-                            <CardDescription>Upload CSV/Excel to populate the Q4 batch inventory.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline">
-                                <FileDown className="mr-2 h-4 w-4" /> Download Template
-                            </Button>
-                            <input 
-                                type="file" 
-                                ref={fileInputRef} 
-                                onChange={handleFileChange} 
-                                className="hidden" 
-                                accept=".xlsx, .xls, .csv" 
-                            />
-                            <Button 
-                                onClick={handleUploadClick} 
-                                disabled={isUploading} 
-                                className="w-full h-11 font-headline shadow-lg"
-                            >
-                                {isUploading ? (
-                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
-                                ) : (
-                                    <><Download className="mr-2 h-4 w-4 rotate-180" /> Import Products</>
-                                )}
-                            </Button>
-                            <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase tracking-widest font-bold">
-                                <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} />
-                                Refresh Distribution
-                            </Button>
-                        </CardContent>
-                    </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card className="border-2 shadow-lg overflow-hidden">
+                            <CardHeader className="bg-muted/30 border-b pb-6">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <CardTitle className="text-xl font-black font-headline">Batch Oversight: {activeQuarter}</CardTitle>
+                                        <CardDescription>Monitoring inventory for current batch period.</CardDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2 w-full max-w-sm">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                            <Input 
+                                                placeholder="Search products..." 
+                                                className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                                value={search}
+                                                onChange={(e) => setSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        {selectedIds.length > 0 && (
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl animate-in zoom-in duration-200">
+                                                        <Trash2 className="h-5 w-5" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete {selectedIds.length} Products?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            This will remove these products from the {activeQuarter} list.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground">Delete Permanentely</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-muted/20">
+                                            <TableRow className="h-12 hover:bg-transparent">
+                                                <TableHead className="w-12 pl-6">
+                                                    <Checkbox 
+                                                        checked={selectedIds.length > 0 && selectedIds.length === paginatedSamples.length}
+                                                        onCheckedChange={handleSelectAll}
+                                                    />
+                                                </TableHead>
+                                                <TableHead className="font-bold text-foreground">Material Name</TableHead>
+                                                <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
+                                                <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                                                <TableHead className="text-center font-bold text-foreground w-32 pr-6">Remaining</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {dataLoading ? (
+                                                <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing...</p></TableCell></TableRow>
+                                            ) : paginatedSamples.length > 0 ? (
+                                                paginatedSamples.map((sample) => {
+                                                    const used = usedQuantities[sample.displayMaterialName] || 0;
+                                                    const balance = sample.allocationQuantity - used;
+                                                    return (
+                                                        <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                            <TableCell className="pl-6">
+                                                                <Checkbox 
+                                                                    checked={selectedIds.includes(sample.id)}
+                                                                    onCheckedChange={(checked) => handleSelectRow(sample.id, !!checked)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium text-sm">{sample.displayMaterialName}</span>
+                                                                    <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                            <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
+                                                            <TableCell className="text-center pr-6">
+                                                                <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
+                                                                    "font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center",
+                                                                    balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
+                                                                )}>
+                                                                    {balance}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                })
+                                            ) : (
+                                                <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products uploaded for {activeQuarter} yet.</TableCell></TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between px-1">
+                                <p className="text-sm text-muted-foreground">
+                                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                    <Alert className="border-2 bg-muted/30">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle className="font-headline font-bold">Important</AlertTitle>
-                        <AlertDescription className="text-xs leading-normal opacity-70">
-                            Excel must have headers: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.
-                        </AlertDescription>
-                    </Alert>
+                    <div className="space-y-6">
+                        <Card className="border-2 shadow-lg bg-primary/5">
+                            <CardHeader>
+                                <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary">
+                                    <PackagePlus className="w-5 h-5" />
+                                    Import {activeQuarter}
+                                </CardTitle>
+                                <CardDescription>Populate Batch {activeQuarter} via Excel.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline">
+                                    <FileDown className="mr-2 h-4 w-4" /> Get Template
+                                </Button>
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
+                                <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">
+                                    {isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}
+                                </Button>
+                                <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase font-bold tracking-widest">
+                                    <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} /> Refresh Tracker
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        <Alert className="border-2 bg-muted/30">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle className="font-headline font-bold">Import Guide</AlertTitle>
+                            <AlertDescription className="text-xs leading-normal opacity-70">
+                                Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.
+                            </AlertDescription>
+                        </Alert>
+                    </div>
                 </div>
-            </div>
+             </Tabs>
         </div>
     );
 }

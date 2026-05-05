@@ -103,6 +103,7 @@ export interface Q4Allocation {
     prodGroupProdSubGroup: string;
     displayMaterialName: string;
     allocationQuantity: number;
+    quarter?: 'Q3' | 'Q4';
 }
 
 export interface MarketingSample {

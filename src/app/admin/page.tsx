@@ -292,8 +292,8 @@ export default function AdminPage() {
                     <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
-                            <TabsTrigger value="q4-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                <Package2 className="h-4 w-4" /> Q4 Batch 1 Sample
+                            <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                <Package2 className="h-4 w-4" /> Sample Allocation
                             </TabsTrigger>
                             <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
                                 <Bell className="mr-2 h-4 w-4"/>
@@ -362,7 +362,7 @@ export default function AdminPage() {
                         {renderDistrictReportsContent()}
                     </TabsContent>
 
-                    <TabsContent value="q4-allocation" className="mt-8">
+                    <TabsContent value="sample-allocation" className="mt-8">
                         <Q4AllocationView />
                     </TabsContent>
                     

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -18,7 +19,7 @@ export const useQ4Allocation = () => {
       const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
       setAllocations(fetched);
     } catch (error: any) {
-      console.error("Q4 fetch error:", error);
+      console.error("Allocation fetch error:", error);
     } finally {
       setLoading(false);
     }
@@ -28,21 +29,22 @@ export const useQ4Allocation = () => {
     fetchData();
   }, [fetchData]);
 
-  const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
+  const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        // Create unique ID based on material name to prevent duplicates
-        const docId = item.displayMaterialName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (!docId) return;
+        // Create unique ID based on material name and quarter to prevent overlaps
+        const baseId = item.displayMaterialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!baseId) return;
+        const docId = `${quarter.toLowerCase()}_${baseId}`;
         const docRef = doc(db, "q4Allocation", docId);
-        batch.set(docRef, item, { merge: true });
+        batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
       await fetchData();
       return true;
     } catch (error: any) {
-      console.error("Q4 Bulk Upload Error:", error);
+      console.error("Bulk Upload Error:", error);
       return false;
     }
   };
@@ -59,7 +61,7 @@ export const useQ4Allocation = () => {
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
       } catch (error) {
-          console.error("Q4 Delete Error:", error);
+          console.error("Delete Error:", error);
           toast({ variant: "destructive", title: "Delete Failed" });
           return false;
       }
