@@ -156,6 +156,7 @@ export function CoverageForm({
     allocations, 
     masterEntries, 
     initialDoctor, 
+    entryToEdit,
     onFormSubmit, 
     todaysPlans, 
     offlineEntries, 
