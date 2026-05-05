@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -82,12 +81,17 @@ export function PlanningCalendar({
     onAddNonCallDay, 
     readOnly = false,
 }: PlanningCalendarProps) {
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    // Hydration-safe initial state
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
+
+    useEffect(() => {
+        setSelectedDate(new Date());
+    }, []);
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
