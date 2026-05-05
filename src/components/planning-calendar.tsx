@@ -492,7 +492,7 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="max-w-xl w-[95vw] max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
+                <DialogContent className="max-w-xl w-[95vw] h-[90dvh] md:h-auto md:max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden">
                     <DialogHeader className="p-6 pb-2 shrink-0">
                         <div className="flex justify-between items-start">
                             <div>
