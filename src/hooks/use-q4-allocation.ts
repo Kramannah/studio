@@ -61,8 +61,9 @@ export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
 ];
 
 export const useQ4Allocation = () => {
+  // Initialize with official items immediately to ensure they show up in PMR dropdowns
   const [allocations, setAllocations] = useState<Q4Allocation[]>(
-    OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `official_${idx}`, ...item }))
+    OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);

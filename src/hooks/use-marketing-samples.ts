@@ -60,9 +60,9 @@ export const OFFICIAL_50_ITEMS: Omit<MarketingSample, 'id'>[] = [
 ];
 
 export const useMarketingSamples = () => {
-  // Initialize with official items immediately
+  // Initialize with official items immediately to ensure they show up on live server
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>(
-    OFFICIAL_50_ITEMS.map((item, idx) => ({ id: `static_${idx}`, ...item }))
+    OFFICIAL_50_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
   const [loading, setLoading] = useState(true);
 
