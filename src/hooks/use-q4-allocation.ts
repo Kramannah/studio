@@ -1,14 +1,15 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, writeBatch, doc, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
+import { useToast } from './use-toast';
 
 export const useQ4Allocation = () => {
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -44,7 +45,25 @@ export const useQ4Allocation = () => {
       console.error("Q4 Bulk Upload Error:", error);
       return false;
     }
-  }
+  };
 
-  return { allocations, loading, refetch: fetchData, addAllocationsBulk };
+  const deleteAllocationsBulk = async (ids: string[]) => {
+      try {
+          const batch = writeBatch(db);
+          ids.forEach(id => {
+              const docRef = doc(db, "q4Allocation", id);
+              batch.delete(docRef);
+          });
+          await batch.commit();
+          await fetchData();
+          toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
+          return true;
+      } catch (error) {
+          console.error("Q4 Delete Error:", error);
+          toast({ variant: "destructive", title: "Delete Failed" });
+          return false;
+      }
+  };
+
+  return { allocations, loading, refetch: fetchData, addAllocationsBulk, deleteAllocationsBulk };
 };
