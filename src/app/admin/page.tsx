@@ -374,12 +374,7 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="q4-allocation" className="mt-8">
-                        <Q4AllocationView 
-                            marketingSamples={marketingSamples} 
-                            usedQuantities={usedQuantities} 
-                            loading={marketingSamplesLoading} 
-                            onRefresh={refetchMarketingSamples}
-                        />
+                        <Q4AllocationView />
                     </TabsContent>
 
                     <TabsContent value="marketing-samples" className="mt-8">
