@@ -100,8 +100,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const filteredSamples = useMemo(() => {
         return allocations.filter(s => {
             const matchesQuarter = s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4');
-            const matchesSearch = s.displayMaterialName.toLowerCase().includes(search.toLowerCase()) ||
-                                 s.prodGroupProdSubGroup.toLowerCase().includes(search.toLowerCase());
+            const matchesSearch = (s.displayMaterialName || "").toLowerCase().includes(search.toLowerCase()) ||
+                                 (s.prodGroupProdSubGroup || "").toLowerCase().includes(search.toLowerCase());
             return matchesQuarter && matchesSearch;
         });
     }, [allocations, search, activeQuarter]);
@@ -223,7 +223,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(paginatedSamples.map(s => s.id));
+            // Select ALL matching filtered samples (across all pages)
+            setSelectedIds(filteredSamples.map(s => s.id));
         } else {
             setSelectedIds([]);
         }
@@ -329,7 +330,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 {!readOnly && (
                                                     <TableHead className="w-12 pl-6">
                                                         <Checkbox 
-                                                            checked={selectedIds.length > 0 && selectedIds.length === paginatedSamples.length}
+                                                            checked={filteredSamples.length > 0 && selectedIds.length === filteredSamples.length}
                                                             onCheckedChange={handleSelectAll}
                                                         />
                                                     </TableHead>

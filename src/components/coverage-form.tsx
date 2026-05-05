@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter } from "date-fns"
-import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Info } from "lucide-react"
+import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
