@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -36,7 +35,8 @@ export function useAdminData(managerId?: string) {
   
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+    const normalizedEmail = user.email?.toLowerCase() || '';
+    return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
   const fetchTeamApprovals = useCallback(async () => {
@@ -138,7 +138,6 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            // Apply range filters to team fetches to keep system light
             const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), where("submittedAt", ">=", startDate)));
             const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), where("timeIn", ">=", startDate)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
@@ -176,7 +175,7 @@ export function useAdminData(managerId?: string) {
             acc.nonCallDays.push(...current.nonCallDays);
             acc.plans.push(...current.plans);
             return acc;
-        }, { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] });
+        }, { entries: [] as CoverageEntry[], timeLogs: [] as TimeLog[], doctors: [] as Doctor[], nonCallDays: [] as NonCallDay[], plans: [] as Plan[] });
 
         const marketingSamples = marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample);
         
@@ -358,8 +357,19 @@ export function useAdminData(managerId?: string) {
   }, [toast, teamSummaryData]);
 
   const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
+    // Process doctorsData in chunks
+    const chunkSize = 500;
+    for (let i = 0; i < doctorsData.length; i += chunkSize) {
+        const chunk = doctorsData.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(doctor => {
+            const docRef = doc(collection(db, "doctors"));
+            batch.set(docRef, doctor);
+        });
+        await batch.commit();
+    }
     await fetchTeamSummary();
-    toast({ title: 'Bulk Add', description: 'Bulk add processed, refreshing data.' });
+    toast({ title: 'Bulk Add Successful', description: `${doctorsData.length} doctors processed.` });
   }, [fetchTeamSummary, toast]);
 
 

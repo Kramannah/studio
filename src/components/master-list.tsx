@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -184,13 +183,15 @@ const DoctorRow = ({
     onUpdateDoctor, 
     readOnly, 
     isSelected, 
-    onSelect 
+    onSelect,
+    onEdit
 }: { 
     doctor: Doctor; 
     onUpdateDoctor: (d: Doctor) => void; 
     readOnly: boolean; 
     isSelected: boolean;
     onSelect: (id: string, checked: boolean) => void;
+    onEdit: (d: Doctor) => void;
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const productKeys: ProductKey[] = ['dapavid', 'hofovir', 'inox', 'irinovid', 'ondavid', 'ricamTablet', 'tocovid100mg', 'tocovid200mg', 'tocovidVitality', 'virestCream', 'virestTab'];
@@ -259,7 +260,6 @@ const DoctorRow = ({
                 <TableRow className="bg-muted/10">
                     <TableCell colSpan={readOnly ? 4 : 5} className="p-0">
                         <div className="p-4 space-y-6">
-                            {/* Primary Details Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
                                 <div className="space-y-2">
                                     <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-tight">
@@ -309,13 +309,12 @@ const DoctorRow = ({
                                     </div>
                                 </div>
                                 <div className="flex flex-col justify-end">
-                                     <Button variant="outline" size="sm" className="w-full" onClick={() => (window as any).editDoctor(doctor)}>
+                                     <Button variant="outline" size="sm" className="w-full" onClick={() => onEdit(doctor)}>
                                         <Edit className="w-3 h-3 mr-2" /> Full Edit
                                     </Button>
                                 </div>
                             </div>
 
-                            {/* Product Ratings Grid */}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-tight">
                                     <Pill className="w-3 h-3" /> Product Prescriber Profile
@@ -357,21 +356,13 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Global exposure for the row-level edit button
-    useEffect(() => {
-        (window as any).editDoctor = (doctor: Doctor) => {
-            setSelectedDoctor(doctor);
-            setIsFormOpen(true);
-        };
-    }, []);
-
     const filteredDoctors = useMemo(() => {
         return doctors.filter(doctor =>
             `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
-            (doctor.specialty && doctor.specialty.toLowerCase().includes(filter.toLowerCase())) ||
-            (doctor.clinic && doctor.clinic.toLowerCase().includes(filter.toLowerCase())) ||
-            (doctor.province && doctor.province.toLowerCase().includes(filter.toLowerCase())) ||
-            (doctor.municipality && doctor.municipality.toLowerCase().includes(filter.toLowerCase()))
+            (doctor.specialty || "").toLowerCase().includes(filter.toLowerCase()) ||
+            (doctor.clinic || "").toLowerCase().includes(filter.toLowerCase()) ||
+            (doctor.province || "").toLowerCase().includes(filter.toLowerCase()) ||
+            (doctor.municipality || "").toLowerCase().includes(filter.toLowerCase())
         );
     }, [doctors, filter]);
 
@@ -399,9 +390,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         setIsFormOpen(true);
     };
 
+    const handleEditDoctor = (doctor: Doctor) => {
+        setSelectedDoctor(doctor);
+        setIsFormOpen(true);
+    };
+
     const handleSaveDoctor = (doctor: Omit<Doctor, 'id'> | Doctor) => {
         if ('id' in doctor) {
-            onUpdateDoctor(doctor);
+            onUpdateDoctor(doctor as Doctor);
         } else {
             onAddDoctor(doctor);
         }
@@ -685,27 +681,27 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
+                            <TableBody>
                             {paginatedDoctors.length > 0 ? (
                                 paginatedDoctors.map((doctor) => (
-                                    <TableBody key={doctor.id}>
-                                        <DoctorRow 
-                                            doctor={doctor} 
-                                            onUpdateDoctor={onUpdateDoctor} 
-                                            readOnly={readOnly} 
-                                            isSelected={selectedIds.includes(doctor.id)}
-                                            onSelect={handleRowSelect}
-                                        />
-                                    </TableBody>
+                                    <DoctorRow 
+                                        key={doctor.id}
+                                        doctor={doctor} 
+                                        onUpdateDoctor={onUpdateDoctor} 
+                                        readOnly={readOnly} 
+                                        isSelected={selectedIds.includes(doctor.id)}
+                                        onSelect={handleRowSelect}
+                                        onEdit={handleEditDoctor}
+                                    />
                                 ))
                             ) : (
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell colSpan={readOnly ? 4 : 5} className="h-32 text-center text-muted-foreground">
-                                            No doctors found matching your filters.
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
+                                <TableRow>
+                                    <TableCell colSpan={readOnly ? 4 : 5} className="h-32 text-center text-muted-foreground">
+                                        No doctors found matching your filters.
+                                    </TableCell>
+                                </TableRow>
                             )}
+                            </TableBody>
                         </Table>
                     </div>
                     

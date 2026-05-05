@@ -64,12 +64,22 @@ export function UserDashboard({
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
-              <SubmittedList entries={allEntries} doctors={allDoctors} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} isAdminView={isAdminView} userMap={userMap} />
+              <SubmittedList 
+                entries={allEntries} 
+                doctors={allDoctors} 
+                onDelete={onDeleteEntry} 
+                onEdit={() => {}} 
+                readOnly={!isAdminView} 
+                isAdminView={isAdminView} 
+                userMap={userMap} 
+              />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans}
+                    planningRequests={[]} // Logic for team planning requests can be extended if needed
+                    onRequestUnlock={async () => false}
                     entries={allEntries}
                     offlineEntries={[]}
                     onAddPlan={() => {}} 

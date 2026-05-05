@@ -43,7 +43,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
-        return doctors.find(d => d.firstName.toLowerCase() === entry.firstName?.toLowerCase() && d.lastName.toLowerCase() === entry.lastName?.toLowerCase());
+        return doctors.find(d => d.firstName.toLowerCase() === (entry.firstName || "").toLowerCase() && d.lastName.toLowerCase() === (entry.lastName || "").toLowerCase());
     }, [doctors, entry.firstName, entry.lastName]);
 
     const isEditable = useMemo(() => {
@@ -253,12 +253,22 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     );
 }
 
-export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = false }: { 
+export function SubmittedList({ 
+    entries, 
+    doctors, 
+    onDelete, 
+    onEdit, 
+    readOnly = false,
+    isAdminView = false,
+    userMap
+}: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
-    readOnly?: boolean 
+    readOnly?: boolean,
+    isAdminView?: boolean,
+    userMap?: Record<string, { code: string; firstName: string; lastName: string }>
 }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
@@ -284,11 +294,11 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
     useEffect(() => {
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
         setSelectedDate(monthDate);
-        setCurrentPage(1); // Reset page on month change
+        setCurrentPage(1);
     }, [selectedMonth]);
 
     useEffect(() => {
-        setCurrentPage(1); // Reset page on tab or search change
+        setCurrentPage(1);
     }, [activeTab, searchQuery]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
@@ -322,7 +332,7 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
         let res = [...filteredByMonth];
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            res = res.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) || e.clinic?.toLowerCase().includes(q));
+            res = res.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) || (e.clinic || "").toLowerCase().includes(q));
         }
 
         if (activeTab === 'calendar' && selectedDate) {
@@ -345,7 +355,16 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
         const dataToExport = filtered.map(entry => {
             const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
             const covDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+            
+            // Map User ID to Name if userMap is provided
+            let userName = entry.userId;
+            if (userMap && userMap[entry.userId]) {
+                const u = userMap[entry.userId];
+                userName = `${u.firstName} ${u.lastName} (${u.code})`;
+            }
+
             return {
+                "User Name/Code": userName,
                 "Doctor Name": `${entry.firstName} ${entry.lastName}`,
                 "Specialty": entry.specialty || "N/A",
                 "Clinic": entry.clinic || "N/A",
@@ -368,8 +387,8 @@ export function SubmittedList({ entries, doctors, onDelete, onEdit, readOnly = f
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "My Coverage");
-        XLSX.writeFile(workbook, `my_coverage_report_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Coverage Report");
+        XLSX.writeFile(workbook, `Coverage_Report_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
     };
 
     return (

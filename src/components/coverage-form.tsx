@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -167,9 +166,11 @@ const SearchableSelect = ({
     showBalance?: boolean
 }) => {
     const [open, setOpen] = useState(false);
+    
+    // Filter options to ensure no empty values cause runtime crashes in Select/Command
+    const validOptions = useMemo(() => options.filter(o => o.value && o.value.trim() !== ""), [options]);
 
-    // Find the current selected option label to display in the button
-    const selectedOption = options.find((o) => o.value === value);
+    const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -193,12 +194,11 @@ const SearchableSelect = ({
                     <CommandList>
                         <CommandEmpty>No results found.</CommandEmpty>
                         <CommandGroup>
-                            {options.map((option) => (
+                            {validOptions.map((option) => (
                                 <CommandItem
                                     key={option.value}
                                     value={option.label}
                                     onSelect={() => {
-                                        // CRITICAL: We use option.value directly to avoid casing issues with cmdk's lowercased currentValue
                                         onValueChange(option.value === value ? "" : option.value);
                                         setOpen(false);
                                     }}
@@ -303,7 +303,6 @@ export function CoverageForm({
   const reminderProducts = form.watch("reminderProducts");
   const plannedDoctorId = form.watch("plannedDoctorId");
 
-  // Dynamic products list linked to Sample Allocation (q4Allocation collection)
   const dynamicProductList = useMemo(() => {
     const categories = new Set(
         allocations
@@ -313,7 +312,6 @@ export function CoverageForm({
     return Array.from(categories).sort().map(cat => ({ value: cat, label: cat }));
   }, [allocations]);
 
-  // Primary Sample options linked to selected group and tracking live usage
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
     return allocations
@@ -325,7 +323,6 @@ export function CoverageForm({
         });
   }, [primaryProduct, allocations, usedQuantities]);
 
-  // Secondary Sample options linked to selected group and tracking live usage
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
     return allocations
@@ -458,7 +455,7 @@ export function CoverageForm({
         const coverageDate = typeof entryToEdit.coverageDate === 'string' ? parseISO(entryToEdit.coverageDate) : entryToEdit.coverageDate;
         form.reset({
             ...entryToEdit,
-            coverageDate: isValid(coverageDate) ? coverageDate : new Date(),
+            coverageDate: isValid(coverageDate) ? (coverageDate as Date) : new Date(),
         });
         setAutocompleteValue(`${entryToEdit.firstName} ${entryToEdit.lastName}`);
         if (entryToEdit.photos && entryToEdit.photos.length > 0) {
@@ -518,8 +515,8 @@ export function CoverageForm({
       const newCoverageDate = values.coverageDate || new Date();
 
       if (!isEditMode) {
-        const docFirstNameLower = values.firstName?.toLowerCase();
-        const docLastNameLower = values.lastName?.toLowerCase();
+        const docFirstNameLower = (values.firstName || "").toLowerCase();
+        const docLastNameLower = (values.lastName || "").toLowerCase();
         
         const doctorInMasterlist = doctors.find(
           (d) =>
@@ -531,7 +528,7 @@ export function CoverageForm({
         let alreadyCoveredToday = false;
 
         for (const entry of allEntries) {
-            if (entry.firstName?.toLowerCase() === docFirstNameLower && entry.lastName?.toLowerCase() === docLastNameLower) {
+            if ((entry.firstName || "").toLowerCase() === docFirstNameLower && (entry.lastName || "").toLowerCase() === docLastNameLower) {
                 const entryDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
                 if (entryDate && isValid(entryDate)) {
                     if (isSameMonth(entryDate, newCoverageDate)) {
@@ -563,17 +560,17 @@ export function CoverageForm({
       if (isEditMode) {
           onUpdate({
               ...values,
-              id: entryToEdit.id,
+              id: entryToEdit!.id,
               coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
           });
           toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
-          onFormSubmit?.(entryToEdit.isOffline ? false : isOnline);
+          onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
           setIsSubmitting(false);
           return;
       }
       
-      const { plannedDoctorId, ...restOfValues } = values;
+      const { plannedDoctorId: _pId, ...restOfValues } = values;
 
       if (callType === 'unplanned') {
         const doctor = doctors.find(d => d.firstName === values.firstName && d.lastName === values.lastName);
@@ -655,7 +652,7 @@ export function CoverageForm({
                                 render={({ field }) => (
                                     <FormItem>
                                     <FormLabel className="font-headline">Select a Planned Doctor</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
                                         <FormControl>
                                             <SelectTrigger>
                                             <SelectValue placeholder="Select a doctor from today's plan..." />
@@ -749,7 +746,7 @@ export function CoverageForm({
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Type of Coverage</FormLabel>
-                                      <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                      <Select onValueChange={field.onChange} value={field.value || ""}>
                                       <FormControl>
                                           <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                                       </FormControl>
@@ -1054,7 +1051,7 @@ export function CoverageForm({
                                       render={({ field }) => (
                                       <FormItem>
                                           <FormLabel className="font-headline">Joint Call With</FormLabel>
-                                          <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                          <Select onValueChange={field.onChange} value={field.value || ""}>
                                           <FormControl><SelectTrigger><SelectValue placeholder="Select companion..." /></SelectTrigger></FormControl>
                                           <SelectContent>
                                               {jointCallRoles.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}
@@ -1105,7 +1102,7 @@ export function CoverageForm({
         isOpen={signatureState.isOpen}
         onOpenChange={(open) => {
             setSignatureState(s => ({ ...s, isOpen: open }));
-            if (!open) form.trigger(signatureState.target!);
+            if (!open && signatureState.target) form.trigger(signatureState.target);
         }}
         onSave={(sig) => {
             if (signatureState.target) {
