@@ -60,7 +60,6 @@ export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
 ];
 
 export const useQ4Allocation = () => {
-  // Initialize with official items immediately to ensure they show up in PMR dropdowns
   const [allocations, setAllocations] = useState<Q4Allocation[]>(
     OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
@@ -69,7 +68,6 @@ export const useQ4Allocation = () => {
   const [loadingUsage, setLoadingUsage] = useState(true);
   const { toast } = useToast();
 
-  // Listener for Allocation Definitions
   useEffect(() => {
     setLoading(true);
     const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
@@ -88,7 +86,6 @@ export const useQ4Allocation = () => {
     return () => unsubscribe();
   }, []);
 
-  // Real-time Global Usage Listener
   useEffect(() => {
     setLoadingUsage(true);
     const q = query(collection(db, "coverageEntries"));
@@ -119,9 +116,7 @@ export const useQ4Allocation = () => {
     return () => unsubscribe();
   }, []);
 
-  const refetch = () => {
-      // Data is synced in real-time via onSnapshot
-  };
+  const refetch = () => {};
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
     try {
