@@ -49,7 +49,8 @@ export default function Home() {
   const { toast } = useToast();
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+    const normalizedEmail = user.email?.toLowerCase() || '';
+    return ADMIN_UIDS.includes(user.uid) || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
@@ -60,7 +61,7 @@ export default function Home() {
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
   const { plans, planningRequests, addPlan, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays();
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
+  const { timeLogs, addTime in, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
   
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -126,7 +127,6 @@ export default function Home() {
 
   /**
    * Merges server-side usage with pending local usage for accurate inventory tracking.
-   * Ensures whole numbers throughout.
    */
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
@@ -145,10 +145,6 @@ export default function Home() {
                 quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
             }
         });
-    });
-    // Ensure all values are rounded for safety
-    Object.keys(quantities).forEach(key => {
-        quantities[key] = Math.round(quantities[key]);
     });
     return quantities;
   }, [usedQuantities, offlineEntries]);

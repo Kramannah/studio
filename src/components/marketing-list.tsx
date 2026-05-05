@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -13,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Download, Upload, Loader2, AlertCircle } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Download, Upload, Loader2, AlertCircle, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
@@ -54,7 +55,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
 
-  // Auto-seed screenshot data if empty
+  // Auto-seed if completely empty
   useEffect(() => {
     if (samples.length === 0 && !loading && !readOnly) {
         runAutoSeed().then(() => onRefresh?.());
@@ -78,6 +79,13 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSamples, currentPage]);
+
+  const handleSyncSystemProducts = async () => {
+    setIsUploading(true);
+    await runAutoSeed();
+    onRefresh?.();
+    setIsUploading(false);
+  };
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
@@ -189,14 +197,20 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                   Marketing Samples Inventory
               </CardTitle>
               <CardDescription className="text-base">
-                  Live stock monitoring and batch inventory updates.
+                  Live stock monitoring and allocation management.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
                 {!readOnly && (
-                    <Button onClick={() => setShowImport(!showImport)} variant="secondary" className="border-2 font-headline h-11">
-                        <Upload className="mr-2 h-4 w-4" /> Bulk Import
-                    </Button>
+                    <>
+                        <Button onClick={handleSyncSystemProducts} variant="secondary" className="border-2 font-headline h-11" disabled={isUploading}>
+                           {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+                           Sync System Products
+                        </Button>
+                        <Button onClick={() => setShowImport(!showImport)} variant="outline" className="border-2 font-headline h-11">
+                            <Upload className="mr-2 h-4 w-4" /> Bulk Import
+                        </Button>
+                    </>
                 )}
                 <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
@@ -314,7 +328,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  No materials found.
+                                  No materials found. {readOnly ? 'Contact admin to initialize inventory.' : 'Click "Sync System Products" to begin.'}
                               </TableCell>
                           </TableRow>
                       )}
@@ -352,12 +366,14 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
         </CardContent>
       </Card>
       
-      <MarketingSampleDialog 
-        isOpen={isDialogOpen} 
-        onOpenChange={setIsFormOpen} 
-        onSave={() => onRefresh?.()} 
-        sample={selectedSample} 
-      />
+      {!readOnly && (
+          <MarketingSampleDialog 
+            isOpen={isDialogOpen} 
+            onOpenChange={setIsFormOpen} 
+            onSave={() => onRefresh?.()} 
+            sample={selectedSample} 
+          />
+      )}
     </div>
   );
 }

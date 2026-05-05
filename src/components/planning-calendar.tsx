@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -491,7 +492,7 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="max-w-xl w-[95vw] max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden">
+                <DialogContent className="max-w-xl w-[95vw] max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]">
                     <DialogHeader className="p-6 pb-2 shrink-0">
                         <div className="flex justify-between items-start">
                             <div>
@@ -578,13 +579,16 @@ export function PlanningCalendar({
                             </div>
                         </ScrollArea>
                     </div>
-                    <DialogFooter className="p-6 shrink-0 bg-muted/20 border-t">
+                    <DialogFooter className="p-6 shrink-0 bg-muted/20 border-t flex flex-col gap-2">
                         <Button 
                             className="w-full h-14 text-xl font-black rounded-xl shadow-lg" 
                             onClick={handleAddSelectedPlans} 
                             disabled={selectedDoctorIdsForPlan.length === 0}
                         >
                             Add {selectedDoctorIdsForPlan.length} to Schedule
+                        </Button>
+                        <Button variant="ghost" className="w-full h-10" onClick={() => setIsAddPlanDialogOpen(false)}>
+                            Cancel
                         </Button>
                     </DialogFooter>
                 </DialogContent>

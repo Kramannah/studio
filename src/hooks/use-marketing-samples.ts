@@ -29,7 +29,8 @@ export const useMarketingSamples = () => {
       // We try to fetch the most recent entries we have access to.
       try {
         let entriesQuery;
-        const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com';
+        const normalizedEmail = currentUser?.email?.toLowerCase() || '';
+        const isAdmin = normalizedEmail === 'mbustamante@hovidinc.com';
         
         if (isAdmin) {
           // Admins fetch global usage (capped at 2000 for performance)
@@ -45,7 +46,7 @@ export const useMarketingSamples = () => {
           setAllEntries(fetchedEntries);
         }
       } catch (usageError) {
-        console.warn("Could not fetch global usage data. Showing personal usage/inventory only.", usageError);
+        console.warn("Could not fetch usage data. Showing inventory only.", usageError);
       }
 
     } catch (error: any) {
@@ -149,9 +150,6 @@ export const useAdminMarketingSamples = () => {
     }
 
     try {
-      // Force refresh auth state before heavy write
-      await currentUser.getIdToken(true);
-      
       const batch = writeBatch(db);
       let addedCount = 0;
 
@@ -159,7 +157,6 @@ export const useAdminMarketingSamples = () => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
 
-        // Create a unique but clean ID
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!docId) return;
 
@@ -173,13 +170,10 @@ export const useAdminMarketingSamples = () => {
         addedCount++;
       });
       
-      if (addedCount === 0) {
-        return false;
-      }
+      if (addedCount === 0) return false;
 
       await batch.commit();
       return true;
-
     } catch (error: any) {
       console.error("BATCH ERROR:", error);
       toast({ 
@@ -243,20 +237,16 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Tocovid - Tocovid D'Repair", materialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10 },
       { productGroup: "Tocovid - Tocovid 200mg", materialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60 },
       { productGroup: "Dermatology - Hovicor", materialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24 },
-      // New requested items
+      // Added new items requested
       { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
       { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Elite Marks & Spencer Set", allocationQuantity: 218 },
     ];
     
-    const currentUser = auth.currentUser;
-    if (currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com') {
-        const res = await addMarketingSamplesBulk(newData);
-        if (res) toast({ title: "Inventory Initialized", description: "54 products added to database." });
-        return res;
-    }
-    return false;
+    const res = await addMarketingSamplesBulk(newData);
+    if (res) toast({ title: "Inventory Updated", description: "All 54 system products synced successfully." });
+    return res;
   }, [addMarketingSamplesBulk, toast]);
 
   return { addSample, updateSample, deleteSample, addMarketingSamplesBulk, runAutoSeed };
