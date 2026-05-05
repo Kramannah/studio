@@ -34,7 +34,7 @@ import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import React from "react";
 
 type ProductKey = keyof Pick<Doctor, 'dapavid' | 'hofovir' | 'inox' | 'irinovid' | 'ondavid' | 'ricamTablet' | 'tocovid100mg' | 'tocovid200mg' | 'tocovidVitality' | 'virestCream' | 'virestTab'>;
 
@@ -212,8 +212,7 @@ const DoctorRow = ({
     ];
 
     return (
-        <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
-            <>
+        <React.Fragment>
             <TableRow className={cn(isOpen && "bg-muted/30")}>
                 {!readOnly && (
                     <TableCell className="w-10">
@@ -256,7 +255,7 @@ const DoctorRow = ({
                     </div>
                 </TableCell>
             </TableRow>
-            <CollapsibleContent asChild>
+            {isOpen && (
                 <TableRow className="bg-muted/10">
                     <TableCell colSpan={readOnly ? 4 : 5} className="p-0">
                         <div className="p-4 space-y-6">
@@ -328,9 +327,8 @@ const DoctorRow = ({
                         </div>
                     </TableCell>
                 </TableRow>
-            </CollapsibleContent>
-            </>
-        </Collapsible>
+            )}
+        </React.Fragment>
     );
 };
 
