@@ -46,7 +46,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export function Q4AllocationView() {
+interface Q4AllocationViewProps {
+    readOnly?: boolean;
+}
+
+export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const { allocations, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
     
@@ -275,13 +279,13 @@ export function Q4AllocationView() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-                    <div className="lg:col-span-2 space-y-6">
+                    <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
                         <Card className="border-2 shadow-lg overflow-hidden">
                             <CardHeader className="bg-muted/30 border-b pb-6">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline">Batch Oversight: {activeQuarter}</CardTitle>
-                                        <CardDescription>Monitoring inventory for current batch period.</CardDescription>
+                                        <CardDescription>{readOnly ? 'Live status of your sample inventory for the current period.' : 'Monitoring inventory for current batch period.'}</CardDescription>
                                     </div>
                                     <div className="flex items-center gap-2 w-full max-w-sm">
                                         <div className="relative flex-1">
@@ -293,7 +297,7 @@ export function Q4AllocationView() {
                                                 onChange={(e) => setSearch(e.target.value)}
                                             />
                                         </div>
-                                        {selectedIds.length > 0 && (
+                                        {selectedIds.length > 0 && !readOnly && (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl animate-in zoom-in duration-200">
@@ -322,13 +326,15 @@ export function Q4AllocationView() {
                                     <Table>
                                         <TableHeader className="bg-muted/20">
                                             <TableRow className="h-12 hover:bg-transparent">
-                                                <TableHead className="w-12 pl-6">
-                                                    <Checkbox 
-                                                        checked={selectedIds.length > 0 && selectedIds.length === paginatedSamples.length}
-                                                        onCheckedChange={handleSelectAll}
-                                                    />
-                                                </TableHead>
-                                                <TableHead className="font-bold text-foreground">Material Name</TableHead>
+                                                {!readOnly && (
+                                                    <TableHead className="w-12 pl-6">
+                                                        <Checkbox 
+                                                            checked={selectedIds.length > 0 && selectedIds.length === paginatedSamples.length}
+                                                            onCheckedChange={handleSelectAll}
+                                                        />
+                                                    </TableHead>
+                                                )}
+                                                <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
                                                 <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
                                                 <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
                                                 <TableHead className="text-center font-bold text-foreground w-32 pr-6">Remaining</TableHead>
@@ -343,13 +349,15 @@ export function Q4AllocationView() {
                                                     const balance = sample.allocationQuantity - used;
                                                     return (
                                                         <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                            <TableCell className="pl-6">
-                                                                <Checkbox 
-                                                                    checked={selectedIds.includes(sample.id)}
-                                                                    onCheckedChange={(checked) => handleSelectRow(sample.id, !!checked)}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
+                                                            {!readOnly && (
+                                                                <TableCell className="pl-6">
+                                                                    <Checkbox 
+                                                                        checked={selectedIds.includes(sample.id)}
+                                                                        onCheckedChange={(checked) => handleSelectRow(sample.id, !!checked)}
+                                                                    />
+                                                                </TableCell>
+                                                            )}
+                                                            <TableCell className={cn(readOnly && "pl-6")}>
                                                                 <div className="flex flex-col">
                                                                     <span className="font-medium text-sm">{sample.displayMaterialName}</span>
                                                                     <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
@@ -369,7 +377,7 @@ export function Q4AllocationView() {
                                                     );
                                                 })
                                             ) : (
-                                                <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products uploaded for {activeQuarter} yet.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found for {activeQuarter}.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>
@@ -390,37 +398,39 @@ export function Q4AllocationView() {
                         )}
                     </div>
 
-                    <div className="space-y-6">
-                        <Card className="border-2 shadow-lg bg-primary/5">
-                            <CardHeader>
-                                <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary">
-                                    <PackagePlus className="w-5 h-5" />
-                                    Import {activeQuarter}
-                                </CardTitle>
-                                <CardDescription>Populate Batch {activeQuarter} via Excel.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline">
-                                    <FileDown className="mr-2 h-4 w-4" /> Get Template
-                                </Button>
-                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-                                <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">
-                                    {isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}
-                                </Button>
-                                <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase font-bold tracking-widest">
-                                    <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} /> Refresh Tracker
-                                </Button>
-                            </CardContent>
-                        </Card>
+                    {!readOnly && (
+                        <div className="space-y-6">
+                            <Card className="border-2 shadow-lg bg-primary/5">
+                                <CardHeader>
+                                    <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary">
+                                        <PackagePlus className="w-5 h-5" />
+                                        Import {activeQuarter}
+                                    </CardTitle>
+                                    <CardDescription>Populate Batch {activeQuarter} via Excel.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline">
+                                        <FileDown className="mr-2 h-4 w-4" /> Get Template
+                                    </Button>
+                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
+                                    <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">
+                                        {isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}
+                                    </Button>
+                                    <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase font-bold tracking-widest">
+                                        <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} /> Refresh Tracker
+                                    </Button>
+                                </CardContent>
+                            </Card>
 
-                        <Alert className="border-2 bg-muted/30">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle className="font-headline font-bold">Import Guide</AlertTitle>
-                            <AlertDescription className="text-xs leading-normal opacity-70">
-                                Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.
-                            </AlertDescription>
-                        </Alert>
-                    </div>
+                            <Alert className="border-2 bg-muted/30">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertTitle className="font-headline font-bold">Import Guide</AlertTitle>
+                                <AlertDescription className="text-xs leading-normal opacity-70">
+                                    Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.
+                                </AlertDescription>
+                            </Alert>
+                        </div>
+                    )}
                 </div>
              </Tabs>
         </div>
