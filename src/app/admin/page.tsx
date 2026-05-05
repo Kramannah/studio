@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, LayoutDashboard, Package } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,7 +20,6 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
-import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -32,7 +31,6 @@ const DynamicSkeleton = () => (
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
 const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
-const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 
 
 export default function AdminPage() {
@@ -79,13 +77,6 @@ export default function AdminPage() {
         deleteDoctorsBulk,
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
-
-    const {
-        marketingSamples,
-        usedQuantities: marketingUsedQuantities,
-        loading: marketingLoading,
-        refetch: refetchMarketing
-    } = useMarketingSamples();
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
@@ -302,9 +293,6 @@ export default function AdminPage() {
                             <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                 <Package2 className="h-4 w-4" /> Sample Allocation
                             </TabsTrigger>
-                            <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                <Package className="h-4 w-4" /> Marketing Samples
-                            </TabsTrigger>
                             <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
                                 <Bell className="mr-2 h-4 w-4"/>
                                 Approvals
@@ -374,16 +362,6 @@ export default function AdminPage() {
 
                     <TabsContent value="sample-allocation" className="mt-8">
                         <Q4AllocationView />
-                    </TabsContent>
-
-                    <TabsContent value="marketing-samples" className="mt-8">
-                        <MarketingList 
-                            samples={marketingSamples} 
-                            usedQuantities={marketingUsedQuantities} 
-                            readOnly={false} 
-                            loading={marketingLoading}
-                            onRefresh={refetchMarketing}
-                        />
                     </TabsContent>
 
                     <TabsContent value="approvals" className="mt-8 space-y-8 w-full">
