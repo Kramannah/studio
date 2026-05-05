@@ -14,13 +14,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Download, Upload, Loader2, AlertCircle, Database } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Download, Upload, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
 import { format } from "date-fns";
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
+import { AddMarketingSamples } from "./add-marketing-samples";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,27 +44,14 @@ type MarketingListProps = {
 }
 
 export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
-  const { deleteSample, runAutoSeed, addMarketingSamplesBulk } = useAdminMarketingSamples();
+  const { deleteSample } = useAdminMarketingSamples();
   const { toast } = useToast();
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDialogOpen, setIsFormOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [selectedSample, setSelectedSample] = useState<MarketingSample | undefined>(undefined);
-  const hasAttemptedSeed = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
-
-  // Auto-seed if missing products (Target total: 54) - Controlled by ref to prevent loop
-  useEffect(() => {
-    if (!loading && !readOnly && samples.length < 54 && !hasAttemptedSeed.current) {
-        hasAttemptedSeed.current = true;
-        runAutoSeed().then((success) => {
-            if (success && onRefresh) onRefresh();
-        });
-    }
-  }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
 
   const filteredSamples = useMemo(() => {
     return samples.filter(sample =>
@@ -83,16 +71,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     return filteredSamples.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredSamples, currentPage]);
 
-  const handleSyncSystemProducts = async () => {
-    setIsUploading(true);
-    const success = await runAutoSeed();
-    if (success) {
-        toast({ title: "Sync Successful", description: "54 system products updated." });
-        onRefresh?.();
-    }
-    setIsUploading(false);
-  };
-
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
         const used = Math.round(usedQuantities[sample.materialName] || 0);
@@ -110,72 +88,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     XLSX.writeFile(workbook, `marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-        if (json.length < 2) {
-          toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
-          setIsUploading(false);
-          return;
-        }
-
-        const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim());
-        const bodyRows = json.slice(1);
-
-        const findColIndex = (possibleNames: string[]) => {
-          for (const name of possibleNames) {
-            const index = headerRow.findIndex((h) => h.includes(name.toLowerCase()));
-            if (index > -1) return index;
-          }
-          return -1;
-        };
-
-        const colMap = {
-          group: findColIndex(['prodgroupprodsubgroup', 'product group', 'product', 'group']),
-          name: findColIndex(['displaymaterialname', 'material name', 'material', 'name']),
-          qty: findColIndex(['allocationquantity', 'allocation quantity', 'allocation', 'quantity', 'qty'])
-        };
-
-        if (colMap.name === -1 || colMap.qty === -1) {
-          toast({ variant: "destructive", title: "Header Mismatch", description: "Could not find 'Material Name' or 'Quantity' columns." });
-          setIsUploading(false);
-          return;
-        }
-
-        const samplesToAdd: Omit<MarketingSample, 'id'>[] = [];
-        for (const row of bodyRows) {
-          const name = String(row[colMap.name] || '').trim();
-          const qty = parseInt(String(row[colMap.qty]).replace(/[^0-9]/g, '')) || 0;
-          const group = colMap.group > -1 ? String(row[colMap.group] || '').trim() : "Uncategorized";
-          if (name) samplesToAdd.push({ productGroup: group, materialName: name, allocationQuantity: qty });
-        }
-
-        const success = await addMarketingSamplesBulk(samplesToAdd);
-        if (success) {
-          toast({ title: "Import Successful", description: `${samplesToAdd.length} products updated.` });
-          onRefresh?.();
-          setShowImport(false);
-        }
-      } catch (error) {
-        toast({ variant: "destructive", title: "Upload Error", description: "Failed to process the file." });
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
   const handleEdit = (sample: MarketingSample) => {
       setSelectedSample(sample);
       setIsFormOpen(true);
@@ -188,13 +100,17 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   return (
     <div className="space-y-6">
+      {!readOnly && (
+          <AddMarketingSamples onRefresh={onRefresh} />
+      )}
+
       <Card className="shadow-lg border-2">
         <CardHeader>
           <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle className="font-headline text-2xl flex items-center gap-2 text-primary">
                   <PackageCheck className="w-6 h-6" />
-                  Marketing Samples Inventory
+                  Inventory List
               </CardTitle>
               <CardDescription className="text-base">
                   Live stock monitoring and allocation management.
@@ -202,18 +118,9 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             </div>
             <div className="flex flex-wrap gap-2">
                 {!readOnly && (
-                    <>
-                        <Button onClick={handleSyncSystemProducts} variant="secondary" className="border-2 font-headline h-11" disabled={isUploading}>
-                           {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
-                           Sync System Data
-                        </Button>
-                        <Button onClick={() => setShowImport(!showImport)} variant="outline" className="border-2 font-headline h-11">
-                            <Upload className="mr-2 h-4 w-4" /> Bulk Import
-                        </Button>
-                         <Button onClick={handleAddClick} variant="default" className="font-headline h-11">
-                            <PlusCircle className="mr-2 h-4 w-4" /> Add Single
-                        </Button>
-                    </>
+                    <Button onClick={handleAddClick} variant="default" className="font-headline h-11">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add Single
+                    </Button>
                 )}
                 <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
@@ -226,23 +133,6 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             </div>
           </div>
           
-          {showImport && !readOnly && (
-              <div className="mt-6 p-6 border-2 border-dashed rounded-xl bg-muted/30 animate-in slide-in-from-top-4 duration-300">
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                      <div className="space-y-2">
-                          <h3 className="font-headline font-bold text-lg">Excel Bulk Upload</h3>
-                          <p className="text-sm text-muted-foreground">Upload your .xlsx or .csv file to update multiple items at once.</p>
-                      </div>
-                      <div className="shrink-0">
-                          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-                          <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} size="lg" className="h-14 px-8 font-headline text-lg shadow-lg">
-                              {isUploading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...</> : <><FileSpreadsheet className="mr-2 h-5 w-5" /> Select File</>}
-                          </Button>
-                      </div>
-                  </div>
-              </div>
-          )}
-
           <div className="mt-4">
             <Input 
               placeholder="Search product or material..."
@@ -328,7 +218,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  {loading ? "Searching..." : "No items in database. Tap 'Sync System Data' to initialize."}
+                                  {loading ? "Searching..." : "No items found. Use the management tool above to upload inventory."}
                               </TableCell>
                           </TableRow>
                       )}
