@@ -122,7 +122,6 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, []);
 
-  // Compute live used quantities including global server data and local offline reports
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...globalUsedQuantities };
     

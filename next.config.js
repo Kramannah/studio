@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const withPWA = require('next-pwa')({
   dest: 'public',
-  disable: true, // KEEP DISABLED: Essential for resolving ChunkLoadErrors during build/deploy
+  disable: true, // KEEP DISABLED: Resolves ChunkLoadErrors during build and deploy
   register: true,
   skipWaiting: true,
 });
@@ -15,14 +15,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-    ],
+    unoptimized: true, // Recommended for standalone mode in serverless environments
   },
   env: {
     TZ: 'Asia/Manila',
