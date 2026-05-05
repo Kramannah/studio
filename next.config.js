@@ -1,13 +1,13 @@
 /** @type {import('next').NextConfig} */
 const withPWA = require('next-pwa')({
   dest: 'public',
-  disable: true, // Temporarily disabled to resolve ChunkLoadErrors
+  disable: true, // KEEP DISABLED: Essential for resolving ChunkLoadErrors during build/deploy
   register: true,
   skipWaiting: true,
 });
 
 const nextConfig = {
-  output: 'standalone',
+  output: 'standalone', // MANDATORY for Firebase App Hosting
   typescript: {
     ignoreBuildErrors: true,
   },
