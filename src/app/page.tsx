@@ -61,7 +61,7 @@ export default function Home() {
   const { plans, planningRequests, addPlan, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
-  const { allocations, loading: allocationLoading } = useQ4Allocation();
+  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation();
   
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -123,11 +123,11 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, []);
 
+  // Compute live used quantities including global server data and local offline reports
   const mergedUsedQuantities = useMemo(() => {
-    const quantities: Record<string, number> = {};
-    const allEntries = [...masterEntries, ...offlineEntries];
+    const quantities = { ...globalUsedQuantities };
     
-    allEntries.forEach(entry => {
+    offlineEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
             const qty = Math.round(Number(entry.primaryProductQty));
             quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
@@ -144,7 +144,7 @@ export default function Home() {
         });
     });
     return quantities;
-  }, [masterEntries, offlineEntries]);
+  }, [globalUsedQuantities, offlineEntries]);
 
   const todaysPlans = useMemo(() => {
     return plans.filter(p => {

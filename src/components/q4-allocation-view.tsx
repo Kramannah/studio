@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import {
     PackageCheck,
     RefreshCw,
     TrendingUp,
-    Filter,
     Trash2,
     ChevronLeft,
     ChevronRight,
@@ -27,11 +26,9 @@ import {
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
-import type { Q4Allocation, CoverageEntry } from "@/lib/types";
+import type { Q4Allocation } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { collection, getDocs, query } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
@@ -51,51 +48,17 @@ interface Q4AllocationViewProps {
 }
 
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    const { allocations, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
     
     const [activeQuarter, setActiveQuarter] = useState<'Q3' | 'Q4'>('Q4');
     const [search, setSearch] = useState('');
     const [isUploading, setIsUploading] = useState(false);
-    const [isFetchingUsage, setIsFetchingUsage] = useState(false);
-    const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const fetchAllUsage = useCallback(async () => {
-        setIsFetchingUsage(true);
-        try {
-            const entriesSnap = await getDocs(query(collection(db, "coverageEntries")));
-            const entries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
-            
-            const usage: Record<string, number> = {};
-            entries.forEach(entry => {
-                if (entry.primarySampleName && entry.primaryProductQty) {
-                    usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
-                }
-                if (entry.secondarySampleName && entry.secondaryProductQty) {
-                    usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
-                }
-                entry.reminderProducts?.forEach(prod => {
-                    if (prod.sampleName && prod.quantity) {
-                        usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
-                    }
-                });
-            });
-            setUsedQuantities(usage);
-        } catch (error) {
-            console.error("Error fetching usage data:", error);
-        } finally {
-            setIsFetchingUsage(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchAllUsage();
-    }, [fetchAllUsage]);
 
     const filteredSamples = useMemo(() => {
         return allocations.filter(s => {
@@ -223,7 +186,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            // Select ALL matching filtered samples (across all pages)
             setSelectedIds(filteredSamples.map(s => s.id));
         } else {
             setSelectedIds([]);
@@ -416,9 +378,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
                                     <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">
                                         {isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}
-                                    </Button>
-                                    <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase font-bold tracking-widest">
-                                        <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} /> Refresh Tracker
                                     </Button>
                                 </CardContent>
                             </Card>

@@ -2,16 +2,19 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
-import type { Q4Allocation } from '@/lib/types';
+import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
 export const useQ4Allocation = () => {
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingUsage, setLoadingUsage] = useState(true);
   const { toast } = useToast();
 
+  // Listener for Allocation Definitions
   useEffect(() => {
     setLoading(true);
     const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
@@ -28,8 +31,39 @@ export const useQ4Allocation = () => {
     return () => unsubscribe();
   }, []);
 
+  // Real-time Global Usage Listener
+  useEffect(() => {
+    setLoadingUsage(true);
+    const q = query(collection(db, "coverageEntries"));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usage: Record<string, number> = {};
+      snapshot.docs.forEach(doc => {
+        const entry = doc.data() as CoverageEntry;
+        if (entry.primarySampleName && entry.primaryProductQty) {
+            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+        }
+        if (entry.secondarySampleName && entry.secondaryProductQty) {
+            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+        }
+        entry.reminderProducts?.forEach(prod => {
+            if (prod.sampleName && prod.quantity) {
+                usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
+            }
+        });
+      });
+      setUsedQuantities(usage);
+      setLoadingUsage(false);
+    }, (error) => {
+      console.error("Usage listener error:", error);
+      setLoadingUsage(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const refetch = () => {
-      // Data is synced in real-time via onSnapshot, so we just return
+      // Data is synced in real-time via onSnapshot
   };
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
@@ -67,5 +101,5 @@ export const useQ4Allocation = () => {
       }
   };
 
-  return { allocations, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };
+  return { allocations, usedQuantities, loading: loading || loadingUsage, refetch, addAllocationsBulk, deleteAllocationsBulk };
 };
