@@ -3,6 +3,7 @@
 
 // Safely handle PWA setup to ensure the app boots reliably
 const nextConfig = {
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },
