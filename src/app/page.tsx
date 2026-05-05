@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -9,7 +10,6 @@ import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDash
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
-import { useMarketingSamples } from "@/hooks/use-marketing-samples";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
@@ -36,11 +36,10 @@ const MasterList = dynamic(() => import('@/components/master-list').then(mod => 
 const CallSummary = dynamic(() => import('@/components/call-summary').then(mod => mod.CallSummary), { loading: () => <DynamicSkeleton /> });
 const PlanningCalendar = dynamic(() => import('@/components/planning-calendar').then(mod => mod.PlanningCalendar), { loading: () => <DynamicSkeleton /> });
 const SubmittedList = dynamic(() => import('@/components/submitted-list').then(mod => mod.SubmittedList), { loading: () => <DynamicSkeleton /> });
-const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'marketing';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -55,7 +54,6 @@ export default function Home() {
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
   const hasAdminAccess = isUserAdmin || isUserManager;
 
-  const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
   const { plans, planningRequests, addPlan, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
@@ -83,8 +81,7 @@ export default function Home() {
               syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
               refreshPlans(),
               fetchTimeLogs(),
-              fetchNonCallDays(),
-              refetchMarketingSamples()
+              fetchNonCallDays()
           ]);
           toast({
               title: "Sync Finished",
@@ -100,7 +97,7 @@ export default function Home() {
       } finally {
           setIsManualSyncing(false);
       }
-  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchMarketingSamples, toast]);
+  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
@@ -120,12 +117,11 @@ export default function Home() {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
-    if (savedOnline) refetchMarketingSamples();
     setActiveView(savedOnline ? 'submitted' : 'offline');
-  }, [refetchMarketingSamples]);
+  }, []);
 
   const mergedUsedQuantities = useMemo(() => {
-    const quantities = { ...usedQuantities };
+    const quantities: Record<string, number> = {};
     offlineEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
             const qty = Math.round(Number(entry.primaryProductQty));
@@ -143,7 +139,7 @@ export default function Home() {
         });
     });
     return quantities;
-  }, [usedQuantities, offlineEntries]);
+  }, [offlineEntries]);
 
   const todaysPlans = useMemo(() => {
     return plans.filter(p => {
@@ -156,11 +152,11 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const handleCrmClick = () => {
-    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'marketing'];
+    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master'];
     if (!crmViews.includes(activeView)) setActiveView('planning');
   };
   
-  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
+  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading;
 
   const renderContent = () => {
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master';
@@ -168,12 +164,11 @@ export default function Home() {
 
     switch (activeView) {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={marketingSamples} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={[]} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
-      case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} readOnly={true} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} />;
       default: return null;
     }
   }
@@ -222,7 +217,6 @@ export default function Home() {
                       </SidebarMenuSubItem>
                        <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
-                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>

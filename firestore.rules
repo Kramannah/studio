@@ -1,18 +1,10 @@
-/**
- * Firestore Security Rules
- *
- * Core Philosophy:
- * This ruleset implements a strict User-Ownership model where all application data is nested 
- * under a specific user's path. 
- */
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- CRITICAL OVERRIDE FOR MARKETING SAMPLES ---
-    // This allows the admin to manage inventory without any token delay issues.
-    match /marketingSamples/{sampleId} {
+    // --- CRITICAL OVERRIDE FOR Q4 ALLOCATION ---
+    match /q4Allocation/{id} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && 
         (request.auth.token.email.lower() == 'mbustamante@hovidinc.com' || 
@@ -20,55 +12,46 @@ service cloud.firestore {
     }
 
     // --- Helper Functions ---
-
-    /** Checks if the request is from an authenticated user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** Checks if the authenticated user's UID matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** Checks if the document exists and the current user is the owner. */
     function isExistingOwner(userId) {
       return resource != null && isOwner(userId);
     }
 
-    /** 
-     * Checks if the current user has administrative privileges.
-     */
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid)) ||
+        request.auth.token.email.lower() == 'mbustamante@hovidinc.com'
+      );
     }
 
     // --- Rules ---
-
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId) || isAdmin();
 
       match /providers/{providerId} {
         allow get, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && request.resource.data.id == providerId;
-        allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-        allow delete: if isExistingOwner(userId) || isAdmin();
+        allow create, update, delete: if isOwner(userId) || isAdmin();
       }
 
       match /coverageEvents/{coverageEventId} {
         allow get, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && request.resource.data.id == coverageEventId;
-        allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-        allow delete: if isExistingOwner(userId) || isAdmin();
+        allow create, update, delete: if isOwner(userId) || isAdmin();
       }
     }
 
-    match /{path=**}/coverageEvents/{coverageEventId} {
-      allow list: if isAdmin();
+    match /coverageEntries/{entryId} {
+      allow read, write: if isSignedIn();
     }
 
     match /admin_roles/{adminId} {
@@ -77,7 +60,6 @@ service cloud.firestore {
       allow create, update, delete: if false; 
     }
     
-    // Catch-all for other collections
     match /timeLogs/{logId} {
       allow read, write: if isSignedIn();
     }
@@ -92,6 +74,10 @@ service cloud.firestore {
     }
     match /planningRequests/{requestId} {
       allow read, write: if isSignedIn();
+    }
+    match /marketingSamples/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

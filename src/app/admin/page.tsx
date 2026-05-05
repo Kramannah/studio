@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -5,19 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package, Package2 } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2 } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
-import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { USER_DATA_MAP } from '@/lib/user-data';
 import { Badge } from '@/components/ui/badge';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -34,7 +33,6 @@ const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(m
 const AdminReportList = dynamic(() => import('@/components/admin-report-list').then(mod => mod.AdminReportList), { loading: () => <DynamicSkeleton /> });
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
 const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
-const MarketingList = dynamic(() => import('@/components/marketing-list').then(mod => mod.MarketingList), { loading: () => <DynamicSkeleton /> });
 
 
 export default function AdminPage() {
@@ -82,10 +80,6 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    const { entries: allEntries, deleteEntry: deleteAllUsersEntry } = useAllCoverageEntries();
-    
-    const { marketingSamples, usedQuantities, loading: marketingSamplesLoading, refetch: refetchMarketingSamples } = useMarketingSamples();
-
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
         return MANAGER_TEAMS[selectedManagerId] || [];
@@ -118,9 +112,8 @@ export default function AdminPage() {
             plans: allPlans || [],
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
             timeLogs: teamTimeLogs || [],
-            marketingSamples: marketingSamples || [],
         }
-    }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs, marketingSamples]);
+    }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs]);
 
     const selectedUserUsedQuantities = useMemo(() => {
         if (!selectedUserData) return {};
@@ -203,7 +196,7 @@ export default function AdminPage() {
                     allPlans={selectedUserData.plans}
                     allNonCallDays={selectedUserData.nonCallDays}
                     allTimeLogs={selectedUserData.timeLogs}
-                    allMarketingSamples={selectedUserData.marketingSamples}
+                    allMarketingSamples={[]}
                     onDeleteEntry={deleteTeamEntry}
                     usedQuantities={selectedUserUsedQuantities}
                     userMap={USER_DATA_MAP}
@@ -234,7 +227,7 @@ export default function AdminPage() {
                         allPlans={teamSummaryData.plans}
                         allNonCallDays={teamSummaryData.nonCallDays}
                         allTimeLogs={teamSummaryData.timeLogs}
-                        allMarketingSamples={teamSummaryData.marketingSamples}
+                        allMarketingSamples={[]}
                         onDeleteEntry={deleteTeamEntry}
                         usedQuantities={teamSummaryData.usedQuantities}
                         userMap={USER_DATA_MAP}
@@ -302,10 +295,6 @@ export default function AdminPage() {
                             <TabsTrigger value="q4-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                 <Package2 className="h-4 w-4" /> Q4 Batch 1 Sample
                             </TabsTrigger>
-                            <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                <Package className="h-4 w-4" /> Marketing Samples
-                            </TabsTrigger>
-                            {isUserAdmin && <TabsTrigger value="all-reports" className="px-6 rounded-lg font-headline">All Reports</TabsTrigger>}
                             <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
                                 <Bell className="mr-2 h-4 w-4"/>
                                 Approvals
@@ -376,22 +365,6 @@ export default function AdminPage() {
                     <TabsContent value="q4-allocation" className="mt-8">
                         <Q4AllocationView />
                     </TabsContent>
-
-                    <TabsContent value="marketing-samples" className="mt-8">
-                        <MarketingList 
-                            samples={marketingSamples} 
-                            usedQuantities={usedQuantities} 
-                            readOnly={!hasAdminAccess} 
-                            loading={marketingSamplesLoading} 
-                            onRefresh={refetchMarketingSamples}
-                        />
-                    </TabsContent>
-                    
-                    {isUserAdmin && (
-                        <TabsContent value="all-reports" className="mt-8 w-full">
-                            <AdminReportList entries={allEntries} onDelete={deleteAllUsersEntry} />
-                        </TabsContent>
-                    )}
                     
                     <TabsContent value="approvals" className="mt-8 space-y-8 w-full">
                         <NonCallDayApprovals 

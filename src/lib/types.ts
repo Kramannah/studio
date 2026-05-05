@@ -1,5 +1,4 @@
 
-
 export interface ReminderProduct {
     productName?: string;
     sampleName?: string;
@@ -99,6 +98,12 @@ export interface PlanningPermissionRequest {
   requestedAt: string; // ISO string
 }
 
+export interface Q4Allocation {
+    id: string;
+    prodGroupProdSubGroup: string;
+    displayMaterialName: string;
+    allocationQuantity: number;
+}
 
 export interface MarketingSample {
     id: string;
@@ -125,4 +130,5 @@ export interface AdminData {
     allTimeLogs: TimeLog[];
     allMarketingSamples: MarketingSample[];
     allPlanningRequests: PlanningPermissionRequest[];
+    q4Allocations: Q4Allocation[];
 }
