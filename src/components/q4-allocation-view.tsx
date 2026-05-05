@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -196,7 +196,7 @@ export function Q4AllocationView() {
                 <Card className="border-2 shadow-sm bg-orange-500/5">
                     <CardHeader className="pb-2">
                         <CardDescription className="font-headline font-bold text-orange-500 flex items-center gap-2 uppercase tracking-tighter">
-                            <TrendingUp className="w-4 h-4" /> Current Distribution
+                            <TrendingUp className="w-4 h-4" /> Current Distribution (Used)
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -222,10 +222,10 @@ export function Q4AllocationView() {
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
-                                        <CardTitle className="text-xl font-black font-headline">Q4 Allocation List</CardTitle>
+                                        <CardTitle className="text-xl font-black font-headline">Q4 Allocation Oversight</CardTitle>
                                         {(dataLoading || isFetchingUsage) && <RefreshCw className="h-4 w-4 animate-spin text-primary" />}
                                     </div>
-                                    <CardDescription>Live monitoring for Q4 Batch 1 inventory.</CardDescription>
+                                    <CardDescription>Live monitoring of usage vs. allocation.</CardDescription>
                                 </div>
                                 <div className="relative max-w-sm w-full">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -244,9 +244,9 @@ export function Q4AllocationView() {
                                     <TableHeader className="bg-muted/20">
                                         <TableRow className="h-12 hover:bg-transparent">
                                             <TableHead className="font-bold text-foreground pl-6">Material Name</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-24">Initial</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Initial Alloc</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-32 pr-6">Balance</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-32 pr-6">Remaining</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
