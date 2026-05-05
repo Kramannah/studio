@@ -76,6 +76,8 @@ export const useQ4Allocation = () => {
       if (!snapshot.empty) {
         const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
         setAllocations(fetched);
+      } else {
+          setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
       }
       setLoading(false);
     }, (error) => {
