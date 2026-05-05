@@ -1,7 +1,6 @@
-
 "use client"
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,14 +14,19 @@ import {
     Loader2, 
     FileSpreadsheet, 
     AlertCircle, 
-    PackageCheck
+    PackageCheck,
+    RefreshCw,
+    TrendingUp,
+    Filter
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
-import type { Q4Allocation } from "@/lib/types";
+import type { Q4Allocation, CoverageEntry } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { collection, getDocs, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export function Q4AllocationView() {
     const { allocations, loading: dataLoading, refetch, addAllocationsBulk } = useQ4Allocation();
@@ -30,7 +34,41 @@ export function Q4AllocationView() {
     
     const [search, setSearch] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [isFetchingUsage, setIsFetchingUsage] = useState(false);
+    const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const fetchAllUsage = useCallback(async () => {
+        setIsFetchingUsage(true);
+        try {
+            const entriesSnap = await getDocs(query(collection(db, "coverageEntries")));
+            const entries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
+            
+            const usage: Record<string, number> = {};
+            entries.forEach(entry => {
+                if (entry.primarySampleName && entry.primaryProductQty) {
+                    usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+                }
+                if (entry.secondarySampleName && entry.secondaryProductQty) {
+                    usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+                }
+                entry.reminderProducts?.forEach(prod => {
+                    if (prod.sampleName && prod.quantity) {
+                        usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
+                    }
+                });
+            });
+            setUsedQuantities(usage);
+        } catch (error) {
+            console.error("Error fetching usage data:", error);
+        } finally {
+            setIsFetchingUsage(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchAllUsage();
+    }, [fetchAllUsage]);
 
     const filteredSamples = useMemo(() => {
         return allocations.filter(s => 
@@ -39,9 +77,22 @@ export function Q4AllocationView() {
         );
     }, [allocations, search]);
 
-    const totalAllocated = useMemo(() => {
-        return allocations.reduce((sum, s) => sum + (s.allocationQuantity || 0), 0);
-    }, [allocations]);
+    const stats = useMemo(() => {
+        let totalAllocated = 0;
+        let totalUsed = 0;
+        
+        allocations.forEach(s => {
+            totalAllocated += s.allocationQuantity || 0;
+            totalUsed += usedQuantities[s.displayMaterialName] || 0;
+        });
+
+        return {
+            totalAllocated,
+            totalUsed,
+            remaining: totalAllocated - totalUsed,
+            percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
+        };
+    }, [allocations, usedQuantities]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -91,7 +142,7 @@ export function Q4AllocationView() {
                     toast({ 
                         variant: "destructive", 
                         title: "Format Error", 
-                        description: "Column headers must match the template exactly: ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity." 
+                        description: "Column headers must match the template exactly." 
                     });
                     setIsUploading(false);
                     return;
@@ -115,14 +166,12 @@ export function Q4AllocationView() {
                 if (samplesToAdd.length > 0) {
                     const success = await addAllocationsBulk(samplesToAdd);
                     if (success) {
-                        toast({ title: "Import Successful", description: `${samplesToAdd.length} items added to Q4 Batch 1.` });
+                        toast({ title: "Import Successful", description: `${samplesToAdd.length} items added.` });
                         refetch();
-                    } else {
-                        toast({ variant: "destructive", title: "Upload Failed", description: "Database permission error." });
                     }
                 }
             } catch (err) {
-                toast({ variant: "destructive", title: "Technical Error", description: "Could not parse Excel file." });
+                toast({ variant: "destructive", title: "Error", description: "Could not parse Excel file." });
             } finally {
                 setIsUploading(false);
                 if (fileInputRef.current) fileInputRef.current.value = "";
@@ -133,15 +182,35 @@ export function Q4AllocationView() {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="border-2 shadow-sm bg-primary/5">
                     <CardHeader className="pb-2">
                         <CardDescription className="font-headline font-bold text-primary flex items-center gap-2 uppercase tracking-tighter">
-                            <PackageCheck className="w-4 h-4" /> Total Q4 Batch Allocation
+                            <PackageCheck className="w-4 h-4" /> Total Batch Allocation
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-black font-headline">{totalAllocated} <span className="text-sm font-normal text-muted-foreground">units</span></div>
+                        <div className="text-3xl font-black font-mono">{stats.totalAllocated} <span className="text-sm font-normal text-muted-foreground">units</span></div>
+                    </CardContent>
+                </Card>
+                <Card className="border-2 shadow-sm bg-orange-500/5">
+                    <CardHeader className="pb-2">
+                        <CardDescription className="font-headline font-bold text-orange-500 flex items-center gap-2 uppercase tracking-tighter">
+                            <TrendingUp className="w-4 h-4" /> Current Distribution
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black font-mono text-orange-500">{stats.totalUsed} <span className="text-sm font-normal text-muted-foreground">units ({stats.percent}%)</span></div>
+                    </CardContent>
+                </Card>
+                <Card className="border-2 shadow-sm bg-green-500/5">
+                    <CardHeader className="pb-2">
+                        <CardDescription className="font-headline font-bold text-green-500 flex items-center gap-2 uppercase tracking-tighter">
+                            <Filter className="w-4 h-4" /> Remaining Stock
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black font-mono text-green-500">{stats.remaining} <span className="text-sm font-normal text-muted-foreground">units</span></div>
                     </CardContent>
                 </Card>
             </div>
@@ -152,7 +221,10 @@ export function Q4AllocationView() {
                         <CardHeader className="bg-muted/30 border-b pb-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
-                                    <CardTitle className="text-xl font-black font-headline">Q4 Allocation List</CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <CardTitle className="text-xl font-black font-headline">Q4 Allocation List</CardTitle>
+                                        {(dataLoading || isFetchingUsage) && <RefreshCw className="h-4 w-4 animate-spin text-primary" />}
+                                    </div>
                                     <CardDescription>Live monitoring for Q4 Batch 1 inventory.</CardDescription>
                                 </div>
                                 <div className="relative max-w-sm w-full">
@@ -167,36 +239,50 @@ export function Q4AllocationView() {
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
-                            <Table>
-                                <TableHeader className="bg-muted/20">
-                                    <TableRow className="h-12 hover:bg-transparent">
-                                        <TableHead className="font-bold text-foreground pl-6">Group</TableHead>
-                                        <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground w-32 pr-6">Allocation</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {dataLoading ? (
-                                        <TableRow><TableCell colSpan={3} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Loading Database...</p></TableCell></TableRow>
-                                    ) : filteredSamples.length > 0 ? (
-                                        filteredSamples.map((sample) => {
-                                            return (
-                                                <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                    <TableCell className="pl-6 font-bold text-primary text-xs uppercase tracking-tight">{sample.prodGroupProdSubGroup}</TableCell>
-                                                    <TableCell className="font-medium text-sm">{sample.displayMaterialName}</TableCell>
-                                                    <TableCell className="text-center pr-6">
-                                                        <Badge variant="outline" className="font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center">
-                                                            {sample.allocationQuantity}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })
-                                    ) : (
-                                        <TableRow><TableCell colSpan={3} className="h-64 text-center text-muted-foreground italic">No products uploaded yet.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-muted/20">
+                                        <TableRow className="h-12 hover:bg-transparent">
+                                            <TableHead className="font-bold text-foreground pl-6">Material Name</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Initial</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-32 pr-6">Balance</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {dataLoading ? (
+                                            <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Loading Database...</p></TableCell></TableRow>
+                                        ) : filteredSamples.length > 0 ? (
+                                            filteredSamples.map((sample) => {
+                                                const used = usedQuantities[sample.displayMaterialName] || 0;
+                                                const balance = sample.allocationQuantity - used;
+                                                return (
+                                                    <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                        <TableCell className="pl-6">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-medium text-sm">{sample.displayMaterialName}</span>
+                                                                <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                        <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
+                                                        <TableCell className="text-center pr-6">
+                                                            <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
+                                                                "font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center",
+                                                                balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
+                                                            )}>
+                                                                {balance}
+                                                            </Badge>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })
+                                        ) : (
+                                            <TableRow><TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic">No products uploaded yet.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>
@@ -231,6 +317,10 @@ export function Q4AllocationView() {
                                 ) : (
                                     <><Download className="mr-2 h-4 w-4 rotate-180" /> Import Products</>
                                 )}
+                            </Button>
+                            <Button variant="ghost" onClick={fetchAllUsage} disabled={isFetchingUsage} className="w-full h-10 text-xs uppercase tracking-widest font-bold">
+                                <RefreshCw className={cn("mr-2 h-3 w-3", isFetchingUsage && "animate-spin")} />
+                                Refresh Distribution
                             </Button>
                         </CardContent>
                     </Card>
