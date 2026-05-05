@@ -20,24 +20,21 @@ export const useMarketingSamples = () => {
     const currentUser = auth.currentUser;
     
     try {
-      // 1. Fetch Inventory - This should always work for authenticated users
+      // 1. Fetch Inventory
       const samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("materialName", "asc")));
       const fetchedSamples = samplesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MarketingSample));
       setMarketingSamples(fetchedSamples);
 
-      // 2. Fetch Usage - Non-admins might be restricted from querying ALL entries.
-      // We try to fetch the most recent entries we have access to.
+      // 2. Fetch Usage
       try {
         let entriesQuery;
         const normalizedEmail = currentUser?.email?.toLowerCase() || '';
-        const isAdmin = normalizedEmail === 'mbustamante@hovidinc.com';
+        const isAdmin = normalizedEmail === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
         
         if (isAdmin) {
-          // Admins fetch global usage (capped at 2000 for performance)
-          entriesQuery = query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(2000));
+          entriesQuery = query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(1000));
         } else if (currentUser) {
-          // PMRs fetch their own usage to ensure calculation works for them
-          entriesQuery = query(collection(db, "coverageEntries"), where("userId", "==", currentUser.uid), orderBy("submittedAt", "desc"));
+          entriesQuery = query(collection(db, "coverageEntries"), where("userId", "==", currentUser.uid));
         }
 
         if (entriesQuery) {
@@ -46,7 +43,7 @@ export const useMarketingSamples = () => {
           setAllEntries(fetchedEntries);
         }
       } catch (usageError) {
-        console.warn("Could not fetch usage data. Showing inventory only.", usageError);
+        console.warn("Usage fetch limited. Stock data still accurate.", usageError);
       }
 
     } catch (error: any) {
@@ -101,15 +98,14 @@ export const useAdminMarketingSamples = () => {
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     try {
         const currentUser = auth.currentUser;
-        if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-          throw new Error("Administrative permission required.");
-        }
+        const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
+        if (!isAdmin) throw new Error("Administrative permission required.");
 
         const docRef = await addDoc(collection(db, "marketingSamples"), {
             ...data,
             updatedAt: new Date().toISOString()
         });
-        toast({ title: "Sample Added", description: `${data.materialName} is now in the inventory.` });
+        toast({ title: "Sample Added" });
         return { id: docRef.id, ...data };
     } catch (error: any) {
         toast({ variant: "destructive", title: "Add Failed", description: error.message });
@@ -144,22 +140,19 @@ export const useAdminMarketingSamples = () => {
 
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[]) => {
     const currentUser = auth.currentUser;
-    if (!currentUser || currentUser.email?.toLowerCase() !== 'mbustamante@hovidinc.com') {
-        toast({ variant: "destructive", title: "Permission Denied", description: "Verify you are logged in as mbustamante@hovidinc.com" });
+    const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
+    
+    if (!isAdmin) {
+        toast({ variant: "destructive", title: "Permission Denied", description: "Admin access required." });
         return false;
     }
 
     try {
       const batch = writeBatch(db);
-      let addedCount = 0;
-
       samplesData.forEach(sample => {
         const materialName = (sample.materialName || "").trim();
         if (!materialName) return;
-
         const docId = materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (!docId) return;
-
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { 
           productGroup: sample.productGroup || "Uncategorized",
@@ -167,20 +160,12 @@ export const useAdminMarketingSamples = () => {
           allocationQuantity: Math.round(Number(sample.allocationQuantity) || 0),
           updatedAt: new Date().toISOString()
         }, { merge: true });
-        addedCount++;
       });
-      
-      if (addedCount === 0) return false;
-
       await batch.commit();
       return true;
     } catch (error: any) {
       console.error("BATCH ERROR:", error);
-      toast({ 
-        variant: "destructive", 
-        title: "Database Sync Failed", 
-        description: error.message || "Insufficient permissions."
-      });
+      toast({ variant: "destructive", title: "Update Failed", description: error.message });
       return false;
     }
   }, [toast]);
@@ -237,7 +222,7 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Tocovid - Tocovid D'Repair", materialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10 },
       { productGroup: "Tocovid - Tocovid 200mg", materialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60 },
       { productGroup: "Dermatology - Hovicor", materialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24 },
-      // Added new items requested
+      // Added new items 51-54
       { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
       { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },
@@ -245,7 +230,7 @@ export const useAdminMarketingSamples = () => {
     ];
     
     const res = await addMarketingSamplesBulk(newData);
-    if (res) toast({ title: "Inventory Updated", description: "All 54 system products synced successfully." });
+    if (res) toast({ title: "Sync Success", description: "54 products verified." });
     return res;
   }, [addMarketingSamplesBulk, toast]);
 

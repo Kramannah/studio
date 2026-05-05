@@ -55,9 +55,9 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
 
-  // Auto-seed if completely empty
+  // Auto-seed if missing products (54 total)
   useEffect(() => {
-    if (samples.length === 0 && !loading && !readOnly) {
+    if (samples.length < 54 && !loading && !readOnly) {
         runAutoSeed().then(() => onRefresh?.());
     }
   }, [samples.length, loading, readOnly, runAutoSeed, onRefresh]);
@@ -328,7 +328,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  No materials found. {readOnly ? 'Contact admin to initialize inventory.' : 'Click "Sync System Products" to begin.'}
+                                  No materials found. {readOnly ? 'Contact admin to initialize inventory.' : 'Syncing system products...'}
                               </TableCell>
                           </TableRow>
                       )}

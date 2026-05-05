@@ -1,15 +1,15 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. MARKETING SAMPLES
-    // Public read for all authenticated users. Restricted write for Admin.
+    // 1. MARKETING SAMPLES - High Priority Overrides
     match /marketingSamples/{sampleId} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && (
-          (exists(request.auth.token.email) && request.auth.token.email.lower() == 'mbustamante@hovidinc.com') || 
-          request.auth.uid == 'SgOR5cjCC6dZ0oABv4nXdntu6pI3'
+          request.auth.uid == 'SgOR5cjCC6dZ0oABv4nXdntu6pI3' || 
+          (exists(request.auth.token.email) && request.auth.token.email.lower() == 'mbustamante@hovidinc.com')
         );
     }
 
@@ -22,7 +22,7 @@ service cloud.firestore {
       let uid = request.auth.uid;
 
       // Direct whitelist for primary admin and hovid domain
-      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.endsWith('@hovidinc.com');
+      let isAdmin = userEmail == 'mbustamante@hovidinc.com' || userEmail.endsWith('@hovidinc.com') || uid == 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
 
       // List of authorized UIDs (Managers).
       let isWhitelistedUid = uid in [

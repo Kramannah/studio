@@ -6,7 +6,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Package } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -125,9 +125,6 @@ export default function Home() {
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, [refetchMarketingSamples]);
 
-  /**
-   * Merges server-side usage with pending local usage for accurate inventory tracking.
-   */
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...usedQuantities };
     offlineEntries.forEach(entry => {
