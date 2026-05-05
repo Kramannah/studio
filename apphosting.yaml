@@ -9,3 +9,5 @@ env:
     value: "1"
   - variable: TZ
     value: "Asia/Manila"
+  - variable: NODE_OPTIONS
+    value: "--max-old-space-size=1536"

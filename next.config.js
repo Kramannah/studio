@@ -7,7 +7,7 @@ const withPWA = require('next-pwa')({
 });
 
 const nextConfig = {
-  output: 'standalone',
+  output: 'standalone', // Required for Firebase App Hosting
   typescript: {
     ignoreBuildErrors: true,
   },

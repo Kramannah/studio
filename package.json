@@ -6,8 +6,7 @@
     "dev": "next dev -p 9002",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint": "next lint"
   },
   "dependencies": {
     "@genkit-ai/google-genai": "1.27.0",
@@ -63,7 +62,6 @@
     "@types/node": "20.17.19",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "@types/xlsx": "0.0.36",
     "autoprefixer": "10.4.19",
     "postcss": "8.4.38",
     "tailwindcss": "3.4.10",
