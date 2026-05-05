@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { SignatureDialog } from "./signature-dialog"
-import type { CoverageEntry, Doctor, MarketingSample, Plan } from "@/lib/types"
+import type { CoverageEntry, Doctor, Q4Allocation, Plan } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
@@ -110,7 +110,7 @@ type CoverageFormProps = {
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   isOnline: boolean;
   doctors: Doctor[];
-  marketingSamples: MarketingSample[];
+  allocations: Q4Allocation[];
   masterEntries: CoverageEntry[];
   initialDoctor?: Doctor | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
@@ -120,31 +120,6 @@ type CoverageFormProps = {
   initialDate?: Date | null;
   usedQuantities?: Record<string, number>;
 }
-
-const productList = [
-  "Anti-Fungals - Difluvid",
-  "Anti-Fungals - Inox",
-  "Anti-Fungals - Terbivid",
-  "Antihistamine - Ricam Syrup",
-  "Antihistamine - Ricam Tablet",
-  "Anti-Viral - Hofovir",
-  "Anti-Viral - Virest Tab",
-  "CNS/Pain - Biovid Forte",
-  "CNS/Pain - Celevid",
-  "CNS/Pain - Pengesic",
-  "Dermatology - Calazin",
-  "Dermatology - Hovicor",
-  "Endocrine - Dapavid",
-  "Endocrine - Hovideuform 500",
-  "Endocrine - Hovideuform XR500",
-  "Gastro - Gascovid Double Action",
-  "Gastro - Hovizol",
-  "Tocovid - Tocovid 100mg",
-  "Tocovid - Tocovid 200mg",
-  "Tocovid - Tocovid 50mg",
-  "Tocovid - Tocovid D'Repair",
-  "Tocovid - Tocovid Vitality",
-];
 
 const jointCallRoles = [
     "DSM",
@@ -178,13 +153,12 @@ export function CoverageForm({
     onAddPlan, 
     isOnline, 
     doctors, 
-    marketingSamples, 
+    allocations, 
     masterEntries, 
     initialDoctor, 
     onFormSubmit, 
     todaysPlans, 
     offlineEntries, 
-    entryToEdit, 
     initialDate,
     usedQuantities = {}
 }: CoverageFormProps) {
@@ -248,15 +222,20 @@ export function CoverageForm({
   const reminderProducts = form.watch("reminderProducts");
   const plannedDoctorId = form.watch("plannedDoctorId");
 
+  const dynamicProductList = useMemo(() => {
+    const categories = new Set(allocations.map(a => a.prodGroupProdSubGroup));
+    return Array.from(categories).sort();
+  }, [allocations]);
+
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
-    return marketingSamples.filter(s => s.productGroup === primaryProduct);
-  }, [primaryProduct, marketingSamples]);
+    return allocations.filter(s => s.prodGroupProdSubGroup === primaryProduct);
+  }, [primaryProduct, allocations]);
 
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
-    return marketingSamples.filter(s => s.productGroup === secondaryProduct);
-  }, [secondaryProduct, marketingSamples]);
+    return allocations.filter(s => s.prodGroupProdSubGroup === secondaryProduct);
+  }, [secondaryProduct, allocations]);
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -768,7 +747,7 @@ export function CoverageForm({
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent>
-                                                          {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                                          {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                                       </SelectContent>
                                                   </Select>
                                                   <FormMessage />
@@ -786,7 +765,7 @@ export function CoverageForm({
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
                                                       <SelectContent>
-                                                          {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                                          {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                                       </SelectContent>
                                                   </Select>
                                                   <FormMessage />
@@ -807,12 +786,12 @@ export function CoverageForm({
                                                           </FormControl>
                                                           <SelectContent>
                                                               {primarySampleOptions.map(s => {
-                                                                  const used = usedQuantities[s.materialName] || 0;
+                                                                  const used = usedQuantities[s.displayMaterialName] || 0;
                                                                   const bal = s.allocationQuantity - used;
                                                                   return (
-                                                                    <SelectItem key={s.id} value={s.materialName}>
+                                                                    <SelectItem key={s.id} value={s.displayMaterialName}>
                                                                         <div className="flex justify-between w-full gap-4">
-                                                                            <span>{s.materialName}</span>
+                                                                            <span>{s.displayMaterialName}</span>
                                                                             <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
                                                                         </div>
                                                                     </SelectItem>
@@ -849,12 +828,12 @@ export function CoverageForm({
                                                           </FormControl>
                                                           <SelectContent>
                                                               {secondarySampleOptions.map(s => {
-                                                                  const used = usedQuantities[s.materialName] || 0;
+                                                                  const used = usedQuantities[s.displayMaterialName] || 0;
                                                                   const bal = s.allocationQuantity - used;
                                                                   return (
-                                                                    <SelectItem key={s.id} value={s.materialName}>
+                                                                    <SelectItem key={s.id} value={s.displayMaterialName}>
                                                                         <div className="flex justify-between w-full gap-4">
-                                                                            <span>{s.materialName}</span>
+                                                                            <span>{s.displayMaterialName}</span>
                                                                             <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
                                                                         </div>
                                                                     </SelectItem>
@@ -896,7 +875,7 @@ export function CoverageForm({
                                                         <Select onValueChange={field.onChange} value={field.value}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                {productList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                                                {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                                             </SelectContent>
                                                         </Select>
                                                         </FormItem>
@@ -911,13 +890,13 @@ export function CoverageForm({
                                                         <Select onValueChange={f.onChange} value={f.value} disabled={!reminderProducts?.[index]?.productName}>
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
-                                                                {marketingSamples.filter(s => s.productGroup === reminderProducts?.[index]?.productName).map(s => {
-                                                                    const used = usedQuantities[s.materialName] || 0;
+                                                                {allocations.filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName).map(s => {
+                                                                    const used = usedQuantities[s.displayMaterialName] || 0;
                                                                     const bal = s.allocationQuantity - used;
                                                                     return (
-                                                                        <SelectItem key={s.id} value={s.materialName}>
+                                                                        <SelectItem key={s.id} value={s.displayMaterialName}>
                                                                              <div className="flex justify-between w-full gap-2">
-                                                                                <span>{s.materialName}</span>
+                                                                                <span>{s.displayMaterialName}</span>
                                                                                 <span className="text-[10px] opacity-70">Bal: {bal}</span>
                                                                             </div>
                                                                         </SelectItem>

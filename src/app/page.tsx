@@ -5,6 +5,7 @@ import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
+import { useQ4Allocation } from '@/hooks/use-q4-allocation';
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Package2 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -60,6 +61,7 @@ export default function Home() {
   const { plans, planningRequests, addPlan, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays();
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
+  const { allocations, loading: allocationLoading } = useQ4Allocation();
   
   const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -123,7 +125,9 @@ export default function Home() {
 
   const mergedUsedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
-    offlineEntries.forEach(entry => {
+    const allEntries = [...masterEntries, ...offlineEntries];
+    
+    allEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
             const qty = Math.round(Number(entry.primaryProductQty));
             quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
@@ -140,7 +144,7 @@ export default function Home() {
         });
     });
     return quantities;
-  }, [offlineEntries]);
+  }, [masterEntries, offlineEntries]);
 
   const todaysPlans = useMemo(() => {
     return plans.filter(p => {
@@ -157,7 +161,7 @@ export default function Home() {
     if (!crmViews.includes(activeView)) setActiveView('planning');
   };
   
-  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading;
+  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || allocationLoading;
 
   const renderContent = () => {
     const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master' && activeView !== 'allocation';
@@ -165,7 +169,7 @@ export default function Home() {
 
     switch (activeView) {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} marketingSamples={[]} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
