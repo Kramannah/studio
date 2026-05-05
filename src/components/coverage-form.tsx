@@ -168,6 +168,9 @@ const SearchableSelect = ({
 }) => {
     const [open, setOpen] = useState(false);
 
+    // Find the current selected option label to display in the button
+    const selectedOption = options.find((o) => o.value === value);
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -179,7 +182,7 @@ const SearchableSelect = ({
                     disabled={disabled}
                 >
                     <span className="truncate">
-                        {value ? options.find((o) => o.value === value)?.label : placeholder}
+                        {selectedOption ? selectedOption.label : placeholder}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -193,9 +196,10 @@ const SearchableSelect = ({
                             {options.map((option) => (
                                 <CommandItem
                                     key={option.value}
-                                    value={option.value}
-                                    onSelect={(currentValue) => {
-                                        onValueChange(currentValue === value ? "" : currentValue);
+                                    value={option.label}
+                                    onSelect={() => {
+                                        // CRITICAL: We use option.value directly to avoid casing issues with cmdk's lowercased currentValue
+                                        onValueChange(option.value === value ? "" : option.value);
                                         setOpen(false);
                                     }}
                                 >
@@ -299,6 +303,7 @@ export function CoverageForm({
   const reminderProducts = form.watch("reminderProducts");
   const plannedDoctorId = form.watch("plannedDoctorId");
 
+  // Dynamic products list linked to Sample Allocation (q4Allocation collection)
   const dynamicProductList = useMemo(() => {
     const categories = new Set(
         allocations
@@ -308,6 +313,7 @@ export function CoverageForm({
     return Array.from(categories).sort().map(cat => ({ value: cat, label: cat }));
   }, [allocations]);
 
+  // Primary Sample options linked to selected group and tracking live usage
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
     return allocations
@@ -319,6 +325,7 @@ export function CoverageForm({
         });
   }, [primaryProduct, allocations, usedQuantities]);
 
+  // Secondary Sample options linked to selected group and tracking live usage
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
     return allocations
@@ -424,8 +431,8 @@ export function CoverageForm({
       coverageDate: new Date(),
       photos: [],
       signature: null,
-      jointWith: undefined,
       jointCallSignature: null,
+      jointCallWith: "",
       callObjective: "",
       primaryProduct: "",
       secondaryProduct: "",
