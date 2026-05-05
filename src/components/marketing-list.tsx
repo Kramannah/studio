@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -105,13 +106,13 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                           <Database className="w-5 h-5 text-primary" />
                           System Reset
                       </CardTitle>
-                      <CardDescription>Force load the default 54-item inventory list.</CardDescription>
+                      <CardDescription>Force load the official 50-item inventory list.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                      <p className="text-xs text-muted-foreground">Use this if the automated background updates are failing or if you want to restore the official product list.</p>
+                      <p className="text-xs text-muted-foreground">Use this to restore the specific product list provided for marketing samples.</p>
                       <Button onClick={handleReset} variant="outline" className="w-full border-2 h-11 font-headline" disabled={isResetting}>
                           {isResetting ? <RefreshCw className="mr-2 animate-spin" /> : <RefreshCw className="mr-2" />}
-                          Reset & Load 54 Items
+                          Reset & Load 50 Items
                       </Button>
                   </CardContent>
               </Card>
