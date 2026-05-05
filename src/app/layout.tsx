@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 export const metadata: Metadata = {
   title: 'SFE Offline coverage',
   description: 'A coverage logging application with offline support',
-  manifest: '/manifest.json',
 };
 
 const ptSans = PT_Sans({
