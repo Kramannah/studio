@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 
 export const useQ4Allocation = () => {
@@ -12,28 +12,30 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const snap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
-      const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
+    const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
       setAllocations(fetched);
-    } catch (error: any) {
-      console.error("Allocation fetch error:", error);
-    } finally {
       setLoading(false);
-    }
+    }, (error) => {
+      console.error("Allocation listener error:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const refetch = () => {
+      // Data is synced in real-time via onSnapshot, so we just return
+  };
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        // Create unique ID based on material name and quarter to prevent overlaps
         const baseId = item.displayMaterialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!baseId) return;
         const docId = `${quarter.toLowerCase()}_${baseId}`;
@@ -41,7 +43,6 @@ export const useQ4Allocation = () => {
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
-      await fetchData();
       return true;
     } catch (error: any) {
       console.error("Bulk Upload Error:", error);
@@ -57,7 +58,6 @@ export const useQ4Allocation = () => {
               batch.delete(docRef);
           });
           await batch.commit();
-          await fetchData();
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
       } catch (error) {
@@ -67,5 +67,5 @@ export const useQ4Allocation = () => {
       }
   };
 
-  return { allocations, loading, refetch: fetchData, addAllocationsBulk, deleteAllocationsBulk };
+  return { allocations, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };
 };

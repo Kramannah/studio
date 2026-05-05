@@ -224,33 +224,31 @@ export function CoverageForm({
   const plannedDoctorId = form.watch("plannedDoctorId");
 
   const dynamicProductList = useMemo(() => {
-    const categories = new Set(allocations.map(a => a.prodGroupProdSubGroup).filter(val => !!val && val.trim() !== ""));
+    const categories = new Set(
+        allocations
+            .map(a => a.prodGroupProdSubGroup)
+            .filter(val => !!val && val.trim() !== "")
+    );
     return Array.from(categories).sort();
   }, [allocations]);
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
-    return allocations.filter(s => s.prodGroupProdSubGroup === primaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "");
+    return allocations.filter(s => 
+        s.prodGroupProdSubGroup === primaryProduct && 
+        !!s.displayMaterialName && 
+        s.displayMaterialName.trim() !== ""
+    );
   }, [primaryProduct, allocations]);
 
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
-    return allocations.filter(s => s.prodGroupProdSubGroup === secondaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "");
+    return allocations.filter(s => 
+        s.prodGroupProdSubGroup === secondaryProduct && 
+        !!s.displayMaterialName && 
+        s.displayMaterialName.trim() !== ""
+    );
   }, [secondaryProduct, allocations]);
-
-  useEffect(() => {
-    if (!isSubmitting) {
-        form.setValue("primarySampleName", "");
-        form.setValue("primaryProductQty", 0);
-    }
-  }, [primaryProduct, form, isSubmitting]);
-
-  useEffect(() => {
-    if (!isSubmitting) {
-        form.setValue("secondarySampleName", "");
-        form.setValue("secondaryProductQty", 0);
-    }
-  }, [secondaryProduct, form, isSubmitting]);
   
   useEffect(() => {
     if (proofMethod === 'photo') {
@@ -346,7 +344,7 @@ export function CoverageForm({
       coverageDate: new Date(),
       photos: [],
       signature: null,
-      jointCallWith: undefined,
+      jointWith: undefined,
       jointCallSignature: null,
       callObjective: "",
       primaryProduct: "",
@@ -743,7 +741,14 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Primary Product</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                                  <Select 
+                                                    onValueChange={(val) => {
+                                                        field.onChange(val);
+                                                        form.setValue("primarySampleName", "");
+                                                        form.setValue("primaryProductQty", 0);
+                                                    }} 
+                                                    value={field.value || undefined}
+                                                  >
                                                       <FormControl>
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
@@ -761,7 +766,14 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                                  <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                                  <Select 
+                                                    onValueChange={(val) => {
+                                                        field.onChange(val);
+                                                        form.setValue("secondarySampleName", "");
+                                                        form.setValue("secondaryProductQty", 0);
+                                                    }} 
+                                                    value={field.value || undefined}
+                                                  >
                                                       <FormControl>
                                                           <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                                                       </FormControl>
@@ -870,10 +882,17 @@ export function CoverageForm({
                                                 <FormField
                                                     control={form.control}
                                                     name={`reminderProducts.${index}.productName`}
-                                                    render={({ field }) => (
+                                                    render={({ field: f }) => (
                                                         <FormItem className="md:col-span-2">
                                                         <FormLabel className="text-xs">Product</FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                                        <Select 
+                                                            onValueChange={(val) => {
+                                                                f.onChange(val);
+                                                                form.setValue(`reminderProducts.${index}.sampleName`, "");
+                                                                form.setValue(`reminderProducts.${index}.quantity`, 0);
+                                                            }} 
+                                                            value={f.value || undefined}
+                                                        >
                                                             <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                                                             <SelectContent>
                                                                 {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
