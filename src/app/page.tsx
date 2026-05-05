@@ -22,7 +22,6 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
-// Optimized dynamic imports
 const DynamicSkeleton = () => (
   <div className="space-y-4 w-full">
     <Skeleton className="w-1/3 h-8" />
