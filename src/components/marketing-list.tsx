@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { useState, useMemo, useEffect } from "react";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Database, AlertCircle } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, PackageCheck, FileSpreadsheet, PlusCircle, Edit2, Trash2, Database, ListPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
@@ -43,11 +43,11 @@ type MarketingListProps = {
 }
 
 export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
-  const { deleteSample, resetToSystemDefaults } = useAdminMarketingSamples();
+  const { deleteSample, populateOfficialList } = useAdminMarketingSamples();
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDialogOpen, setIsFormOpen] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
+  const [isPopulating, setIsPopulating] = useState(false);
   const [selectedSample, setSelectedSample] = useState<MarketingSample | undefined>(undefined);
   const itemsPerPage = 15;
 
@@ -86,36 +86,18 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     XLSX.writeFile(workbook, `marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const handleReset = async () => {
-      setIsResetting(true);
-      const success = await resetToSystemDefaults();
+  const handlePopulateOfficial = async () => {
+      setIsPopulating(true);
+      const success = await populateOfficialList();
       if (success && onRefresh) onRefresh();
-      setIsResetting(false);
+      setIsPopulating(false);
   }
 
   return (
     <div className="space-y-6">
       {!readOnly && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                  <AddMarketingSamples onRefresh={onRefresh} />
-              </div>
-              <Card className="border-2 border-primary/20 bg-primary/5">
-                  <CardHeader>
-                      <CardTitle className="font-headline text-lg flex items-center gap-2">
-                          <Database className="w-5 h-5 text-primary" />
-                          System Reset
-                      </CardTitle>
-                      <CardDescription>Force load the official 50-item inventory list.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                      <p className="text-xs text-muted-foreground">Use this to restore the specific product list provided for marketing samples.</p>
-                      <Button onClick={handleReset} variant="outline" className="w-full border-2 h-11 font-headline" disabled={isResetting}>
-                          {isResetting ? <RefreshCw className="mr-2 animate-spin" /> : <RefreshCw className="mr-2" />}
-                          Reset & Load 50 Items
-                      </Button>
-                  </CardContent>
-              </Card>
+          <div className="w-full">
+              <AddMarketingSamples onRefresh={onRefresh} />
           </div>
       )}
 
@@ -133,9 +115,15 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             </div>
             <div className="flex flex-wrap gap-2">
                 {!readOnly && (
-                    <Button onClick={() => { setSelectedSample(undefined); setIsFormOpen(true); }} variant="default" className="font-headline h-11">
-                        <PlusCircle className="mr-2 h-4 w-4" /> Add Single
-                    </Button>
+                    <>
+                        <Button onClick={handlePopulateOfficial} variant="outline" className="border-2 font-headline h-11" disabled={isPopulating}>
+                            {isPopulating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <ListPlus className="mr-2 h-4 w-4" />}
+                            Load Official 50 Items
+                        </Button>
+                        <Button onClick={() => { setSelectedSample(undefined); setIsFormOpen(true); }} variant="default" className="font-headline h-11">
+                            <PlusCircle className="mr-2 h-4 w-4" /> Add Single
+                        </Button>
+                    </>
                 )}
                 <Button onClick={handleExportExcel} variant="outline" className="border-2 font-headline h-11">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Data
@@ -214,9 +202,9 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                                                       <AlertDialogContent>
                                                           <AlertDialogHeader>
                                                               <AlertDialogTitle>Delete Sample?</AlertDialogTitle>
-                                                              <AlertDialogDescription>
+                                                              <AlertDialogHeader>
                                                                   Remove <strong>{sample.materialName}</strong> from the inventory?
-                                                              </AlertDialogDescription>
+                                                              </AlertDialogHeader>
                                                           </AlertDialogHeader>
                                                           <AlertDialogFooter>
                                                               <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -233,7 +221,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  No items found. Use the management tool above to upload inventory.
+                                  No items found. Use the official list button or upload inventory.
                               </TableCell>
                           </TableRow>
                       )}
