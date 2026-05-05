@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package, Package2 } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,6 +21,7 @@ import { useAllCoverageEntries } from '@/hooks/use-all-coverage-entries';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { Q4AllocationView } from '@/components/q4-allocation-view';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -299,6 +299,9 @@ export default function AdminPage() {
                     <div className="w-full overflow-x-auto pb-2 scrollbar-hide">
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                            <TabsTrigger value="q4-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                <Package2 className="h-4 w-4" /> Q4 Batch 1 Sample
+                            </TabsTrigger>
                             <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                 <Package className="h-4 w-4" /> Marketing Samples
                             </TabsTrigger>
@@ -368,6 +371,15 @@ export default function AdminPage() {
                         </Card>
 
                         {renderDistrictReportsContent()}
+                    </TabsContent>
+
+                    <TabsContent value="q4-allocation" className="mt-8">
+                        <Q4AllocationView 
+                            marketingSamples={marketingSamples} 
+                            usedQuantities={usedQuantities} 
+                            loading={marketingSamplesLoading} 
+                            onRefresh={refetchMarketingSamples}
+                        />
                     </TabsContent>
 
                     <TabsContent value="marketing-samples" className="mt-8">

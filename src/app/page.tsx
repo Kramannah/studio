@@ -5,7 +5,7 @@ import { useDoctors } from '@/hooks/use-doctors';
 import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Package2 } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -41,7 +41,7 @@ const MarketingList = dynamic(() => import('@/components/marketing-list').then(m
 const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
 const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'marketing' | 'q4-allocation';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'marketing';
 
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -164,7 +164,7 @@ export default function Home() {
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || marketingSamplesLoading;
 
   const renderContent = () => {
-    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master' && activeView !== 'q4-allocation';
+    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master';
     if (isContentLoading) return <DynamicSkeleton />;
 
     switch (activeView) {
@@ -175,7 +175,6 @@ export default function Home() {
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'marketing': return <MarketingList samples={marketingSamples} usedQuantities={mergedUsedQuantities} readOnly={true} loading={marketingSamplesLoading} onRefresh={refetchMarketingSamples} />;
-      case 'q4-allocation': return <Link href="/q4-allocation" className="text-primary font-bold">Redirecting to Q4 Allocation Page...</Link>;
       default: return null;
     }
   }
@@ -225,13 +224,6 @@ export default function Home() {
                        <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('marketing')} isActive={activeView === 'marketing'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
-                      <SidebarMenuSubItem>
-                        <Link href="/q4-allocation" className="w-full">
-                          <SidebarMenuSubButton isActive={activeView === 'q4-allocation'}>
-                            <Package2 className="w-3.5 h-3.5 mr-2" /> Q4 Allocation
-                          </SidebarMenuSubButton>
-                        </Link>
-                      </SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
