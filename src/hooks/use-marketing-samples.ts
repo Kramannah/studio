@@ -93,7 +93,9 @@ export const useAdminMarketingSamples = () => {
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     try {
         const currentUser = auth.currentUser;
-        const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
+        const normalizedEmail = currentUser?.email?.toLowerCase() || '';
+        const isAdmin = normalizedEmail === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
+        
         if (!isAdmin) throw new Error("Administrative permission required.");
 
         const docRef = await addDoc(collection(db, "marketingSamples"), {
@@ -135,7 +137,8 @@ export const useAdminMarketingSamples = () => {
 
   const addMarketingSamplesBulk = useCallback(async (samplesData: Omit<MarketingSample, 'id'>[], isSilent = false) => {
     const currentUser = auth.currentUser;
-    const isAdmin = currentUser?.email?.toLowerCase() === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
+    const normalizedEmail = currentUser?.email?.toLowerCase() || '';
+    const isAdmin = normalizedEmail === 'mbustamante@hovidinc.com' || currentUser?.uid === 'SgOR5cjCC6dZ0oABv4nXdntu6pI3';
     
     if (!isAdmin) {
         if (!isSilent) toast({ variant: "destructive", title: "Permission Denied", description: "Admin access required." });
@@ -217,7 +220,6 @@ export const useAdminMarketingSamples = () => {
       { productGroup: "Tocovid - Tocovid D'Repair", materialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10 },
       { productGroup: "Tocovid - Tocovid 200mg", materialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60 },
       { productGroup: "Dermatology - Hovicor", materialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24 },
-      // New 4 items
       { productGroup: "Antihistamine - Ricam Syrup", materialName: "PQ3_Frutos Candy", allocationQuantity: 180 },
       { productGroup: "Antihistamine - Ricam Tablet", materialName: "PQ3_Pistachio with Ricam Sticker", allocationQuantity: 675 },
       { productGroup: "Anti-Fungals - Inox", materialName: "PQ3_Inox Penlight", allocationQuantity: 180 },

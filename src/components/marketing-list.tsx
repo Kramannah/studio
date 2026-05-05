@@ -51,12 +51,14 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const [showImport, setShowImport] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedSample, setSelectedSample] = useState<MarketingSample | undefined>(undefined);
+  const hasAttemptedSeed = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 15;
 
-  // Auto-seed if missing products (Target total: 54)
+  // Auto-seed if missing products (Target total: 54) - Controlled by ref to prevent loop
   useEffect(() => {
-    if (!loading && !readOnly && samples.length < 54) {
+    if (!loading && !readOnly && samples.length < 54 && !hasAttemptedSeed.current) {
+        hasAttemptedSeed.current = true;
         runAutoSeed().then((success) => {
             if (success && onRefresh) onRefresh();
         });
@@ -122,7 +124,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
         const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
         if (json.length < 2) {
-          toast({ variant: "destructive", title: "Empty File", description: "Your file contains no data rows." });
+          toast({ variant: "destructive", title: "Empty File", description: "The Excel file is empty or has no data rows." });
           setIsUploading(false);
           return;
         }
@@ -179,6 +181,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
       setIsFormOpen(true);
   }
 
+  const handleAddClick = () => {
+    setSelectedSample(undefined);
+    setIsFormOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <Card className="shadow-lg border-2">
@@ -198,10 +205,13 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                     <>
                         <Button onClick={handleSyncSystemProducts} variant="secondary" className="border-2 font-headline h-11" disabled={isUploading}>
                            {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
-                           Sync 54 Products
+                           Sync System Data
                         </Button>
                         <Button onClick={() => setShowImport(!showImport)} variant="outline" className="border-2 font-headline h-11">
                             <Upload className="mr-2 h-4 w-4" /> Bulk Import
+                        </Button>
+                         <Button onClick={handleAddClick} variant="default" className="font-headline h-11">
+                            <PlusCircle className="mr-2 h-4 w-4" /> Add Single
                         </Button>
                     </>
                 )}
@@ -318,7 +328,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                       ) : (
                           <TableRow>
                               <TableCell colSpan={readOnly ? 4 : 5} className="h-48 text-center text-muted-foreground italic text-lg">
-                                  No materials found. Syncing system database...
+                                  {loading ? "Searching..." : "No items in database. Tap 'Sync System Data' to initialize."}
                               </TableCell>
                           </TableRow>
                       )}
