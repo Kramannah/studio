@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter } from "date-fns"
-import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2 } from "lucide-react"
+import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
@@ -39,6 +39,7 @@ import { ScrollArea } from "./ui/scroll-area"
 import { Calendar } from "./ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 import { Badge } from "./ui/badge"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command"
 
 
 const formSchema = z.object({
@@ -147,6 +148,81 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
+/**
+ * Reusable Searchable Select Component for Products and Samples
+ */
+const SearchableSelect = ({ 
+    options, 
+    value, 
+    onValueChange, 
+    placeholder, 
+    disabled,
+    showBalance = false
+}: { 
+    options: { value: string, label: string, balance?: number }[], 
+    value?: string, 
+    onValueChange: (val: string) => void, 
+    placeholder?: string,
+    disabled?: boolean,
+    showBalance?: boolean
+}) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className={cn("w-full justify-between font-normal text-left h-auto min-h-[40px] py-2", !value && "text-muted-foreground")}
+                    disabled={disabled}
+                >
+                    <span className="truncate">
+                        {value ? options.find((o) => o.value === value)?.label : placeholder}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder={`Search ${placeholder?.toLowerCase()}...`} />
+                    <CommandList>
+                        <CommandEmpty>No results found.</CommandEmpty>
+                        <CommandGroup>
+                            {options.map((option) => (
+                                <CommandItem
+                                    key={option.value}
+                                    value={option.value}
+                                    onSelect={(currentValue) => {
+                                        onValueChange(currentValue === value ? "" : currentValue);
+                                        setOpen(false);
+                                    }}
+                                >
+                                    <Check
+                                        className={cn(
+                                            "mr-2 h-4 w-4 shrink-0",
+                                            value === option.value ? "opacity-100" : "opacity-0"
+                                        )}
+                                    />
+                                    <div className="flex justify-between w-full items-center gap-2">
+                                        <span className="truncate">{option.label}</span>
+                                        {showBalance && option.balance !== undefined && (
+                                            <Badge variant={option.balance <= 0 ? "destructive" : "outline"} className="text-[10px] shrink-0">
+                                                Bal: {option.balance}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+};
+
 export function CoverageForm({ 
     onSave, 
     onUpdate, 
@@ -229,26 +305,30 @@ export function CoverageForm({
             .map(a => a.prodGroupProdSubGroup)
             .filter(val => !!val && val.trim() !== "")
     );
-    return Array.from(categories).sort();
+    return Array.from(categories).sort().map(cat => ({ value: cat, label: cat }));
   }, [allocations]);
 
   const primarySampleOptions = useMemo(() => {
     if (!primaryProduct) return [];
-    return allocations.filter(s => 
-        s.prodGroupProdSubGroup === primaryProduct && 
-        !!s.displayMaterialName && 
-        s.displayMaterialName.trim() !== ""
-    );
-  }, [primaryProduct, allocations]);
+    return allocations
+        .filter(s => s.prodGroupProdSubGroup === primaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
+        .map(s => {
+            const used = usedQuantities[s.displayMaterialName] || 0;
+            const balance = (s.allocationQuantity || 0) - used;
+            return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
+        });
+  }, [primaryProduct, allocations, usedQuantities]);
 
   const secondarySampleOptions = useMemo(() => {
     if (!secondaryProduct) return [];
-    return allocations.filter(s => 
-        s.prodGroupProdSubGroup === secondaryProduct && 
-        !!s.displayMaterialName && 
-        s.displayMaterialName.trim() !== ""
-    );
-  }, [secondaryProduct, allocations]);
+    return allocations
+        .filter(s => s.prodGroupProdSubGroup === secondaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
+        .map(s => {
+            const used = usedQuantities[s.displayMaterialName] || 0;
+            const balance = (s.allocationQuantity || 0) - used;
+            return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
+        });
+  }, [secondaryProduct, allocations, usedQuantities]);
   
   useEffect(() => {
     if (proofMethod === 'photo') {
@@ -741,21 +821,18 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Primary Product</FormLabel>
-                                                  <Select 
-                                                    onValueChange={(val) => {
-                                                        field.onChange(val);
-                                                        form.setValue("primarySampleName", "");
-                                                        form.setValue("primaryProductQty", 0);
-                                                    }} 
-                                                    value={field.value || undefined}
-                                                  >
-                                                      <FormControl>
-                                                          <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                                      </FormControl>
-                                                      <SelectContent>
-                                                          {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
+                                                  <FormControl>
+                                                      <SearchableSelect 
+                                                        options={dynamicProductList} 
+                                                        value={field.value} 
+                                                        onValueChange={(val) => {
+                                                            field.onChange(val);
+                                                            form.setValue("primarySampleName", "");
+                                                            form.setValue("primaryProductQty", 0);
+                                                        }}
+                                                        placeholder="Search product..."
+                                                      />
+                                                  </FormControl>
                                                   <FormMessage />
                                                   </FormItem>
                                               )}
@@ -766,21 +843,18 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                   <FormLabel className="font-headline">Secondary Product</FormLabel>
-                                                  <Select 
-                                                    onValueChange={(val) => {
-                                                        field.onChange(val);
-                                                        form.setValue("secondarySampleName", "");
-                                                        form.setValue("secondaryProductQty", 0);
-                                                    }} 
-                                                    value={field.value || undefined}
-                                                  >
-                                                      <FormControl>
-                                                          <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                                      </FormControl>
-                                                      <SelectContent>
-                                                          {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                                      </SelectContent>
-                                                  </Select>
+                                                  <FormControl>
+                                                       <SearchableSelect 
+                                                        options={dynamicProductList} 
+                                                        value={field.value} 
+                                                        onValueChange={(val) => {
+                                                            field.onChange(val);
+                                                            form.setValue("secondarySampleName", "");
+                                                            form.setValue("secondaryProductQty", 0);
+                                                        }}
+                                                        placeholder="Search product..."
+                                                      />
+                                                  </FormControl>
                                                   <FormMessage />
                                                   </FormItem>
                                               )}
@@ -793,25 +867,16 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                       <FormLabel className="font-headline">Primary Samples</FormLabel>
-                                                      <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!primaryProduct}>
-                                                          <FormControl>
-                                                              <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
-                                                          </FormControl>
-                                                          <SelectContent>
-                                                              {primarySampleOptions.map(s => {
-                                                                  const used = usedQuantities[s.displayMaterialName] || 0;
-                                                                  const bal = s.allocationQuantity - used;
-                                                                  return (
-                                                                    <SelectItem key={s.id} value={s.displayMaterialName}>
-                                                                        <div className="flex justify-between w-full gap-4">
-                                                                            <span>{s.displayMaterialName}</span>
-                                                                            <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                  )
-                                                              })}
-                                                          </SelectContent>
-                                                      </Select>
+                                                      <FormControl>
+                                                          <SearchableSelect 
+                                                            options={primarySampleOptions} 
+                                                            value={field.value} 
+                                                            onValueChange={field.onChange} 
+                                                            placeholder="Search sample..."
+                                                            disabled={!primaryProduct}
+                                                            showBalance={true}
+                                                          />
+                                                      </FormControl>
                                                       <FormMessage />
                                                   </FormItem>
                                               )}
@@ -835,25 +900,16 @@ export function CoverageForm({
                                               render={({ field }) => (
                                                   <FormItem>
                                                       <FormLabel className="font-headline">Secondary Samples</FormLabel>
-                                                      <Select onValueChange={field.onChange} value={field.value || undefined} disabled={!secondaryProduct}>
-                                                          <FormControl>
-                                                              <SelectTrigger><SelectValue placeholder="Select sample..." /></SelectTrigger>
-                                                          </FormControl>
-                                                          <SelectContent>
-                                                              {secondarySampleOptions.map(s => {
-                                                                  const used = usedQuantities[s.displayMaterialName] || 0;
-                                                                  const bal = s.allocationQuantity - used;
-                                                                  return (
-                                                                    <SelectItem key={s.id} value={s.displayMaterialName}>
-                                                                        <div className="flex justify-between w-full gap-4">
-                                                                            <span>{s.displayMaterialName}</span>
-                                                                            <Badge variant={bal <= 0 ? "destructive" : "outline"} className="text-[10px] ml-auto">Bal: {bal}</Badge>
-                                                                        </div>
-                                                                    </SelectItem>
-                                                                  )
-                                                              })}
-                                                          </SelectContent>
-                                                      </Select>
+                                                      <FormControl>
+                                                          <SearchableSelect 
+                                                            options={secondarySampleOptions} 
+                                                            value={field.value} 
+                                                            onValueChange={field.onChange} 
+                                                            placeholder="Search sample..."
+                                                            disabled={!secondaryProduct}
+                                                            showBalance={true}
+                                                          />
+                                                      </FormControl>
                                                       <FormMessage />
                                                   </FormItem>
                                               )}
@@ -885,19 +941,18 @@ export function CoverageForm({
                                                     render={({ field: f }) => (
                                                         <FormItem className="md:col-span-2">
                                                         <FormLabel className="text-xs">Product</FormLabel>
-                                                        <Select 
-                                                            onValueChange={(val) => {
-                                                                f.onChange(val);
-                                                                form.setValue(`reminderProducts.${index}.sampleName`, "");
-                                                                form.setValue(`reminderProducts.${index}.quantity`, 0);
-                                                            }} 
-                                                            value={f.value || undefined}
-                                                        >
-                                                            <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                                                            <SelectContent>
-                                                                {dynamicProductList.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <FormControl>
+                                                            <SearchableSelect 
+                                                                options={dynamicProductList} 
+                                                                value={f.value} 
+                                                                onValueChange={(val) => {
+                                                                    f.onChange(val);
+                                                                    form.setValue(`reminderProducts.${index}.sampleName`, "");
+                                                                    form.setValue(`reminderProducts.${index}.quantity`, 0);
+                                                                }}
+                                                                placeholder="Search..."
+                                                            />
+                                                        </FormControl>
                                                         </FormItem>
                                                     )}
                                                 />
@@ -907,23 +962,23 @@ export function CoverageForm({
                                                     render={({ field: f }) => (
                                                         <FormItem className="md:col-span-2">
                                                         <FormLabel className="text-xs">Sample</FormLabel>
-                                                        <Select onValueChange={f.onChange} value={f.value || undefined} disabled={!reminderProducts?.[index]?.productName}>
-                                                            <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
-                                                            <SelectContent>
-                                                                {allocations.filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName && !!s.displayMaterialName && s.displayMaterialName.trim() !== "").map(s => {
-                                                                    const used = usedQuantities[s.displayMaterialName] || 0;
-                                                                    const bal = s.allocationQuantity - used;
-                                                                    return (
-                                                                        <SelectItem key={s.id} value={s.displayMaterialName}>
-                                                                             <div className="flex justify-between w-full gap-2">
-                                                                                <span>{s.displayMaterialName}</span>
-                                                                                <span className="text-[10px] opacity-70">Bal: {bal}</span>
-                                                                            </div>
-                                                                        </SelectItem>
-                                                                    )
-                                                                })}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <FormControl>
+                                                            <SearchableSelect 
+                                                                options={allocations
+                                                                    .filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
+                                                                    .map(s => {
+                                                                        const used = usedQuantities[s.displayMaterialName] || 0;
+                                                                        const balance = (s.allocationQuantity || 0) - used;
+                                                                        return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
+                                                                    })
+                                                                } 
+                                                                value={f.value} 
+                                                                onValueChange={f.onChange} 
+                                                                placeholder="Search..."
+                                                                disabled={!reminderProducts?.[index]?.productName}
+                                                                showBalance={true}
+                                                            />
+                                                        </FormControl>
                                                         </FormItem>
                                                     )}
                                                 />
