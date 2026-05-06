@@ -1,20 +1,15 @@
+'use client';
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+/**
+ * Consolidated Firebase Initialization
+ * This file uses the shared initialization logic from @/firebase/index.ts
+ * to ensure that all hooks and providers use the same singleton instance.
+ */
+import { initializeFirebase } from "@/firebase";
 
-const firebaseConfig = {
-  projectId: "hovidcoverage",
-  appId: "1:321369261510:web:9c4b76565d68b8c9875ec7",
-  storageBucket: "hovidcoverage.appspot.com",
-  apiKey: "AIzaSyCqtWu5SXQmQllqN61DM80uquFa0K06QCE",
-  authDomain: "hovidcoverage.firebaseapp.com",
-  messagingSenderId: "321369261510",
-};
+// Initialize services once and export the singleton instances
+const services = initializeFirebase();
 
-// Initialize Firebase
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-export { db, auth, app };
+export const app = services.firebaseApp;
+export const db = services.firestore;
+export const auth = services.auth;
