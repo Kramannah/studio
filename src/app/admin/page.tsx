@@ -27,9 +27,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 
 const DynamicSkeleton = () => (
-    <div className="flex items-center justify-center mt-10 w-full">
-        <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-        <p className="ml-4 font-headline">Loading Module...</p>
+    <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
+        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+        <p className="ml-4 font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Accessing Firestore Records...</p>
     </div>
 );
 
@@ -43,7 +43,6 @@ export default function AdminPage() {
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
     const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string } | null>(null);
 
@@ -71,6 +70,7 @@ export default function AdminPage() {
         updatePlanningRequestStatus,
         loading: dataLoading,
         loadingSummary,
+        loadingIndividual,
         fetchUserData,
         fetchTeamSummary,
         deleteEntry,
@@ -174,9 +174,9 @@ export default function AdminPage() {
 
     if (authLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-background">
-                <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                <p className="ml-4 font-headline">Loading Dashboard...</p>
+            <div className="flex items-center justify-center min-h-screen bg-background text-primary">
+                <RefreshCw className="w-12 h-12 animate-spin" />
+                <p className="ml-4 font-headline font-bold">Initializing Dashboard...</p>
             </div>
         );
     }
@@ -247,7 +247,9 @@ export default function AdminPage() {
                         </Card>
                         
                         {selectedUserId ? (
+                            loadingIndividual ? <DynamicSkeleton /> : (
                              <UserDashboard 
+                                key={selectedUserId}
                                 userId={selectedUserId}
                                 allEntries={individualEntries}
                                 allDoctors={individualDoctors}
@@ -263,13 +265,14 @@ export default function AdminPage() {
                                 onUpdateDoctor={updateDoctor}
                                 onDeleteDoctor={deleteDoctor}
                             />
+                            )
                         ) : selectedManagerId ? (
                             <TeamSummary data={teamSummaryData} loading={loadingSummary} />
                         ) : (
-                            <Alert className="border-2">
-                                <AlertCircle className="w-4 h-4 text-primary" />
-                                <AlertTitle className="font-headline">Technical Oversight</AlertTitle>
-                                <AlertDescription>Please select a District Manager to view team performance analytics or select a specific PMR for individual masterlists.</AlertDescription>
+                            <Alert className="border-2 py-12 flex flex-col items-center text-center">
+                                <AlertCircle className="w-10 h-10 text-primary mb-4" />
+                                <AlertTitle className="font-headline text-xl">Territory Oversight Required</AlertTitle>
+                                <AlertDescription className="text-lg">Please select a District Manager to view team performance analytics or select a specific PMR for individual masterlists.</AlertDescription>
                             </Alert>
                         )}
                     </TabsContent>

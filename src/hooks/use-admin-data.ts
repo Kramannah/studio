@@ -48,6 +48,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [loadingIndividual, setLoadingIndividual] = useState(false);
   
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -55,7 +56,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
-  // Combined hardcoded and dynamic managed user IDs
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
     const hardcoded = MANAGER_TEAMS[mgrId] || [];
@@ -158,7 +158,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
         };
 
-        const [chunkResults, marketingSamplesSnap] = await Promise.all([
+        const [chunkResults, q4Snap] = await Promise.all([
             Promise.all(chunks.map(fetchDataForChunk)),
             getDocs(query(collection(db, "q4Allocation")))
         ]);
@@ -180,7 +180,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         setTeamSummaryData({
             ...combined,
-            marketingSamples: marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample),
+            marketingSamples: [],
             usedQuantities: used
         });
 
@@ -194,7 +194,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (userId: string) => {
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
-    setLoading(true);
+    
+    // Clear previous PMR states to ensure the UI doesn't flicker with old data
+    setAllEntries([]);
+    setAllDoctors([]);
+    setAllPlans([]);
+    setAllTimeLogs([]);
+    setAllNonCallDaysIndividual([]);
+    setIndividualPlanningRequests([]);
+    setIndividualUsedQuantities({});
+    
+    setLoadingIndividual(true);
     
     try {
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
@@ -251,7 +261,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         console.error("Individual PMR Data Fetch Error:", err);
         toast({ variant: 'destructive', title: "Fetch Error", description: "Could not retrieve full PMR records." });
     } finally {
-        setLoading(false);
+        setLoadingIndividual(false);
     }
   }, [toast]);
 
@@ -322,7 +332,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     deleteDoc(docRef)
       .then(() => {
         setAllDoctors(prev => prev.filter(d => d.id !== id));
-        toast({ variant: 'destructive', title: "Doctor Deleted" });
+        toast({ variant: "destructive", title: "Doctor Deleted" });
       })
       .catch(async () => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
@@ -342,6 +352,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     teamSummaryData,
     loading,
     loadingSummary,
+    loadingIndividual,
     fetchUserData,
     fetchTeamSummary,
     updateNonCallDayStatus, 
