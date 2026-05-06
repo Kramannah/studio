@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -15,7 +16,7 @@ interface UserDashboardProps {
     allPlans: Plan[];
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
-    allMarketingSamples: MarketingSample[];
+    individualPlanningRequests?: PlanningPermissionRequest[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
@@ -34,6 +35,7 @@ export function UserDashboard({
     allPlans, 
     allNonCallDays, 
     allTimeLogs, 
+    individualPlanningRequests = [],
     onDeleteEntry = () => {},
     isAdminView = false,
     userMap,
@@ -78,11 +80,12 @@ export function UserDashboard({
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans}
-                    planningRequests={[]} // Logic for team planning requests can be extended if needed
+                    planningRequests={individualPlanningRequests}
                     onRequestUnlock={async () => false}
                     entries={allEntries}
                     offlineEntries={[]}
                     onAddPlan={() => {}} 
+                    onAddPlansBulk={async () => false}
                     onRemovePlan={() => {}} 
                     onLogCall={() => {}}
                     nonCallDays={allNonCallDays}

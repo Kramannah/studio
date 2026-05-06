@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -11,6 +11,7 @@ import { useToast } from "./use-toast";
 import { getQueryStartDateISO } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { parseISO, isValid } from "date-fns";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -22,16 +23,38 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
+/**
+ * Utility to safely convert any date field (Timestamp or string) to an ISO string
+ * for reliable lexicographical comparison.
+ */
+const safeToDateISO = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (val instanceof Timestamp) return val.toDate().toISOString();
+    if (val instanceof Date) return val.toISOString();
+    if (typeof val.toDate === 'function') return val.toDate().toISOString();
+    return String(val);
+};
+
 export function useAdminData(managerId?: string) {
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Individual User State (for drill-down)
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
   const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
   const [allPlans, setAllPlans] = useState<Plan[]>([]);
   const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
+  const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
+  const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
+
+  // Team-Wide Approvals State
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
+  
+  // Team Summary State
   const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
+  
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
   
@@ -60,59 +83,36 @@ export function useAdminData(managerId?: string) {
     setLoading(true);
     try {
         const fetchCollection = async (collName: string, userIds: string[] | null) => {
-            if (userIds !== null && userIds.length === 0) {
-                return [];
-            }
+            if (userIds !== null && userIds.length === 0) return [];
             
-            let allDocsData: any[] = [];
-
+            let queryRef;
             if (userIds === null) { 
-                const q = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
-                const snapshot = await getDocs(q);
-                allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                queryRef = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
             } else { 
+                // Note: Firestore 'in' queries are limited to 30 items
                 const chunks: string[][] = [];
                 for (let i = 0; i < userIds.length; i += 30) {
                     chunks.push(userIds.slice(i, i + 30));
                 }
-
-                const promises = chunks.map(chunk => {
-                    const q = query(collection(db, collName), where("userId", "in", chunk));
-                    return getDocs(q);
-                });
-
-                const snapshots = await Promise.all(promises);
-                allDocsData = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                const snapshots = await Promise.all(chunks.map(chunk => 
+                    getDocs(query(collection(db, collName), where("userId", "in", chunk)))
+                ));
+                return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
-            return allDocsData;
-        }
+            const snapshot = await getDocs(queryRef);
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        };
       
-      const [nonCallDaysRes, planningRequestsRes] = await Promise.all([
+      const [ncdRes, prRes] = await Promise.all([
           fetchCollection("nonCallDays", userFilter),
           fetchCollection("planningRequests", userFilter)
       ]);
       
-      const sortedNonCallDays = (nonCallDaysRes as NonCallDay[]).sort((a, b) => {
-          const dateA = a.date ? new Date(a.date).getTime() : 0;
-          const dateB = b.date ? new Date(b.date).getTime() : 0;
-          return dateB - dateA;
-      });
-
-      const sortedPlanningRequests = (planningRequestsRes as PlanningPermissionRequest[]).sort((a, b) => {
-          const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
-          const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
-          return dateB - dateA;
-      });
-      
-      setAllNonCallDays(sortedNonCallDays);
-      setAllPlanningRequests(sortedPlanningRequests);
+      setAllNonCallDays((ncdRes as NonCallDay[]).sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
+      setAllPlanningRequests((prRes as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
 
     } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: 'approvals',
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Fetch Approvals Error:", serverError);
     } finally {
       setLoading(false);
     }
@@ -123,15 +123,11 @@ export function useAdminData(managerId?: string) {
   }, [fetchTeamApprovals]);
 
   const fetchTeamSummary = useCallback(async (forceAllWeek = false) => {
-      if (!managerId || !db) {
-          setTeamSummaryData(null);
-          return;
-      }
+      if (!managerId || !db) return;
       
       const userFilter = MANAGER_TEAMS[managerId] || [];
       if (userFilter.length === 0) {
           setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
-          setLoadingSummary(false);
           return;
       }
 
@@ -144,138 +140,81 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            try {
-                const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
-                const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
-                const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-                const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
-                const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
+            const snaps = await Promise.all([
+                getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk))),
+                getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk))),
+                getDocs(query(collection(db, "doctors"), where("userId", "in", chunk))),
+                getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk))),
+                getDocs(query(collection(db, "plans"), where("userId", "in", chunk))),
+            ]);
 
-                const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
-                    entriesPromise,
-                    timeLogsPromise,
-                    doctorsPromise,
-                    nonCallDaysPromise,
-                    plansPromise,
-                ]);
-
-                return {
-                    entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => (e.submittedAt || '') >= startDate),
-                    timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => (t.timeIn || t.timeIn) >= startDate),
-                    doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                    nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => (n.date || '') >= startDate),
-                    plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => (p.plannedDate || '') >= startDate),
-                };
-            } catch (err) {
-                console.error("Chunk fetch error", err);
-                return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
-            }
+            return {
+                entries: snaps[0].docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate),
+                timeLogs: snaps[1].docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate),
+                doctors: snaps[2].docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
+                nonCallDays: snaps[3].docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate),
+                plans: snaps[4].docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate),
+            };
         };
-
-        const marketingSamplesPromise = getDocs(query(collection(db, "marketingSamples")));
 
         const [chunkResults, marketingSamplesSnap] = await Promise.all([
             Promise.all(chunks.map(fetchDataForChunk)),
-            marketingSamplesPromise,
+            getDocs(query(collection(db, "marketingSamples")))
         ]);
         
-        const combinedData: Omit<TeamSummaryData, 'marketingSamples' | 'usedQuantities'> = chunkResults.reduce((acc, current) => {
-            acc.entries.push(...current.entries);
-            acc.timeLogs.push(...current.timeLogs);
-            acc.doctors.push(...current.doctors);
-            acc.nonCallDays.push(...current.nonCallDays);
-            acc.plans.push(...current.plans);
-            return acc;
-        }, { entries: [] as CoverageEntry[], timeLogs: [] as TimeLog[], doctors: [] as Doctor[], nonCallDays: [] as NonCallDay[], plans: [] as Plan[] });
+        const combined = chunkResults.reduce((acc, curr) => ({
+            entries: [...acc.entries, ...curr.entries],
+            timeLogs: [...acc.timeLogs, ...curr.timeLogs],
+            doctors: [...acc.doctors, ...curr.doctors],
+            nonCallDays: [...acc.nonCallDays, ...curr.nonCallDays],
+            plans: [...acc.plans, ...curr.plans],
+        }), { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] } as any);
 
-        const marketingSamples = marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample);
-        
-        const usedQuantities: Record<string, number> = {};
-        combinedData.entries.forEach(entry => {
-            if (entry.primarySampleName && entry.primaryProductQty) {
-                const qty = Math.round(Number(entry.primaryProductQty));
-                usedQuantities[entry.primarySampleName] = (usedQuantities[entry.primarySampleName] || 0) + qty;
-            }
-            if (entry.secondarySampleName && entry.secondaryProductQty) {
-                const qty = Math.round(Number(entry.secondaryProductQty));
-                usedQuantities[entry.secondarySampleName] = (usedQuantities[entry.secondarySampleName] || 0) + qty;
-            }
-            if (entry.reminderProducts) {
-                entry.reminderProducts.forEach(prod => {
-                    if (prod.sampleName && prod.quantity) {
-                        const qty = Math.round(Number(prod.quantity));
-                        usedQuantities[prod.sampleName] = (usedQuantities[prod.sampleName] || 0) + qty;
-                    }
-                });
-            }
+        const used: Record<string, number> = {};
+        combined.entries.forEach((e: CoverageEntry) => {
+            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
+            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
+            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity); });
         });
 
         setTeamSummaryData({
-            ...combinedData,
-            marketingSamples,
-            usedQuantities
+            ...combined,
+            marketingSamples: marketingSamplesSnap.docs.map(d => ({id: d.id, ...d.data()}) as MarketingSample),
+            usedQuantities: used
         });
 
-      } catch (serverError: any) {
-          const permissionError = new FirestorePermissionError({
-            path: 'teamSummary',
-            operation: 'list',
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
+      } catch (err) {
+          console.error("Team Summary Error:", err);
       } finally {
         setLoadingSummary(false);
       }
-  }, [managerId, toast]);
+  }, [managerId]);
   
   const fetchUserData = useCallback(async (userId: string, forceAllWeek = false) => {
-    if (!userId || !db) {
-        setAllEntries([]);
-        setAllDoctors([]);
-        setAllPlans([]);
-        setAllTimeLogs([]);
-        return;
-    }
+    if (!userId || !db) return;
     setLoading(true);
     try {
         const startDate = getQueryStartDateISO(forceAllWeek);
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
-        const [entriesSnap, doctorsSnap, plansSnap, timeLogsSnap, nonCallDaysSnap] = await Promise.all([
+        const snaps = await Promise.all([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
             getDocs(q("plans")),
             getDocs(q("timeLogs")),
             getDocs(q("nonCallDays")),
+            getDocs(q("planningRequests")),
         ]);
         
-        const entries = entriesSnap.docs
-            .map(d => ({id: d.id, ...d.data()}) as CoverageEntry)
-            .filter(e => (e.submittedAt || '') >= startDate);
-            
-        const plans = plansSnap.docs
-            .map(d => ({id: d.id, ...d.data()}) as Plan)
-            .filter(p => (p.plannedDate || '') >= startDate);
+        setAllEntries(snaps[0].docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate));
+        setAllDoctors(snaps[1].docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
+        setAllPlans(snaps[2].docs.map(d => ({id: d.id, ...d.data()}) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate));
+        setAllTimeLogs(snaps[3].docs.map(d => ({id: d.id, ...d.data()}) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate));
+        setAllNonCallDaysIndividual(snaps[4].docs.map(d => ({id: d.id, ...d.data()}) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate));
+        setIndividualPlanningRequests(snaps[5].docs.map(d => ({id: d.id, ...d.data()}) as PlanningPermissionRequest));
 
-        const timeLogs = timeLogsSnap.docs
-            .map(d => ({id: d.id, ...d.data()}) as TimeLog)
-            .filter(t => (t.timeIn || '') >= startDate);
-
-        const nonCallDays = nonCallDaysSnap.docs
-            .map(d => ({id: d.id, ...d.data()}) as NonCallDay)
-            .filter(n => (n.date || '') >= startDate);
-        
-        setAllEntries(entries);
-        setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
-        setAllPlans(plans);
-        setAllTimeLogs(timeLogs);
-        setAllNonCallDays(nonCallDays);
-
-    } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: 'userData',
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+    } catch (err) {
+        console.error("User Drill-down Error:", err);
     } finally {
         setLoading(false);
     }
@@ -283,183 +222,87 @@ export function useAdminData(managerId?: string) {
 
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
-      if (!db) return;
-      const docRef = doc(db, 'nonCallDays', id);
+      const docRef = doc(db!, 'nonCallDays', id);
       updateDoc(docRef, { status })
         .then(() => {
             setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
-            toast({ title: 'Success', description: `Request has been ${status}.`});
+            toast({ title: 'Success', description: `Request ${status}.`});
         })
-        .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-              path: docRef.path,
-              operation: 'update',
-              requestResourceData: { status },
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+        .catch(async (e) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: { status } }));
         });
   };
   
   const updatePlanningRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
-      if (!db) return;
-      const docRef = doc(db, 'planningRequests', id);
+      const docRef = doc(db!, 'planningRequests', id);
       updateDoc(docRef, { status })
         .then(() => {
             setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
-            toast({ title: 'Success', description: `Request has been ${status}.` });
+            toast({ title: 'Success', description: `Request ${status}.` });
         })
-        .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-              path: docRef.path,
-              operation: 'update',
-              requestResourceData: { status },
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+        .catch(async (e) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: { status } }));
         });
   };
 
   const deleteEntry = async (id: string) => {
-    if (!db) return;
-    const docRef = doc(db, "coverageEntries", id);
+    const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
         setAllEntries(prev => prev.filter(e => e.id !== id));
-        if (teamSummaryData) {
-            setTeamSummaryData(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : null);
-        }
-        toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage report has been removed.` });
+        if (teamSummaryData) setTeamSummaryData(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : null);
+        toast({ variant: 'destructive', title: "Entry Deleted" });
       })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      .catch(async () => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
       });
   };
   
-  const addDoctor = async (doctorData: Omit<Doctor, 'id'>) => {
-    if (!db) return;
-    const colRef = collection(db, "doctors");
-    addDoc(colRef, doctorData)
-      .then((docRef) => {
-        const newDoctor = { id: docRef.id, ...doctorData } as Doctor;
-        if (teamSummaryData) {
-            setTeamSummaryData(prev => prev ? ({ ...prev, doctors: [...prev.doctors, newDoctor] }) : null);
-        }
-        setAllDoctors(prev => [...prev, newDoctor]);
-        toast({ title: "Doctor Added", description: `${doctorData.firstName} ${doctorData.lastName} has been added.` });
+  const addDoctor = async (data: Omit<Doctor, 'id'>) => {
+    const colRef = collection(db!, "doctors");
+    addDoc(colRef, data)
+      .then((dr) => {
+        const newDoc = { id: dr.id, ...data } as Doctor;
+        setAllDoctors(prev => [...prev, newDoc]);
+        toast({ title: "Doctor Added" });
       })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'create',
-          requestResourceData: doctorData,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      .catch(async () => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: colRef.path, operation: 'create', requestResourceData: data }));
       });
   };
 
-  const updateDoctor = async (doctorData: Doctor) => {
-    if (!db) return;
-    const { id, userId, ...dataToUpdate } = doctorData;
-    const docRef = doc(db, "doctors", id);
-    updateDoc(docRef, dataToUpdate)
+  const updateDoctor = async (data: Doctor) => {
+    const { id, userId, ...update } = data;
+    const docRef = doc(db!, "doctors", id);
+    updateDoc(docRef, update)
       .then(() => {
-        if (teamSummaryData) {
-            setTeamSummaryData(prev => {
-                if (!prev) return null;
-                const newDoctors = prev.doctors.map(d => d.id === id ? doctorData : d);
-                return { ...prev, doctors: newDoctors };
-            });
-        }
-        setAllDoctors(prev => prev.map(d => d.id === id ? doctorData : d));
-        toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
+        setAllDoctors(prev => prev.map(d => d.id === id ? data : d));
+        toast({ title: "Doctor Updated" });
       })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'update',
-          requestResourceData: dataToUpdate,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      .catch(async () => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: update }));
       });
   };
   
   const deleteDoctor = async (id: string) => {
-    if (!db) return;
-    const docRef = doc(db, "doctors", id);
+    const docRef = doc(db!, "doctors", id);
     deleteDoc(docRef)
       .then(() => {
-        if (teamSummaryData) {
-          setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => d.id !== id)}) : null);
-        }
         setAllDoctors(prev => prev.filter(d => d.id !== id));
         toast({ variant: 'destructive', title: "Doctor Deleted" });
       })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      .catch(async () => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
       });
   };
-  
-  const deleteDoctorsBulk = async (ids: string[]) => {
-    if (ids.length === 0 || !db) return;
-    const batch = writeBatch(db);
-    ids.forEach(id => {
-      batch.delete(doc(db, "doctors", id));
-    });
-
-    batch.commit()
-      .then(() => {
-        if (teamSummaryData) {
-          setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => !ids.includes(d.id))}) : null);
-        }
-        setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
-        toast({ variant: 'destructive', title: "Doctors Deleted", description: `${ids.length} doctor(s) have been removed.` });
-      })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: 'doctors',
-          operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-      });
-  };
-
-  const addDoctorsBulk = async (doctorsData: Omit<Doctor, 'id'>[]) => {
-    if (!db) return;
-    const chunkSize = 500;
-    try {
-        for (let i = 0; i < doctorsData.length; i += chunkSize) {
-            const chunk = doctorsData.slice(i, i + chunkSize);
-            const batch = writeBatch(db);
-            chunk.forEach(doctor => {
-                const docRef = doc(collection(db, "doctors"));
-                batch.set(docRef, doctor);
-            });
-            await batch.commit();
-        }
-        await fetchTeamSummary();
-        toast({ title: 'Bulk Add Successful', description: `${doctorsData.length} doctors processed.` });
-    } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: 'doctors',
-          operation: 'write',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-    }
-  };
-
 
   return { 
     allEntries,
     allDoctors,
     allPlans,
     allTimeLogs,
+    allNonCallDaysIndividual,
+    individualPlanningRequests,
     allNonCallDays, 
     allPlanningRequests,
     teamSummaryData,
@@ -473,7 +316,17 @@ export function useAdminData(managerId?: string) {
     addDoctor,
     updateDoctor,
     deleteDoctor,
-    deleteDoctorsBulk,
-    addDoctorsBulk,
+    deleteDoctorsBulk: async (ids: string[]) => {
+        const batch = writeBatch(db!);
+        ids.forEach(id => batch.delete(doc(db!, "doctors", id)));
+        await batch.commit();
+        setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
+    },
+    addDoctorsBulk: async (data: Omit<Doctor, 'id'>[]) => {
+        const batch = writeBatch(db!);
+        data.forEach(d => batch.set(doc(collection(db!, "doctors")), d));
+        await batch.commit();
+        await fetchTeamSummary();
+    },
   };
 }
