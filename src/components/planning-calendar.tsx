@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -40,6 +41,7 @@ type PlanningCalendarProps = {
   entries: CoverageEntry[];
   offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
+  onAddPlansBulk?: (doctors: Doctor[], plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor, plannedDate: Date) => void;
   nonCallDays: NonCallDay[];
@@ -124,6 +126,7 @@ export function PlanningCalendar({
     entries, 
     offlineEntries = [],
     onAddPlan, 
+    onAddPlansBulk,
     onRemovePlan, 
     onLogCall, 
     nonCallDays, 
@@ -143,12 +146,17 @@ export function PlanningCalendar({
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
-    useEffect(() => {
-        if (!isAddPlanDialogOpen) {
-            setSelectedDoctorIdsForPlan([]);
-            setDoctorFilter("");
+    // Handle dialog closure reset in a separate cleanup to avoid thread locking
+    const handleAddPlanDialogChange = (open: boolean) => {
+        setIsAddPlanDialogOpen(open);
+        if (!open) {
+            // Small delay to allow the modal closure animation to finish before heavy state cleanup
+            setTimeout(() => {
+                setSelectedDoctorIdsForPlan([]);
+                setDoctorFilter("");
+            }, 150);
         }
-    }, [isAddPlanDialogOpen]);
+    };
 
     const isLocked = useMemo(() => {
         if (!selectedDate) return false;
@@ -296,13 +304,21 @@ export function PlanningCalendar({
     const handleAddSelectedPlans = useCallback(() => {
         if (selectedDate && selectedDoctorIdsForPlan.length > 0) {
             const doctorMap = new Map(doctors.map(d => [d.id, d]));
-            selectedDoctorIdsForPlan.forEach(id => {
-                const doctor = doctorMap.get(id);
-                if (doctor) onAddPlan(doctor, selectedDate);
-            });
+            const selectedDoctors = selectedDoctorIdsForPlan
+                .map(id => doctorMap.get(id))
+                .filter((d): d is Doctor => !!d);
+
+            if (onAddPlansBulk) {
+                onAddPlansBulk(selectedDoctors, selectedDate);
+            } else {
+                // Fallback if hook isn't updated yet
+                selectedDoctors.forEach(doctor => {
+                    onAddPlan(doctor, selectedDate);
+                });
+            }
             setIsAddPlanDialogOpen(false);
         }
-    }, [selectedDate, selectedDoctorIdsForPlan, doctors, onAddPlan]);
+    }, [selectedDate, selectedDoctorIdsForPlan, doctors, onAddPlan, onAddPlansBulk]);
     
     const handleToggleDoctorSelection = useCallback((id: string) => {
         setSelectedDoctorIdsForPlan(prev => 
@@ -552,7 +568,7 @@ export function PlanningCalendar({
                 </div>
             </div>
 
-            <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
+            <Dialog open={isAddPlanDialogOpen} onOpenChange={handleAddPlanDialogChange}>
                 <DialogContent className="max-w-xl w-[95vw] h-[90dvh] md:h-auto md:max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden">
                     <DialogHeader className="p-6 pb-2 shrink-0">
                         <div className="flex justify-between items-start">
