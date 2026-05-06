@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
-import { isValid, parseISO } from 'date-fns';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -43,8 +45,6 @@ export const useOfflineSync = (userId?: string) => {
     }
     try {
       const startDate = getQueryStartDateISO();
-      
-      // Removed the range filter from the query to avoid needing a composite index
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId)
@@ -55,17 +55,19 @@ export const useOfflineSync = (userId?: string) => {
       
       querySnapshot.forEach(doc => {
         const data = doc.data() as CoverageEntry;
-        // Perform filtering in-memory
         if (data.submittedAt && data.submittedAt >= startDate) {
             entries.push({ id: doc.id, ...data });
         }
       });
       
       entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
-      
       setMasterEntries(entries);
-    } catch (error) {
-      console.error("Error fetching master entries:", error);
+    } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: 'coverageEntries',
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
         setLoading(false);
     }
@@ -104,16 +106,22 @@ export const useOfflineSync = (userId?: string) => {
     };
 
     if (isOnline) {
-        try {
-            await setDoc(doc(db, "coverageEntries", entryId), newEntryPayload);
+        const docRef = doc(db, "coverageEntries", entryId);
+        setDoc(docRef, newEntryPayload)
+          .then(() => {
             setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
             toast({ title: "Entry Saved", description: "Report saved to server." });
-            return true;
-        } catch (error) {
-            console.error("Error saving online", error);
+          })
+          .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'create',
+                requestResourceData: newEntryPayload,
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
             saveEntryOffline(newEntryPayload);
-            return false;
-        }
+          });
+        return true;
     } else {
         saveEntryOffline(newEntryPayload);
         return false;
@@ -142,16 +150,22 @@ export const useOfflineSync = (userId?: string) => {
         batch.set(docRef, { ...dataToSync, submittedAt: new Date().toISOString() });
     }
 
-    try {
-        await batch.commit();
+    batch.commit()
+      .then(async () => {
         updateOfflineInStorage([]);
         await fetchMasterEntries();
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
-    } catch (error) {
-        console.error("Sync failed", error);
-    } finally {
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: 'coverageEntries',
+          operation: 'create',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
         setIsSyncing(false);
-    }
+      });
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
 
   useEffect(() => {
@@ -160,31 +174,48 @@ export const useOfflineSync = (userId?: string) => {
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);
 
+  const deleteMasterEntry = async (id: string) => {
+    if (!db) return;
+    const docRef = doc(db, "coverageEntries", id);
+    deleteDoc(docRef)
+      .then(() => {
+        setMasterEntries(prev => prev.filter(e => e.id !== id));
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const updateMasterEntry = async (e: any) => {
+    if (!db) return;
+    const docRef = doc(db, "coverageEntries", e.id);
+    updateDoc(docRef, e)
+      .then(() => {
+        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: e,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
   return { 
     offlineEntries, 
     masterEntries, 
     saveEntry, 
-    deleteMasterEntry: async (id: string) => {
-        if (!db) return;
-        try {
-            await deleteDoc(doc(db, "coverageEntries", id));
-            setMasterEntries(prev => prev.filter(e => e.id !== id));
-        } catch (error) {
-            console.error("Delete from server failed", error);
-        }
-    }, 
+    deleteMasterEntry, 
     isSyncing, 
     syncAllOfflineEntries, 
     isOnline, 
-    updateMasterEntry: async (e: any) => {
-        if (!db) return;
-        try {
-            await updateDoc(doc(db, "coverageEntries", e.id), e);
-            setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));
-        } catch (error) {
-            console.error("Update server entry failed", error);
-        }
-    }, 
+    updateMasterEntry, 
     updateOfflineEntry: (e: any) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
         updateOfflineInStorage(updated);

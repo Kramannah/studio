@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -7,6 +8,8 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -41,7 +44,6 @@ export const usePlans = () => {
       try {
         const startDate = getQueryStartDateISO();
         
-        // Simplified query to avoid index requirement
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid)
@@ -57,14 +59,12 @@ export const usePlans = () => {
         const allPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
           const data = doc.data() as Plan;
-          // In-memory date filtering
           if (data.plannedDate && data.plannedDate >= startDate) {
               allPlans.push({ id: doc.id, ...data });
           }
         });
 
         allPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
-
         setMasterPlans(allPlans);
         
         const fetchedRequests: PlanningPermissionRequest[] = [];
@@ -73,8 +73,12 @@ export const usePlans = () => {
         });
         setPlanningRequests(fetchedRequests);
 
-      } catch (error: any) {
-        console.error("Error fetching plan data:", error);
+      } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: 'plans',
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       }
     }
     
@@ -101,14 +105,62 @@ export const usePlans = () => {
       callType: 'planned' as const,
     };
     
-    try {
-      const docRef = await addDoc(collection(db, "plans"), newPlanData);
-      setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
-      toast({ title: "Visit Scheduled" });
-    } catch (error) {
-      setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);
-    }
+    const colRef = collection(db, "plans");
+    addDoc(colRef, newPlanData)
+      .then((docRef) => {
+        setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
+        toast({ title: "Visit Scheduled" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'create',
+          requestResourceData: newPlanData,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);
+      });
   }, [user, toast]);
+
+  const removePlan = async (id: string) => {
+    if (!db) return;
+    const docRef = doc(db, "plans", id);
+    deleteDoc(docRef)
+      .then(() => {
+        setMasterPlans(prev => prev.filter(p => p.id !== id));
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const requestPlanningPermission = async (week: Date, reason: string) => {
+    if (!db) return false;
+    const newRequest = {
+        userId: user?.uid,
+        weekStartDate: week.toISOString(),
+        reason,
+        status: 'pending',
+        requestedAt: new Date().toISOString()
+    };
+    const colRef = collection(db, 'planningRequests');
+    try {
+        await addDoc(colRef, newRequest);
+        return true;
+    } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'create',
+          requestResourceData: newRequest,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        return false;
+    }
+  };
 
   const syncAllOfflinePlans = useCallback(async () => {
     if (!isOnline || !user || !db || offlinePlans.length === 0) return;
@@ -118,14 +170,19 @@ export const usePlans = () => {
         batch.set(doc(collection(db, 'plans')), dataToSync);
     });
     
-    try {
-      await batch.commit();
-      localStorage.setItem(getOfflineKey(), JSON.stringify([]));
-      setOfflinePlans([]);
-      await fetchData();
-    } catch (error) {
-      console.error("Failed to sync plans", error);
-    }
+    batch.commit()
+      .then(async () => {
+        localStorage.setItem(getOfflineKey(), JSON.stringify([]));
+        setOfflinePlans([]);
+        await fetchData();
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: 'plans',
+          operation: 'create',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
   }, [isOnline, user, offlinePlans, fetchData, getOfflineKey]);
 
   const allPlans = useMemo(() => [...masterPlans, ...offlinePlans], [masterPlans, offlinePlans]);
@@ -134,31 +191,8 @@ export const usePlans = () => {
       plans: allPlans, 
       planningRequests,
       addPlan, 
-      removePlan: async (id: string) => {
-          if (!db) return;
-          try {
-              await deleteDoc(doc(db, "plans", id));
-              setMasterPlans(prev => prev.filter(p => p.id !== id));
-          } catch (error) {
-              console.error("Error removing plan", error);
-          }
-      }, 
-      requestPlanningPermission: async (week: Date, reason: string) => {
-          if (!db) return false;
-          try {
-              await addDoc(collection(db, 'planningRequests'), {
-                  userId: user?.uid,
-                  weekStartDate: week.toISOString(),
-                  reason,
-                  status: 'pending',
-                  requestedAt: new Date().toISOString()
-              });
-              return true;
-          } catch (error) {
-              console.error("Error requesting permission", error);
-              return false;
-          }
-      },
+      removePlan, 
+      requestPlanningPermission,
       loading, 
       syncAllOfflinePlans: offlinePlans.length > 0 ? syncAllOfflinePlans : undefined,
       fetchData

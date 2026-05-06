@@ -1,10 +1,14 @@
+
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
 import { useToast } from './use-toast';
+import { useAuth } from './use-auth';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -60,6 +64,7 @@ export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
 ];
 
 export const useQ4Allocation = () => {
+  const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(
     OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
@@ -68,10 +73,11 @@ export const useQ4Allocation = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || !user) return;
     
     setLoading(true);
-    const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
+    const colRef = collection(db, "q4Allocation");
+    const q = query(colRef, orderBy("displayMaterialName", "asc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
@@ -81,18 +87,23 @@ export const useQ4Allocation = () => {
           setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
       }
       setLoading(false);
-    }, (error) => {
-      console.error("Allocation listen error:", error);
-      setLoading(false);
+    }, async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || !user) return;
     
-    const unsubscribe = onSnapshot(collection(db, "coverageEntries"), (snapshot) => {
+    const colRef = collection(db, "coverageEntries");
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
       const usage: Record<string, number> = {};
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
@@ -109,10 +120,16 @@ export const useQ4Allocation = () => {
         });
       });
       setUsedQuantities(usage);
+    }, async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const refetch = () => {};
 
@@ -129,24 +146,32 @@ export const useQ4Allocation = () => {
       });
       await batch.commit();
       return true;
-    } catch (err) {
-      console.error("Bulk add failed", err);
-      return false;
+    } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+            path: 'q4Allocation',
+            operation: 'write',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        return false;
     }
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+          batch.delete(doc(db, "q4Allocation", id));
+      });
       try {
-          const batch = writeBatch(db);
-          ids.forEach(id => {
-              batch.delete(doc(db, "q4Allocation", id));
-          });
           await batch.commit();
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
-      } catch (err) {
-          toast({ variant: "destructive", title: "Delete Failed" });
+      } catch (serverError: any) {
+          const permissionError = new FirestorePermissionError({
+            path: 'q4Allocation',
+            operation: 'delete',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
           return false;
       }
   };
