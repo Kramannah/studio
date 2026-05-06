@@ -91,27 +91,30 @@ export function PlanningCalendar({
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
-    const isLocked = useMemo(() => {
-        if (!selectedDate) return false;
-        if (isCurrentWeek(selectedDate)) return false;
-        if (!isPastWeek(selectedDate)) return false;
-
-        const monday = getWeekMonday(selectedDate);
-        const hasApproval = planningRequests.some(req => 
-            req.status === 'approved' && 
-            isSameDay(parseISO(req.weekStartDate), monday)
+    const approvedWeekMondays = useMemo(() => {
+        return new Set(
+            planningRequests
+                .filter(r => r.status === 'approved')
+                .map(r => format(parseISO(r.weekStartDate), 'yyyy-MM-dd'))
         );
-        
-        return !hasApproval;
-    }, [selectedDate, planningRequests]);
+    }, [planningRequests]);
+
+    const isLocked = useMemo(() => {
+        if (!selectedDate || isCurrentWeek(selectedDate) || !isPastWeek(selectedDate)) return false;
+        const mondayStr = format(getWeekMonday(selectedDate), 'yyyy-MM-dd');
+        return !approvedWeekMondays.has(mondayStr);
+    }, [selectedDate, approvedWeekMondays]);
 
     const visitCountsThisMonth = useMemo(() => {
         const counts: Record<string, number> = {};
         allEntries.forEach(e => {
-            const date = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-            if (date && isValid(date) && isThisMonth(date)) {
-                const nameKey = `${e.firstName} ${e.lastName}`.toLowerCase();
-                counts[nameKey] = (counts[nameKey] || 0) + 1;
+            const dateStr = e.submittedAt;
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date) && isThisMonth(date)) {
+                    const nameKey = `${e.firstName} ${e.lastName}`.toLowerCase();
+                    counts[nameKey] = (counts[nameKey] || 0) + 1;
+                }
             }
         });
         return counts;
@@ -149,14 +152,21 @@ export function PlanningCalendar({
         return plansByDate[dateStr] || [];
     }, [plansByDate, selectedDate]);
 
+    const selectedDayPlannedIds = useMemo(() => {
+        return new Set(selectedDayPlans.map(p => p.doctorId));
+    }, [selectedDayPlans]);
+
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
         allEntries.forEach(e => {
-            const date = typeof e.coverageDate === 'string' ? parseISO(e.coverageDate) : e.coverageDate;
-            if (isValid(date)) {
-                const dateStr = format(date, 'yyyy-MM-dd');
-                if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateStr].push(e);
+            const dateStr = e.coverageDate;
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date)) {
+                    const groupStr = format(date, 'yyyy-MM-dd');
+                    if (!groups[groupStr]) groups[groupStr] = [];
+                    groups[groupStr].push(e);
+                }
             }
         });
         return groups;
@@ -198,14 +208,18 @@ export function PlanningCalendar({
     }, [nonCallDaysByDate]);
 
     const filteredDoctors = useMemo(() => {
-        if (!doctorFilter) return doctors;
-        const q = doctorFilter.toLowerCase();
-        return doctors.filter(d => 
-            `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
-            (d.province && d.province.toLowerCase().includes(q)) ||
-            (d.municipality && d.municipality.toLowerCase().includes(q)) ||
-            (d.specialty && d.specialty.toLowerCase().includes(q))
-        );
+        let list = doctors;
+        if (doctorFilter) {
+            const q = doctorFilter.toLowerCase();
+            list = list.filter(d => 
+                `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+                (d.province && d.province.toLowerCase().includes(q)) ||
+                (d.municipality && d.municipality.toLowerCase().includes(q)) ||
+                (d.specialty && d.specialty.toLowerCase().includes(q))
+            );
+        }
+        // Slice to 100 items to prevent modal rendering freeze
+        return list.slice(0, 100);
     }, [doctors, doctorFilter]);
 
     const handleAddPlan = (doctor: Doctor) => {
@@ -483,7 +497,7 @@ export function PlanningCalendar({
                                     filteredDoctors.map(doctor => {
                                         const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
                                         const count = visitCountsThisMonth[nameKey] || 0;
-                                        const isAlreadyPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+                                        const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
 
                                         return (
                                             <div 
