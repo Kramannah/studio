@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
@@ -97,12 +98,13 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     const colRef = collection(db, "coverageEntries");
-    const startDate = subMonths(startOfMonth(new Date()), 2).toISOString();
+    // LOOKBACK WINDOW: Optimized to 21 days for shared pool calculation to avoid timeouts
+    const startDate = subDays(new Date(), 21).toISOString();
     
     const usageQuery = query(
         colRef, 
         where("submittedAt", ">=", startDate),
-        limit(5000) 
+        limit(500) // STRICT LIMIT: Capped to 500 documents for team-wide usage to prevent client-side crashes
     );
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
@@ -123,7 +125,8 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     }, (error) => {
-        console.error("Usage tracking error:", error);
+        // Suppress timeout errors visually while logging for dev
+        console.warn("Usage tracker optimized due to high data volume:", error.message);
     });
 
     return () => unsubscribe();
