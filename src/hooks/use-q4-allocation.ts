@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, writeBatch, doc, orderBy, where, limit, getDocs } from 'firebase/firestore';
@@ -71,14 +71,14 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
+  const fetchAllocations = useCallback(() => {
     if (!db || !user) return;
     
     setLoading(true);
     const colRef = collection(db, "q4Allocation");
     const q = query(colRef, orderBy("displayMaterialName", "asc"));
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    return onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
         setAllocations(fetched);
@@ -90,25 +90,25 @@ export const useQ4Allocation = () => {
         console.error("Allocation fetch error:", error);
         setLoading(false);
     });
-
-    return () => unsubscribe();
   }, [user]);
 
-  useEffect(() => {
+  const fetchUsage = useCallback(async () => {
     if (!db || !user) return;
     
-    const colRef = collection(db, "coverageEntries");
-    // LOOKBACK WINDOW: Optimized to 21 days for shared pool calculation to avoid timeouts
-    const startDate = subDays(new Date(), 21).toISOString();
-    
-    const usageQuery = query(
-        colRef, 
-        where("submittedAt", ">=", startDate),
-        limit(500) // STRICT LIMIT: Capped to 500 documents for team-wide usage to prevent client-side crashes
-    );
+    try {
+      const colRef = collection(db, "coverageEntries");
+      // QUOTA OPTIMIZATION: Reduced lookback window to 14 days and switched to getDocs (one-time fetch)
+      const startDate = subDays(new Date(), 14).toISOString();
+      
+      const usageQuery = query(
+          colRef, 
+          where("submittedAt", ">=", startDate),
+          limit(300) // STRICT LIMIT: Capped to 300 docs for team-wide usage
+      );
 
-    const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
+      const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
+      
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
         if (entry.primarySampleName && entry.primaryProductQty) {
@@ -124,15 +124,22 @@ export const useQ4Allocation = () => {
         });
       });
       setUsedQuantities(usage);
-    }, (error) => {
-        // Suppress timeout errors visually while logging for dev
-        console.warn("Usage tracker optimized due to high data volume:", error.message);
-    });
-
-    return () => unsubscribe();
+    } catch (error: any) {
+        console.warn("Usage tracker paused to save quota:", error.message);
+    }
   }, [user]);
 
-  const refetch = () => {};
+  useEffect(() => {
+    const unsubscribe = fetchAllocations();
+    fetchUsage();
+    return () => {
+        if (unsubscribe) unsubscribe();
+    };
+  }, [fetchAllocations, fetchUsage]);
+
+  const refetch = useCallback(async () => {
+      await fetchUsage();
+  }, [fetchUsage]);
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
     if (!db) return false;
