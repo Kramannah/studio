@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2 } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,6 +17,8 @@ import { USER_DATA_MAP } from '@/lib/user-data';
 import { Badge } from '@/components/ui/badge';
 import { managers } from '@/lib/managers';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
@@ -39,6 +41,7 @@ export default function AdminPage() {
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
+    const [accountSearch, setAccountSearch] = useState('');
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
@@ -99,6 +102,42 @@ export default function AdminPage() {
         const pendingPR = teamPlanningRequests.filter(req => req.status === 'pending').length;
         return pendingNCD + pendingPR;
     }, [teamNonCallDays, teamPlanningRequests]);
+
+    const allAccounts = useMemo(() => {
+        const all = Object.entries(USER_DATA_MAP).map(([uid, data]) => {
+            const isAdmin = ADMIN_UIDS.includes(uid);
+            const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
+            let role = 'PMR';
+            if (isAdmin) role = 'Admin';
+            else if (isManager) role = 'Manager';
+
+            let district = 'N/A';
+            if (role === 'PMR') {
+                const managerUid = Object.keys(MANAGER_TEAMS).find(mUid => MANAGER_TEAMS[mUid].includes(uid));
+                if (managerUid) {
+                    const mData = USER_DATA_MAP[managerUid];
+                    district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
+                }
+            } else if (role === 'Manager') {
+                district = 'District Sales Manager';
+            } else if (role === 'Admin') {
+                district = 'National / HQ';
+            }
+
+            return { uid, ...data, role, district };
+        });
+
+        if (!accountSearch.trim()) return all.sort((a, b) => a.code.localeCompare(b.code));
+
+        const q = accountSearch.toLowerCase();
+        return all.filter(a => 
+            a.code.toLowerCase().includes(q) || 
+            a.firstName.toLowerCase().includes(q) || 
+            a.lastName.toLowerCase().includes(q) ||
+            a.role.toLowerCase().includes(q) ||
+            a.district.toLowerCase().includes(q)
+        ).sort((a, b) => a.code.localeCompare(b.code));
+    }, [accountSearch]);
 
     useEffect(() => {
         if (!authLoading && !hasAdminAccess) router.push('/');
@@ -236,6 +275,7 @@ export default function AdminPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8">
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                        <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
                         <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2"><Package2 className="h-4 w-4" /> Sample Allocation</TabsTrigger>
                         <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
                             <Bell className="mr-2 h-4 w-4"/>
@@ -281,6 +321,86 @@ export default function AdminPage() {
                             </CardHeader>
                         </Card>
                         {renderDistrictReportsContent()}
+                    </TabsContent>
+
+                    <TabsContent value="accounts">
+                         <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
+                            <CardHeader className="bg-muted/30 border-b pb-6">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
+                                            <UserCog className="text-primary" /> User Accounts Directory
+                                        </CardTitle>
+                                        <CardDescription>Master list of all PMRs, Managers, and Administrators.</CardDescription>
+                                    </div>
+                                    <div className="relative max-w-md w-full">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                        <Input 
+                                            placeholder="Search by name, code, or role..." 
+                                            className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                            value={accountSearch}
+                                            onChange={(e) => setAccountSearch(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-muted/20">
+                                            <TableRow className="h-12 hover:bg-transparent">
+                                                <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
+                                                <TableHead className="font-bold text-foreground">Employee Name</TableHead>
+                                                <TableHead className="font-bold text-foreground">System Role</TableHead>
+                                                <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
+                                                <TableHead className="font-bold text-foreground pr-6">System UID</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {allAccounts.length > 0 ? (
+                                                allAccounts.map((acc) => (
+                                                    <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
+                                                        <TableCell className="pl-6">
+                                                            <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
+                                                                {acc.code}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="font-bold text-sm">
+                                                            {acc.lastName}, {acc.firstName}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge 
+                                                                variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}
+                                                                className="px-3"
+                                                            >
+                                                                {acc.role}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm font-medium text-muted-foreground">
+                                                            {acc.district}
+                                                        </TableCell>
+                                                        <TableCell className="pr-6">
+                                                            <code className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all">
+                                                                {acc.uid}
+                                                            </code>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="h-64 text-center">
+                                                        <div className="flex flex-col items-center justify-center opacity-30">
+                                                            <Search className="w-16 h-16 mb-2" />
+                                                            <p className="font-headline font-bold uppercase tracking-widest">No matching accounts found</p>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </TabsContent>
 
                     <TabsContent value="sample-allocation">
