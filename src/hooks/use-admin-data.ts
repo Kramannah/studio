@@ -199,6 +199,7 @@ export function useAdminData(managerId?: string) {
   
   const fetchUserData = useCallback(async (userId: string) => {
     if (!userId || !db) return;
+    const sanitizedUserId = userId.trim();
     setLoading(true);
     
     // Clear individual state to prevent stale data visibility
@@ -211,7 +212,7 @@ export function useAdminData(managerId?: string) {
     setIndividualUsedQuantities({});
 
     try {
-        const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId.trim()));
+        const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
         
         // Use Promise.allSettled to ensure failure in one collection doesn't block the rest
         // Removing deep history restrictions to match account view
