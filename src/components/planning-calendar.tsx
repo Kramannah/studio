@@ -453,7 +453,7 @@ export function PlanningCalendar({
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
                 <DialogContent className="w-[94vw] max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background border-2 shadow-2xl">
-                    <DialogHeader className="p-4 border-b shrink-0 bg-muted/20">
+                    <DialogHeader className="p-4 shrink-0 bg-muted/20">
                         <DialogTitle className="text-lg font-headline font-black">Plan Visits: {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
                         <DialogDescription className="text-sm">Select doctors from your masterlist to bulk schedule visits.</DialogDescription>
                     </DialogHeader>
@@ -542,7 +542,7 @@ export function PlanningCalendar({
                         </div>
                     </div>
 
-                    <DialogFooter className="p-4 border-t bg-muted/20 gap-3 flex-row justify-end shrink-0">
+                    <DialogFooter className="p-4 bg-muted/20 gap-3 flex-row justify-end shrink-0">
                         <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-10 px-6 font-bold border-2 text-sm">Close</Button>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[160px] font-headline text-base font-black h-10 shadow-lg transition-all active:scale-95 bg-primary text-primary-foreground hover:bg-primary/90">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
