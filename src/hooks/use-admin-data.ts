@@ -144,26 +144,31 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
-            const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
+            try {
+                const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
+                const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
+                const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
+                const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
+                const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
 
-            const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
-                entriesPromise,
-                timeLogsPromise,
-                doctorsPromise,
-                nonCallDaysPromise,
-                plansPromise,
-            ]);
+                const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
+                    entriesPromise,
+                    timeLogsPromise,
+                    doctorsPromise,
+                    nonCallDaysPromise,
+                    plansPromise,
+                ]);
 
-            return {
-                entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => e.submittedAt >= startDate),
-                timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => t.timeIn >= startDate),
-                doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => n.date >= startDate),
-                plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => p.plannedDate >= startDate),
+                return {
+                    entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => (e.submittedAt || '') >= startDate),
+                    timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => (t.timeIn || t.timeIn) >= startDate),
+                    doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
+                    nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => (n.date || '') >= startDate),
+                    plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => (p.plannedDate || '') >= startDate),
+                };
+            } catch (err) {
+                console.error("Chunk fetch error", err);
+                return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
             }
         };
 
@@ -235,27 +240,35 @@ export function useAdminData(managerId?: string) {
         const startDate = getQueryStartDateISO(forceAllWeek);
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
-        const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
+        const [entriesSnap, doctorsSnap, plansSnap, timeLogsSnap, nonCallDaysSnap] = await Promise.all([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
             getDocs(q("plans")),
+            getDocs(q("timeLogs")),
+            getDocs(q("nonCallDays")),
         ]);
         
         const entries = entriesSnap.docs
             .map(d => ({id: d.id, ...d.data()}) as CoverageEntry)
-            .filter(e => e.submittedAt >= startDate);
+            .filter(e => (e.submittedAt || '') >= startDate);
             
         const plans = plansSnap.docs
             .map(d => ({id: d.id, ...d.data()}) as Plan)
-            .filter(p => p.plannedDate >= startDate);
+            .filter(p => (p.plannedDate || '') >= startDate);
+
+        const timeLogs = timeLogsSnap.docs
+            .map(d => ({id: d.id, ...d.data()}) as TimeLog)
+            .filter(t => (t.timeIn || '') >= startDate);
+
+        const nonCallDays = nonCallDaysSnap.docs
+            .map(d => ({id: d.id, ...d.data()}) as NonCallDay)
+            .filter(n => (n.date || '') >= startDate);
         
         setAllEntries(entries);
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
         setAllPlans(plans);
-        
-        if (teamSummaryData?.timeLogs) {
-            setAllTimeLogs(teamSummaryData.timeLogs.filter(log => log.userId === userId));
-        }
+        setAllTimeLogs(timeLogs);
+        setAllNonCallDays(nonCallDays);
 
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
@@ -266,7 +279,7 @@ export function useAdminData(managerId?: string) {
     } finally {
         setLoading(false);
     }
-  }, [teamSummaryData]);
+  }, []);
 
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
@@ -326,7 +339,7 @@ export function useAdminData(managerId?: string) {
   };
   
   const addDoctor = async (doctorData: Omit<Doctor, 'id'>) => {
-    if (!managerId || !db) return;
+    if (!db) return;
     const colRef = collection(db, "doctors");
     addDoc(colRef, doctorData)
       .then((docRef) => {
@@ -349,7 +362,7 @@ export function useAdminData(managerId?: string) {
 
   const updateDoctor = async (doctorData: Doctor) => {
     if (!db) return;
-    const { id, ...dataToUpdate } = doctorData;
+    const { id, userId, ...dataToUpdate } = doctorData;
     const docRef = doc(db, "doctors", id);
     updateDoc(docRef, dataToUpdate)
       .then(() => {

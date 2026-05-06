@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -109,7 +110,7 @@ export default function AdminPage() {
             doctors: teamDoctors || [],
             plans: allPlans || [],
             nonCallDays: (allNonCallDays || []).filter(ncd => ncd.userId === selectedUserId),
-            timeLogs: teamTimeLogs || [],
+            timeLogs: (teamTimeLogs || []).filter(log => log.userId === selectedUserId),
         }
     }, [selectedUserId, teamEntries, teamDoctors, allPlans, allNonCallDays, teamTimeLogs]);
 
