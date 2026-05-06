@@ -36,10 +36,10 @@ export function useUserProfiles() {
         fetchProfiles();
     }, [fetchProfiles]);
 
-    const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string) => {
+    const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string, email?: string) => {
         if (!db) return false;
         
-        const docId = userId; // Use UID as doc ID for simplicity
+        const docId = userId; 
         const docRef = doc(db, "userProfiles", docId);
         const payload: any = {
             userId,
@@ -50,6 +50,9 @@ export function useUserProfiles() {
         
         if (managerId) {
             payload.managerId = managerId;
+        }
+        if (email) {
+            payload.email = email;
         }
 
         try {

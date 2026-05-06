@@ -6,9 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2, Fingerprint } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2, Fingerprint, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
-import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -25,6 +24,8 @@ import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { useUserProfiles } from '@/hooks/use-user-profiles';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { getDocs, collection, query, limit } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -47,8 +48,9 @@ export default function AdminPage() {
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
+    const [discoveredUids, setDiscoveredUids] = useState<string[]>([]);
     
-    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string, managerId?: string} | null>(null);
+    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string, managerId?: string, email?: string} | null>(null);
     const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     const isUserAdmin = useMemo(() => {
@@ -65,6 +67,29 @@ export default function AdminPage() {
             setSelectedManagerId(user.uid);
         }
     }, [isUserManager, user, selectedManagerId]);
+
+    // GLOBAL ACCOUNT DISCOVERY: Scans data collections for UIDs that aren't in the static map
+    useEffect(() => {
+        if (hasAdminAccess && db) {
+            const scanForActiveUsers = async () => {
+                try {
+                    // Scan a sample of recent coverage entries to find active UIDs
+                    const snap = await getDocs(query(collection(db, "coverageEntries"), limit(500)));
+                    const uids = new Set<string>();
+                    snap.docs.forEach(doc => uids.add(doc.data().userId));
+                    
+                    // Also scan plans
+                    const planSnap = await getDocs(query(collection(db, "plans"), limit(200)));
+                    planSnap.docs.forEach(doc => uids.add(doc.data().userId));
+
+                    setDiscoveredUids(Array.from(uids));
+                } catch (e) {
+                    console.warn("Account discovery scan limited:", e);
+                }
+            };
+            scanForActiveUsers();
+        }
+    }, [hasAdminAccess]);
 
     const { 
         allEntries: individualEntries,
@@ -91,15 +116,26 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    // COMPREHENSIVE USER MAP: Merges hardcoded static directory with all Firestore profiles
+    // COMPREHENSIVE USER MAP: Merges static directory, discovered UIDs, and Firestore profiles
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
         
-        // Ensure every profile found in Firestore is present in the map
+        // Add discovered UIDs from data scan first
+        discoveredUids.forEach(uid => {
+            if (!map[uid]) {
+                map[uid] = {
+                    code: "NEW",
+                    firstName: "Discovered",
+                    lastName: "User",
+                    email: "Pending Discovery..."
+                };
+            }
+        });
+
+        // Layer Firestore Profile Overrides (The Source of Truth)
         Object.values(profiles).forEach(profile => {
             const uid = profile.userId;
             if (map[uid]) {
-                // Update existing record with Firestore overrides
                 map[uid] = { 
                     ...map[uid], 
                     firstName: profile.firstName || map[uid].firstName, 
@@ -107,23 +143,22 @@ export default function AdminPage() {
                     email: profile.email || map[uid].email
                 };
             } else {
-                // Discover new user not in the hardcoded map
                 map[uid] = {
                     code: profile.code || "NEW",
-                    firstName: profile.firstName || "Unknown",
+                    firstName: profile.firstName || "Discovered",
                     lastName: profile.lastName || "User",
                     email: profile.email || "No Email Found"
                 };
             }
         });
         return map;
-    }, [profiles]);
+    }, [profiles, discoveredUids]);
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
         const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
         
-        // Add reassigned users from Firestore
+        // Add reassigned users from Firestore profiles
         Object.values(profiles).forEach(p => {
             if (p.managerId === selectedManagerId) baseSet.add(p.userId);
         });
@@ -160,10 +195,10 @@ export default function AdminPage() {
             else if (isManager) role = 'Manager';
 
             let district = 'N/A';
+            const customManagerId = profiles[uid]?.managerId;
+            const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
+            
             if (role === 'PMR') {
-                const customManagerId = profiles[uid]?.managerId;
-                const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
-                
                 if (managerUid) {
                     const mData = mergedUserMap[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
@@ -174,7 +209,7 @@ export default function AdminPage() {
                 district = 'National / HQ';
             }
 
-            return { uid, ...data, role, district };
+            return { uid, ...data, role, district, managerId: managerUid };
         });
 
         if (!accountSearch.trim()) return all.sort((a, b) => a.code.localeCompare(b.code));
@@ -206,7 +241,13 @@ export default function AdminPage() {
     const handleSaveAccount = async () => {
         if (!editingAccount) return;
         setIsSavingProfile(true);
-        const success = await updateProfile(editingAccount.uid, editingAccount.firstName, editingAccount.lastName, editingAccount.managerId);
+        const success = await updateProfile(
+            editingAccount.uid, 
+            editingAccount.firstName, 
+            editingAccount.lastName, 
+            editingAccount.managerId,
+            editingAccount.email
+        );
         if (success) {
             setEditingAccount(null);
         }
@@ -317,7 +358,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-4">
                     {user && (
                         <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
-                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">DSM SESSION</span>
+                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">AUTH SESSION</span>
                             <div className="flex items-center gap-1.5">
                                 <User className="w-3 h-3 text-primary" />
                                 <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user.email}</span>
@@ -392,7 +433,7 @@ export default function AdminPage() {
                                         <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
                                             <UserCog className="text-primary" /> System User Directory
                                         </CardTitle>
-                                        <CardDescription>Master list of all identified PMRs, Managers, and Administrators found in the system.</CardDescription>
+                                        <CardDescription>All identified active accounts. Manage names, identifiers, and territory assignments here.</CardDescription>
                                     </div>
                                     <div className="relative max-w-md w-full">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -455,7 +496,8 @@ export default function AdminPage() {
                                                                     uid: acc.uid, 
                                                                     firstName: acc.firstName, 
                                                                     lastName: acc.lastName,
-                                                                    managerId: profiles[acc.uid]?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(acc.uid))
+                                                                    managerId: acc.managerId,
+                                                                    email: acc.email
                                                                 })}
                                                             >
                                                                 <Pencil className="h-4 w-4" />
@@ -495,7 +537,7 @@ export default function AdminPage() {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="font-headline text-xl">Edit Account Profile</DialogTitle>
-                        <DialogDescription>Update employee name or district assignment.</DialogDescription>
+                        <DialogDescription>Update employee name, identifier, or territory assignment.</DialogDescription>
                     </DialogHeader>
                     {editingAccount && (
                         <div className="space-y-4 py-4">
@@ -515,6 +557,16 @@ export default function AdminPage() {
                                     className="col-span-3" 
                                     value={editingAccount.lastName}
                                     onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})}
+                                />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="email" className="text-right">Identifier</Label>
+                                <Input 
+                                    id="email" 
+                                    className="col-span-3 font-mono text-xs" 
+                                    value={editingAccount.email || ""}
+                                    placeholder="email@hovidinc.com"
+                                    onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})}
                                 />
                             </div>
                             {allAccounts.find(a => a.uid === editingAccount.uid)?.role === 'PMR' && (
