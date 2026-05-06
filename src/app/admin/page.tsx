@@ -77,7 +77,7 @@ export default function AdminPage() {
         addDoctor,
         updateDoctor,
         deleteDoctor
-    } = useAdminData(selectedManagerId);
+    } = useAdminData(selectedManagerId, profiles);
 
     const allAccounts = useMemo(() => {
         const mergedMap = { ...USER_DATA_MAP };
@@ -334,7 +334,7 @@ export default function AdminPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2 text-sm">
-                                                            <Fingerprint className="h-3 w-3 text-muted-foreground" />
+                                                            <Fingerprint className="h-3 v-3 text-muted-foreground" />
                                                             <span className="font-medium text-xs font-mono">{acc.email}</span>
                                                         </div>
                                                     </TableCell>

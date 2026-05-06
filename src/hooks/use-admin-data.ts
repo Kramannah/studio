@@ -6,7 +6,7 @@ import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, w
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -29,7 +29,7 @@ const safeToDateISO = (val: any): string => {
     return String(val);
 };
 
-export function useAdminData(managerId?: string) {
+export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -58,8 +58,12 @@ export function useAdminData(managerId?: string) {
   // Combined hardcoded and dynamic managed user IDs
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
-    return MANAGER_TEAMS[mgrId] || [];
-  }, []);
+    const hardcoded = MANAGER_TEAMS[mgrId] || [];
+    const dynamic = Object.entries(userProfiles)
+        .filter(([_, p]) => p.managerId === mgrId)
+        .map(([uid, _]) => uid);
+    return Array.from(new Set([...hardcoded, ...dynamic]));
+  }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !db) return;
@@ -78,11 +82,11 @@ export function useAdminData(managerId?: string) {
             
             let queryRef;
             if (userIds === null) { 
-                queryRef = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
+                queryRef = query(collection(db, collName));
             } else { 
                 const chunks: string[][] = [];
-                for (let i = 0; i < userIds.length; i += 30) {
-                    chunks.push(userIds.slice(i, i + 30));
+                for (let i = 0; i < userIds.length; i += 10) {
+                    chunks.push(userIds.slice(i, i + 10));
                 }
                 const snapshots = await Promise.all(chunks.map(chunk => 
                     getDocs(query(collection(db, collName), where("userId", "in", chunk)))
@@ -127,8 +131,8 @@ export function useAdminData(managerId?: string) {
       setLoadingSummary(true);
       try {
         const chunks: string[][] = [];
-        for (let i = 0; i < userFilter.length; i += 30) {
-            chunks.push(userFilter.slice(i, i + 30));
+        for (let i = 0; i < userFilter.length; i += 10) {
+            chunks.push(userFilter.slice(i, i + 10));
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
