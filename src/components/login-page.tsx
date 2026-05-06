@@ -2,8 +2,9 @@
 "use client"
 
 import { useState } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
@@ -18,9 +19,24 @@ export function LoginPage() {
     const [loading, setLoading] = useState(false);
 
     const handleSignUp = async () => {
+        if (!email || !password) return;
         setLoading(true);
         try {
-            await createUserWithEmailAndPassword(auth, email, password);
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // Create initial user profile in Firestore to ensure visibility in Admin Dashboard
+            if (db) {
+                await setDoc(doc(db, "userProfiles", user.uid), {
+                    userId: user.uid,
+                    email: user.email,
+                    firstName: "New",
+                    lastName: "User",
+                    code: "NEW",
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            }
+
             toast({ title: "Account Created", description: "You have been successfully registered." });
         } catch (error: any) {
             toast({ variant: 'destructive', title: "Registration Failed", description: error.message });

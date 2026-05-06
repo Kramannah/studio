@@ -91,12 +91,29 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    // Merged user map for selection and display
+    // COMPREHENSIVE USER MAP: Merges hardcoded static directory with all Firestore profiles
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
-        Object.keys(profiles).forEach(uid => {
+        
+        // Ensure every profile found in Firestore is present in the map
+        Object.values(profiles).forEach(profile => {
+            const uid = profile.userId;
             if (map[uid]) {
-                map[uid] = { ...map[uid], firstName: profiles[uid].firstName, lastName: profiles[uid].lastName };
+                // Update existing record with Firestore overrides
+                map[uid] = { 
+                    ...map[uid], 
+                    firstName: profile.firstName || map[uid].firstName, 
+                    lastName: profile.lastName || map[uid].lastName,
+                    email: profile.email || map[uid].email
+                };
+            } else {
+                // Discover new user not in the hardcoded map
+                map[uid] = {
+                    code: profile.code || "NEW",
+                    firstName: profile.firstName || "Unknown",
+                    lastName: profile.lastName || "User",
+                    email: profile.email || "No Email Found"
+                };
             }
         });
         return map;
@@ -106,12 +123,12 @@ export default function AdminPage() {
         if (!selectedManagerId) return [];
         const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
         
-        // Add reassigned users
+        // Add reassigned users from Firestore
         Object.values(profiles).forEach(p => {
             if (p.managerId === selectedManagerId) baseSet.add(p.userId);
         });
 
-        // Remove users reassigned AWAY
+        // Remove users reassigned AWAY in Firestore
         Object.values(profiles).forEach(p => {
             if (p.managerId && p.managerId !== selectedManagerId && baseSet.has(p.userId)) baseSet.delete(p.userId);
         });
@@ -144,9 +161,8 @@ export default function AdminPage() {
 
             let district = 'N/A';
             if (role === 'PMR') {
-                // Prioritize Firestore override
                 const customManagerId = profiles[uid]?.managerId;
-                const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mUid => MANAGER_TEAMS[mUid].includes(uid));
+                const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
                 
                 if (managerUid) {
                     const mData = mergedUserMap[managerUid];
@@ -374,14 +390,14 @@ export default function AdminPage() {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
-                                            <UserCog className="text-primary" /> User Accounts Directory
+                                            <UserCog className="text-primary" /> System User Directory
                                         </CardTitle>
-                                        <CardDescription>Master list of all PMRs, Managers, and Administrators.</CardDescription>
+                                        <CardDescription>Master list of all identified PMRs, Managers, and Administrators found in the system.</CardDescription>
                                     </div>
                                     <div className="relative max-w-md w-full">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                         <Input 
-                                            placeholder="Search by name, code, or email..." 
+                                            placeholder="Search by name, code, or identifier..." 
                                             className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
                                             value={accountSearch}
                                             onChange={(e) => setAccountSearch(e.target.value)}
@@ -396,7 +412,7 @@ export default function AdminPage() {
                                             <TableRow className="h-12 hover:bg-transparent">
                                                 <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
                                                 <TableHead className="font-bold text-foreground">Employee Name</TableHead>
-                                                <TableHead className="font-bold text-foreground">Identifier</TableHead>
+                                                <TableHead className="font-bold text-foreground">Identifier (Auth)</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
                                                 <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
                                                 <TableHead className="text-right font-bold text-foreground pr-6">Actions</TableHead>
@@ -417,7 +433,7 @@ export default function AdminPage() {
                                                         <TableCell>
                                                             <div className="flex items-center gap-2 text-sm">
                                                                 <Fingerprint className="h-3 w-3 text-muted-foreground" />
-                                                                <span className="font-medium text-xs font-mono">{acc.email || 'No email set'}</span>
+                                                                <span className="font-medium text-xs font-mono">{acc.email || 'No identifier set'}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell>
@@ -439,7 +455,7 @@ export default function AdminPage() {
                                                                     uid: acc.uid, 
                                                                     firstName: acc.firstName, 
                                                                     lastName: acc.lastName,
-                                                                    managerId: profiles[acc.uid]?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mUid].includes(acc.uid))
+                                                                    managerId: profiles[acc.uid]?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(acc.uid))
                                                                 })}
                                                             >
                                                                 <Pencil className="h-4 w-4" />
