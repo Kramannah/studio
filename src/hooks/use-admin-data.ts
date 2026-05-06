@@ -181,9 +181,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
         };
 
-        const [chunkResults] = await Promise.all([
-            Promise.all(chunks.map(fetchDataForChunk)),
-        ]);
+        const chunkResults = await Promise.all(chunks.map(fetchDataForChunk));
         
         const combined = chunkResults.reduce((acc, curr) => ({
             entries: [...acc.entries, ...curr.entries],

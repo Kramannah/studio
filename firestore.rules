@@ -12,16 +12,18 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is an admin.
+     * Admins have full read access to all system data and write access to specific oversight collections.
      */
     function isAdmin() {
       return isSignedIn() && (
         request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
-        request.auth.token.email.lower() == "mbustamante@hovidinc.com"
+        (request.auth.token.email != null && request.auth.token.email.lower() == "mbustamante@hovidinc.com")
       );
     }
 
     /** 
      * Checks if the user is a manager.
+     * Managers can read data for their assigned districts.
      */
     function isManager() {
       return isSignedIn() && request.auth.uid in [
@@ -42,37 +44,37 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read: if isSignedIn(); 
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn()); 
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /doctors/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /plans/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /nonCallDays/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /timeLogs/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /planningRequests/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
@@ -89,7 +91,7 @@ service cloud.firestore {
     
     match /userProfiles/{id} {
       allow read: if isSignedIn();
-      allow write: if isAdmin() || isManager();
+      allow write: if isAdmin() || isManager() || (isSignedIn() && request.auth.uid == id);
     }
   }
 }
