@@ -97,11 +97,6 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     const colRef = collection(db, "coverageEntries");
-    
-    // INVENTORY TRACKING OPTIMIZATION:
-    // We look back at the last 3 months of team-wide activity for inventory balancing.
-    // This is wider than 30 days but narrower than 6 months to avoid Firestore timeouts 
-    // while ensuring quarterly batch accuracy.
     const startDate = subMonths(startOfMonth(new Date()), 2).toISOString();
     
     const usageQuery = query(
@@ -115,14 +110,14 @@ export const useQ4Allocation = () => {
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
         if (entry.primarySampleName && entry.primaryProductQty) {
-            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Math.round(Number(entry.primaryProductQty));
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Math.round(Number(entry.secondaryProductQty));
         }
         entry.reminderProducts?.forEach(prod => {
             if (prod.sampleName && prod.quantity) {
-                usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
+                usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Math.round(Number(prod.quantity));
             }
         });
       });

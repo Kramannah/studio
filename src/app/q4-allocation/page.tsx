@@ -39,9 +39,9 @@ export default function Q4AllocationPage() {
             totalUsed += (usedQuantities[s.materialName] || 0);
         });
         return {
-            totalAllocated,
-            totalUsed,
-            remaining: totalAllocated - totalUsed,
+            totalAllocated: Math.round(totalAllocated),
+            totalUsed: Math.round(totalUsed),
+            remaining: Math.round(totalAllocated - totalUsed),
             percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
         };
     }, [filteredSamples, usedQuantities]);
@@ -107,7 +107,7 @@ export default function Q4AllocationPage() {
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="space-y-1">
                                 <CardTitle className="text-xl font-black font-headline">Product Allocation List</CardTitle>
-                                <CardDescription>Detailed monitoring for the 54-item Q4 Batch 1 inventory.</CardDescription>
+                                <CardDescription>Detailed monitoring for the Q4 Batch 1 inventory.</CardDescription>
                             </div>
                             <div className="relative max-w-md w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -142,13 +142,14 @@ export default function Q4AllocationPage() {
                                         </TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const distributed = usedQuantities[sample.materialName] || 0;
-                                            const balance = sample.allocationQuantity - distributed;
+                                            const distributed = Math.round(usedQuantities[sample.materialName] || 0);
+                                            const alloc = Math.round(sample.allocationQuantity || 0);
+                                            const balance = alloc - distributed;
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6 font-bold text-primary">{sample.productGroup}</TableCell>
                                                     <TableCell className="font-medium">{sample.materialName}</TableCell>
-                                                    <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                    <TableCell className="text-center font-mono">{alloc}</TableCell>
                                                     <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
                                                     <TableCell className="text-center pr-6">
                                                         <Badge variant={balance <= 0 ? "destructive" : "secondary"} className={cn(

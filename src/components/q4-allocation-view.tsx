@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -91,9 +90,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         });
 
         return {
-            totalAllocated,
-            totalUsed,
-            remaining: totalAllocated - totalUsed,
+            totalAllocated: Math.round(totalAllocated),
+            totalUsed: Math.round(totalUsed),
+            remaining: Math.round(totalAllocated - totalUsed),
             percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
         };
     }, [allocations, usedQuantities, activeQuarter]);
@@ -250,7 +249,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                         <CardTitle className="text-xl font-black font-headline">Batch Oversight: {activeQuarter}</CardTitle>
                                         <CardDescription>{readOnly ? 'Live status of your sample inventory for the current period.' : 'Monitoring inventory for current batch period.'}</CardDescription>
                                     </div>
-                                    <div className="flex items-center gap-2 w-full max-w-sm">
+                                    <div className="flex items-center gap-2 w-full max-sm:max-w-sm">
                                         <div className="relative flex-1">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                             <Input 
@@ -308,8 +307,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing...</p></TableCell></TableRow>
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
-                                                    const used = usedQuantities[sample.displayMaterialName] || 0;
-                                                    const balance = sample.allocationQuantity - used;
+                                                    const used = Math.round(usedQuantities[sample.displayMaterialName] || 0);
+                                                    const alloc = Math.round(sample.allocationQuantity || 0);
+                                                    const balance = alloc - used;
                                                     return (
                                                         <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (
@@ -326,7 +326,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                     <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                            <TableCell className="text-center font-mono">{alloc}</TableCell>
                                                             <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
                                                             <TableCell className="text-center pr-6">
                                                                 <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
