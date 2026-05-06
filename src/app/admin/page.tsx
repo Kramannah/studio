@@ -1,11 +1,12 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, Pencil, Save, Loader2, Fingerprint, RefreshCw, AlertCircle } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -19,11 +20,6 @@ import { Input } from '@/components/ui/input';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
-import { useUserProfiles } from '@/hooks/use-user-profiles';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { getDocs, collection, query, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const DynamicSkeleton = () => (
@@ -34,23 +30,15 @@ const DynamicSkeleton = () => (
 );
 
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
-const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
-const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
 
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
-    const { profiles, updateProfile, loading: profilesLoading, refetch: refetchProfiles } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
-    const [discoveredUids, setDiscoveredUids] = useState<string[]>([]);
-    const [isScanning, setIsScanning] = useState(false);
-    
-    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string, managerId?: string, email?: string} | null>(null);
-    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
@@ -61,37 +49,6 @@ export default function AdminPage() {
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
     const hasAdminAccess = isUserAdmin || isUserManager;
 
-    // GLOBAL DISCOVERY: Scans all core collections for any unique User IDs
-    const runDiscoveryScan = useCallback(async () => {
-        if (!hasAdminAccess || !db) return;
-        setIsScanning(true);
-        try {
-            const uids = new Set<string>();
-            
-            // 1. Scan Coverage Entries (Most common source)
-            const coverageSnap = await getDocs(query(collection(db, "coverageEntries"), limit(1000)));
-            coverageSnap.docs.forEach(doc => uids.add(doc.data().userId));
-            
-            // 2. Scan Plans
-            const planSnap = await getDocs(query(collection(db, "plans"), limit(500)));
-            planSnap.docs.forEach(doc => uids.add(doc.data().userId));
-
-            // 3. Scan existing Profiles (The source of truth)
-            const profileSnap = await getDocs(collection(db, "userProfiles"));
-            profileSnap.docs.forEach(doc => uids.add(doc.id));
-
-            setDiscoveredUids(Array.from(uids));
-        } catch (e) {
-            console.warn("Discovery scan restricted:", e);
-        } finally {
-            setIsScanning(false);
-        }
-    }, [hasAdminAccess]);
-
-    useEffect(() => {
-        if (hasAdminAccess) runDiscoveryScan();
-    }, [hasAdminAccess, runDiscoveryScan]);
-
     const { 
         allEntries: individualEntries,
         allDoctors: individualDoctors,
@@ -100,55 +57,16 @@ export default function AdminPage() {
         allNonCallDaysIndividual,
         individualPlanningRequests,
         individualUsedQuantities,
-        allNonCallDays: teamNonCallDays, 
-        allPlanningRequests: teamPlanningRequests,
-        teamSummaryData,
         loading: dataLoading,
-        loadingSummary,
         fetchUserData,
-        fetchTeamSummary,
-        updateNonCallDayStatus,
-        updatePlanningRequestStatus,
         deleteEntry,
         addDoctor,
         updateDoctor,
-        deleteDoctor,
-        deleteDoctorsBulk,
-        addDoctorsBulk
+        deleteDoctor
     } = useAdminData(selectedManagerId);
 
-    // MERGED USER DIRECTORY: Source of truth for the entire dashboard
-    const mergedUserMap = useMemo(() => {
-        const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
-        
-        // 1. Add all discovered UIDs from collection scans
-        discoveredUids.forEach(uid => {
-            if (!map[uid]) {
-                map[uid] = {
-                    code: "NEW",
-                    firstName: "Discovered",
-                    lastName: "User",
-                    email: "Confirming Identity..."
-                };
-            }
-        });
-
-        // 2. Override with Firestore Profiles (Persisted Edits)
-        Object.values(profiles).forEach(profile => {
-            const uid = profile.userId;
-            const existing = map[uid] || {};
-            map[uid] = {
-                code: profile.code || existing.code || "NEW",
-                firstName: profile.firstName || existing.firstName || "New",
-                lastName: profile.lastName || existing.lastName || "User",
-                email: profile.email || existing.email || "No Email Found"
-            };
-        });
-        return map;
-    }, [profiles, discoveredUids]);
-
     const allAccounts = useMemo(() => {
-        const all = Object.entries(mergedUserMap).map(([uid, data]) => {
+        const all = Object.entries(USER_DATA_MAP).map(([uid, data]) => {
             const isAdmin = ADMIN_UIDS.includes(uid);
             const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
             let role = 'PMR';
@@ -156,12 +74,11 @@ export default function AdminPage() {
             else if (isManager) role = 'Manager';
 
             let district = 'N/A';
-            const customManagerId = profiles[uid]?.managerId;
-            const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
+            const managerUid = Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
             
             if (role === 'PMR') {
                 if (managerUid) {
-                    const mData = mergedUserMap[managerUid];
+                    const mData = USER_DATA_MAP[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
                 }
             } else if (role === 'Manager') {
@@ -184,45 +101,31 @@ export default function AdminPage() {
             a.district.toLowerCase().includes(q) ||
             (a.email && a.email.toLowerCase().includes(q))
         ).sort((a, b) => a.lastName.localeCompare(b.lastName));
-    }, [accountSearch, mergedUserMap, profiles]);
+    }, [accountSearch]);
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
-        const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
-        Object.values(profiles).forEach(p => { if (p.managerId === selectedManagerId) baseSet.add(p.userId); });
-        Object.values(profiles).forEach(p => { if (p.managerId && p.managerId !== selectedManagerId && baseSet.has(p.userId)) baseSet.delete(p.userId); });
-        return Array.from(baseSet);
-    }, [selectedManagerId, profiles]);
+        return MANAGER_TEAMS[selectedManagerId] || [];
+    }, [selectedManagerId]);
 
     const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
         managedUserIds.forEach((id) => {
-            const u = mergedUserMap[id];
-            map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id.substring(0, 6)}...`);
+            const u = USER_DATA_MAP[id];
+            map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id}`);
         });
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
-    }, [managedUserIds, mergedUserMap]);
-
-    const handleSaveAccount = async () => {
-        if (!editingAccount) return;
-        setIsSavingProfile(true);
-        const success = await updateProfile(
-            editingAccount.uid, 
-            editingAccount.firstName, 
-            editingAccount.lastName, 
-            editingAccount.managerId,
-            editingAccount.email
-        );
-        if (success) {
-            setEditingAccount(null);
-            await runDiscoveryScan();
-        }
-        setIsSavingProfile(false);
-    };
+    }, [managedUserIds]);
 
     useEffect(() => {
         if (!authLoading && !hasAdminAccess) router.push('/');
     }, [authLoading, hasAdminAccess, router]);
+
+    useEffect(() => {
+        if (selectedUserId) {
+            fetchUserData(selectedUserId);
+        }
+    }, [selectedUserId, fetchUserData]);
 
     if (authLoading) {
         return (
@@ -308,7 +211,7 @@ export default function AdminPage() {
                                 individualPlanningRequests={individualPlanningRequests}
                                 onDeleteEntry={deleteEntry}
                                 usedQuantities={individualUsedQuantities}
-                                userMap={mergedUserMap}
+                                userMap={USER_DATA_MAP}
                                 isAdminView={true}
                                 onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
                                 onUpdateDoctor={updateDoctor}
@@ -329,23 +232,18 @@ export default function AdminPage() {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
-                                            <UserCog className="text-primary" /> Registered User Directory
+                                            <UserCog className="text-primary" /> User Directory
                                         </CardTitle>
-                                        <CardDescription>Every account that has accessed the system is listed here. Manage identities and DSM assignments.</CardDescription>
+                                        <CardDescription>Master mapping of all authorized personnel in the system.</CardDescription>
                                     </div>
-                                    <div className="flex items-center gap-3 w-full max-w-md">
-                                        <div className="relative flex-1">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                            <Input 
-                                                placeholder="Search by name, code, or identifier..." 
-                                                className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
-                                                value={accountSearch}
-                                                onChange={(e) => setAccountSearch(e.target.value)}
-                                            />
-                                        </div>
-                                        <Button variant="outline" size="icon" onClick={() => runDiscoveryScan()} disabled={isScanning} className="h-11 w-11 rounded-xl border-2">
-                                            <RefreshCw className={cn("w-4 h-4", isScanning && "animate-spin")} />
-                                        </Button>
+                                    <div className="relative max-w-md w-full">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                        <Input 
+                                            placeholder="Search by name, code, or identifier..." 
+                                            className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                            value={accountSearch}
+                                            onChange={(e) => setAccountSearch(e.target.value)}
+                                        />
                                     </div>
                                 </div>
                             </CardHeader>
@@ -356,58 +254,38 @@ export default function AdminPage() {
                                             <TableRow className="h-12 hover:bg-transparent">
                                                 <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
                                                 <TableHead className="font-bold text-foreground">Employee Name</TableHead>
-                                                <TableHead className="font-bold text-foreground">Identifier (Auth)</TableHead>
+                                                <TableHead className="font-bold text-foreground">Identifier</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
-                                                <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
-                                                <TableHead className="text-right font-bold text-foreground pr-6">Actions</TableHead>
+                                                <TableHead className="font-bold text-foreground pr-6">District / Assignment</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {allAccounts.length > 0 ? (
-                                                allAccounts.map((acc) => (
-                                                    <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
-                                                        <TableCell className="pl-6">
-                                                            <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
-                                                                {acc.code}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell className="font-bold text-sm">
-                                                            {acc.lastName}, {acc.firstName}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-2 text-sm">
-                                                                <Fingerprint className="h-3 w-3 text-muted-foreground" />
-                                                                <span className="font-medium text-xs font-mono">{acc.email}</span>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}>
-                                                                {acc.role}
-                                                            </Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-sm font-medium text-muted-foreground">
-                                                            {acc.district}
-                                                        </TableCell>
-                                                        <TableCell className="text-right pr-6">
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                onClick={() => setEditingAccount({ 
-                                                                    uid: acc.uid, 
-                                                                    firstName: acc.firstName, 
-                                                                    lastName: acc.lastName,
-                                                                    managerId: acc.managerId,
-                                                                    email: acc.email
-                                                                })}
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow><TableCell colSpan={6} className="h-64 text-center">No accounts discovered yet.</TableCell></TableRow>
-                                            )}
+                                            {allAccounts.map((acc) => (
+                                                <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
+                                                    <TableCell className="pl-6">
+                                                        <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
+                                                            {acc.code}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="font-bold text-sm">
+                                                        {acc.lastName}, {acc.firstName}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2 text-sm">
+                                                            <Fingerprint className="h-3 w-3 text-muted-foreground" />
+                                                            <span className="font-medium text-xs font-mono">{acc.email}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}>
+                                                            {acc.role}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-medium text-muted-foreground pr-6">
+                                                        {acc.district}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </div>
@@ -420,53 +298,6 @@ export default function AdminPage() {
                     </TabsContent>
                 </Tabs>
             </main>
-
-            <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="font-headline text-xl">Edit Account Profile</DialogTitle>
-                        <DialogDescription>Update employee identity and territory assignment.</DialogDescription>
-                    </DialogHeader>
-                    {editingAccount && (
-                        <div className="space-y-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="firstName" className="text-right">First Name</Label>
-                                <Input id="firstName" className="col-span-3" value={editingAccount.firstName} onChange={(e) => setEditingAccount({...editingAccount, firstName: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="lastName" className="text-right">Last Name</Label>
-                                <Input id="lastName" className="col-span-3" value={editingAccount.lastName} onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="email" className="text-right">Identifier</Label>
-                                <Input id="email" className="col-span-3 font-mono text-xs" value={editingAccount.email || ""} placeholder="email@hovidinc.com" onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})} />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="manager" className="text-right">District DSM</Label>
-                                <div className="col-span-3">
-                                    <Select value={editingAccount.managerId || ""} onValueChange={(val) => setEditingAccount({...editingAccount, managerId: val})}>
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select District Manager..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {managers.map(m => (
-                                                <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setEditingAccount(null)}>Cancel</Button>
-                        <Button onClick={handleSaveAccount} disabled={isSavingProfile}>
-                            {isSavingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                            Save Changes
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

@@ -2,16 +2,14 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { getQueryStartDateISO } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { useUserProfiles } from "./use-user-profiles";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -34,7 +32,6 @@ const safeToDateISO = (val: any): string => {
 export function useAdminData(managerId?: string) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { profiles: customProfiles } = useUserProfiles();
   
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
   const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
@@ -58,27 +55,10 @@ export function useAdminData(managerId?: string) {
     return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
-  // Merge static teams with custom manager assignments from Firestore
   const managedUserIds = useMemo(() => {
     if (!managerId) return [];
-    const baseSet = new Set(MANAGER_TEAMS[managerId] || []);
-    
-    // Add users reassigned to this manager via userProfiles
-    Object.values(customProfiles).forEach(profile => {
-        if (profile.managerId === managerId) {
-            baseSet.add(profile.userId);
-        }
-    });
-
-    // Remove users who have been reassigned AWAY from this manager via userProfiles
-    Object.values(customProfiles).forEach(profile => {
-        if (profile.managerId && profile.managerId !== managerId && baseSet.has(profile.userId)) {
-            baseSet.delete(profile.userId);
-        }
-    });
-
-    return Array.from(baseSet);
-  }, [managerId, customProfiles]);
+    return MANAGER_TEAMS[managerId] || [];
+  }, [managerId]);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !db) return;
@@ -134,7 +114,7 @@ export function useAdminData(managerId?: string) {
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
 
-  const fetchTeamSummary = useCallback(async (forceAllWeek = false) => {
+  const fetchTeamSummary = useCallback(async () => {
       if (!managerId || !db) return;
       
       const userFilter = managedUserIds;
@@ -145,7 +125,6 @@ export function useAdminData(managerId?: string) {
 
       setLoadingSummary(true);
       try {
-        const startDate = getQueryStartDateISO(forceAllWeek);
         const chunks: string[][] = [];
         for (let i = 0; i < userFilter.length; i += 30) {
             chunks.push(userFilter.slice(i, i + 30));
@@ -166,11 +145,11 @@ export function useAdminData(managerId?: string) {
             };
 
             return {
-                entries: getResults(0).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate),
-                timeLogs: getResults(1).map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate),
+                entries: getResults(0).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
+                timeLogs: getResults(1).map(d => ({ id: d.id, ...d.data() }) as TimeLog),
                 doctors: getResults(2).map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: getResults(3).map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate),
-                plans: getResults(4).map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate),
+                nonCallDays: getResults(3).map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
+                plans: getResults(4).map(d => ({ id: d.id, ...d.data() }) as Plan),
             };
         };
 
@@ -385,7 +364,6 @@ export function useAdminData(managerId?: string) {
         const batch = writeBatch(db!);
         data.forEach(d => batch.set(doc(collection(db!, "doctors")), d));
         await batch.commit();
-    },
-    customProfiles
+    }
   };
 }
