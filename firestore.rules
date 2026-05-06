@@ -30,11 +30,11 @@ service cloud.firestore {
 
     // --- Collection Rules ---
 
-    // Generic rule for collections where documents have a 'userId' field
+    // Generic rule for user-owned collections
     match /{collectionName}/{docId} {
       allow read: if isSignedIn() && (
-        collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && 
-        (isOwner(resource.data) || isAdminOrManager())
+        isAdminOrManager() || 
+        (collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && isOwner(resource.data))
       );
       
       allow create: if isSignedIn() && (
@@ -43,8 +43,8 @@ service cloud.firestore {
       );
 
       allow update, delete: if isSignedIn() && (
-        collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && 
-        (isOwner(resource.data) || isAdminOrManager())
+        isAdminOrManager() ||
+        (collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && isOwner(resource.data))
       );
     }
 
