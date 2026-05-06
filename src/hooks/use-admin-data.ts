@@ -23,15 +23,14 @@ export interface TeamSummaryData {
 }
 
 /**
- * Utility to safely convert any date field (Timestamp or string) to an ISO string
- * for reliable lexicographical comparison.
+ * Utility to safely convert any date field (Timestamp or string) to an ISO string.
+ * Uses duck-typing to detect Firestore Timestamps or native Dates.
  */
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
     if (typeof val === 'string') return val;
-    if (val instanceof Timestamp) return val.toDate().toISOString();
+    if (val && typeof val.toDate === 'function') return val.toDate().toISOString();
     if (val instanceof Date) return val.toISOString();
-    if (typeof val.toDate === 'function') return val.toDate().toISOString();
     return String(val);
 };
 
@@ -102,13 +101,17 @@ export function useAdminData(managerId?: string) {
             return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         };
       
-      const [ncdRes, prRes] = await Promise.all([
+      const [ncdRes, prRes] = await Promise.allSettled([
           fetchCollection("nonCallDays", userFilter),
           fetchCollection("planningRequests", userFilter)
       ]);
       
-      setAllNonCallDays((ncdRes as NonCallDay[]).sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
-      setAllPlanningRequests((prRes as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
+      if (ncdRes.status === 'fulfilled') {
+        setAllNonCallDays((ncdRes.value as NonCallDay[]).sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
+      }
+      if (prRes.status === 'fulfilled') {
+        setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
+      }
 
     } catch (serverError: any) {
         console.error("Fetch Approvals Error:", serverError);
@@ -139,7 +142,7 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const snaps = await Promise.all([
+            const snaps = await Promise.allSettled([
                 getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk))),
                 getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk))),
                 getDocs(query(collection(db, "doctors"), where("userId", "in", chunk))),
@@ -147,12 +150,17 @@ export function useAdminData(managerId?: string) {
                 getDocs(query(collection(db, "plans"), where("userId", "in", chunk))),
             ]);
 
+            const getResults = (index: number) => {
+                const res = snaps[index];
+                return res.status === 'fulfilled' ? res.value.docs : [];
+            };
+
             return {
-                entries: snaps[0].docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate),
-                timeLogs: snaps[1].docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate),
-                doctors: snaps[2].docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: snaps[3].docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate),
-                plans: snaps[4].docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate),
+                entries: getResults(0).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate),
+                timeLogs: getResults(1).map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate),
+                doctors: getResults(2).map(d => ({ id: d.id, ...d.data() }) as Doctor),
+                nonCallDays: getResults(3).map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate),
+                plans: getResults(4).map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate),
             };
         };
 
@@ -203,17 +211,11 @@ export function useAdminData(managerId?: string) {
     setIndividualUsedQuantities({});
 
     try {
-        const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
+        const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId.trim()));
         
-        // Fetch each collection individually to handle partial failures more gracefully
-        const [
-            entriesSnap, 
-            doctorsSnap, 
-            plansSnap, 
-            logsSnap, 
-            ncdSnap, 
-            requestsSnap
-        ] = await Promise.all([
+        // Use Promise.allSettled to ensure failure in one collection doesn't block the rest
+        // Removing deep history restrictions to match account view
+        const results = await Promise.allSettled([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
             getDocs(q("plans")),
@@ -222,12 +224,17 @@ export function useAdminData(managerId?: string) {
             getDocs(q("planningRequests"))
         ]);
         
-        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
-        const doctors = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor);
-        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan);
-        const logs = logsSnap.docs.map(d => ({id: d.id, ...d.data()}) as TimeLog);
-        const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()}) as NonCallDay);
-        const requests = requestsSnap.docs.map(d => ({id: d.id, ...d.data()}) as PlanningPermissionRequest);
+        const getVal = <T>(idx: number): T[] => {
+            const res = results[idx];
+            return res.status === 'fulfilled' ? res.value.docs.map(d => ({id: d.id, ...d.data()}) as T) : [];
+        };
+
+        const entries = getVal<CoverageEntry>(0);
+        const doctors = getVal<Doctor>(1);
+        const plans = getVal<Plan>(2);
+        const logs = getVal<TimeLog>(3);
+        const ncds = getVal<NonCallDay>(4);
+        const requests = getVal<PlanningPermissionRequest>(5);
 
         // Sort data for presentation
         entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt)));
@@ -235,12 +242,20 @@ export function useAdminData(managerId?: string) {
         logs.sort((a, b) => safeToDateISO(b.timeIn).localeCompare(safeToDateISO(a.timeIn)));
         ncds.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date)));
 
-        // Calculate individual used quantities
+        // Calculate individual used quantities from fetched entries
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
-            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
-            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
-            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity); });
+            if (e.primarySampleName && e.primaryProductQty) {
+                used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
+            }
+            if (e.secondarySampleName && e.secondaryProductQty) {
+                used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
+            }
+            e.reminderProducts?.forEach(p => {
+                if (p.sampleName && p.quantity) {
+                    used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity);
+                }
+            });
         });
 
         setAllEntries(entries);
@@ -250,6 +265,10 @@ export function useAdminData(managerId?: string) {
         setAllNonCallDaysIndividual(ncds);
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
+
+        if (results.some(r => r.status === 'rejected')) {
+            console.warn("Some representative data points failed to sync independently.");
+        }
 
     } catch (err) {
         console.error("Individual PMR Data Fetch Error:", err);
