@@ -18,20 +18,20 @@ let services: FirebaseServices | null = null;
  * Uses a singleton pattern to ensure only one instance of each service exists.
  */
 export function initializeFirebase(): FirebaseServices {
+  if (typeof window === 'undefined') {
+    throw new Error('initializeFirebase must be called on the client side.');
+  }
+
   if (services) return services;
 
   const firebaseApp = getApps().length === 0 
     ? initializeApp(firebaseConfig) 
     : getApp();
 
-  // Create service instances directly tied to the app instance
-  const authInstance = getAuth(firebaseApp);
-  const firestoreInstance = getFirestore(firebaseApp);
-
   services = {
     firebaseApp,
-    auth: authInstance,
-    firestore: firestoreInstance,
+    auth: getAuth(firebaseApp),
+    firestore: getFirestore(firebaseApp),
   };
 
   return services;

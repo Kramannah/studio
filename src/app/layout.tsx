@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
+import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { PT_Sans, Space_Grotesk } from 'next/font/google';
 import { cn } from '@/lib/utils';
 
@@ -32,9 +33,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={cn("font-body antialiased", ptSans.variable, spaceGrotesk.variable)}>
-        <AuthProvider>
-            {children}
-        </AuthProvider>
+        <FirebaseClientProvider>
+            <AuthProvider>
+                {children}
+            </AuthProvider>
+        </FirebaseClientProvider>
         <Toaster />
       </body>
     </html>

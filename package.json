@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@genkit-ai/google-genai": "^1.0.0",
+    "@genkit-ai/google-genai": "^1.0.5",
     "@hookform/resolvers": "3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -37,17 +37,17 @@
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
-    "firebase": "^10.13.2",
-    "genkit": "^1.0.0",
+    "firebase": "^11.0.2",
+    "genkit": "^1.0.5",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.441.0",
-    "next": "14.2.11",
+    "next": "15.0.3",
     "next-pwa": "^5.6.0",
-    "react": "^18.3.1",
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
     "react-day-picker": "^8.10.1",
-    "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",
     "recharts": "^2.12.7",
     "tailwind-merge": "^2.5.2",
@@ -58,12 +58,15 @@
   "devDependencies": {
     "@types/file-saver": "^2.0.7",
     "@types/node": "^20.16.5",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "autoprefixer": "10.4.20",
-    "postcss": "8.4.45",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
     "tailwindcss": "3.4.10",
     "typescript": "^5.6.2"
+  },
+  "overrides": {
+    "browserslist": "4.26.1"
   },
   "engines": {
     "node": "20.x"

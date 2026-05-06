@@ -6,9 +6,14 @@
  */
 import { initializeFirebase } from "@/firebase";
 
-const isClient = typeof window !== 'undefined';
-const firebaseServices = isClient ? initializeFirebase() : null;
+// Helper to safely get services on the client side only
+const getClientServices = () => {
+  if (typeof window === 'undefined') return null;
+  return initializeFirebase();
+};
 
-export const app = firebaseServices?.firebaseApp;
-export const db = firebaseServices?.firestore;
-export const auth = firebaseServices?.auth;
+const services = getClientServices();
+
+export const app = services?.firebaseApp;
+export const db = services?.firestore;
+export const auth = services?.auth;
