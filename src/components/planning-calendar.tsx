@@ -153,6 +153,22 @@ export function PlanningCalendar({
         return { totalCompleted, totalTarget, freqStats };
     }, [doctors, visitCountsThisMonth]);
 
+    const entriesByDate = useMemo(() => {
+        const groups: Record<string, CoverageEntry[]> = {};
+        allEntries.forEach(e => {
+            const dateStr = e.coverageDate;
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date)) {
+                    const groupStr = format(date, 'yyyy-MM-dd');
+                    if (!groups[groupStr]) groups[groupStr] = [];
+                    groups[groupStr].push(e);
+                }
+            }
+        });
+        return groups;
+    }, [allEntries]);
+
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
         plans.forEach(plan => {
@@ -480,21 +496,4 @@ export function PlanningCalendar({
             {selectedDate && <PlanningPermissionDialog isOpen={isUnlockDialogOpen} onOpenChange={setIsUnlockDialogOpen} onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)} weekStartDate={getWeekMonday(selectedDate)} />}
         </div>
     );
-}
-
-// Internal helper for selectedDayStats
-const entriesByDateHelper = (entries: CoverageEntry[]) => {
-    const groups: Record<string, CoverageEntry[]> = {};
-    entries.forEach(e => {
-        const dateStr = e.coverageDate;
-        if (dateStr) {
-            const date = parseISO(dateStr);
-            if (isValid(date)) {
-                const groupStr = format(date, 'yyyy-MM-dd');
-                if (!groups[groupStr]) groups[groupStr] = [];
-                groups[groupStr].push(e);
-            }
-        }
-    });
-    return groups;
 }
