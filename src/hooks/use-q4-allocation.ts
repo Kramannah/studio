@@ -1,15 +1,12 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -89,11 +86,7 @@ export const useQ4Allocation = () => {
       }
       setLoading(false);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Allocation fetch error:", error);
         setLoading(false);
     });
 
@@ -105,11 +98,9 @@ export const useQ4Allocation = () => {
     
     const colRef = collection(db, "coverageEntries");
     
-    // REVERTED: Calculate balance based ONLY on the individual user's data (unless admin/manager).
-    // This restores individual tracking of inventory per representative.
-    const isAdmin = ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
-    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
-    const usageQuery = (isAdmin || isManager) ? colRef : query(colRef, where("userId", "==", user.uid));
+    // TEAM-WIDE POOL: Usage is calculated from all submitted entries across the team.
+    // This ensures that all users see the same global balance for shared inventory items.
+    const usageQuery = colRef;
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};
@@ -129,11 +120,7 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     }, (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        console.error("Usage tracking error:", error);
     });
 
     return () => unsubscribe();

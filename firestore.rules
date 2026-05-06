@@ -42,8 +42,9 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // REVERTED: Access restricted to owner, manager, or admin.
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      // TEAM-WIDE POOL: All users can read entries to calculate global sample usage.
+      // Privacy in the UI is maintained by filtering queries in specific views.
+      allow read: if isSignedIn(); 
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
