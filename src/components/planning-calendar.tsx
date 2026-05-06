@@ -81,12 +81,12 @@ const DoctorSearchList = React.memo(({
 }) => {
     const filtered = useMemo(() => {
         const q = filter.toLowerCase().trim();
-        if (!q) return doctors.slice(0, 30); // Limiting initial view for performance
+        if (!q) return doctors.slice(0, 30);
         return doctors.filter(d => 
             `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
             (d.municipality && d.municipality.toLowerCase().includes(q)) ||
             (d.specialty && d.specialty.toLowerCase().includes(q))
-        ).slice(0, 50); // Limiting results to 50 for mobile responsiveness
+        ).slice(0, 100); // Limit to 100 for performance
     }, [doctors, filter]);
 
     if (filtered.length === 0) {
@@ -152,8 +152,8 @@ export function PlanningCalendar({
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
 
-    // CRITICAL FIX: Ensure pointer events are restored when any dialog is closed
-    // This prevents the "screen freeze" issue where the body lock isn't removed.
+    // CRITICAL RECOVERY: Ensure click interactions are restored after dialog closure.
+    // This addresses Radix UI's body lock persisting in some browser environments.
     useEffect(() => {
         if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
             document.body.style.pointerEvents = "auto";
@@ -395,12 +395,9 @@ export function PlanningCalendar({
     }
 
     // HANDLER FOR OPENING MODALS FROM DROPDOWN
-    // We use a small timeout to ensure the dropdown menu is fully unmounted 
-    // before opening the dialog, preventing the focus-lock and UI freeze.
+    // Prevent default selection to avoid focus conflicts between Dropdown and Dialog overlays.
     const handleOpenDialog = (setter: (v: boolean) => void) => {
-        setTimeout(() => {
-            setter(true);
-        }, 150);
+        setter(true);
     };
     
     return (
@@ -477,7 +474,7 @@ export function PlanningCalendar({
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <DropdownMenu>
+                            <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild>
                                     <Button size="lg" className="h-12 px-6 font-bold text-lg gap-2" disabled={readOnly}>
                                         <Settings2 className="w-5 h-5" />
@@ -543,9 +540,7 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={(open) => {
-                if (!open) {
-                  setDoctorFilter("");
-                }
+                if (!open) setDoctorFilter("");
                 setIsAddPlanDialogOpen(open);
             }}>
                 <DialogContent 

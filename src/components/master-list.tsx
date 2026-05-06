@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -606,7 +607,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                             </div>
                             
                             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
-                            <DropdownMenu>
+                            <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" size="sm" className="h-9">
                                         <Settings2 className="mr-2 w-4 h-4" />
