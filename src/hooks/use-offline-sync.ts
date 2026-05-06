@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -46,11 +46,12 @@ export const useOfflineSync = (userId?: string) => {
     try {
       const startDate = getQueryStartDateISO();
       
+      // Removed orderBy to avoid the requirement for a composite index in Firestore.
+      // We handle sorting in-memory below.
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId),
-        where("submittedAt", ">=", startDate),
-        orderBy("submittedAt", "desc")
+        where("submittedAt", ">=", startDate)
       );
       
       const querySnapshot = await getDocs(q);
@@ -59,9 +60,16 @@ export const useOfflineSync = (userId?: string) => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
       
+      // Sort in-memory (descending by submission date)
+      entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      
       setMasterEntries(entries);
-    } catch (error) {
-      console.error("Error fetching master entries:", error);
+    } catch (serverError: any) {
+      const permissionError = new FirestorePermissionError({
+        path: 'coverageEntries',
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
         setLoading(false);
     }

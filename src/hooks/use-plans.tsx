@@ -5,9 +5,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -42,12 +44,11 @@ export const usePlans = () => {
       try {
         const startDate = getQueryStartDateISO();
         
-        // Fetch plans and permission requests for current month
+        // Removed orderBy to avoid index requirement.
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          where("plannedDate", ">=", startDate),
-          orderBy("plannedDate", "asc")
+          where("plannedDate", ">=", startDate)
         );
         
         const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
@@ -62,6 +63,9 @@ export const usePlans = () => {
           allPlans.push({ id: doc.id, ...doc.data() } as Plan);
         });
 
+        // Sort in-memory
+        allPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
+
         setMasterPlans(allPlans);
         
         const fetchedRequests: PlanningPermissionRequest[] = [];
@@ -70,8 +74,12 @@ export const usePlans = () => {
         });
         setPlanningRequests(fetchedRequests);
 
-      } catch (error) {
-        console.error("Error fetching plans:", error);
+      } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: 'plans',
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       }
     }
     

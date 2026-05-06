@@ -6,7 +6,7 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { isToday, parseISO } from 'date-fns';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -29,11 +29,12 @@ export const useTimeLogs = () => {
     setLoading(true);
     try {
       const startDate = getQueryStartDateISO();
+      
+      // Removed orderBy to avoid composite index requirement.
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
-        where("timeIn", ">=", startDate),
-        orderBy("timeIn", "desc")
+        where("timeIn", ">=", startDate)
       );
       
       const querySnapshot = await getDocs(q);
@@ -42,10 +43,17 @@ export const useTimeLogs = () => {
         fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
 
+      // Sort in-memory descending by timeIn
+      fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
+
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
-    } catch (error) {
-      console.error("Error fetching time logs:", error);
+    } catch (serverError: any) {
+      const permissionError = new FirestorePermissionError({
+        path: 'timeLogs',
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
