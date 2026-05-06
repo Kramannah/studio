@@ -9,7 +9,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock, Loader2, X } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock, Loader2, X, Info } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   DropdownMenu,
@@ -51,8 +51,8 @@ type PlanningCalendarProps = {
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'wholeday': 'Whole Day',
-    'halfday-am': 'AM',
-    'halfday-pm': 'PM',
+    'halfday-am': 'Half Day (AM)',
+    'halfday-pm': 'Half Day (PM)',
 };
 
 const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
@@ -206,6 +206,12 @@ export function PlanningCalendar({
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
         return plansByDate[dateStr] || [];
     }, [plansByDate, selectedDate]);
+
+    const selectedDayNonCallDays = useMemo(() => {
+        if (!selectedDate) return [];
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        return nonCallDaysByDate[dateStr] || [];
+    }, [nonCallDaysByDate, selectedDate]);
 
     const selectedDayStats = useMemo(() => {
         if (!selectedDate) return { total: 0, covered: 0, notCovered: 0 };
@@ -386,6 +392,47 @@ export function PlanningCalendar({
                             </DropdownMenu>
                         </div>
                     </div>
+
+                    {/* Non-Call Activity / Leave Details */}
+                    {selectedDayNonCallDays.length > 0 && (
+                        <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                             <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
+                                <CalendarOff className="w-3 h-3" /> Non-Call Activity
+                            </h4>
+                            {selectedDayNonCallDays.map((day) => (
+                                <div key={day.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 rounded-full bg-orange-500/10">
+                                            <StatusIcon status={day.status} />
+                                        </div>
+                                        <div>
+                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none mb-1">
+                                                {day.reason}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Badge variant="secondary" className="h-6 px-2 text-[10px] font-black uppercase tracking-tighter bg-orange-500/10 text-orange-600 border-none">
+                                                    {dayTypeLabels[day.dayType]}
+                                                </Badge>
+                                                {day.remarks && (
+                                                    <p className="text-xs text-muted-foreground font-medium italic">
+                                                        "{day.remarks}"
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <Badge variant="outline" className={cn(
+                                        "h-8 px-4 capitalize font-black text-xs border-2 shadow-sm",
+                                        day.status === 'approved' && "bg-primary/10 text-primary border-primary/30",
+                                        day.status === 'pending' && "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
+                                        day.status === 'rejected' && "bg-destructive/10 text-destructive border-destructive/30"
+                                    )}>
+                                        {day.status}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
                         <Table>
