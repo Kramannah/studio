@@ -215,7 +215,7 @@ export function useAdminData(managerId?: string) {
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
         
         // Use Promise.allSettled to ensure failure in one collection doesn't block the rest
-        // Removing deep history restrictions to match account view
+        // Removing deep history restrictions to match account view parity for GMAS-06 and others
         const results = await Promise.allSettled([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
@@ -237,7 +237,7 @@ export function useAdminData(managerId?: string) {
         const ncds = getVal<NonCallDay>(4);
         const requests = getVal<PlanningPermissionRequest>(5);
 
-        // Sort data for presentation
+        // Sort data for consistent presentation
         entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt)));
         plans.sort((a, b) => safeToDateISO(b.plannedDate).localeCompare(safeToDateISO(a.plannedDate)));
         logs.sort((a, b) => safeToDateISO(b.timeIn).localeCompare(safeToDateISO(a.timeIn)));
@@ -247,14 +247,14 @@ export function useAdminData(managerId?: string) {
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
             if (e.primarySampleName && e.primaryProductQty) {
-                used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
+                used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Math.round(Number(e.primaryProductQty));
             }
             if (e.secondarySampleName && e.secondaryProductQty) {
-                used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
+                used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Math.round(Number(e.secondaryProductQty));
             }
             e.reminderProducts?.forEach(p => {
                 if (p.sampleName && p.quantity) {
-                    used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity);
+                    used[p.sampleName] = (used[p.sampleName] || 0) + Math.round(Number(p.quantity));
                 }
             });
         });
@@ -266,10 +266,6 @@ export function useAdminData(managerId?: string) {
         setAllNonCallDaysIndividual(ncds);
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
-
-        if (results.some(r => r.status === 'rejected')) {
-            console.warn("Some representative data points failed to sync independently.");
-        }
 
     } catch (err) {
         console.error("Individual PMR Data Fetch Error:", err);

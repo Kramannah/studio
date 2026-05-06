@@ -269,7 +269,7 @@ export default function AdminPage() {
                             <Button size="sm" variant="outline" className="font-headline border-2">User View</Button>
                         </Link>
                     )}
-                    <Button size="sm" variant="destructive" className="font-headline" logout={logout}>Logout</Button>
+                    <Button size="sm" variant="destructive" className="font-headline" onClick={logout}>Logout</Button>
                 </div>
             </header>
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
