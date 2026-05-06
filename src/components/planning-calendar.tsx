@@ -9,7 +9,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock, Loader2 } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock, Loader2, X } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   DropdownMenu,
@@ -93,6 +93,13 @@ export function PlanningCalendar({
     useEffect(() => {
         setSelectedDate(new Date());
     }, []);
+
+    // Restoration of pointer events on body after closing dialogs
+    useEffect(() => {
+        if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
+            document.body.style.pointerEvents = 'auto';
+        }
+    }, [isAddPlanDialogOpen, isNonCallDialogOpen, isUnlockDialogOpen]);
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
@@ -181,7 +188,8 @@ export function PlanningCalendar({
             const freq = d.frequency || '1x';
             const target = parseInt(freq.replace('x', ''), 10) || 0;
             const nameKey = `${(d.firstName || '').toLowerCase()}|${(d.lastName || '').toLowerCase()}`;
-            const completed = Math.min(target, visitCountsThisMonth[nameKey] || 0);
+            const actual = visitCountsThisMonth[nameKey] || 0;
+            const completed = Math.min(target, actual);
 
             stats.total.target += target;
             stats.total.completed += completed;
@@ -445,68 +453,50 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
+                <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
                     <DialogHeader className="p-6 border-b shrink-0 bg-muted/20">
-                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
-                        <DialogDescription className="text-base">Select doctors from your masterlist to schedule visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}.</DialogDescription>
-                        
-                        <div className="flex flex-wrap gap-2 mt-4">
-                            <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">
-                                Monthly Territory Progress: {territoryStats.total.completed} / {territoryStats.total.target}
-                            </Badge>
-                            {['1x', '2x', '3x', '4x'].map(f => (
-                                <Badge key={f} variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
-                                    {f}: {territoryStats[f as keyof typeof territoryStats].completed} / {territoryStats[f as keyof typeof territoryStats].target}
-                                </Badge>
-                            ))}
-                        </div>
+                        <DialogTitle className="text-2xl font-headline font-black">Plan Visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
+                        <DialogDescription className="text-base">Select doctors from your masterlist to plan multiple visits at once.</DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 flex flex-col min-h-0 p-6 space-y-6">
+                    <div className="flex-1 flex flex-col min-h-0 p-6 space-y-6 overflow-hidden">
                         <div className="relative shrink-0">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
-                                placeholder="Search doctors by name, specialty, or city..." 
+                                placeholder="Search doctors by name..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
                                 className="pl-12 h-12 text-lg rounded-xl border-2 focus-visible:ring-primary bg-card"
                             />
                         </div>
 
-                        <div className="flex-1 border-2 rounded-2xl bg-card overflow-hidden flex flex-col">
-                            <div className="sticky top-0 bg-muted/90 backdrop-blur-md z-30 border-b-2">
-                                <Table className="table-fixed w-full">
-                                    <TableHeader>
-                                        <TableRow className="hover:bg-transparent h-12">
-                                            <TableHead className="w-[60px] pl-6">
-                                                <Checkbox 
-                                                    checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.filter(d => !selectedDayPlannedIds.has(d.id)).length} 
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            const ids = new Set(filteredDoctorsForSearch.filter(d => !selectedDayPlannedIds.has(d.id)).map(d => d.id));
-                                                            setSelectedDoctorIds(ids);
-                                                        } else {
-                                                            setSelectedDoctorIds(new Set());
-                                                        }
-                                                    }}
-                                                />
-                                            </TableHead>
-                                            <TableHead className="font-bold text-xs uppercase tracking-widest text-muted-foreground">Doctor Name</TableHead>
-                                            <TableHead className="font-bold text-xs uppercase tracking-widest text-muted-foreground">Location</TableHead>
-                                            <TableHead className="w-[120px] font-bold text-xs uppercase tracking-widest text-muted-foreground text-center">Remaining</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                </Table>
+                        <div className="space-y-4 shrink-0">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold font-headline">Total Completed:</span>
+                                <span className="font-black text-primary">{territoryStats.total.completed} / {territoryStats.total.target}</span>
                             </div>
-                            <ScrollArea className="flex-1">
-                                <Table className="table-fixed w-full">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <span className="text-muted-foreground text-sm font-bold uppercase tracking-widest">By Frequency:</span>
+                                {['1x', '2x', '3x', '4x'].map(f => (
+                                    territoryStats[f as keyof typeof territoryStats].target > 0 && (
+                                        <Badge key={f} variant="outline" className="h-8 px-4 font-bold border-2 bg-background/50 text-sm">
+                                            {f}: {territoryStats[f as keyof typeof territoryStats].completed} / {territoryStats[f as keyof typeof territoryStats].target}
+                                        </Badge>
+                                    )
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 border-2 rounded-2xl bg-card overflow-hidden flex flex-col relative">
+                            <ScrollArea className="flex-1 w-full">
+                                <Table className="w-full">
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
                                                 const nameKey = `${(doctor.firstName || '').toLowerCase()}|${(doctor.lastName || '').toLowerCase()}`;
-                                                const completedCount = visitCountsThisMonth[nameKey] || 0;
+                                                const actualCount = visitCountsThisMonth[nameKey] || 0;
                                                 const targetCount = parseInt((doctor.frequency || '1x').replace('x', ''), 10) || 0;
-                                                const remaining = Math.max(0, targetCount - completedCount);
+                                                const remaining = Math.max(0, targetCount - actualCount);
                                                 const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
                                                 
                                                 return (
@@ -518,16 +508,16 @@ export function PlanningCalendar({
                                                                 disabled={isAlreadyPlanned}
                                                             />
                                                         </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-bold text-primary">{doctor.firstName} {doctor.lastName}</span>
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold">{doctor.specialty}</span>
-                                                            </div>
+                                                        <TableCell className="w-[250px]">
+                                                            <span className="font-bold text-base">{doctor.firstName} {doctor.lastName}</span>
                                                         </TableCell>
-                                                        <TableCell className="text-sm text-muted-foreground truncate">
-                                                            {doctor.municipality}
+                                                        <TableCell className="text-muted-foreground text-sm font-medium">
+                                                            {doctor.municipality}, {doctor.province}
                                                         </TableCell>
-                                                        <TableCell className="w-[120px] font-mono text-lg font-black text-center text-foreground/70">
+                                                        <TableCell className="w-[80px] text-center font-bold">
+                                                            {doctor.frequency}
+                                                        </TableCell>
+                                                        <TableCell className="w-[80px] font-mono text-lg font-black text-center pr-6">
                                                             {remaining}
                                                         </TableCell>
                                                     </TableRow>
@@ -535,7 +525,7 @@ export function PlanningCalendar({
                                             })
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic text-lg">No doctors found matching your search.</TableCell>
+                                                <TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic text-lg">No doctors found matching your search.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
@@ -545,10 +535,10 @@ export function PlanningCalendar({
                     </div>
 
                     <DialogFooter className="p-6 border-t bg-muted/20 gap-4 flex-row justify-end shrink-0">
-                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-12 px-8 font-bold border-2">Cancel</Button>
-                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[200px] font-headline text-lg font-black h-12 shadow-lg transition-all active:scale-95">
-                            {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <PlusCircle className="mr-3 w-5 h-5" />}
-                            Plan {selectedDoctorIds.size} Visit(s)
+                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-12 px-8 font-bold border-2">Close</Button>
+                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[200px] font-headline text-lg font-black h-12 shadow-lg transition-all active:scale-95 bg-primary text-primary-foreground hover:bg-primary/90">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : null}
+                            Plan Visit(s)
                         </Button>
                     </DialogFooter>
                 </DialogContent>
