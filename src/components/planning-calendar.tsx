@@ -4,7 +4,7 @@ import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -31,7 +31,6 @@ import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { cn, isPastWeek, getWeekMonday, isCurrentWeek } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
-
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -66,6 +65,56 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
     }
 }
 
+/**
+ * Memoized Row for the Add Plan Dialog to prevent full list re-renders
+ */
+const DoctorPlanRow = React.memo(({ 
+    doctor, 
+    isPlanned, 
+    isSelected, 
+    onToggle, 
+    visitCount 
+}: { 
+    doctor: Doctor, 
+    isPlanned: boolean, 
+    isSelected: boolean, 
+    onToggle: (id: string) => void,
+    visitCount: number
+}) => {
+    const target = parseInt(doctor.frequency.replace('x', ''), 10);
+    const balance = Math.max(0, target - visitCount);
+
+    return (
+        <div 
+            className={cn(
+                "flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", 
+                isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer border-border/50",
+                isSelected && "border-primary bg-primary/5"
+            )}
+            onClick={() => !isPlanned && onToggle(doctor.id)}
+        >
+            <div className="flex items-center gap-4">
+                <Checkbox 
+                    className="h-6 w-6 rounded-md"
+                    checked={isSelected || isPlanned}
+                    disabled={isPlanned}
+                    onCheckedChange={() => !isPlanned && onToggle(doctor.id)}
+                />
+                <div>
+                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+                        {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
+                    </p>
+                </div>
+            </div>
+            <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
+                {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
+            </Badge>
+        </div>
+    );
+});
+DoctorPlanRow.displayName = "DoctorPlanRow";
+
 
 export function PlanningCalendar({ 
     doctors, 
@@ -81,7 +130,6 @@ export function PlanningCalendar({
     onAddNonCallDay, 
     readOnly = false,
 }: PlanningCalendarProps) {
-    // Hydration-safe initial state
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
@@ -117,15 +165,15 @@ export function PlanningCalendar({
     }, [selectedDate, planningRequests]);
 
     const visitCountsThisMonth = useMemo(() => {
-        const thisMonthEntries = allEntries.filter(e => {
-            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-            return isValid(submittedDate) && isThisMonth(submittedDate);
+        const counts: Record<string, number> = {};
+        allEntries.forEach(e => {
+            const date = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
+            if (date && isValid(date) && isThisMonth(date)) {
+                const nameKey = `${e.firstName} ${e.lastName}`.toLowerCase();
+                counts[nameKey] = (counts[nameKey] || 0) + 1;
+            }
         });
-        return thisMonthEntries.reduce((acc, entry) => {
-          const doctorName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
-          acc[doctorName] = (acc[doctorName] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
+        return counts;
     }, [allEntries]);
 
     const categoryProgress = useMemo(() => {
@@ -150,50 +198,53 @@ export function PlanningCalendar({
     }, [doctors, visitCountsThisMonth]);
 
     const plansByDate = useMemo(() => {
-        return plans.reduce((acc, plan) => {
-            const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
-            if(!isValid(plannedDate)) return acc;
-            const date = format(plannedDate, 'yyyy-MM-dd');
-            if (!acc[date]) {
-                acc[date] = [];
+        const groups: Record<string, Plan[]> = {};
+        plans.forEach(plan => {
+            const date = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
+            if(isValid(date)) {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                if (!groups[dateStr]) groups[dateStr] = [];
+                groups[dateStr].push(plan);
             }
-            acc[date].push(plan);
-            return acc;
-        }, {} as Record<string, Plan[]>);
+        });
+        return groups;
     }, [plans]);
     
     const nonCallDaysByDate = useMemo(() => {
-        return nonCallDays.reduce((acc, entry) => {
-            const nonCallDate = typeof entry.date === 'string' ? parseISO(entry.date) : entry.date;
-            if(!isValid(nonCallDate)) return acc;
-            const date = format(nonCallDate, 'yyyy-MM-dd');
-            if (!acc[date]) {
-                acc[date] = [];
+        const groups: Record<string, NonCallDay[]> = {};
+        nonCallDays.forEach(day => {
+            const date = typeof day.date === 'string' ? parseISO(day.date) : day.date;
+            if(isValid(date)) {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                if (!groups[dateStr]) groups[dateStr] = [];
+                groups[dateStr].push(day);
             }
-            acc[date].push(entry);
-            return acc;
-        }, {} as Record<string, NonCallDay[]>);
+        });
+        return groups;
     }, [nonCallDays]);
 
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
-        return plans.filter(plan => {
-            const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
-            return isValid(plannedDate) && isSameDay(plannedDate, selectedDate);
-        });
-    }, [plans, selectedDate]);
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        return plansByDate[dateStr] || [];
+    }, [plansByDate, selectedDate]);
+
+    // High performance Set for plan status checking in the dialog
+    const plannedDoctorIdsSet = useMemo(() => {
+        return new Set(selectedDayPlans.map(p => p.doctorId));
+    }, [selectedDayPlans]);
 
     const entriesByDate = useMemo(() => {
-        return allEntries.reduce((acc, entry) => {
-            const coverageDate = typeof entry.coverageDate === 'string' ? parseISO(entry.coverageDate) : entry.coverageDate;
-            if (!isValid(coverageDate)) return acc;
-            const date = format(coverageDate, 'yyyy-MM-dd');
-            if(!acc[date]){
-                acc[date] = [];
+        const groups: Record<string, CoverageEntry[]> = {};
+        allEntries.forEach(e => {
+            const date = typeof e.coverageDate === 'string' ? parseISO(e.coverageDate) : e.coverageDate;
+            if (isValid(date)) {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                if (!groups[dateStr]) groups[dateStr] = [];
+                groups[dateStr].push(e);
             }
-            acc[date].push(entry);
-            return acc;
-        }, {} as Record<string, CoverageEntry[]>);
+        });
+        return groups;
     }, [allEntries]);
 
     const selectedDayStats = useMemo(() => {
@@ -219,11 +270,9 @@ export function PlanningCalendar({
     
     const selectedDayNonCallEntry = useMemo(() => {
         if (!selectedDate) return undefined;
-        return nonCallDays.find(entry => {
-            const nonCallDate = typeof entry.date === 'string' ? parseISO(entry.date) : entry.date;
-            return isValid(nonCallDate) && isSameDay(nonCallDate, selectedDate);
-        });
-    }, [nonCallDays, selectedDate]);
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        return (nonCallDaysByDate[dateStr] || [])[0];
+    }, [nonCallDaysByDate, selectedDate]);
     
     const plannedDays = useMemo(() => {
         return Object.keys(plansByDate).map(dateStr => parseISO(dateStr));
@@ -235,23 +284,32 @@ export function PlanningCalendar({
 
     const filteredDoctors = useMemo(() => {
         if (!doctorFilter) return doctors;
+        const q = doctorFilter.toLowerCase();
         return doctors.filter(d => 
-            `${d.firstName} ${d.lastName}`.toLowerCase().includes(doctorFilter.toLowerCase()) ||
-            (d.province && d.province.toLowerCase().includes(doctorFilter.toLowerCase())) ||
-            (d.municipality && d.municipality.toLowerCase().includes(doctorFilter.toLowerCase()))
+            `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+            (d.province && d.province.toLowerCase().includes(q)) ||
+            (d.municipality && d.municipality.toLowerCase().includes(q)) ||
+            (d.specialty && d.specialty.toLowerCase().includes(q))
         );
     }, [doctors, doctorFilter]);
 
-    const handleAddSelectedPlans = () => {
+    const handleAddSelectedPlans = useCallback(() => {
         if (selectedDate && selectedDoctorIdsForPlan.length > 0) {
-            const doctorsToAdd = doctors.filter(d => selectedDoctorIdsForPlan.includes(d.id));
-            doctorsToAdd.forEach(doctor => {
-                onAddPlan(doctor, selectedDate);
+            const doctorMap = new Map(doctors.map(d => [d.id, d]));
+            selectedDoctorIdsForPlan.forEach(id => {
+                const doctor = doctorMap.get(id);
+                if (doctor) onAddPlan(doctor, selectedDate);
             });
             setIsAddPlanDialogOpen(false);
         }
-    };
+    }, [selectedDate, selectedDoctorIdsForPlan, doctors, onAddPlan]);
     
+    const handleToggleDoctorSelection = useCallback((id: string) => {
+        setSelectedDoctorIdsForPlan(prev => 
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    }, []);
+
     const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
             onAddNonCallDay({
@@ -265,9 +323,9 @@ export function PlanningCalendar({
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = doctors.find(d => d.id === plan.doctorId);
-        const plannedDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
-        if (doctor && isValid(plannedDate)) {
-            onLogCall(doctor, plannedDate);
+        const date = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
+        if (doctor && isValid(date)) {
+            onLogCall(doctor, date);
         }
     }
 
@@ -287,9 +345,8 @@ export function PlanningCalendar({
                         const doctor = doctors.find(d => d.id === plan.doctorId);
                         if (!doctor) return null;
 
-                        const planDate = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
-                        const dateString = format(planDate, 'yyyy-MM-dd');
-                        const dayEntries = entriesByDate[dateString] || [];
+                        const dateStr = typeof plan.plannedDate === 'string' ? format(parseISO(plan.plannedDate), 'yyyy-MM-dd') : format(plan.plannedDate, 'yyyy-MM-dd');
+                        const dayEntries = entriesByDate[dateStr] || [];
                         const isCovered = dayEntries.some(entry => 
                             entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
                             entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
@@ -533,45 +590,20 @@ export function PlanningCalendar({
                             <div className="space-y-2">
                                 {filteredDoctors.length > 0 ? (
                                     filteredDoctors.map(doctor => {
-                                        const doctorName = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                        const visitCount = visitCountsThisMonth[doctorName] || 0;
-                                        const target = parseInt(doctor.frequency.replace('x', ''), 10);
-                                        const balance = Math.max(0, target - visitCount);
-                                        const isPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
+                                        const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                        const count = visitCountsThisMonth[nameKey] || 0;
+                                        const isPlanned = plannedDoctorIdsSet.has(doctor.id);
+                                        const isSelected = selectedDoctorIdsForPlan.includes(doctor.id);
 
                                         return (
-                                            <div 
-                                                key={doctor.id} 
-                                                className={cn(
-                                                    "flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", 
-                                                    isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer border-border/50"
-                                                )}
-                                                onClick={() => {
-                                                    if (!isPlanned) {
-                                                        const isSelected = selectedDoctorIdsForPlan.includes(doctor.id);
-                                                        if (isSelected) setSelectedDoctorIdsForPlan(prev => prev.filter(id => id !== doctor.id));
-                                                        else setSelectedDoctorIdsForPlan(prev => [...prev, doctor.id]);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <Checkbox 
-                                                        className="h-6 w-6 rounded-md"
-                                                        checked={selectedDoctorIdsForPlan.includes(doctor.id)}
-                                                        disabled={isPlanned}
-                                                        onCheckedChange={() => {}} 
-                                                    />
-                                                    <div>
-                                                        <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
-                                                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
-                                                            {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
-                                                    {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
-                                                </Badge>
-                                            </div>
+                                            <DoctorPlanRow 
+                                                key={doctor.id}
+                                                doctor={doctor}
+                                                isPlanned={isPlanned}
+                                                isSelected={isSelected}
+                                                visitCount={count}
+                                                onToggle={handleToggleDoctorSelection}
+                                            />
                                         )
                                     })
                                 ) : (
