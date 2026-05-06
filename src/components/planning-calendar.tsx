@@ -96,7 +96,7 @@ export function PlanningCalendar({
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
-    // Grouping lookups for calendar modifiers
+    // Grouping lookups for calendar modifiers and plan status
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
         allEntries.forEach(e => {
@@ -162,7 +162,7 @@ export function PlanningCalendar({
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase().trim();
+                    const nameKey = `${(e.firstName || '').toLowerCase()}|${(e.lastName || '').toLowerCase()}`;
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
             }
@@ -176,7 +176,7 @@ export function PlanningCalendar({
         const freqStats: Record<string, { completed: number, target: number }> = {};
 
         doctors.forEach(doc => {
-            const nameKey = `${doc.firstName || ''} ${doc.lastName || ''}`.toLowerCase().trim();
+            const nameKey = `${(doc.firstName || '').toLowerCase()}|${(doc.lastName || '').toLowerCase()}`;
             const completed = visitCountsThisMonth[nameKey] || 0;
             const target = parseInt((doc.frequency || '1x').replace('x', ''), 10) || 0;
 
@@ -442,8 +442,8 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
-                    <DialogHeader className="p-6 border-b shrink-0">
+                <DialogContent className="max-w-6xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
+                    <DialogHeader className="p-6 border-b shrink-0 bg-muted/20">
                         <DialogTitle className="text-2xl font-headline font-black">Plan Visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
                         <DialogDescription className="text-base">Select doctors from your masterlist to plan multiple visits at once.</DialogDescription>
                     </DialogHeader>
@@ -455,19 +455,19 @@ export function PlanningCalendar({
                                 placeholder="Search doctors by name..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
-                                className="pl-12 h-12 text-lg rounded-xl border-2 border-primary/50 focus-visible:ring-primary"
+                                className="pl-12 h-14 text-lg rounded-xl border-2 border-primary/50 focus-visible:ring-primary bg-card"
                             />
                         </div>
 
-                        <div className="space-y-2 shrink-0">
-                             <div className="flex items-center gap-2">
-                                <span className="font-headline font-bold text-sm">Total Completed:</span>
-                                <span className="font-mono text-sm font-black text-primary">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
+                        <div className="space-y-3 shrink-0 px-1">
+                             <div className="flex items-center gap-3">
+                                <span className="font-headline font-black text-lg uppercase tracking-tight text-foreground/80">Total Completed:</span>
+                                <span className="font-mono text-xl font-black text-primary">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
                              </div>
-                             <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">By Frequency:</span>
+                             <div className="flex flex-wrap items-center gap-3">
+                                <span className="text-xs text-muted-foreground uppercase font-black tracking-widest">By Frequency:</span>
                                 {Object.entries(territoryStats.freqStats).sort().map(([freq, stats]) => (
-                                    <Badge key={freq} variant="secondary" className="font-mono h-7 px-3 border border-primary/10">
+                                    <Badge key={freq} variant="secondary" className="font-mono h-8 px-4 text-sm border-2 border-primary/10 bg-muted/50 rounded-lg">
                                         {freq}: {stats.completed}/{stats.target}
                                     </Badge>
                                 ))}
@@ -475,68 +475,81 @@ export function PlanningCalendar({
                         </div>
 
                         <div className="flex-1 flex flex-col min-h-0">
-                            <ScrollArea className="flex-1 border rounded-xl bg-card">
+                            <div className="flex-1 border-2 rounded-2xl bg-card overflow-hidden flex flex-col">
                                 <Table className="table-fixed w-full">
-                                    <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-20 border-b">
-                                        <TableRow className="hover:bg-transparent h-12">
-                                            <TableHead className="w-[50px] pl-4"><Checkbox checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.length} onCheckedChange={(checked) => {
-                                                if (checked) setSelectedDoctorIds(new Set(filteredDoctorsForSearch.map(d => d.id)));
-                                                else setSelectedDoctorIds(new Set());
-                                            }}/></TableHead>
-                                            <TableHead className="w-[200px] font-bold text-xs uppercase">Name</TableHead>
-                                            <TableHead className="w-[250px] font-bold text-xs uppercase">Location</TableHead>
-                                            <TableHead className="w-[100px] font-bold text-xs uppercase text-center">Target</TableHead>
-                                            <TableHead className="font-bold text-xs uppercase text-right pr-6">Remaining</TableHead>
+                                    <TableHeader className="sticky top-0 bg-muted/90 backdrop-blur-md z-30 border-b-2">
+                                        <TableRow className="hover:bg-transparent h-14">
+                                            <TableHead className="w-[60px] pl-6">
+                                                <Checkbox 
+                                                    checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.filter(d => !selectedDayPlannedIds.has(d.id)).length} 
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            const ids = new Set(filteredDoctorsForSearch.filter(d => !selectedDayPlannedIds.has(d.id)).map(d => d.id));
+                                                            setSelectedDoctorIds(ids);
+                                                        } else {
+                                                            setSelectedDoctorIds(new Set());
+                                                        }
+                                                    }}
+                                                />
+                                            </TableHead>
+                                            <TableHead className="w-[300px] font-black text-xs uppercase tracking-widest text-muted-foreground">Name</TableHead>
+                                            <TableHead className="w-[350px] font-black text-xs uppercase tracking-widest text-muted-foreground">Location</TableHead>
+                                            <TableHead className="w-[120px] font-black text-xs uppercase tracking-widest text-muted-foreground text-center">Target</TableHead>
+                                            <TableHead className="font-black text-xs uppercase tracking-widest text-muted-foreground text-right pr-8">Remaining Visits</TableHead>
                                         </TableRow>
                                     </TableHeader>
-                                    <TableBody>
-                                        {filteredDoctorsForSearch.length > 0 ? (
-                                            filteredDoctorsForSearch.map(doctor => {
-                                                const nameKey = `${doctor.firstName || ''} ${doctor.lastName || ''}`.toLowerCase().trim();
-                                                const completedCount = visitCountsThisMonth[nameKey] || 0;
-                                                const targetCount = parseInt((doctor.frequency || '1x').replace('x', ''), 10) || 0;
-                                                const remaining = Math.max(0, targetCount - completedCount);
-                                                const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
-                                                
-                                                return (
-                                                    <TableRow key={doctor.id} className={cn("h-14 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
-                                                        <TableCell className="w-[50px] pl-4">
-                                                            <Checkbox 
-                                                                checked={selectedDoctorIds.has(doctor.id)} 
-                                                                onCheckedChange={() => toggleDoctorSelection(doctor.id)}
-                                                                disabled={isAlreadyPlanned}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="w-[200px] font-bold text-primary truncate">
-                                                            {doctor.firstName} {doctor.lastName}
-                                                        </TableCell>
-                                                        <TableCell className="w-[250px] text-xs text-muted-foreground truncate">
-                                                            {doctor.municipality}, {doctor.province}
-                                                        </TableCell>
-                                                        <TableCell className="w-[100px] font-mono text-sm text-center">
-                                                            {doctor.frequency}
-                                                        </TableCell>
-                                                        <TableCell className="font-mono text-sm font-bold text-right pr-6">
-                                                            {remaining}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">No doctors found matching your search.</TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
                                 </Table>
-                            </ScrollArea>
+                                <ScrollArea className="flex-1">
+                                    <Table className="table-fixed w-full">
+                                        <TableBody>
+                                            {filteredDoctorsForSearch.length > 0 ? (
+                                                filteredDoctorsForSearch.map(doctor => {
+                                                    const nameKey = `${(doctor.firstName || '').toLowerCase()}|${(doctor.lastName || '').toLowerCase()}`;
+                                                    const completedCount = visitCountsThisMonth[nameKey] || 0;
+                                                    const targetCount = parseInt((doctor.frequency || '1x').replace('x', ''), 10) || 0;
+                                                    const remaining = Math.max(0, targetCount - completedCount);
+                                                    const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
+                                                    
+                                                    return (
+                                                        <TableRow key={doctor.id} className={cn("h-16 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
+                                                            <TableCell className="w-[60px] pl-6">
+                                                                <Checkbox 
+                                                                    checked={selectedDoctorIds.has(doctor.id)} 
+                                                                    onCheckedChange={() => toggleDoctorSelection(doctor.id)}
+                                                                    disabled={isAlreadyPlanned}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="w-[300px] font-bold text-primary text-base truncate">
+                                                                {doctor.firstName} {doctor.lastName}
+                                                            </TableCell>
+                                                            <TableCell className="w-[350px] text-sm text-muted-foreground truncate">
+                                                                {doctor.municipality}, {doctor.province}
+                                                            </TableCell>
+                                                            <TableCell className="w-[120px] font-mono text-sm font-bold text-center">
+                                                                {doctor.frequency}
+                                                            </TableCell>
+                                                            <TableCell className="font-mono text-lg font-black text-right pr-8 text-foreground/70">
+                                                                {remaining}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic text-lg">No doctors found matching your search.</TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </div>
                         </div>
                     </div>
 
                     <DialogFooter className="p-6 border-t bg-muted/20 gap-4 flex-row justify-end shrink-0">
-                        <Button variant="ghost" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
-                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[140px] font-headline text-base h-11">
-                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2" />}
+                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-12 px-8 font-bold border-2">Close</Button>
+                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[200px] font-headline text-lg font-black h-12 shadow-lg transition-all active:scale-95">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <PlusCircle className="mr-3 w-5 h-5" />}
                             Plan {selectedDoctorIds.size} Visit(s)
                         </Button>
                     </DialogFooter>
