@@ -2,7 +2,7 @@
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
@@ -329,6 +329,18 @@ export function SubmittedList({
         }).filter((d): d is Date => d !== null);
     }, [filteredByMonth]);
 
+    const entryCountsByDate = useMemo(() => {
+        const counts: Record<string, number> = {};
+        filteredByMonth.forEach(e => {
+            const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+            if (d && isValid(d)) {
+                const key = format(d, 'yyyy-MM-dd');
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [filteredByMonth]);
+
     const filtered = useMemo(() => {
         let res = [...filteredByMonth];
         if (searchQuery.trim()) {
@@ -518,6 +530,22 @@ export function SubmittedList({
                                 }}
                                 modifiersStyles={{
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' }
+                                }}
+                                components={{
+                                    DayContent: ({ date }) => {
+                                        const dateKey = format(date, 'yyyy-MM-dd');
+                                        const count = entryCountsByDate[dateKey];
+                                        return (
+                                            <div className="relative flex items-center justify-center w-full h-full">
+                                                {date.getDate()}
+                                                {count > 0 && (
+                                                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-black shadow-sm border border-background">
+                                                        {count}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    },
                                 }}
                                 className="w-full p-4"
                             />
