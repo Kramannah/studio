@@ -105,9 +105,11 @@ export const useQ4Allocation = () => {
     
     const colRef = collection(db, "coverageEntries");
     
-    // To ensure a consistent balance for all users, we calculate usage based on ALL coverage entries.
-    // This allows the "Sample Allocation" view to reflect the total pool usage for the whole team.
-    const usageQuery = colRef;
+    // REVERTED: Calculate balance based ONLY on the individual user's data (unless admin/manager).
+    // This restores individual tracking of inventory per representative.
+    const isAdmin = ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
+    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
+    const usageQuery = (isAdmin || isManager) ? colRef : query(colRef, where("userId", "==", user.uid));
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};

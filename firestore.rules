@@ -42,9 +42,8 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // In medical sales orgs using a shared pool, users need to see total consumption.
-      // We allow reading of entries to all signed-in users to support the shared Sample Allocation balance.
-      allow read: if isSignedIn();
+      // REVERTED: Access restricted to owner, manager, or admin.
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
