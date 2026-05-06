@@ -23,6 +23,8 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PlanningCalendar } from '@/components/planning-calendar';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const DynamicSkeleton = () => (
   <div className="space-y-4 w-full">
@@ -55,6 +57,20 @@ export default function Home() {
 
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
   const hasAdminAccess = isUserAdmin || isUserManager;
+
+  // ENSURE USER PROFILE EXISTS: Dynamic Discovery Mechanism
+  useEffect(() => {
+    if (user && db) {
+      const profileRef = doc(db, "userProfiles", user.uid);
+      // We use merge: true to avoid overwriting existing names/assignments
+      // while ensuring every logged in user is registered in the dashboard's directory.
+      setDoc(profileRef, {
+        userId: user.uid,
+        email: user.email,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => console.warn("Auto-profile update skipped:", err.message));
+    }
+  }, [user]);
 
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
