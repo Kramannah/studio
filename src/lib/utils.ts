@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, parseISO, isValid, startOfMonth, isBefore, subDays } from "date-fns"
+import { startOfWeek, isSameWeek, parseISO, isValid, startOfMonth, isBefore, subDays, subMonths } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -8,7 +8,8 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Returns the ISO string for the start of the current period.
- * If forceAllWeek is true, returns 7 days ago. Otherwise start of current month.
+ * If forceAllWeek is true, returns 7 days ago. 
+ * Default: Returns start of the month from 6 months ago to show historical data.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
@@ -16,8 +17,8 @@ export function getQueryStartDateISO(forceAllWeek?: boolean): string {
       // For performance and data limit reasons, we might want to fetch only the last 7 days
       return subDays(now, 7).toISOString();
   }
-  // Default: Start of the current month
-  return startOfMonth(now).toISOString();
+  // Expanded lookback to 6 months so historical data is visible in the UI
+  return subMonths(startOfMonth(now), 6).toISOString();
 }
 
 /**
