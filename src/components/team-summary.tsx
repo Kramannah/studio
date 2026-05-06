@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { format, parseISO, isValid, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { Users, Target, Pill, Activity, TrendingUp, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface TeamSummaryProps {
     data: TeamSummaryData | null;

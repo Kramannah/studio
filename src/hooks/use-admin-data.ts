@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -332,7 +331,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllDoctors(prev => prev.map(d => d.id === id ? data : d));
         toast({ title: "Doctor Updated" });
       })
-      .catch(async () => {
+      .catch(async (e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: update }));
       });
   };
