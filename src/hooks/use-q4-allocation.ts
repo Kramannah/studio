@@ -4,9 +4,10 @@
 import { useState, useEffect } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
+import { getQueryStartDateISO } from '@/lib/utils';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -97,10 +98,12 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     const colRef = collection(db, "coverageEntries");
+    const startDate = getQueryStartDateISO();
     
     // TEAM-WIDE POOL: Usage is calculated from all submitted entries across the team.
     // This ensures that all users see the same global balance for shared inventory items.
-    const usageQuery = colRef;
+    // Filtered by date to reduce data volume and prevent datastore timeouts.
+    const usageQuery = query(colRef, where("submittedAt", ">=", startDate));
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};
