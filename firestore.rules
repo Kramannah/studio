@@ -1,73 +1,131 @@
+/**
+ * Core Philosophy:
+ * This ruleset enforces a strict provider-ownership model where access to data is primarily determined 
+ * by the authenticated user's identity (UID). Data is organized hierarchically to allow for 
+ * efficient, path-based authorization and secure list operations.
+ *
+ * Data Structure:
+ * - /clinics/{clinicId}: Top-level collection of clinics, accessible to all authenticated providers.
+ * - /providers/{providerId}: Top-level collection for provider profiles, where the document ID 
+ *   matches the user's Firebase Auth UID.
+ * - /providers/{providerId}/coverageEvents/...: Subcollections for activity logs, photos, and 
+ *   signatures, nested under the owning provider to ensure clear isolation.
+ *
+ * Key Security Decisions:
+ * - Authorization Independence: Critical fields like 'providerId' are denormalized onto child 
+ *   documents (photos, signatures, events) to allow rules to verify ownership without costly get() calls.
+ * - Path-Based Security: Rules utilize the providerId in the document path to perform fast 
+ *   identity checks (isOwner).
+ * - Restricted Writes: While data is readable by owners, structural entities like Clinics are 
+ *   read-only for standard users to maintain administrative control.
+ * - Explicit Denial: Any attempt to access undocumented collections (like the legacy 'timeLogs') 
+ *   is strictly denied by the default-closed posture.
+ *
+ * Denormalization for Authorization:
+ * - 'providerId' is required on all documents within a provider's tree. This allows the system 
+ *   to ensure that a user can only write data that they explicitly claim as their own, and that 
+ *   this ownership cannot be transferred (immutability).
+ */
 
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Helper Functions ---
+
+    /** Checks if the request is from a signed-in user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /** Checks if the signed-in user's UID matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admin_roles/$(request.auth.uid)) ||
-        request.auth.token.email.lower() == 'mbustamante@hovidinc.com' ||
-        request.auth.uid == 'SgOR5cjCC6dZ0oABv4nXdntu6pI3'
-      );
+    /** 
+     * Verifies the document exists and the user is the owner. 
+     * Used for update and delete operations. 
+     */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
     }
 
-    // --- Allocation Collection ---
-    match /q4Allocation/{id} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the Clinics collection. Clinics are viewable by all authenticated providers.
+     * @path /clinics/{clinicId}
+     * @allow (get, list) Authenticated user retrieving clinic details.
+     * @deny (create, update, delete) Non-admin users attempting to modify clinic information.
+     * @principle Public Read with Restricted Writes.
+     */
+    match /clinics/{clinicId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if false; // TODO: Implement admin role check for clinic management.
     }
 
-    // --- Standard Rules ---
-    match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isAdmin();
+    /**
+     * @description Rules for Provider profiles. A provider can only access and manage their own profile.
+     * @path /providers/{providerId}
+     * @allow (create) User creating their own profile where document ID matches UID.
+     * @allow (get, list, update) Provider accessing or updating their own profile document.
+     * @deny (all) Any user attempting to access another provider's profile.
+     * @principle Ownership-based access control.
+     */
+    match /providers/{providerId} {
+      allow get, list: if isOwner(providerId);
+      allow create: if isOwner(providerId);
+      allow update, delete: if isExistingOwner(providerId);
+    }
 
-      match /providers/{providerId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        allow create, update, delete: if isOwner(userId) || isAdmin();
+    /**
+     * @description Rules for Coverage Events (Call Summary). Events are private to the owning provider.
+     * @path /providers/{providerId}/coverageEvents/{coverageEventId}
+     * @allow (list) Provider listing their own events via path-based authorization.
+     * @allow (create) Provider logging a new event with their UID correctly assigned.
+     * @deny (create) Mismatched providerId in data vs path.
+     * @principle Relational integrity and owner-only writes.
+     */
+    match /providers/{providerId}/coverageEvents/{coverageEventId} {
+      allow get, list: if isOwner(providerId);
+      allow create: if isOwner(providerId) && request.resource.data.providerId == providerId;
+      allow update: if isExistingOwner(providerId) && request.resource.data.providerId == resource.data.providerId;
+      allow delete: if isExistingOwner(providerId);
+
+      /**
+       * @description Photos attached to specific coverage events.
+       * @path /providers/{providerId}/coverageEvents/{coverageEventId}/photos/{photoId}
+       * @allow (create) Provider uploading a photo to their own event.
+       * @principle Authorization Independence using denormalized providerId.
+       */
+      match /photos/{photoId} {
+        allow get, list: if isOwner(providerId);
+        allow create: if isOwner(providerId) && request.resource.data.providerId == providerId;
+        allow update: if isExistingOwner(providerId) && request.resource.data.providerId == resource.data.providerId;
+        allow delete: if isExistingOwner(providerId);
       }
 
-      match /coverageEvents/{coverageEventId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        allow create, update, delete: if isOwner(userId) || isAdmin();
+      /**
+       * @description Signatures attached to specific coverage events.
+       * @path /providers/{providerId}/coverageEvents/{coverageEventId}/signatures/{signatureId}
+       * @allow (create) Provider saving a signature for their own event.
+       * @principle Authorization Independence using denormalized providerId.
+       */
+      match /signatures/{signatureId} {
+        allow get, list: if isOwner(providerId);
+        allow create: if isOwner(providerId) && request.resource.data.providerId == providerId;
+        allow update: if isExistingOwner(providerId) && request.resource.data.providerId == resource.data.providerId;
+        allow delete: if isExistingOwner(providerId);
       }
-    }
-
-    match /coverageEntries/{entryId} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /admin_roles/{adminId} {
-      allow get: if isSignedIn();
-      allow list: if isAdmin();
     }
     
-    match /timeLogs/{logId} {
-      allow read, write: if isSignedIn();
-    }
-    match /plans/{planId} {
-      allow read, write: if isSignedIn();
-    }
-    match /nonCallDays/{dayId} {
-      allow read, write: if isSignedIn();
-    }
-    match /doctors/{doctorId} {
-      allow read, write: if isSignedIn();
-    }
-    match /planningRequests/{requestId} {
-      allow read, write: if isSignedIn();
+    /**
+     * @description Explicitly deny access to the legacy timeLogs path reported in errors.
+     * Assets should be migrated to the /providers/{uid}/coverageEvents path.
+     */
+    match /timeLogs/{document=**} {
+      allow read, write: if false;
     }
   }
 }

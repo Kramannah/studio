@@ -1,10 +1,73 @@
 {
   "entities": {
+    "Clinic": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Clinic",
+      "type": "object",
+      "description": "Represents a medical clinic where healthcare providers practice.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Clinic entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The official name of the clinic."
+        },
+        "address": {
+          "type": "string",
+          "description": "The street address of the clinic."
+        },
+        "city": {
+          "type": "string",
+          "description": "The city where the clinic is located."
+        },
+        "state": {
+          "type": "string",
+          "description": "The state where the clinic is located."
+        },
+        "zipCode": {
+          "type": "string",
+          "description": "The postal code of the clinic's location."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The primary contact phone number for the clinic."
+        },
+        "email": {
+          "type": "string",
+          "description": "The primary contact email address for the clinic.",
+          "format": "email"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the clinic record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the clinic record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "address",
+        "city",
+        "state",
+        "zipCode",
+        "phoneNumber",
+        "email",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "Provider": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Provider",
       "type": "object",
-      "description": "Represents a medical professional (MD) providing coverage information.",
+      "description": "Represents a medical doctor or other healthcare provider.",
       "properties": {
         "id": {
           "type": "string",
@@ -12,23 +75,29 @@
         },
         "firstName": {
           "type": "string",
-          "description": "The first name of the medical provider."
+          "description": "The first name of the provider."
         },
         "lastName": {
           "type": "string",
-          "description": "The last name of the medical provider."
+          "description": "The last name of the provider."
         },
         "specialty": {
           "type": "string",
-          "description": "The medical specialty or area of expertise of the provider."
+          "description": "The medical specialty of the provider (e.g., Cardiology, Pediatrics)."
         },
-        "clinicName": {
+        "clinicId": {
           "type": "string",
-          "description": "The name of the clinic or medical facility where the provider works."
+          "description": "Reference to Clinic. (Relationship: Clinic 1:N Provider)"
         },
-        "clinicAddress": {
+        "createdAt": {
           "type": "string",
-          "description": "The physical address of the clinic or medical facility."
+          "description": "Timestamp when the provider record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the provider record was last updated.",
+          "format": "date-time"
         }
       },
       "required": [
@@ -36,15 +105,16 @@
         "firstName",
         "lastName",
         "specialty",
-        "clinicName",
-        "clinicAddress"
+        "clinicId",
+        "createdAt",
+        "updatedAt"
       ]
     },
     "CoverageEvent": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "CoverageEvent",
       "type": "object",
-      "description": "Records a specific coverage event, detailing its type, date, associated provider, and multimedia captures.",
+      "description": "Records a specific healthcare coverage event or call, detailing interaction with a provider at a clinic.",
       "properties": {
         "id": {
           "type": "string",
@@ -52,45 +122,136 @@
         },
         "providerId": {
           "type": "string",
-          "description": "Reference to the Provider who conducted this coverage event. (Relationship: Provider 1:N CoverageEvent)"
+          "description": "Reference to Provider. (Relationship: Provider 1:N CoverageEvent)"
+        },
+        "clinicId": {
+          "type": "string",
+          "description": "Reference to Clinic. (Relationship: Clinic 1:N CoverageEvent)"
         },
         "coverageType": {
           "type": "string",
-          "description": "The type of coverage provided, typically 'Inbase' or 'Outbase'."
+          "description": "The type of coverage provided, e.g., 'Inbase' or 'Outbase'."
         },
         "coverageDate": {
           "type": "string",
           "description": "The date and time when the coverage event occurred.",
           "format": "date-time"
         },
-        "photoUrls": {
-          "type": "array",
-          "description": "An array of URLs pointing to photos uploaded as evidence or documentation for this coverage event.",
-          "items": {
-            "type": "string"
-          }
-        },
-        "signatureUrl": {
+        "notes": {
           "type": "string",
-          "description": "The URL pointing to the captured electronic signature image for this coverage event."
+          "description": "Optional notes or additional details about the coverage event."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp indicating when this coverage event record was initially created.",
+          "description": "Timestamp when the coverage event record was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp indicating the last time this coverage event record was updated.",
+          "description": "Timestamp when the coverage event record was last updated.",
           "format": "date-time"
         }
       },
       "required": [
         "id",
         "providerId",
+        "clinicId",
         "coverageType",
         "coverageDate",
-        "signatureUrl"
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Photo": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Photo",
+      "type": "object",
+      "description": "Stores information about a photo uploaded in relation to a coverage event.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Photo entity."
+        },
+        "coverageEventId": {
+          "type": "string",
+          "description": "Reference to CoverageEvent. (Relationship: CoverageEvent 1:N Photo)"
+        },
+        "url": {
+          "type": "string",
+          "description": "The URL where the photo image is stored.",
+          "format": "uri"
+        },
+        "description": {
+          "type": "string",
+          "description": "An optional description of the photo."
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "Timestamp when the photo was uploaded.",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the photo record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the photo record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "coverageEventId",
+        "url",
+        "uploadedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Signature": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Signature",
+      "type": "object",
+      "description": "Stores information about a captured digital signature related to a coverage event.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Signature entity."
+        },
+        "coverageEventId": {
+          "type": "string",
+          "description": "Reference to CoverageEvent. (Relationship: CoverageEvent 1:N Signature)"
+        },
+        "url": {
+          "type": "string",
+          "description": "The URL where the signature image or data is stored.",
+          "format": "uri"
+        },
+        "signedAt": {
+          "type": "string",
+          "description": "Timestamp when the signature was captured.",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the signature record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the signature record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "coverageEventId",
+        "url",
+        "signedAt",
+        "createdAt",
+        "updatedAt"
       ]
     }
   },
@@ -103,78 +264,106 @@
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
+        "path": "/clinics/{clinicId}",
         "definition": {
-          "entityName": "user",
+          "entityName": "Clinic",
           "schema": {
-            "$ref": "#/backend/entities/user"
+            "$ref": "#/backend/entities/Clinic"
           },
-          "description": "Stores user profile data, acting as the root for all user-specific collections. Authorization is based on request.auth.uid == userId. (Note: The 'user' entity schema is assumed for this structure, but not explicitly provided in the input backend entities.)",
+          "description": "Collection for all medical clinics. Documents are typically publicly readable for lookup by authenticated providers, with write access restricted to administrators. Authorization is independent for this top-level entity.",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique ID of the user (Firebase Authentication UID)."
+              "name": "clinicId",
+              "description": "The unique identifier for a specific clinic."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/providers/{providerId}",
+        "path": "/providers/{providerId}",
         "definition": {
           "entityName": "Provider",
           "schema": {
             "$ref": "#/backend/entities/Provider"
           },
-          "description": "Stores Provider entities, each exclusively owned by a specific user. Authorization is path-based (request.auth.uid == userId). This ensures Authorization Independence for Provider data and enables QAPs for listing a user's providers.",
+          "description": "Collection for all healthcare providers. Each document represents a provider, where 'providerId' is expected to match 'request.auth.uid' for direct ownership. Providers can manage their own profile. Includes 'clinicId' to link to their associated clinic.",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique ID of the user who owns this provider."
-            },
-            {
               "name": "providerId",
-              "description": "The unique ID of the provider."
+              "description": "The unique identifier for a specific provider, matching 'request.auth.uid'."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/coverageEvents/{coverageEventId}",
+        "path": "/providers/{providerId}/coverageEvents/{coverageEventId}",
         "definition": {
           "entityName": "CoverageEvent",
           "schema": {
             "$ref": "#/backend/entities/CoverageEvent"
           },
-          "description": "Stores CoverageEvent entities, each recorded by and owned by a specific user. The 'providerId' field within the document references a Provider entity within the same user's scope. Authorization is path-based (request.auth.uid == userId), ensuring Authorization Independence and enabling QAPs for listing a user's coverage events.",
+          "description": "Subcollection storing coverage events associated with a specific provider. Access is path-based, meaning 'request.auth.uid' must match 'providerId' in the path. The document itself includes denormalized 'providerId' and 'clinicId' for authorization independence, allowing direct security rule checks without fetching parent documents. This structure enables secure 'list' operations for a provider's events.",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique ID of the user who recorded this coverage event."
+              "name": "providerId",
+              "description": "The unique identifier of the provider who owns this coverage event, matching 'request.auth.uid'."
             },
             {
               "name": "coverageEventId",
-              "description": "The unique ID of the coverage event."
+              "description": "The unique identifier for a specific coverage event."
             }
           ]
         }
       },
       {
-        "path": "/admin_roles/{adminId}",
+        "path": "/providers/{providerId}/coverageEvents/{coverageEventId}/photos/{photoId}",
         "definition": {
-          "entityName": "admin_role",
+          "entityName": "Photo",
           "schema": {
-            "$ref": "#/backend/entities/admin_role"
+            "$ref": "#/backend/entities/Photo"
           },
-          "description": "Dedicated collection for Database Access Control (DBAC) of global administrators. The mere existence of a document at /admin_roles/{uid} grants administrative privileges to that user. Authorization is based on request.auth.uid == adminId. (Note: The 'admin_role' entity schema is assumed for this structure, typically an empty document with an 'assignedAt' field, but not explicitly provided in the input backend entities.)",
+          "description": "Subcollection storing photos related to a specific coverage event. Access is inherited from the parent coverage event. Includes denormalized 'providerId' and 'clinicId' for authorization independence, allowing security rules to directly verify ownership without 'get()' operations on parent documents.",
           "params": [
             {
-              "name": "adminId",
-              "description": "The unique ID of the user designated as an administrator."
+              "name": "providerId",
+              "description": "The unique identifier of the provider who owns the parent coverage event."
+            },
+            {
+              "name": "coverageEventId",
+              "description": "The unique identifier for the parent coverage event."
+            },
+            {
+              "name": "photoId",
+              "description": "The unique identifier for a specific photo."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/providers/{providerId}/coverageEvents/{coverageEventId}/signatures/{signatureId}",
+        "definition": {
+          "entityName": "Signature",
+          "schema": {
+            "$ref": "#/backend/entities/Signature"
+          },
+          "description": "Subcollection storing signatures related to a specific coverage event. Access is inherited from the parent coverage event. Includes denormalized 'providerId' and 'clinicId' for authorization independence, allowing security rules to directly verify ownership without 'get()' operations on parent documents.",
+          "params": [
+            {
+              "name": "providerId",
+              "description": "The unique identifier of the provider who owns the parent coverage event."
+            },
+            {
+              "name": "coverageEventId",
+              "description": "The unique identifier for the parent coverage event."
+            },
+            {
+              "name": "signatureId",
+              "description": "The unique identifier for a specific signature."
             }
           ]
         }
       }
     ],
-    "reasoning": "The recommended Firestore structure prioritizes Authorization Independence and Queryable Access Patterns (QAPs) by leveraging a user-centric, hierarchical path model. All primary application data (`Provider` and `CoverageEvent`) is nested under a user's unique ID (`userId`), making ownership explicit and simplifying security rules significantly.\n\n1.  **Authorization Independence:** This is critically achieved by nesting `Provider` entities under `/users/{userId}/providers/{providerId}` and `CoverageEvent` entities under `/users/{userId}/coverageEvents/{coverageEventId}`. For any document within these collections, the `userId` segment in its path directly identifies the owner. This means security rules can evaluate access without requiring expensive and problematic `get()` calls to parent documents or other collections. For instance, a rule can simply check `request.auth.uid == userId` for read/write access to a user's data. The `providerId` field within a `CoverageEvent` document is a data reference, not an authorization attribute, thus it does not violate authorization independence.\n\n2.  **Queryable Access Patterns (QAPs):** The hierarchical structure inherently supports QAPs for user-owned data. When a user queries their own `providers` collection (`/users/myUid/providers`) or `coverageEvents` collection (`/users/myUid/coverageEvents`), Firestore security rules can enforce `allow list: if request.auth.uid == userId;`. This ensures that `list` operations (queries) are naturally constrained by the path, eliminating the need for `where` clauses on an `ownerId` field (if `ownerId` were not part of the path) and preventing rules from acting as filters, which would lead to insecure or inefficient queries. For global administrative access (e.g., the 'Q4 Batch 1 Sample' view), a separate `admin_roles` collection allows for explicit DBAC. An admin could then use collection group queries (`db.collectionGroup('coverageEvents')`) with a corresponding rule that checks for admin status, enabling broad access for specific roles while maintaining security.\n\n3.  **Structural Segregation:** Each collection (`providers`, `coverageEvents`, `admin_roles`) is designed to contain documents with a homogeneous security posture. There is no mixing of public/private or different permission levels within a single collection, simplifying rule logic. For instance, all documents in `/users/{userId}/providers` are private to `userId`.\n\n4.  **DBAC (Database Access Control):** Global roles, such as administrators implied by the 'Admin Dashboard' request, are handled via the dedicated `/admin_roles/{adminId}` collection. The existence of a document at this path for a given `uid` grants administrative privileges. This aligns with the 'Existence over Content' principle for roles and avoids custom claims.\n\n5.  **Data Clarity and Predictability:** Wildcards are semantically named (`userId`, `providerId`, `coverageEventId`, `adminId`). Timestamps (`createdAt`, `updatedAt`) are available for `CoverageEvent` records, as per the schema. The `Provider` and `CoverageEvent` entities are directly mapped to specific, well-defined paths."
+    "reasoning": "The application error reports 'Missing or insufficient permissions: ... path: /databases/(default)/documents/timeLogs' with 'auth: null'. This indicates an attempt to list a top-level collection named 'timeLogs' when the user is not authenticated. Furthermore, 'timeLogs' is not defined in the provided entity schemas. Based on the app requirements ('Master List & Call Summary') and the 'CoverageEvent' entity description ('Records a specific healthcare coverage event or call'), it is inferred that 'timeLogs' refers to 'CoverageEvent's.\n\nThe proposed Firestore structure prioritizes Authorization Independence and secure `list` operations (QAPs) to resolve such permission errors and ensure future scalability and debuggability. The core strategy involves structuring data hierarchically based on ownership and denormalizing critical authorization context.\n\n1.  **Clinics (`/clinics/{clinicId}`)**: Clinics are independent entities. They can be generally accessible for lookup by authenticated users, with creation/modification restricted to administrative roles.\n\n2.  **Providers (`/providers/{providerId}`)**: Providers are assumed to be the primary users of the system, with `providerId` directly mapping to `request.auth.uid`. Each provider manages their own profile. The `clinicId` field within the Provider document (already part of the schema) serves to link a provider to their clinic.\n\n3.  **Coverage Events (`/providers/{providerId}/coverageEvents/{coverageEventId}`)**: This is the critical change addressing the reported error. Instead of a top-level 'timeLogs' (or 'coverageEvents') collection, these are nested under the owning Provider. This fulfills the **Authorization Independence** and **QAPs** principles:\n    *   **QAPs (Secure List Operations)**: By nesting under `/providers/{providerId}`, a provider can securely query only their own coverage events by requesting `/providers/{request.auth.uid}/coverageEvents`. This path-based authorization intrinsically filters results by the authenticated user, making security rules simple and efficient for `list` operations.\n    *   **Authorization Independence**: The `CoverageEvent` entity already contains `providerId` and `clinicId`. These fields are denormalized from their logical parents, allowing security rules to directly check `request.auth.uid == resource.data.providerId` and validate `clinicId` without performing `get()` operations on parent `Provider` or `Clinic` documents. This makes individual `CoverageEvent` document access decisions atomic and easy to debug.\n\n4.  **Photos and Signatures (`/providers/{providerId}/coverageEvents/{coverageEventId}/photos/{photoId}` and `/providers/{providerId}/coverageEvents/{coverageEventId}/signatures/{signatureId}`)**: These are nested further under their respective `CoverageEvent`. To maintain **Authorization Independence** throughout the hierarchy, `providerId` and `clinicId` (from the parent `CoverageEvent`) MUST be denormalized into each `Photo` and `Signature` document. This allows security rules for photos and signatures to verify ownership directly (e.g., `request.auth.uid == resource.data.providerId`) without needing to fetch their parent `CoverageEvent` or `Provider` document.\n\nThis structure ensures clear ownership, enables robust `list` operations, and minimizes the complexity of security rules by leveraging path-based authorization and strategic denormalization."
   }
 }
