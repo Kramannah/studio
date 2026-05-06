@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2 } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2, Fingerprint } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -298,7 +297,7 @@ export default function AdminPage() {
                             <Button size="sm" variant="outline" className="font-headline border-2">User View</Button>
                         </Link>
                     )}
-                    <Button size="sm" variant="destructive" className="font-headline" onClick={logout}>Logout</Button>
+                    <Button size="sm" variant="destructive" className="font-headline" onClick={() => logout()}>Logout</Button>
                 </div>
             </header>
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
@@ -381,7 +380,7 @@ export default function AdminPage() {
                                             <TableRow className="h-12 hover:bg-transparent">
                                                 <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
                                                 <TableHead className="font-bold text-foreground">Employee Name</TableHead>
-                                                <TableHead className="font-bold text-foreground">Email Address</TableHead>
+                                                <TableHead className="font-bold text-foreground">Identifier</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
                                                 <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
                                                 <TableHead className="text-right font-bold text-foreground pr-6">Actions</TableHead>
@@ -401,8 +400,8 @@ export default function AdminPage() {
                                                         </TableCell>
                                                         <TableCell>
                                                             <div className="flex items-center gap-2 text-sm">
-                                                                <Mail className="h-3 w-3 text-muted-foreground" />
-                                                                <span className="font-medium">{acc.email || 'No email set'}</span>
+                                                                <Fingerprint className="h-3 w-3 text-muted-foreground" />
+                                                                <span className="font-medium text-xs font-mono">{acc.email || 'No email set'}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell>
