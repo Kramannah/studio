@@ -68,17 +68,17 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
 }
 
 export function PlanningCalendar({ 
-    doctors, 
-    plans, 
-    planningRequests,
+    doctors = [], 
+    plans = [], 
+    planningRequests = [],
     onRequestUnlock,
-    entries, 
+    entries = [], 
     offlineEntries = [],
     onAddPlan, 
     onAddPlansBulk,
     onRemovePlan, 
     onLogCall, 
-    nonCallDays, 
+    nonCallDays = [], 
     onAddNonCallDay, 
     readOnly = false,
 }: PlanningCalendarProps) {
@@ -124,7 +124,7 @@ export function PlanningCalendar({
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${e.firstName} ${e.lastName}`.toLowerCase();
+                    const nameKey = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase().trim();
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
             }
@@ -138,9 +138,9 @@ export function PlanningCalendar({
         const freqStats: Record<string, { completed: number, target: number }> = {};
 
         doctors.forEach(doc => {
-            const nameKey = `${doc.firstName} ${doc.lastName}`.toLowerCase();
+            const nameKey = `${doc.firstName || ''} ${doc.lastName || ''}`.toLowerCase().trim();
             const completed = visitCountsThisMonth[nameKey] || 0;
-            const target = parseInt(doc.frequency.replace('x', ''), 10) || 0;
+            const target = parseInt((doc.frequency || '1x').replace('x', ''), 10) || 0;
 
             totalTarget += target;
             totalCompleted += Math.min(completed, target);
@@ -160,9 +160,9 @@ export function PlanningCalendar({
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date)) {
-                    const groupStr = format(date, 'yyyy-MM-dd');
-                    if (!groups[groupStr]) groups[groupStr] = [];
-                    groups[groupStr].push(e);
+                    const dateKey = format(date, 'yyyy-MM-dd');
+                    if (!groups[dateKey]) groups[dateKey] = [];
+                    groups[dateKey].push(e);
                 }
             }
         });
@@ -208,13 +208,16 @@ export function PlanningCalendar({
         const dayEntries = entriesByDate[dateStr] || [];
         
         const coveredCount = dayPlans.filter(p => 
-            dayEntries.some(e => e.firstName === p.doctorFirstName && e.lastName === p.doctorLastName)
+            dayEntries.some(e => 
+                (e.firstName || '').toLowerCase() === (p.doctorFirstName || '').toLowerCase() && 
+                (e.lastName || '').toLowerCase() === (p.doctorLastName || '').toLowerCase()
+            )
         ).length;
 
         return {
             total: dayPlans.length,
             covered: coveredCount,
-            notCovered: dayPlans.length - coveredCount
+            notCovered: Math.max(0, dayPlans.length - coveredCount)
         };
     }, [selectedDate, plansByDate, entriesByDate]);
 
@@ -224,6 +227,7 @@ export function PlanningCalendar({
 
     const filteredDoctorsForSearch = useMemo(() => {
         const q = doctorFilter.toLowerCase().trim();
+        if (!q) return doctors;
         return doctors.filter(d => 
             `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
             (d.municipality && d.municipality.toLowerCase().includes(q)) ||
@@ -383,14 +387,16 @@ export function PlanningCalendar({
                                 <div className="p-3 bg-destructive/10 rounded-full">
                                     <CalendarOff className="w-6 h-6 text-destructive" />
                                 </div>
-                                {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')].map((ncd) => (
-                                    <div key={ncd.id}>
-                                        <p className="text-xl font-black text-destructive leading-tight">{ncd.reason}</p>
-                                        <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-                                            {dayTypeLabels[ncd.dayType]}
-                                        </p>
-                                    </div>
-                                ))}
+                                <div className="space-y-1">
+                                    {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')].map((ncd) => (
+                                        <div key={ncd.id}>
+                                            <p className="text-xl font-black text-destructive leading-tight">{ncd.reason}</p>
+                                            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                                                {dayTypeLabels[ncd.dayType]}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                             <Badge variant="outline" className="h-10 px-4 text-sm font-bold uppercase gap-2 border-2">
                                 <StatusIcon status={nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status} /> {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status}
@@ -413,10 +419,17 @@ export function PlanningCalendar({
                                     selectedDayPlans.map((plan) => {
                                         const doctor = doctors.find(d => d.id === plan.doctorId);
                                         const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
-                                        const isCovered = (entriesByDate[dateStr] || []).some(e => e.firstName === plan.doctorFirstName && e.lastName === plan.doctorLastName);
+                                        const isCovered = (entriesByDate[dateStr] || []).some(e => 
+                                            (e.firstName || '').toLowerCase() === (plan.doctorFirstName || '').toLowerCase() && 
+                                            (e.lastName || '').toLowerCase() === (plan.doctorLastName || '').toLowerCase()
+                                        );
                                         return (
                                             <TableRow key={plan.id} className="h-16">
-                                                <TableCell><Button variant="link" className="p-0 font-bold text-base text-primary" onClick={() => handleLogCallClick(plan)} disabled={readOnly || isCovered}>{plan.doctorFirstName} {plan.doctorLastName}</Button></TableCell>
+                                                <TableCell>
+                                                    <Button variant="link" className="p-0 h-auto font-bold text-base text-primary" onClick={() => handleLogCallClick(plan)} disabled={readOnly || isCovered}>
+                                                        {plan.doctorFirstName} {plan.doctorLastName}
+                                                    </Button>
+                                                </TableCell>
                                                 <TableCell className="hidden md:table-cell text-sm text-muted-foreground font-medium">{doctor?.municipality}</TableCell>
                                                 <TableCell>{isCovered ? <Badge variant="secondary" className="text-primary font-bold">Covered</Badge> : <Badge variant="outline" className="font-bold">Planned</Badge>}</TableCell>
                                                 <TableCell className="text-right">{!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive"/></Button>}</TableCell>
@@ -453,7 +466,7 @@ export function PlanningCalendar({
                         <div className="space-y-2 shrink-0">
                              <div className="flex items-center gap-2">
                                 <span className="font-headline font-bold text-sm">Total Completed:</span>
-                                <span className="font-mono text-sm font-black">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
+                                <span className="font-mono text-sm font-black text-primary">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
                              </div>
                              <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">By Frequency:</span>
@@ -470,14 +483,14 @@ export function PlanningCalendar({
                                 <Table className="table-fixed">
                                     <TableHeader>
                                         <TableRow className="hover:bg-transparent h-12">
-                                            <TableHead className="w-[50px] pl-4"><Checkbox checked={selectedDoctorIds.size === filteredDoctorsForSearch.length && filteredDoctorsForSearch.length > 0} onCheckedChange={(checked) => {
+                                            <TableHead className="w-[50px] pl-4"><Checkbox checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.length} onCheckedChange={(checked) => {
                                                 if (checked) setSelectedDoctorIds(new Set(filteredDoctorsForSearch.map(d => d.id)));
                                                 else setSelectedDoctorIds(new Set());
                                             }}/></TableHead>
                                             <TableHead className="w-[200px] font-bold text-xs uppercase">Name</TableHead>
                                             <TableHead className="w-[250px] font-bold text-xs uppercase">Location</TableHead>
                                             <TableHead className="w-[100px] font-bold text-xs uppercase text-center">Target</TableHead>
-                                            <TableHead className="font-bold text-xs uppercase text-right pr-4">Remaining Visits</TableHead>
+                                            <TableHead className="font-bold text-xs uppercase text-right pr-4">Remaining</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                 </Table>
@@ -487,9 +500,9 @@ export function PlanningCalendar({
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
-                                                const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                                const nameKey = `${doctor.firstName || ''} ${doctor.lastName || ''}`.toLowerCase().trim();
                                                 const completedCount = visitCountsThisMonth[nameKey] || 0;
-                                                const targetCount = parseInt(doctor.frequency.replace('x', ''), 10) || 0;
+                                                const targetCount = parseInt((doctor.frequency || '1x').replace('x', ''), 10) || 0;
                                                 const remaining = Math.max(0, targetCount - completedCount);
                                                 const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
                                                 
@@ -502,10 +515,18 @@ export function PlanningCalendar({
                                                                 disabled={isAlreadyPlanned}
                                                             />
                                                         </TableCell>
-                                                        <TableCell className="w-[200px] font-bold text-primary truncate">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                        <TableCell className="w-[250px] text-xs text-muted-foreground truncate">{doctor.municipality}, {doctor.province}</TableCell>
-                                                        <TableCell className="w-[100px] font-mono text-sm text-center">{doctor.frequency}</TableCell>
-                                                        <TableCell className="font-mono text-sm font-bold text-right pr-4">{remaining}</TableCell>
+                                                        <TableCell className="w-[200px] font-bold text-primary truncate">
+                                                            {doctor.firstName} {doctor.lastName}
+                                                        </TableCell>
+                                                        <TableCell className="w-[250px] text-xs text-muted-foreground truncate">
+                                                            {doctor.municipality}, {doctor.province}
+                                                        </TableCell>
+                                                        <TableCell className="w-[100px] font-mono text-sm text-center">
+                                                            {doctor.frequency}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-sm font-bold text-right pr-4">
+                                                            {remaining}
+                                                        </TableCell>
                                                     </TableRow>
                                                 )
                                             })
