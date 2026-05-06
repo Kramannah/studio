@@ -1,9 +1,10 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek, isSameMonth } from "date-fns";
+import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek, isSameMonth, isToday } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -413,7 +414,18 @@ export function PlanningCalendar({
                                                     </Button>
                                                 </TableCell>
                                                 <TableCell className="hidden md:table-cell text-sm text-muted-foreground font-medium">{doctor?.municipality}</TableCell>
-                                                <TableCell>{isCovered ? <Badge variant="secondary" className="text-primary font-bold">Covered</Badge> : <Badge variant="outline" className="font-bold">Planned</Badge>}</TableCell>
+                                                <TableCell>
+                                                    {isCovered ? (
+                                                        <Badge variant="secondary" className="text-primary font-bold">Covered</Badge>
+                                                    ) : (
+                                                        <Badge 
+                                                            variant="outline" 
+                                                            className={cn("font-bold", plan.callType === 'unplanned' && "border-orange-500/50 text-orange-500")}
+                                                        >
+                                                            {plan.callType === 'unplanned' ? 'Unplanned' : 'Planned'}
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell className="text-right">{!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive"/></Button>}</TableCell>
                                             </TableRow>
                                         )

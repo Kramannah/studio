@@ -10,6 +10,7 @@ import { getQueryStartDateISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { isToday } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -96,13 +97,17 @@ export const usePlans = () => {
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
+    
+    // If planned for today, it should be marked as unplanned
+    const callType = isToday(plannedDate) ? 'unplanned' : 'planned';
+    
     const newPlanData = {
       userId: user.uid,
       doctorId: doctor.id,
       doctorFirstName: doctor.firstName,
       doctorLastName: doctor.lastName,
       plannedDate: plannedDate.toISOString(),
-      callType: 'planned' as const,
+      callType: callType as 'planned' | 'unplanned',
     };
     
     const colRef = collection(db, "plans");
@@ -124,8 +129,10 @@ export const usePlans = () => {
 
   const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
     if (!user || !db || doctors.length === 0) return;
+    
     const batch = writeBatch(db);
     const dateISO = plannedDate.toISOString();
+    const callType = isToday(plannedDate) ? 'unplanned' : 'planned';
     
     const newPlans: Plan[] = [];
 
@@ -137,7 +144,7 @@ export const usePlans = () => {
             doctorFirstName: doctor.firstName,
             doctorLastName: doctor.lastName,
             plannedDate: dateISO,
-            callType: 'planned' as const,
+            callType: callType as 'planned' | 'unplanned',
         };
         batch.set(docRef, newPlan);
         newPlans.push({ id: docRef.id, ...newPlan });
