@@ -22,7 +22,6 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is a manager.
-     * UIDs sourced from territory management configuration.
      */
     function isManager() {
       return isSignedIn() && request.auth.uid in [
@@ -33,49 +32,44 @@ service cloud.firestore {
       ];
     }
 
-    /** Verifies ownership of a document via a userId field. */
-    function isOwner(data) {
-      return isSignedIn() && request.auth.uid == data.userId;
-    }
-
-    /** Helper for consolidated read/write permissions for reports. */
-    function canAccessReport(data) {
-      return isAdmin() || isManager() || isOwner(data);
-    }
-
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /doctors/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /plans/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /nonCallDays/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /timeLogs/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /planningRequests/{id} {
-      allow read, update, delete: if canAccessReport(resource.data);
-      allow create: if isSignedIn() && isOwner(request.resource.data);
+      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
-    // Inventory and Allocation rules
     match /q4Allocation/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

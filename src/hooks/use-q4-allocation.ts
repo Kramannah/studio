@@ -1,14 +1,14 @@
-
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -73,6 +73,14 @@ export const useQ4Allocation = () => {
   const [loadingUsage, setLoadingUsage] = useState(true);
   const { toast } = useToast();
 
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    const normalizedEmail = user.email?.toLowerCase() || '';
+    return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
+  }, [user]);
+
+  const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+
   useEffect(() => {
     if (!db || !user) {
         setLoading(false);
@@ -111,7 +119,14 @@ export const useQ4Allocation = () => {
     
     setLoadingUsage(true);
     const colRef = collection(db, "coverageEntries");
-    const q = query(colRef);
+    
+    // CRITICAL: Filter query by userId for non-admins to avoid permission error during list
+    let q;
+    if (isUserAdmin || isUserManager) {
+      q = query(colRef);
+    } else {
+      q = query(colRef, where("userId", "==", user.uid));
+    }
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usage: Record<string, number> = {};
@@ -141,7 +156,7 @@ export const useQ4Allocation = () => {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, isUserAdmin, isUserManager]);
 
   const refetch = () => {};
 
