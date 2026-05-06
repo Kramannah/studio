@@ -1,13 +1,11 @@
 'use client';
 
 /**
- * Consolidated Firebase Initialization
- * This file uses the shared initialization logic from @/firebase/index.ts
- * to ensure that all hooks and providers use the same singleton instance.
+ * This file provides a simple, shared singleton instance of Firebase services
+ * for standard client-side components and hooks.
  */
 import { initializeFirebase } from "@/firebase";
 
-// Initialize services once and export the singleton instances
 const services = initializeFirebase();
 
 export const app = services.firebaseApp;

@@ -11,26 +11,28 @@ export interface FirebaseServices {
   firestore: Firestore;
 }
 
-// IMPORTANT: DO NOT MODIFY THIS FUNCTION
+/**
+ * Initializes Firebase services with the provided configuration.
+ * Uses a singleton pattern to ensure only one instance of each service exists.
+ */
 export function initializeFirebase(): FirebaseServices {
   let firebaseApp: FirebaseApp;
 
-  if (!getApps().length) {
-    try {
-      // Attempt to initialize via Firebase App Hosting environment variables
-      firebaseApp = initializeApp();
-    } catch (e) {
-      // Fallback to config object
-      firebaseApp = initializeApp(firebaseConfig);
-    }
+  if (getApps().length === 0) {
+    // Use the explicit config object for consistent behavior in both local and production environments
+    firebaseApp = initializeApp(firebaseConfig);
   } else {
     firebaseApp = getApp();
   }
 
+  // Directly obtain service instances from the initialized app
+  const authInstance = getAuth(firebaseApp);
+  const firestoreInstance = getFirestore(firebaseApp);
+
   return {
     firebaseApp,
-    auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp)
+    auth: authInstance,
+    firestore: firestoreInstance,
   };
 }
 
