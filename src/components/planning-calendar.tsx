@@ -2,7 +2,7 @@
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
@@ -81,12 +81,12 @@ const DoctorSearchList = React.memo(({
 }) => {
     const filtered = useMemo(() => {
         const q = filter.toLowerCase().trim();
-        if (!q) return doctors.slice(0, 50);
+        if (!q) return doctors.slice(0, 30); // Limiting initial view for performance
         return doctors.filter(d => 
             `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
             (d.municipality && d.municipality.toLowerCase().includes(q)) ||
             (d.specialty && d.specialty.toLowerCase().includes(q))
-        ).slice(0, 50);
+        ).slice(0, 50); // Limiting results to 50 for mobile responsiveness
     }, [doctors, filter]);
 
     if (filtered.length === 0) {
@@ -114,13 +114,13 @@ const DoctorSearchList = React.memo(({
                         )}
                         onClick={() => !isAlreadyPlanned && onSelect(doctor)}
                     >
-                        <div>
-                            <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
-                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+                        <div className="flex-1 min-w-0 mr-2">
+                            <p className="font-bold text-base leading-tight truncate">{doctor.firstName} {doctor.lastName}</p>
+                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight truncate">
                                 {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
                             </p>
                         </div>
-                        <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
+                        <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[9px] font-black h-5 shrink-0">
                             {isAlreadyPlanned ? 'PLANNED' : `Visits: ${count}`}
                         </Badge>
                     </div>
@@ -385,6 +385,15 @@ export function PlanningCalendar({
             </Card>
         );
     }
+
+    // HANDLER FOR OPENING MODALS FROM DROPDOWN
+    // We use a small timeout to ensure the dropdown menu is fully unmounted 
+    // before opening the dialog, preventing the focus-lock and UI freeze.
+    const handleOpenDialog = (setter: (v: boolean) => void) => {
+        setTimeout(() => {
+            setter(true);
+        }, 150);
+    };
     
     return (
         <div className="w-full space-y-6 animate-in fade-in duration-500">
@@ -454,7 +463,7 @@ export function PlanningCalendar({
                                     <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/20 bg-orange-500/5 flex gap-2 items-center">
                                         <Clock className="w-3.5 h-3.5 text-orange-500" />
                                         <span className="text-orange-500">{selectedDayStats.notYetCovered}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase">Not Yet Covered</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase">Not Covered</span>
                                     </Badge>
                                 </div>
                             </div>
@@ -464,7 +473,7 @@ export function PlanningCalendar({
                                 <DropdownMenuTrigger asChild>
                                     <Button size="lg" className="h-12 px-6 font-bold text-lg gap-2" disabled={readOnly}>
                                         <Settings2 className="w-5 h-5" />
-                                        Schedule Actions
+                                        Actions
                                         <ChevronDown className="w-4 h-4 ml-1 opacity-70" />
                                     </Button>
                                 </DropdownMenuTrigger>
@@ -472,7 +481,7 @@ export function PlanningCalendar({
                                     <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
                                     {isLocked ? (
                                         <DropdownMenuItem 
-                                            onSelect={(e) => { e.preventDefault(); setIsUnlockDialogOpen(true); }}
+                                            onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsUnlockDialogOpen); }}
                                             className="gap-2 py-3"
                                         >
                                             <Unlock className="w-4 h-4 text-primary" />
@@ -480,7 +489,7 @@ export function PlanningCalendar({
                                         </DropdownMenuItem>
                                     ) : (
                                         <DropdownMenuItem 
-                                            onSelect={(e) => { e.preventDefault(); setIsAddPlanDialogOpen(true); }}
+                                            onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsAddPlanDialogOpen); }}
                                             className="gap-2 py-3"
                                         >
                                             <PlusCircle className="w-4 h-4 text-primary" />
@@ -488,7 +497,7 @@ export function PlanningCalendar({
                                         </DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem 
-                                        onSelect={(e) => { e.preventDefault(); setIsNonCallDialogOpen(true); }}
+                                        onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsNonCallDialogOpen); }}
                                         className="gap-2 py-3"
                                         disabled={isLocked}
                                     >
@@ -526,20 +535,28 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={(open) => {
-                if (!open) setDoctorFilter("");
-                setIsAddPlanDialogOpen(open);
+                if (!open) {
+                  setDoctorFilter("");
+                  // When closing, give a tiny moment to prevent unmount cycle freeze
+                  setTimeout(() => setIsAddPlanDialogOpen(false), 50);
+                } else {
+                  setIsAddPlanDialogOpen(true);
+                }
             }}>
-                <DialogContent className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden">
+                <DialogContent 
+                  className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden"
+                  onOpenAutoFocus={(e) => e.preventDefault()} // Helps prevent viewport jumping
+                >
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle className="text-2xl font-headline font-black">Add Visit Plan</DialogTitle>
-                        <DialogDescription>Search and select a doctor to visit on {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
+                        <DialogDescription>Select a doctor to visit on {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-hidden p-6 pt-0 flex flex-col space-y-4">
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
-                                placeholder="Search by name, specialty, or location..." 
+                                placeholder="Filter masterlist..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
                                 className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2" 
@@ -581,3 +598,4 @@ export function PlanningCalendar({
         </div>
     );
 }
+
