@@ -1,4 +1,4 @@
-# Deployment Version: 1.1.1
+# Deployment Version: 1.1.4
 runConfig:
   maxInstances: 2
   memory: 1024Mi

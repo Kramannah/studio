@@ -15,26 +15,31 @@ let services: FirebaseServices | null = null;
 
 /**
  * Initializes Firebase services with the provided configuration.
- * Uses a singleton pattern to ensure only one instance of each service exists.
+ * Safe for SSR - returns null if window is undefined.
  */
-export function initializeFirebase(): FirebaseServices {
+export function initializeFirebase(): FirebaseServices | null {
   if (typeof window === 'undefined') {
-    throw new Error('initializeFirebase must be called on the client side.');
+    return null;
   }
 
   if (services) return services;
 
-  const firebaseApp = getApps().length === 0 
-    ? initializeApp(firebaseConfig) 
-    : getApp();
+  try {
+    const firebaseApp = getApps().length === 0 
+      ? initializeApp(firebaseConfig) 
+      : getApp();
 
-  services = {
-    firebaseApp,
-    auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp),
-  };
+    services = {
+      firebaseApp,
+      auth: getAuth(firebaseApp),
+      firestore: getFirestore(firebaseApp),
+    };
 
-  return services;
+    return services;
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+    return null;
+  }
 }
 
 export * from './provider';

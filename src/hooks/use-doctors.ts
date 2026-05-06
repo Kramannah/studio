@@ -18,6 +18,8 @@ import {
   deleteDoc,
   writeBatch,
 } from "firebase/firestore";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const useDoctors = () => {
   const { toast } = useToast();
@@ -30,11 +32,8 @@ export const useDoctors = () => {
     return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
   }, [user]);
 
-  /** ------------------------
-   * Fetch Doctors
-   * ------------------------ */
   const fetchDoctors = useCallback(async () => {
-    if (!user) {
+    if (!user || !db) {
       setDoctors([]);
       setLoading(false);
       return;
@@ -43,11 +42,9 @@ export const useDoctors = () => {
     setLoading(true);
     try {
       let q;
-      // Admins can see all doctors
       if (isUserAdmin) {
         q = query(collection(db, "doctors"));
       } else {
-        // Regular users only see their own
         q = query(collection(db, "doctors"), where("userId", "==", user.uid));
       }
 
@@ -60,57 +57,44 @@ export const useDoctors = () => {
       setDoctors(fetchedDoctors);
     } catch (error) {
       console.error("Error fetching doctors:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Could not fetch doctor masterlist.",
-      });
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, toast]);
+  }, [user, isUserAdmin]);
 
   useEffect(() => {
     fetchDoctors();
   }, [fetchDoctors]);
 
-  /** ------------------------
-   * Add Doctor (single)
-   * ------------------------ */
   const addDoctor = useCallback(
     async (doctorData: Omit<Doctor, "id">) => {
-      if (!user) return;
-      try {
-        const newDoctorData = { ...doctorData, userId: user.uid };
-        const docRef = await addDoc(collection(db, "doctors"), newDoctorData);
-        setDoctors((prev) => [
-          ...prev,
-          { id: docRef.id, ...newDoctorData },
-        ]);
-        toast({
-          title: "Doctor Added",
-          description: `${doctorData.firstName} ${doctorData.lastName} has been added.`,
+      if (!user || !db) return;
+      const newDoctorData = { ...doctorData, userId: user.uid };
+      const colRef = collection(db, "doctors");
+      
+      addDoc(colRef, newDoctorData)
+        .then((docRef) => {
+          setDoctors((prev) => [...prev, { id: docRef.id, ...newDoctorData }]);
+          toast({
+            title: "Doctor Added",
+            description: `${doctorData.firstName} ${doctorData.lastName} has been added.`,
+          });
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: colRef.path,
+            operation: 'create',
+            requestResourceData: newDoctorData,
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
         });
-      } catch (error) {
-        console.error("Error adding doctor:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not add doctor.",
-        });
-      }
     },
     [user, toast]
   );
 
-  /** ------------------------
-   * Add/Update Doctors in Bulk (for user's own upload)
-   * This now only adds new doctors and ignores existing ones.
-   * ------------------------ */
   const addDoctorsBulk = useCallback(
     async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[]) => {
-      if (!user) return;
-      if (doctorsToAdd.length === 0) return;
+      if (!user || !db || doctorsToAdd.length === 0) return;
       setLoading(true);
 
       try {
@@ -124,60 +108,41 @@ export const useDoctors = () => {
         });
 
         const operations: { type: 'create' | 'update'; data: any; id?: string }[] = [];
-        let newDoctorsCount = 0;
-        let updatedDoctorsCount = 0;
-
+        
         doctorsToAdd.forEach((newDoctor) => {
           const key = `${newDoctor.firstName.toLowerCase()}|${newDoctor.lastName.toLowerCase()}`;
           const existingDoctor = existingDoctorMap.get(key);
-
           if (existingDoctor) {
             operations.push({ type: 'update', data: { ...newDoctor, userId: user.uid }, id: existingDoctor.id });
-            updatedDoctorsCount++;
           } else {
             operations.push({ type: 'create', data: { ...newDoctor, userId: user.uid } });
-            newDoctorsCount++;
           }
         });
 
         if (operations.length === 0) {
-          toast({
-            title: "No Changes",
-            description: `All doctors from the file already exist.`,
-          });
+          toast({ title: "No Changes" });
           setLoading(false);
           return;
         }
 
-        const chunkSize = 499; // Keep it safely under the 500 limit
+        const chunkSize = 499;
         for (let i = 0; i < operations.length; i += chunkSize) {
           const chunk = operations.slice(i, i + chunkSize);
           const batch = writeBatch(db);
           chunk.forEach(op => {
             if (op.type === 'create') {
-              const docRef = doc(collection(db, "doctors"));
-              batch.set(docRef, op.data);
+              batch.set(doc(collection(db, "doctors")), op.data);
             } else if (op.type === 'update' && op.id) {
-              const docRef = doc(db, "doctors", op.id);
-              batch.update(docRef, op.data);
+              batch.update(doc(db, "doctors", op.id), op.data);
             }
           });
           await batch.commit();
         }
 
         await fetchDoctors();
-        toast({
-          title: "Upload Successful",
-          description: `${newDoctorsCount} new doctor(s) added and ${updatedDoctorsCount} existing doctor(s) updated.`,
-        });
+        toast({ title: "Upload Successful" });
       } catch (error) {
-        console.error("Error processing bulk doctor upload:", error);
-        toast({
-          variant: "destructive",
-          title: "Upload Failed",
-          description: "Could not process your doctor master list file.",
-        });
-        await fetchDoctors();
+        console.error("Bulk doctor upload error:", error);
       } finally {
         setLoading(false);
       }
@@ -185,94 +150,62 @@ export const useDoctors = () => {
     [user, toast, fetchDoctors]
   );
 
-
-  /** ------------------------
-   * Update Doctor (only user’s own)
-   * ------------------------ */
   const updateDoctor = useCallback(
     async (doctorData: Doctor) => {
-      if (!user) return;
-      try {
-        const { id, userId, ...dataToUpdate } = doctorData;
-        const doctorRef = doc(db, "doctors", id);
-        // Ensure userId from auth is used, not from doctorData if it exists
-        await updateDoc(doctorRef, { ...dataToUpdate, userId: user.uid });
+      if (!user || !db) return;
+      const { id, userId, ...dataToUpdate } = doctorData;
+      const doctorRef = doc(db, "doctors", id);
+      const payload = { ...dataToUpdate, userId: user.uid };
 
-        setDoctors((prev) =>
-          prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
-        );
-
-      } catch (error) {
-        console.error("Error updating doctor:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not update doctor details.",
+      updateDoc(doctorRef, payload)
+        .catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path: doctorRef.path,
+            operation: 'update',
+            requestResourceData: payload,
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
         });
-      }
+
+      setDoctors((prev) =>
+        prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
+      );
+    },
+    [user]
+  );
+
+  const deleteDoctor = useCallback(
+    async (id: string) => {
+      if (!user || !db) return;
+      const doctorRef = doc(db, "doctors", id);
+      
+      deleteDoc(doctorRef)
+        .catch(async () => {
+          const permissionError = new FirestorePermissionError({
+            path: doctorRef.path,
+            operation: 'delete',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
+      setDoctors((prev) => prev.filter((d) => d.id !== id));
+      toast({ variant: "destructive", title: "Doctor Removed" });
     },
     [user, toast]
   );
 
-  /** ------------------------
-   * Delete Doctor (only user’s own)
-   * ------------------------ */
-  const deleteDoctor = useCallback(
-    async (id: string) => {
-      if (!user) return;
-      try {
-        const doctorToDelete = doctors.find((d) => d.id === id);
-        await deleteDoc(doc(db, "doctors", id));
-        setDoctors((prev) => prev.filter((d) => d.id !== id));
-
-        if (doctorToDelete) {
-          toast({
-            variant: "destructive",
-            title: "Doctor Deleted",
-            description: `${doctorToDelete.firstName} ${doctorToDelete.lastName} has been removed from your master list.`,
-          });
-        }
-      } catch (error) {
-        console.error("Error deleting doctor:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Could not delete doctor.",
-        });
-      }
-    },
-    [user, doctors, toast]
-  );
-
-  /** ------------------------
-   * Bulk Delete (user’s own)
-   * ------------------------ */
   const deleteDoctorsBulk = useCallback(
     async (ids: string[]) => {
-      if (!user || ids.length === 0) return;
-
+      if (!user || !db || ids.length === 0) return;
       const batch = writeBatch(db);
-      ids.forEach((id) => {
-        const docRef = doc(db, "doctors", id);
-        batch.delete(docRef);
-      });
+      ids.forEach((id) => batch.delete(doc(db, "doctors", id)));
 
       try {
         await batch.commit();
         setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
-
-        toast({
-          variant: "destructive",
-          title: "Doctors Deleted",
-          description: `${ids.length} doctor(s) have been removed from your master list.`,
-        });
+        toast({ variant: "destructive", title: "Doctors Deleted" });
       } catch (error) {
-        console.error("Error bulk deleting doctors:", error);
-        toast({
-          variant: "destructive",
-          title: "Bulk Delete Failed",
-          description: `Could not remove the selected doctors.`,
-        });
+        console.error("Bulk delete error:", error);
       }
     },
     [user, toast]

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, orderBy } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -36,14 +39,13 @@ export const useOfflineSync = (userId?: string) => {
   }, []);
 
   const fetchMasterEntries = useCallback(async () => {
-    if (!userId || !isOnline) {
+    if (!userId || !isOnline || !db) {
       setLoading(false);
       return;
     }
     try {
       const startDate = getQueryStartDateISO();
       
-      // Fetch all entries for the current month
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId),
@@ -87,7 +89,7 @@ export const useOfflineSync = (userId?: string) => {
   }
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
-    if (!userId) return false;
+    if (!userId || !db) return false;
     
     const entryId = generateUniqueId();
     const newEntryPayload = {
@@ -98,16 +100,20 @@ export const useOfflineSync = (userId?: string) => {
     };
 
     if (isOnline) {
-        try {
-            const entryRef = doc(db, "coverageEntries", entryId);
-            await setDoc(entryRef, newEntryPayload);
-            setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
-            toast({ title: "Entry Saved", description: "Report saved to server." });
-            return true;
-        } catch(error) {
-            saveEntryOffline(newEntryPayload);
-            return false;
-        }
+        const entryRef = doc(db, "coverageEntries", entryId);
+        setDoc(entryRef, newEntryPayload)
+          .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: entryRef.path,
+              operation: 'create',
+              requestResourceData: newEntryPayload,
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+          });
+        
+        setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
+        toast({ title: "Entry Saved", description: "Report saved to server." });
+        return true;
     } else {
         saveEntryOffline(newEntryPayload);
         return false;
@@ -122,30 +128,27 @@ export const useOfflineSync = (userId?: string) => {
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!isOnline || !userId || offlineEntries.length === 0) return;
+    if (!isOnline || !userId || !db || offlineEntries.length === 0) return;
     
     if (isSyncing) return;
     setIsSyncing(true);
 
     const entriesToSync = [...offlineEntries];
     const batch = writeBatch(db);
-    const chunkIds: string[] = [];
 
     for (const entry of entriesToSync) {
         const { id, isOffline, ...dataToSync } = entry;
         const docRef = doc(collection(db, "coverageEntries")); 
         batch.set(docRef, { ...dataToSync, submittedAt: new Date().toISOString() });
-        chunkIds.push(id);
     }
 
     try {
         await batch.commit();
         updateOfflineInStorage([]);
         await fetchMasterEntries();
-        toast({ title: 'Sync Complete', description: `${chunkIds.length} entries synced.` });
+        toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
     } catch (error) {
         console.error("Sync failed:", error);
-        toast({ variant: 'destructive', title: 'Sync Failed' });
     } finally {
         setIsSyncing(false);
     }
@@ -162,14 +165,31 @@ export const useOfflineSync = (userId?: string) => {
     masterEntries, 
     saveEntry, 
     deleteMasterEntry: async (id: string) => {
-        await deleteDoc(doc(db, "coverageEntries", id));
+        if (!db) return;
+        const entryRef = doc(db, "coverageEntries", id);
+        deleteDoc(entryRef).catch(async () => {
+            const permissionError = new FirestorePermissionError({
+              path: entryRef.path,
+              operation: 'delete',
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+        });
         setMasterEntries(prev => prev.filter(e => e.id !== id));
     }, 
     isSyncing, 
     syncAllOfflineEntries, 
     isOnline, 
     updateMasterEntry: async (e: any) => {
-        await updateDoc(doc(db, "coverageEntries", e.id), e);
+        if (!db) return;
+        const entryRef = doc(db, "coverageEntries", e.id);
+        updateDoc(entryRef, e).catch(async () => {
+            const permissionError = new FirestorePermissionError({
+              path: entryRef.path,
+              operation: 'update',
+              requestResourceData: e,
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+        });
         setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));
     }, 
     updateOfflineEntry: (e: any) => {

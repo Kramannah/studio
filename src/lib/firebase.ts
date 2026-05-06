@@ -1,19 +1,18 @@
 'use client';
 
-/**
- * This file provides a simple, shared singleton instance of Firebase services
- * for standard client-side components and hooks.
- */
 import { initializeFirebase } from "@/firebase";
 
-// Helper to safely get services on the client side only
-const getClientServices = () => {
+/**
+ * Singleton service access.
+ * Returns null during server-side rendering to prevent crashes.
+ */
+const getServices = () => {
   if (typeof window === 'undefined') return null;
   return initializeFirebase();
 };
 
-const services = getClientServices();
+const currentServices = getServices();
 
-export const app = services?.firebaseApp;
-export const db = services?.firestore;
-export const auth = services?.auth;
+export const app = currentServices?.firebaseApp || null;
+export const db = currentServices?.firestore || null;
+export const auth = currentServices?.auth || null;
