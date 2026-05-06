@@ -46,8 +46,6 @@ export const useOfflineSync = (userId?: string) => {
     try {
       const startDate = getQueryStartDateISO();
       
-      // Removed orderBy to avoid the requirement for a composite index in Firestore.
-      // We handle sorting in-memory below.
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId),
@@ -60,7 +58,6 @@ export const useOfflineSync = (userId?: string) => {
         entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
       });
       
-      // Sort in-memory (descending by submission date)
       entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       
       setMasterEntries(entries);
@@ -155,8 +152,12 @@ export const useOfflineSync = (userId?: string) => {
         updateOfflineInStorage([]);
         await fetchMasterEntries();
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
-    } catch (error) {
-        console.error("Sync failed:", error);
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+          path: 'coverageEntries',
+          operation: 'write',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
         setIsSyncing(false);
     }

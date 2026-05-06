@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,6 +8,8 @@ import { parseISO, isValid, startOfMonth, isAfter } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const useNonCallDays = () => {
   const { toast } = useToast();
@@ -15,7 +18,7 @@ export const useNonCallDays = () => {
   const [loading, setLoading] = useState(true);
 
   const fetchNonCallDays = useCallback(async () => {
-    if (!user) {
+    if (!user || !db) {
       setNonCallDays([]);
       setLoading(false);
       return;
@@ -31,15 +34,18 @@ export const useNonCallDays = () => {
 
       const monthStart = startOfMonth(new Date());
 
-      // Show non-call days from the current month onwards
       const filtered = fetched.filter(d => {
           const dDate = d.date ? parseISO(d.date) : null;
           return dDate && isValid(dDate) && isAfter(dDate, monthStart);
       });
 
       setNonCallDays(filtered);
-    } catch (error) {
-      console.error("Error fetching non-call days:", error);
+    } catch (serverError) {
+      const permissionError = new FirestorePermissionError({
+        path: 'nonCallDays',
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
@@ -52,10 +58,23 @@ export const useNonCallDays = () => {
   return { 
       nonCallDays, 
       addNonCallDay: async (entry: any) => {
-          const newEntry = { userId: user?.uid, ...entry, status: 'pending' as const };
-          const docRef = await addDoc(collection(db, "nonCallDays"), newEntry);
-          setNonCallDays(prev => [...prev, { id: docRef.id, ...newEntry }]);
-          toast({ title: "Request Submitted" });
+          if (!user || !db) return;
+          const newEntry = { userId: user.uid, ...entry, status: 'pending' as const };
+          const colRef = collection(db, "nonCallDays");
+          
+          addDoc(colRef, newEntry)
+            .then((docRef) => {
+              setNonCallDays(prev => [...prev, { id: docRef.id, ...newEntry }]);
+              toast({ title: "Request Submitted" });
+            })
+            .catch(async (serverError) => {
+              const permissionError = new FirestorePermissionError({
+                path: colRef.path,
+                operation: 'create',
+                requestResourceData: newEntry,
+              } satisfies SecurityRuleContext);
+              errorEmitter.emit('permission-error', permissionError);
+            });
       }, 
       loading,
       fetchNonCallDays

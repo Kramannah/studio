@@ -30,7 +30,6 @@ export const useTimeLogs = () => {
     try {
       const startDate = getQueryStartDateISO();
       
-      // Removed orderBy to avoid composite index requirement.
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
@@ -43,7 +42,6 @@ export const useTimeLogs = () => {
         fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
       });
 
-      // Sort in-memory descending by timeIn
       fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
 
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);

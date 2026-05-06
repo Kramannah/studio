@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -8,6 +9,8 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getQueryStartDateISO } from "@/lib/utils";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -40,7 +43,7 @@ export function useAdminData(managerId?: string) {
   }, [user]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user) {
+    if (!user || !db) {
         setAllNonCallDays([]);
         setAllPlanningRequests([]);
         return;
@@ -64,11 +67,11 @@ export function useAdminData(managerId?: string) {
             
             let allDocsData: any[] = [];
 
-            if (userIds === null) { // Admin fetching all
+            if (userIds === null) { 
                 const q = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
                 const snapshot = await getDocs(q);
                 allDocsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            } else { // Manager fetching for team
+            } else { 
                 const chunks: string[][] = [];
                 for (let i = 0; i < userIds.length; i += 30) {
                     chunks.push(userIds.slice(i, i + 30));
@@ -105,8 +108,12 @@ export function useAdminData(managerId?: string) {
       setAllNonCallDays(sortedNonCallDays);
       setAllPlanningRequests(sortedPlanningRequests);
 
-    } catch (error) {
-      console.error("Error fetching admin approval data:", error);
+    } catch (serverError) {
+      const permissionError = new FirestorePermissionError({
+        path: 'approvals',
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
@@ -117,7 +124,7 @@ export function useAdminData(managerId?: string) {
   }, [fetchTeamApprovals]);
 
   const fetchTeamSummary = useCallback(async (forceAllWeek = false) => {
-      if (!managerId) {
+      if (!managerId || !db) {
           setTeamSummaryData(null);
           return;
       }
@@ -205,8 +212,12 @@ export function useAdminData(managerId?: string) {
             usedQuantities
         });
 
-      } catch (error) {
-          console.error("Error fetching team summary:", error);
+      } catch (serverError) {
+          const permissionError = new FirestorePermissionError({
+            path: 'team_summary',
+            operation: 'list',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
           toast({ variant: 'destructive', title: 'Error', description: 'Failed to load team summary data.'})
       } finally {
         setLoadingSummary(false);
@@ -214,7 +225,7 @@ export function useAdminData(managerId?: string) {
   }, [managerId, toast]);
   
   const fetchUserData = useCallback(async (userId: string, forceAllWeek = false) => {
-    if (!userId) {
+    if (!userId || !db) {
         setAllEntries([]);
         setAllDoctors([]);
         setAllPlans([]);
@@ -244,8 +255,12 @@ export function useAdminData(managerId?: string) {
             setAllTimeLogs(teamSummaryData.timeLogs.filter(log => log.userId === userId));
         }
 
-    } catch (error) {
-         console.error("Error fetching user data:", error);
+    } catch (serverError) {
+         const permissionError = new FirestorePermissionError({
+            path: 'user_data',
+            operation: 'list',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
     } finally {
         setLoading(false);
     }
@@ -253,61 +268,100 @@ export function useAdminData(managerId?: string) {
 
 
   const updateNonCallDayStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
-      try {
-          const docRef = doc(db, 'nonCallDays', id);
-          await updateDoc(docRef, { status });
+      if (!db) return;
+      const docRef = doc(db, 'nonCallDays', id);
+      const payload = { status };
+      
+      updateDoc(docRef, payload)
+        .then(() => {
           setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
           toast({ title: 'Success', description: `Request has been ${status}.`});
-      } catch (error) {
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: payload,
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
           toast({ variant: 'destructive', title: 'Error', description: 'Failed to update request status.' });
-      }
+        });
   }, [toast]);
   
   const updatePlanningRequestStatus = useCallback(async (id: string, status: 'approved' | 'rejected') => {
-      try {
-          const docRef = doc(db, 'planningRequests', id);
-          await updateDoc(docRef, { status });
+      if (!db) return;
+      const docRef = doc(db, 'planningRequests', id);
+      const payload = { status };
+      
+      updateDoc(docRef, payload)
+        .then(() => {
           setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
           toast({ title: 'Success', description: `Request has been ${status}.` });
-      } catch (error) {
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: payload,
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
           toast({ variant: 'destructive', title: 'Error', description: 'Failed to update request status.' });
-      }
+        });
   }, [toast]);
 
   const deleteEntry = useCallback(async (id: string) => {
-    try {
-        await deleteDoc(doc(db, "coverageEntries", id));
+    if (!db) return;
+    const entryRef = doc(db, "coverageEntries", id);
+    
+    deleteDoc(entryRef)
+      .then(() => {
         setAllEntries(prev => prev.filter(e => e.id !== id));
         if (teamSummaryData) {
             setTeamSummaryData(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : null);
         }
         toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage report has been removed.` });
-    } catch (error) {
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: entryRef.path,
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
         toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
-    }
+      });
   }, [toast, teamSummaryData]);
   
   const addDoctor = useCallback(async (doctorData: Omit<Doctor, 'id'>) => {
-    if (!managerId) return;
-    try {
-      const docRef = await addDoc(collection(db, "doctors"), doctorData);
-      const newDoctor = { id: docRef.id, ...doctorData } as Doctor;
-      if (teamSummaryData) {
-          setTeamSummaryData(prev => prev ? ({ ...prev, doctors: [...prev.doctors, newDoctor] }) : null);
-      }
-      setAllDoctors(prev => [...prev, newDoctor]);
-      toast({ title: "Doctor Added", description: `${doctorData.firstName} ${doctorData.lastName} has been added.` });
-    } catch (error) {
-       toast({ variant: "destructive", title: "Error", description: "Could not add doctor." });
-    }
+    if (!managerId || !db) return;
+    const colRef = collection(db, "doctors");
+    
+    addDoc(colRef, doctorData)
+      .then((docRef) => {
+        const newDoctor = { id: docRef.id, ...doctorData } as Doctor;
+        if (teamSummaryData) {
+            setTeamSummaryData(prev => prev ? ({ ...prev, doctors: [...prev.doctors, newDoctor] }) : null);
+        }
+        setAllDoctors(prev => [...prev, newDoctor]);
+        toast({ title: "Doctor Added", description: `${doctorData.firstName} ${doctorData.lastName} has been added.` });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'create',
+          requestResourceData: doctorData,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        toast({ variant: "destructive", title: "Error", description: "Could not add doctor." });
+      });
   }, [managerId, toast, teamSummaryData]);
 
   const updateDoctor = useCallback(async (doctorData: Doctor) => {
-    try {
-        const { id, ...dataToUpdate } = doctorData;
-        const doctorRef = doc(db, "doctors", id);
-        await updateDoc(doctorRef, dataToUpdate);
-        
+    if (!db) return;
+    const { id, ...dataToUpdate } = doctorData;
+    const doctorRef = doc(db, "doctors", id);
+    
+    updateDoc(doctorRef, dataToUpdate)
+      .then(() => {
         if (teamSummaryData) {
             setTeamSummaryData(prev => {
                 if (!prev) return null;
@@ -317,59 +371,87 @@ export function useAdminData(managerId?: string) {
         }
         setAllDoctors(prev => prev.map(d => d.id === id ? doctorData : d));
         toast({ title: "Doctor Updated", description: `${doctorData.firstName} ${doctorData.lastName}'s details have been updated.` });
-    } catch (error) {
-        console.error("Error updating doctor:", error);
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: doctorRef.path,
+          operation: 'update',
+          requestResourceData: dataToUpdate,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
         toast({ variant: "destructive", title: "Error", description: "Could not update doctor details." });
-    }
+      });
   }, [toast, teamSummaryData]);
   
   const deleteDoctor = useCallback(async (id: string) => {
-    try {
-      await deleteDoc(doc(db, "doctors", id));
-      if (teamSummaryData) {
-        setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => d.id !== id)}) : null);
-      }
-      setAllDoctors(prev => prev.filter(d => d.id !== id));
-      toast({ variant: 'destructive', title: "Doctor Deleted" });
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not delete doctor.' });
-    }
+    if (!db) return;
+    const doctorRef = doc(db, "doctors", id);
+    
+    deleteDoc(doctorRef)
+      .then(() => {
+        if (teamSummaryData) {
+          setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => d.id !== id)}) : null);
+        }
+        setAllDoctors(prev => prev.filter(d => d.id !== id));
+        toast({ variant: 'destructive', title: "Doctor Deleted" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: doctorRef.path,
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not delete doctor.' });
+      });
   }, [toast, teamSummaryData]);
   
   const deleteDoctorsBulk = useCallback(async (ids: string[]) => {
-    if (ids.length === 0) return;
-    try {
-      const batch = writeBatch(db);
-      ids.forEach(id => {
-        const docRef = doc(db, "doctors", id);
-        batch.delete(docRef);
-      });
-      await batch.commit();
+    if (ids.length === 0 || !db) return;
+    const batch = writeBatch(db);
+    ids.forEach(id => {
+      const docRef = doc(db, "doctors", id);
+      batch.delete(docRef);
+    });
 
+    try {
+      await batch.commit();
       if (teamSummaryData) {
         setTeamSummaryData(prev => prev ? ({...prev, doctors: prev.doctors.filter(d => !ids.includes(d.id))}) : null);
       }
       setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
       toast({ variant: 'destructive', title: "Doctors Deleted", description: `${ids.length} doctor(s) have been removed.` });
-    } catch (error) {
+    } catch (serverError) {
+      const permissionError = new FirestorePermissionError({
+        path: 'doctors',
+        operation: 'delete',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
       toast({ variant: 'destructive', title: 'Bulk Delete Failed', description: 'Could not delete the selected doctors.' });
     }
   }, [toast, teamSummaryData]);
 
   const addDoctorsBulk = useCallback(async (doctorsData: Omit<Doctor, 'id'>[]) => {
-    // Process doctorsData in chunks
+    if (!db) return;
     const chunkSize = 500;
-    for (let i = 0; i < doctorsData.length; i += chunkSize) {
-        const chunk = doctorsData.slice(i, i + chunkSize);
-        const batch = writeBatch(db);
-        chunk.forEach(doctor => {
-            const docRef = doc(collection(db, "doctors"));
-            batch.set(docRef, doctor);
-        });
-        await batch.commit();
+    try {
+        for (let i = 0; i < doctorsData.length; i += chunkSize) {
+            const chunk = doctorsData.slice(i, i + chunkSize);
+            const batch = writeBatch(db);
+            chunk.forEach(doctor => {
+                const docRef = doc(collection(db, "doctors"));
+                batch.set(docRef, doctor);
+            });
+            await batch.commit();
+        }
+        await fetchTeamSummary();
+        toast({ title: 'Bulk Add Successful', description: `${doctorsData.length} doctors processed.` });
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+          path: 'doctors',
+          operation: 'write',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     }
-    await fetchTeamSummary();
-    toast({ title: 'Bulk Add Successful', description: `${doctorsData.length} doctors processed.` });
   }, [fetchTeamSummary, toast]);
 
 

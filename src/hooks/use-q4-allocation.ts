@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -5,6 +6,8 @@ import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -69,8 +72,10 @@ export const useQ4Allocation = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!db) return;
     setLoading(true);
-    const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
+    const colRef = collection(db, "q4Allocation");
+    const q = query(colRef, orderBy("displayMaterialName", "asc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
@@ -80,8 +85,12 @@ export const useQ4Allocation = () => {
           setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
       }
       setLoading(false);
-    }, (error) => {
-      console.error("Allocation listener error:", error);
+    }, async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: colRef.path,
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
       setLoading(false);
     });
 
@@ -89,8 +98,10 @@ export const useQ4Allocation = () => {
   }, []);
 
   useEffect(() => {
+    if (!db) return;
     setLoadingUsage(true);
-    const q = query(collection(db, "coverageEntries"));
+    const colRef = collection(db, "coverageEntries");
+    const q = query(colRef);
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const usage: Record<string, number> = {};
@@ -110,9 +121,13 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
       setLoadingUsage(false);
-    }, (error) => {
-      console.error("Usage listener error:", error);
-      setLoadingUsage(false);
+    }, async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        setLoadingUsage(false);
     });
 
     return () => unsubscribe();
@@ -121,6 +136,7 @@ export const useQ4Allocation = () => {
   const refetch = () => {};
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
+    if (!db) return false;
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
@@ -132,13 +148,18 @@ export const useQ4Allocation = () => {
       });
       await batch.commit();
       return true;
-    } catch (error: any) {
-      console.error("Bulk Upload Error:", error);
+    } catch (serverError: any) {
+      const permissionError = new FirestorePermissionError({
+        path: 'q4Allocation',
+        operation: 'write',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
       return false;
     }
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
+      if (!db) return false;
       try {
           const batch = writeBatch(db);
           ids.forEach(id => {
@@ -148,8 +169,12 @@ export const useQ4Allocation = () => {
           await batch.commit();
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
-      } catch (error) {
-          console.error("Delete Error:", error);
+      } catch (serverError) {
+          const permissionError = new FirestorePermissionError({
+            path: 'q4Allocation',
+            operation: 'delete',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
           toast({ variant: "destructive", title: "Delete Failed" });
           return false;
       }

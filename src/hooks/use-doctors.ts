@@ -55,8 +55,12 @@ export const useDoctors = () => {
       });
 
       setDoctors(fetchedDoctors);
-    } catch (error) {
-      console.error("Error fetching doctors:", error);
+    } catch (serverError: any) {
+      const permissionError = new FirestorePermissionError({
+        path: 'doctors',
+        operation: 'list',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
@@ -141,8 +145,12 @@ export const useDoctors = () => {
 
         await fetchDoctors();
         toast({ title: "Upload Successful" });
-      } catch (error) {
-        console.error("Bulk doctor upload error:", error);
+      } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: 'doctors',
+          operation: 'write',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       } finally {
         setLoading(false);
       }
@@ -204,8 +212,12 @@ export const useDoctors = () => {
         await batch.commit();
         setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
         toast({ variant: "destructive", title: "Doctors Deleted" });
-      } catch (error) {
-        console.error("Bulk delete error:", error);
+      } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+          path: 'doctors',
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       }
     },
     [user, toast]
