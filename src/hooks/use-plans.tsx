@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -8,8 +7,6 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -72,12 +69,8 @@ export const usePlans = () => {
         });
         setPlanningRequests(fetchedRequests);
 
-      } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: 'plans',
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      } catch (error: any) {
+        console.error("Error fetching plan data:", error);
       }
     }
     
@@ -104,23 +97,13 @@ export const usePlans = () => {
       callType: 'planned' as const,
     };
     
-    const colRef = collection(db, "plans");
-    addDoc(colRef, newPlanData)
-      .then((docRef) => {
-        setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
-        toast({ title: "Visit Scheduled" });
-      })
-      .catch(async (serverError) => {
-        // Fallback to offline
-        setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);
-        
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'create',
-          requestResourceData: newPlanData,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-      });
+    try {
+      const docRef = await addDoc(collection(db, "plans"), newPlanData);
+      setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
+      toast({ title: "Visit Scheduled" });
+    } catch (error) {
+      setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);
+    }
   }, [user, toast]);
 
   const syncAllOfflinePlans = useCallback(async () => {
@@ -136,12 +119,8 @@ export const usePlans = () => {
       localStorage.setItem(getOfflineKey(), JSON.stringify([]));
       setOfflinePlans([]);
       await fetchData();
-    } catch (serverError) {
-      const permissionError = new FirestorePermissionError({
-        path: 'plans',
-        operation: 'write',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+    } catch (error) {
+      console.error("Failed to sync plans", error);
     }
   }, [isOnline, user, offlinePlans, fetchData, getOfflineKey]);
 
@@ -153,31 +132,28 @@ export const usePlans = () => {
       addPlan, 
       removePlan: async (id: string) => {
           if (!db) return;
-          const planRef = doc(db, "plans", id);
-          deleteDoc(planRef).catch(async () => {
-              const permissionError = new FirestorePermissionError({
-                path: planRef.path,
-                operation: 'delete',
-              } satisfies SecurityRuleContext);
-              errorEmitter.emit('permission-error', permissionError);
-          });
-          setMasterPlans(prev => prev.filter(p => p.id !== id));
+          try {
+              await deleteDoc(doc(db, "plans", id));
+              setMasterPlans(prev => prev.filter(p => p.id !== id));
+          } catch (error) {
+              console.error("Error removing plan", error);
+          }
       }, 
       requestPlanningPermission: async (week: Date, reason: string) => {
           if (!db) return false;
-          const payload = { userId: user?.uid, weekStartDate: week.toISOString(), reason, status: 'pending', requestedAt: new Date().toISOString() };
-          const colRef = collection(db, 'planningRequests');
-          
-          addDoc(colRef, payload)
-            .catch(async () => {
-              const permissionError = new FirestorePermissionError({
-                path: colRef.path,
-                operation: 'create',
-                requestResourceData: payload,
-              } satisfies SecurityRuleContext);
-              errorEmitter.emit('permission-error', permissionError);
-            });
-          return true;
+          try {
+              await addDoc(collection(db, 'planningRequests'), {
+                  userId: user?.uid,
+                  weekStartDate: week.toISOString(),
+                  reason,
+                  status: 'pending',
+                  requestedAt: new Date().toISOString()
+              });
+              return true;
+          } catch (error) {
+              console.error("Error requesting permission", error);
+              return false;
+          }
       },
       loading, 
       syncAllOfflinePlans: offlinePlans.length > 0 ? syncAllOfflinePlans : undefined,

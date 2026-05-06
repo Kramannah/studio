@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -18,8 +17,6 @@ import {
   deleteDoc,
   writeBatch,
 } from "firebase/firestore";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const useDoctors = () => {
   const { toast } = useToast();
@@ -55,12 +52,8 @@ export const useDoctors = () => {
       });
 
       setDoctors(fetchedDoctors);
-    } catch (serverError: any) {
-      const permissionError = new FirestorePermissionError({
-        path: 'doctors',
-        operation: 'list',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+    } catch (error: any) {
+      console.error("Error fetching doctors:", error);
     } finally {
       setLoading(false);
     }
@@ -74,24 +67,16 @@ export const useDoctors = () => {
     async (doctorData: Omit<Doctor, "id">) => {
       if (!user || !db) return;
       const newDoctorData = { ...doctorData, userId: user.uid };
-      const colRef = collection(db, "doctors");
-      
-      addDoc(colRef, newDoctorData)
-        .then((docRef) => {
-          setDoctors((prev) => [...prev, { id: docRef.id, ...newDoctorData }]);
-          toast({
-            title: "Doctor Added",
-            description: `${doctorData.firstName} ${doctorData.lastName} has been added.`,
-          });
-        })
-        .catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: colRef.path,
-            operation: 'create',
-            requestResourceData: newDoctorData,
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
+      try {
+        const docRef = await addDoc(collection(db, "doctors"), newDoctorData);
+        setDoctors((prev) => [...prev, { id: docRef.id, ...newDoctorData }]);
+        toast({
+          title: "Doctor Added",
+          description: `${doctorData.firstName} ${doctorData.lastName} has been added.`,
         });
+      } catch (error) {
+        console.error("Error adding doctor:", error);
+      }
     },
     [user, toast]
   );
@@ -145,12 +130,8 @@ export const useDoctors = () => {
 
         await fetchDoctors();
         toast({ title: "Upload Successful" });
-      } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: 'doctors',
-          operation: 'write',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      } catch (error: any) {
+        console.error("Bulk add error:", error);
       } finally {
         setLoading(false);
       }
@@ -162,22 +143,14 @@ export const useDoctors = () => {
     async (doctorData: Doctor) => {
       if (!user || !db) return;
       const { id, userId, ...dataToUpdate } = doctorData;
-      const doctorRef = doc(db, "doctors", id);
-      const payload = { ...dataToUpdate, userId: user.uid };
-
-      updateDoc(doctorRef, payload)
-        .catch(async () => {
-          const permissionError = new FirestorePermissionError({
-            path: doctorRef.path,
-            operation: 'update',
-            requestResourceData: payload,
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
-        });
-
-      setDoctors((prev) =>
-        prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
-      );
+      try {
+        await updateDoc(doc(db, "doctors", id), { ...dataToUpdate, userId: user.uid });
+        setDoctors((prev) =>
+          prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
+        );
+      } catch (error) {
+        console.error("Update failed", error);
+      }
     },
     [user]
   );
@@ -185,19 +158,13 @@ export const useDoctors = () => {
   const deleteDoctor = useCallback(
     async (id: string) => {
       if (!user || !db) return;
-      const doctorRef = doc(db, "doctors", id);
-      
-      deleteDoc(doctorRef)
-        .catch(async () => {
-          const permissionError = new FirestorePermissionError({
-            path: doctorRef.path,
-            operation: 'delete',
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
-        });
-
-      setDoctors((prev) => prev.filter((d) => d.id !== id));
-      toast({ variant: "destructive", title: "Doctor Removed" });
+      try {
+        await deleteDoc(doc(db, "doctors", id));
+        setDoctors((prev) => prev.filter((d) => d.id !== id));
+        toast({ variant: "destructive", title: "Doctor Removed" });
+      } catch (error) {
+        console.error("Delete failed", error);
+      }
     },
     [user, toast]
   );
@@ -212,12 +179,8 @@ export const useDoctors = () => {
         await batch.commit();
         setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
         toast({ variant: "destructive", title: "Doctors Deleted" });
-      } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-          path: 'doctors',
-          operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+      } catch (error) {
+        console.error("Bulk delete failed", error);
       }
     },
     [user, toast]

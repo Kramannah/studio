@@ -1,14 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy } from 'firebase/firestore';
 import { useToast } from './use-toast';
-import { useAuth } from './use-auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -64,32 +60,18 @@ export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
 ];
 
 export const useQ4Allocation = () => {
-  const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(
     OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [loadingUsage, setLoadingUsage] = useState(true);
   const { toast } = useToast();
 
-  const isUserAdmin = useMemo(() => {
-    if (!user) return false;
-    const normalizedEmail = user.email?.toLowerCase() || '';
-    return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
-  }, [user]);
-
-  const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
-
   useEffect(() => {
-    if (!db || !user) {
-        setLoading(false);
-        return;
-    };
+    if (!db) return;
     
     setLoading(true);
-    const colRef = collection(db, "q4Allocation");
-    const q = query(colRef, orderBy("displayMaterialName", "asc"));
+    const q = query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
@@ -99,36 +81,18 @@ export const useQ4Allocation = () => {
           setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
       }
       setLoading(false);
-    }, async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: colRef.path,
-        operation: 'list',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+    }, (error) => {
+      console.error("Allocation listen error:", error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, []);
 
   useEffect(() => {
-    if (!db || !user) {
-        setLoadingUsage(false);
-        return;
-    };
+    if (!db) return;
     
-    setLoadingUsage(true);
-    const colRef = collection(db, "coverageEntries");
-    
-    // CRITICAL: Filter query by userId for non-admins to avoid permission error during list
-    let q;
-    if (isUserAdmin || isUserManager) {
-      q = query(colRef);
-    } else {
-      q = query(colRef, where("userId", "==", user.uid));
-    }
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, "coverageEntries"), (snapshot) => {
       const usage: Record<string, number> = {};
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
@@ -145,18 +109,10 @@ export const useQ4Allocation = () => {
         });
       });
       setUsedQuantities(usage);
-      setLoadingUsage(false);
-    }, async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
-        setLoadingUsage(false);
     });
 
     return () => unsubscribe();
-  }, [user, isUserAdmin, isUserManager]);
+  }, []);
 
   const refetch = () => {};
 
@@ -173,12 +129,8 @@ export const useQ4Allocation = () => {
       });
       await batch.commit();
       return true;
-    } catch (serverError: any) {
-      const permissionError = new FirestorePermissionError({
-        path: 'q4Allocation',
-        operation: 'write',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+    } catch (err) {
+      console.error("Bulk add failed", err);
       return false;
     }
   };
@@ -188,22 +140,16 @@ export const useQ4Allocation = () => {
       try {
           const batch = writeBatch(db);
           ids.forEach(id => {
-              const docRef = doc(db, "q4Allocation", id);
-              batch.delete(docRef);
+              batch.delete(doc(db, "q4Allocation", id));
           });
           await batch.commit();
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
-      } catch (serverError) {
-          const permissionError = new FirestorePermissionError({
-            path: 'q4Allocation',
-            operation: 'delete',
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
+      } catch (err) {
           toast({ variant: "destructive", title: "Delete Failed" });
           return false;
       }
   };
 
-  return { allocations, usedQuantities, loading: loading || loadingUsage, refetch, addAllocationsBulk, deleteAllocationsBulk };
+  return { allocations, usedQuantities, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };
 };

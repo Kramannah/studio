@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,8 +8,6 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 import { isToday, parseISO } from 'date-fns';
 import { getQueryStartDateISO } from '@/lib/utils';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const useTimeLogs = () => {
   const { toast } = useToast();
@@ -46,12 +43,8 @@ export const useTimeLogs = () => {
 
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
-    } catch (serverError: any) {
-      const permissionError = new FirestorePermissionError({
-        path: 'timeLogs',
-        operation: 'list',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+    } catch (error: any) {
+      console.error("Error fetching time logs:", error);
     } finally {
       setLoading(false);
     }
@@ -65,44 +58,29 @@ export const useTimeLogs = () => {
       timeLogs, 
       addTimeIn: async (photo: string, loc: 'inbase' | 'outbase') => {
           if (!user || !db) return;
-          const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
-          const colRef = collection(db, "timeLogs");
-          
-          addDoc(colRef, newLog)
-            .then((docRef) => {
+          try {
+              const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
+              const docRef = await addDoc(collection(db, "timeLogs"), newLog);
               const created = { id: docRef.id, ...newLog } as TimeLog;
               setTimeLogs(prev => [created, ...prev]);
               setTodaysTimeIn(created);
               toast({ title: "Time In Recorded" });
-            })
-            .catch(async (serverError) => {
-              const permissionError = new FirestorePermissionError({
-                path: colRef.path,
-                operation: 'create',
-                requestResourceData: newLog,
-              } satisfies SecurityRuleContext);
-              errorEmitter.emit('permission-error', permissionError);
-            });
+          } catch (error) {
+              console.error("Error timing in", error);
+          }
       }, 
       addTimeOut: async (photo: string) => {
           if (!user || !db || !todaysTimeIn) return;
-          const logRef = doc(db, "timeLogs", todaysTimeIn.id);
-          const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
-          
-          updateDoc(logRef, updateData)
-            .then(() => {
+          try {
+              const logRef = doc(db, "timeLogs", todaysTimeIn.id);
+              const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
+              await updateDoc(logRef, updateData);
               setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
               setTodaysTimeIn(null);
               toast({ title: "Time Out Recorded" });
-            })
-            .catch(async (serverError) => {
-              const permissionError = new FirestorePermissionError({
-                path: logRef.path,
-                operation: 'update',
-                requestResourceData: updateData,
-              } satisfies SecurityRuleContext);
-              errorEmitter.emit('permission-error', permissionError);
-            });
+          } catch (error) {
+              console.error("Error timing out", error);
+          }
       }, 
       loading, 
       todaysTimeIn,
