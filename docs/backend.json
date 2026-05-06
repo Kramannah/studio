@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Doctor": {
@@ -141,6 +142,18 @@
         "quarter": { "enum": ["Q3", "Q4"] }
       },
       "required": ["displayMaterialName", "allocationQuantity"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Custom profile overrides for users (e.g. edited names).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "firstName", "lastName"]
     }
   },
   "auth": {
@@ -153,6 +166,7 @@
     "/plans/{id}": { "schema": { "$ref": "#/backend/entities/Plan" }, "description": "Scheduled visit plans." },
     "/planningRequests/{id}": { "schema": { "$ref": "#/backend/entities/PlanningPermissionRequest" }, "description": "Requests to unlock past planning weeks." },
     "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs." },
-    "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Inventory and marketing sample allocations." }
+    "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Inventory and marketing sample allocations." },
+    "/userProfiles/{id}": { "schema": { "$ref": "#/backend/entities/UserProfile" }, "description": "User profile overrides." }
   }
 }

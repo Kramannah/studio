@@ -6,11 +6,12 @@ import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, w
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getQueryStartDateISO } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { useUserProfiles } from "./use-user-profiles";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -22,10 +23,6 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-/**
- * Utility to safely convert any date field (Timestamp or string) to an ISO string.
- * Uses duck-typing to detect Firestore Timestamps or native Dates.
- */
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
     if (typeof val === 'string') return val;
@@ -37,8 +34,8 @@ const safeToDateISO = (val: any): string => {
 export function useAdminData(managerId?: string) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { profiles: customProfiles } = useUserProfiles();
   
-  // Individual User State (for drill-down)
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
   const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
   const [allPlans, setAllPlans] = useState<Plan[]>([]);
@@ -47,11 +44,9 @@ export function useAdminData(managerId?: string) {
   const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
 
-  // Team-Wide Approvals State
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   
-  // Team Summary State
   const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
   
   const [loading, setLoading] = useState(false);
@@ -64,18 +59,12 @@ export function useAdminData(managerId?: string) {
   }, [user]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db) {
-        setAllNonCallDays([]);
-        setAllPlanningRequests([]);
-        return;
-    }
+    if (!user || !db) return;
 
     let userFilter: string[] | null = null;
     if (managerId) {
       userFilter = MANAGER_TEAMS[managerId] || [];
     } else if (!isUserAdmin) {
-      setAllNonCallDays([]);
-      setAllPlanningRequests([]);
       return;
     }
 
@@ -112,7 +101,6 @@ export function useAdminData(managerId?: string) {
       if (prRes.status === 'fulfilled') {
         setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
       }
-
     } catch (serverError: any) {
         console.error("Fetch Approvals Error:", serverError);
     } finally {
@@ -202,7 +190,6 @@ export function useAdminData(managerId?: string) {
     const sanitizedUserId = userId.trim();
     setLoading(true);
     
-    // Clear individual state to prevent stale data visibility
     setAllEntries([]);
     setAllDoctors([]);
     setAllPlans([]);
@@ -214,8 +201,6 @@ export function useAdminData(managerId?: string) {
     try {
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
         
-        // Use Promise.allSettled to ensure failure in one collection doesn't block the rest
-        // Removing deep history restrictions to match account view parity for GMAS-06 and others
         const results = await Promise.allSettled([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
@@ -237,13 +222,11 @@ export function useAdminData(managerId?: string) {
         const ncds = getVal<NonCallDay>(4);
         const requests = getVal<PlanningPermissionRequest>(5);
 
-        // Sort data for consistent presentation
         entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt)));
         plans.sort((a, b) => safeToDateISO(b.plannedDate).localeCompare(safeToDateISO(a.plannedDate)));
         logs.sort((a, b) => safeToDateISO(b.timeIn).localeCompare(safeToDateISO(a.timeIn)));
         ncds.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date)));
 
-        // Calculate individual used quantities from fetched entries
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
             if (e.primarySampleName && e.primaryProductQty) {
@@ -266,7 +249,6 @@ export function useAdminData(managerId?: string) {
         setAllNonCallDaysIndividual(ncds);
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
-
     } catch (err) {
         console.error("Individual PMR Data Fetch Error:", err);
         toast({ variant: 'destructive', title: "Fetch Error", description: "Could not retrieve full PMR records." });
@@ -274,7 +256,6 @@ export function useAdminData(managerId?: string) {
         setLoading(false);
     }
   }, [toast]);
-
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
       const docRef = doc(db!, 'nonCallDays', id);
@@ -382,7 +363,7 @@ export function useAdminData(managerId?: string) {
         const batch = writeBatch(db!);
         data.forEach(d => batch.set(doc(collection(db!, "doctors")), d));
         await batch.commit();
-        await fetchTeamSummary();
     },
+    customProfiles
   };
 }

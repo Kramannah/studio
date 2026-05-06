@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail } from 'lucide-react';
+import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { USER_DATA_MAP } from '@/lib/user-data';
@@ -22,6 +22,9 @@ import { Input } from '@/components/ui/input';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
+import { useUserProfiles } from '@/hooks/use-user-profiles';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -38,10 +41,15 @@ const PlanningRequestApprovals = dynamic(() => import('@/components/planning-req
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
+    const { profiles, updateProfile, loading: profilesLoading } = useUserProfiles();
+    
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
+    
+    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string} | null>(null);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
@@ -88,14 +96,25 @@ export default function AdminPage() {
         return MANAGER_TEAMS[selectedManagerId] || [];
     }, [selectedManagerId]);
 
-    const userMap = useMemo(() => {
+    // Merged user map for selection and display
+    const mergedUserMap = useMemo(() => {
+        const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
+        Object.keys(profiles).forEach(uid => {
+            if (map[uid]) {
+                map[uid] = { ...map[uid], firstName: profiles[uid].firstName, lastName: profiles[uid].lastName };
+            }
+        });
+        return map;
+    }, [profiles]);
+
+    const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
         managedUserIds.forEach((id) => {
-            const u = USER_DATA_MAP[id];
+            const u = mergedUserMap[id];
             map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id.substring(0, 6)}...`);
         });
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
-    }, [managedUserIds]);
+    }, [managedUserIds, mergedUserMap]);
     
     const totalPendingApprovals = useMemo(() => {
         const pendingNCD = teamNonCallDays.filter(ncd => ncd.status === 'pending').length;
@@ -104,7 +123,7 @@ export default function AdminPage() {
     }, [teamNonCallDays, teamPlanningRequests]);
 
     const allAccounts = useMemo(() => {
-        const all = Object.entries(USER_DATA_MAP).map(([uid, data]) => {
+        const all = Object.entries(mergedUserMap).map(([uid, data]) => {
             const isAdmin = ADMIN_UIDS.includes(uid);
             const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
             let role = 'PMR';
@@ -115,7 +134,7 @@ export default function AdminPage() {
             if (role === 'PMR') {
                 const managerUid = Object.keys(MANAGER_TEAMS).find(mUid => MANAGER_TEAMS[mUid].includes(uid));
                 if (managerUid) {
-                    const mData = USER_DATA_MAP[managerUid];
+                    const mData = mergedUserMap[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
                 }
             } else if (role === 'Manager') {
@@ -138,7 +157,7 @@ export default function AdminPage() {
             a.district.toLowerCase().includes(q) ||
             (a.email && a.email.toLowerCase().includes(q))
         ).sort((a, b) => a.code.localeCompare(b.code));
-    }, [accountSearch]);
+    }, [accountSearch, mergedUserMap]);
 
     useEffect(() => {
         if (!authLoading && !hasAdminAccess) router.push('/');
@@ -152,6 +171,16 @@ export default function AdminPage() {
     useEffect(() => {
         if (selectedUserId) fetchUserData(selectedUserId);
     }, [selectedUserId, fetchUserData]);
+
+    const handleSaveAccount = async () => {
+        if (!editingAccount) return;
+        setIsSavingProfile(true);
+        const success = await updateProfile(editingAccount.uid, editingAccount.firstName, editingAccount.lastName);
+        if (success) {
+            setEditingAccount(null);
+        }
+        setIsSavingProfile(false);
+    };
 
     if (authLoading && !selectedManagerId) {
         return (
@@ -194,7 +223,7 @@ export default function AdminPage() {
                     individualPlanningRequests={individualPlanningRequests}
                     onDeleteEntry={deleteEntry}
                     usedQuantities={individualUsedQuantities}
-                    userMap={USER_DATA_MAP}
+                    userMap={mergedUserMap}
                     isAdminView={true}
                     onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
                     onUpdateDoctor={updateDoctor}
@@ -224,7 +253,7 @@ export default function AdminPage() {
                         allTimeLogs={teamSummaryData.timeLogs}
                         onDeleteEntry={deleteEntry}
                         usedQuantities={teamSummaryData.usedQuantities}
-                        userMap={USER_DATA_MAP}
+                        userMap={mergedUserMap}
                         isAdminView={true}
                         onAddDoctor={(d) => addDoctor({ ...d, userId: selectedManagerId })}
                         onUpdateDoctor={updateDoctor}
@@ -312,7 +341,7 @@ export default function AdminPage() {
                                                     <SelectValue placeholder="All Representatives (Summary)" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {Array.from(userMap.entries()).map(([uid, name]) => <SelectItem key={uid} value={uid} className="font-headline">{name}</SelectItem>)}
+                                                    {Array.from(userMapForSelection.entries()).map(([uid, name]) => <SelectItem key={uid} value={uid} className="font-headline">{name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                             {selectedUserId && <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}><X className="w-5 h-5"/></Button>}
@@ -355,7 +384,7 @@ export default function AdminPage() {
                                                 <TableHead className="font-bold text-foreground">Email Address</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
                                                 <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
-                                                <TableHead className="font-bold text-foreground pr-6">System UID</TableHead>
+                                                <TableHead className="text-right font-bold text-foreground pr-6">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -387,10 +416,14 @@ export default function AdminPage() {
                                                         <TableCell className="text-sm font-medium text-muted-foreground">
                                                             {acc.district}
                                                         </TableCell>
-                                                        <TableCell className="pr-6">
-                                                            <code className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded select-all">
-                                                                {acc.uid}
-                                                            </code>
+                                                        <TableCell className="text-right pr-6">
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName })}
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -416,11 +449,49 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="approvals" className="space-y-8">
-                        <NonCallDayApprovals nonCallDays={teamNonCallDays} onUpdateStatus={updateNonCallDayStatus} userMap={USER_DATA_MAP} />
-                        <PlanningRequestApprovals requests={teamPlanningRequests} onUpdateStatus={updatePlanningRequestStatus} userMap={USER_DATA_MAP} />
+                        <NonCallDayApprovals nonCallDays={teamNonCallDays} onUpdateStatus={updateNonCallDayStatus} userMap={mergedUserMap} />
+                        <PlanningRequestApprovals requests={teamPlanningRequests} onUpdateStatus={updatePlanningRequestStatus} userMap={mergedUserMap} />
                     </TabsContent>
                 </Tabs>
             </main>
+
+            <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline text-xl">Edit Employee Name</DialogTitle>
+                        <DialogDescription>Update the display name for this account across the system.</DialogDescription>
+                    </DialogHeader>
+                    {editingAccount && (
+                        <div className="space-y-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="firstName" className="text-right">First Name</Label>
+                                <Input 
+                                    id="firstName" 
+                                    className="col-span-3" 
+                                    value={editingAccount.firstName}
+                                    onChange={(e) => setEditingAccount({...editingAccount, firstName: e.target.value})}
+                                />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="lastName" className="text-right">Last Name</Label>
+                                <Input 
+                                    id="lastName" 
+                                    className="col-span-3" 
+                                    value={editingAccount.lastName}
+                                    onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setEditingAccount(null)}>Cancel</Button>
+                        <Button onClick={handleSaveAccount} disabled={isSavingProfile}>
+                            {isSavingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

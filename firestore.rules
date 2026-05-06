@@ -42,14 +42,12 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // TEAM-WIDE POOL: All users can read entries to calculate global sample usage.
       allow read: if isSignedIn(); 
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /doctors/{id} {
-      // Explicit access for managers to read territory doctor lists
       allow read: if isAdmin() || isManager() || isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
@@ -87,6 +85,11 @@ service cloud.firestore {
     match /marketingSamples/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+    
+    match /userProfiles/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isManager();
     }
   }
 }

@@ -123,6 +123,14 @@ export interface TimeLog {
     timeOutPhoto?: string;
 }
 
+export interface UserProfile {
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    updatedAt: string;
+}
+
 export interface AdminData {
     allEntries: CoverageEntry[];
     allDoctors: Doctor[];
