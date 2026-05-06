@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, LayoutDashboard } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -34,6 +33,7 @@ const DynamicSkeleton = () => (
 );
 
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
+const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton /> });
 
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
@@ -65,10 +65,13 @@ export default function AdminPage() {
         individualUsedQuantities,
         allNonCallDays,
         allPlanningRequests,
+        teamSummaryData,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
         loading: dataLoading,
+        loadingSummary,
         fetchUserData,
+        fetchTeamSummary,
         deleteEntry,
         addDoctor,
         updateDoctor,
@@ -76,7 +79,6 @@ export default function AdminPage() {
     } = useAdminData(selectedManagerId);
 
     const allAccounts = useMemo(() => {
-        // Merge static map with dynamic profiles
         const mergedMap = { ...USER_DATA_MAP };
         Object.entries(profiles).forEach(([uid, p]) => {
             mergedMap[uid] = {
@@ -152,8 +154,10 @@ export default function AdminPage() {
     useEffect(() => {
         if (selectedUserId) {
             fetchUserData(selectedUserId);
+        } else if (selectedManagerId) {
+            fetchTeamSummary();
         }
-    }, [selectedUserId, fetchUserData]);
+    }, [selectedUserId, selectedManagerId, fetchUserData, fetchTeamSummary]);
 
     const handleSaveAccount = async () => {
         if (!editingAccount) return;
@@ -258,11 +262,13 @@ export default function AdminPage() {
                                 onUpdateDoctor={updateDoctor}
                                 onDeleteDoctor={deleteDoctor}
                             />
+                        ) : selectedManagerId ? (
+                            <TeamSummary data={teamSummaryData} loading={loadingSummary} />
                         ) : (
                             <Alert className="border-2">
                                 <AlertCircle className="w-4 h-4 text-primary" />
-                                <AlertTitle className="font-headline">Representative Insight</AlertTitle>
-                                <AlertDescription>Select a specific PMR to view their full masterlist and coverage timeline.</AlertDescription>
+                                <AlertTitle className="font-headline">Technical Oversight</AlertTitle>
+                                <AlertDescription>Please select a District Manager to view team performance analytics or select a specific PMR for individual masterlists.</AlertDescription>
                             </Alert>
                         )}
                     </TabsContent>
