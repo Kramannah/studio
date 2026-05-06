@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, where, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, where, limit, getDocs } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
-import { subDays } from 'date-fns';
+import { subDays, startOfMonth, subMonths } from 'date-fns';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -98,14 +98,16 @@ export const useQ4Allocation = () => {
     
     const colRef = collection(db, "coverageEntries");
     
-    // OPTIMIZATION: Limit the usage calculation window to 30 days for inventory pool.
-    // Reducing from 60 to 30 days fixes the Firestore timeout error for large territories.
-    const startDate = subDays(new Date(), 30).toISOString();
+    // INVENTORY TRACKING OPTIMIZATION:
+    // We look back at the last 3 months of team-wide activity for inventory balancing.
+    // This is wider than 30 days but narrower than 6 months to avoid Firestore timeouts 
+    // while ensuring quarterly batch accuracy.
+    const startDate = subMonths(startOfMonth(new Date()), 2).toISOString();
     
     const usageQuery = query(
         colRef, 
         where("submittedAt", ">=", startDate),
-        limit(3000) // Prevent browser crash if the result set is still unusually large
+        limit(5000) 
     );
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
@@ -126,7 +128,6 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     }, (error) => {
-        // Detailed error logging to help identify if indexes or data volume are still issues
         console.error("Usage tracking error:", error);
     });
 
