@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -453,7 +452,7 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
+                <DialogContent className="w-[94vw] max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background border-2 shadow-2xl">
                     <DialogHeader className="p-4 border-b shrink-0 bg-muted/20">
                         <DialogTitle className="text-lg font-headline font-black">Plan Visits: {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
                         <DialogDescription className="text-sm">Select doctors from your masterlist to bulk schedule visits.</DialogDescription>
@@ -488,9 +487,9 @@ export function PlanningCalendar({
                         </div>
 
                         <div className="flex-1 border-2 rounded-xl bg-card overflow-hidden flex flex-col relative">
-                            <ScrollArea className="flex-1 w-full">
+                            <div className="flex-1 w-full overflow-y-auto scrollbar-hide">
                                 <Table className="w-full">
-                                    <TableHeader className="sticky top-0 bg-muted z-10">
+                                    <TableHeader className="sticky top-0 bg-muted z-20">
                                         <TableRow className="h-10 hover:bg-transparent">
                                             <TableHead className="w-[40px] pl-4"></TableHead>
                                             <TableHead className="w-[200px] text-xs font-bold uppercase tracking-tighter">Doctor Name</TableHead>
@@ -509,7 +508,7 @@ export function PlanningCalendar({
                                                 const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
                                                 
                                                 return (
-                                                    <TableRow key={doctor.id} className={cn("h-12 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
+                                                    <TableRow key={doctor.id} className={cn("h-10 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
                                                         <TableCell className="w-[40px] pl-4">
                                                             <Checkbox 
                                                                 checked={selectedDoctorIds.has(doctor.id)} 
@@ -518,15 +517,15 @@ export function PlanningCalendar({
                                                             />
                                                         </TableCell>
                                                         <TableCell className="w-[200px]">
-                                                            <span className="font-bold text-sm">{doctor.firstName} {doctor.lastName}</span>
+                                                            <span className="font-bold text-xs">{doctor.firstName} {doctor.lastName}</span>
                                                         </TableCell>
-                                                        <TableCell className="text-muted-foreground text-xs font-medium truncate max-w-[150px]">
+                                                        <TableCell className="text-muted-foreground text-[10px] font-medium truncate max-w-[150px]">
                                                             {doctor.municipality}
                                                         </TableCell>
-                                                        <TableCell className="w-[60px] text-center font-bold text-xs">
+                                                        <TableCell className="w-[60px] text-center font-bold text-[10px]">
                                                             {doctor.frequency}
                                                         </TableCell>
-                                                        <TableCell className="w-[60px] font-mono text-sm font-black text-center pr-4">
+                                                        <TableCell className="w-[60px] font-mono text-xs font-black text-center pr-4">
                                                             {remaining}
                                                         </TableCell>
                                                     </TableRow>
@@ -534,12 +533,12 @@ export function PlanningCalendar({
                                             })
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground italic text-sm">No results found.</TableCell>
+                                                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground italic text-xs">No results found.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
-                            </ScrollArea>
+                            </div>
                         </div>
                     </div>
 
