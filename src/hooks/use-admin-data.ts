@@ -90,23 +90,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 }
                 const snapshots = await Promise.all(chunks.map(chunk => 
                     getDocs(query(collection(db, collName), where("userId", "in", chunk)))
-                      .catch(async (e: FirestoreError) => {
-                          errorEmitter.emit('permission-error', new FirestorePermissionError({
-                              path: collName,
-                              operation: 'list',
-                          }));
-                          throw e;
-                      })
                 ));
                 return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
-            const snapshot = await getDocs(queryRef).catch(async (e: FirestoreError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: collName,
-                    operation: 'list',
-                }));
-                throw e;
-            });
+            const snapshot = await getDocs(queryRef);
             return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         };
       
@@ -121,8 +108,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
       if (prRes.status === 'fulfilled') {
         setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
       }
-    } catch (err) {
-        // Handled via errorEmitter
+    } catch (err: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'approvals',
+            operation: 'list',
+        }));
     } finally {
       setLoading(false);
     }
@@ -150,14 +140,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         const fetchDataForChunk = async (chunk: string[]) => {
             const fetchSingle = (collName: string) => 
-                getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
-                .catch(async (e: FirestoreError) => {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: collName,
-                        operation: 'list',
-                    }));
-                    throw e;
-                });
+                getDocs(query(collection(db!, collName), where("userId", "in", chunk)));
 
             const snaps = await Promise.allSettled([
                 fetchSingle("coverageEntries"),
@@ -204,8 +187,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             usedQuantities: used
         });
 
-      } catch (err) {
-          // Handled via errorEmitter
+      } catch (err: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'teamSummary',
+            operation: 'list',
+        }));
       } finally {
         setLoadingSummary(false);
       }
@@ -229,13 +215,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const q = (coll: string) => query(collection(db!, coll), where("userId", "==", sanitizedUserId));
         
         const fetchS = (collName: string) => 
-            getDocs(q(collName)).catch(async (e: FirestoreError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: collName,
-                    operation: 'list',
-                }));
-                throw e;
-            });
+            getDocs(q(collName));
 
         const results = await Promise.allSettled([
             fetchS("coverageEntries"),
@@ -285,8 +265,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllNonCallDaysIndividual(ncds);
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
-    } catch (err) {
-        // Handled via errorEmitter
+    } catch (err: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'userData',
+            operation: 'list',
+        }));
     } finally {
         setLoadingIndividual(false);
     }

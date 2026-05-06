@@ -12,7 +12,7 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is an admin.
-     * Admins have full read access to all system data and write access to specific oversight collections.
+     * Admins have full access to all system data for oversight.
      */
     function isAdmin() {
       return isSignedIn() && (
@@ -23,7 +23,7 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is a manager.
-     * Managers can read data for their assigned districts.
+     * Managers can read data for territory oversight.
      */
     function isManager() {
       return isSignedIn() && request.auth.uid in [
@@ -41,40 +41,46 @@ service cloud.firestore {
       return isSignedIn() && data.userId == request.auth.uid;
     }
 
+    // --- Broad Access for Oversight Roles ---
+    
+    match /{document=**} {
+      allow read: if isAdmin() || isManager();
+    }
+
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn()); 
+      allow read: if isOwner(resource.data); 
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /doctors/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
+      allow read: if isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /plans/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
+      allow read: if isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /nonCallDays/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
+      allow read: if isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /timeLogs/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
+      allow read: if isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /planningRequests/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data) || (resource == null && isSignedIn());
+      allow read: if isOwner(resource.data);
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
