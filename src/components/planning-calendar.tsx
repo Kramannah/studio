@@ -5,7 +5,7 @@ import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -65,6 +65,73 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
     }
 }
 
+// Memoized Doctor List for performance optimization
+const DoctorSearchList = React.memo(({ 
+    doctors, 
+    filter, 
+    visitCounts, 
+    plannedIds, 
+    onSelect 
+}: { 
+    doctors: Doctor[], 
+    filter: string, 
+    visitCounts: Record<string, number>, 
+    plannedIds: Set<string>,
+    onSelect: (d: Doctor) => void 
+}) => {
+    const filtered = useMemo(() => {
+        const q = filter.toLowerCase().trim();
+        if (!q) return doctors.slice(0, 50);
+        return doctors.filter(d => 
+            `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+            (d.municipality && d.municipality.toLowerCase().includes(q)) ||
+            (d.specialty && d.specialty.toLowerCase().includes(q))
+        ).slice(0, 50);
+    }, [doctors, filter]);
+
+    if (filtered.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Search className="w-8 h-8 mb-2 opacity-20" />
+                <p>No doctors found.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {filtered.map(doctor => {
+                const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                const count = visitCounts[nameKey] || 0;
+                const isAlreadyPlanned = plannedIds.has(doctor.id);
+
+                return (
+                    <div 
+                        key={doctor.id} 
+                        className={cn(
+                            "flex items-center justify-between p-4 rounded-xl border transition-all", 
+                            isAlreadyPlanned ? "bg-muted/20 opacity-60 pointer-events-none" : "bg-card shadow-sm cursor-pointer hover:border-primary border-border/50"
+                        )}
+                        onClick={() => !isAlreadyPlanned && onSelect(doctor)}
+                    >
+                        <div>
+                            <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+                                {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
+                            </p>
+                        </div>
+                        <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
+                            {isAlreadyPlanned ? 'PLANNED' : `Visits: ${count}`}
+                        </Badge>
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+DoctorSearchList.displayName = "DoctorSearchList";
+
 export function PlanningCalendar({ 
     doctors, 
     plans, 
@@ -108,7 +175,7 @@ export function PlanningCalendar({
     const visitCountsThisMonth = useMemo(() => {
         const counts: Record<string, number> = {};
         allEntries.forEach(e => {
-            const dateStr = e.submittedAt;
+            const dateStr = e.submittedAt || e.coverageDate;
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isThisMonth(date)) {
@@ -207,30 +274,15 @@ export function PlanningCalendar({
         return Object.keys(nonCallDaysByDate).map(dateStr => parseISO(dateStr));
     }, [nonCallDaysByDate]);
 
-    const filteredDoctors = useMemo(() => {
-        let list = doctors;
-        if (doctorFilter) {
-            const q = doctorFilter.toLowerCase();
-            list = list.filter(d => 
-                `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
-                (d.province && d.province.toLowerCase().includes(q)) ||
-                (d.municipality && d.municipality.toLowerCase().includes(q)) ||
-                (d.specialty && d.specialty.toLowerCase().includes(q))
-            );
-        }
-        // Slice to 100 items to prevent modal rendering freeze
-        return list.slice(0, 100);
-    }, [doctors, doctorFilter]);
-
-    const handleAddPlan = (doctor: Doctor) => {
+    const handleAddPlan = useCallback((doctor: Doctor) => {
         if (selectedDate) {
             onAddPlan(doctor, selectedDate);
             setIsAddPlanDialogOpen(false);
             setDoctorFilter("");
         }
-    };
+    }, [selectedDate, onAddPlan]);
 
-    const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
+    const handleSaveNonCallDay = useCallback((data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
             onAddNonCallDay({
                 date: selectedDate.toISOString(),
@@ -238,8 +290,9 @@ export function PlanningCalendar({
                 remarks: data.remarks || "",
                 dayType: data.dayType,
             });
+            setIsNonCallDialogOpen(false);
         }
-    };
+    }, [selectedDate, onAddNonCallDay]);
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = doctors.find(d => d.id === plan.doctorId);
@@ -419,7 +472,7 @@ export function PlanningCalendar({
                                     <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
                                     {isLocked ? (
                                         <DropdownMenuItem 
-                                            onClick={() => setIsUnlockDialogOpen(true)}
+                                            onSelect={(e) => { e.preventDefault(); setIsUnlockDialogOpen(true); }}
                                             className="gap-2 py-3"
                                         >
                                             <Unlock className="w-4 h-4 text-primary" />
@@ -427,7 +480,7 @@ export function PlanningCalendar({
                                         </DropdownMenuItem>
                                     ) : (
                                         <DropdownMenuItem 
-                                            onClick={() => setIsAddPlanDialogOpen(true)}
+                                            onSelect={(e) => { e.preventDefault(); setIsAddPlanDialogOpen(true); }}
                                             className="gap-2 py-3"
                                         >
                                             <PlusCircle className="w-4 h-4 text-primary" />
@@ -435,7 +488,7 @@ export function PlanningCalendar({
                                         </DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem 
-                                        onClick={() => setIsNonCallDialogOpen(true)}
+                                        onSelect={(e) => { e.preventDefault(); setIsNonCallDialogOpen(true); }}
                                         className="gap-2 py-3"
                                         disabled={isLocked}
                                     >
@@ -472,7 +525,10 @@ export function PlanningCalendar({
                 </div>
             </div>
 
-            <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
+            <Dialog open={isAddPlanDialogOpen} onOpenChange={(open) => {
+                if (!open) setDoctorFilter("");
+                setIsAddPlanDialogOpen(open);
+            }}>
                 <DialogContent className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden">
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle className="text-2xl font-headline font-black">Add Visit Plan</DialogTitle>
@@ -492,41 +548,13 @@ export function PlanningCalendar({
                         </div>
 
                         <ScrollArea className="flex-1 border rounded-xl p-2 bg-muted/10">
-                            <div className="space-y-2">
-                                {filteredDoctors.length > 0 ? (
-                                    filteredDoctors.map(doctor => {
-                                        const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                                        const count = visitCountsThisMonth[nameKey] || 0;
-                                        const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
-
-                                        return (
-                                            <div 
-                                                key={doctor.id} 
-                                                className={cn(
-                                                    "flex items-center justify-between p-4 rounded-xl border transition-all", 
-                                                    isAlreadyPlanned ? "bg-muted/20 opacity-60 pointer-events-none" : "bg-card shadow-sm cursor-pointer hover:border-primary border-border/50"
-                                                )}
-                                                onClick={() => !isAlreadyPlanned && handleAddPlan(doctor)}
-                                            >
-                                                <div>
-                                                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
-                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
-                                                        {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
-                                                    </p>
-                                                </div>
-                                                <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
-                                                    {isAlreadyPlanned ? 'PLANNED' : `Visits: ${count}`}
-                                                </Badge>
-                                            </div>
-                                        )
-                                    })
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                                        <Search className="w-8 h-8 mb-2 opacity-20" />
-                                        <p>No doctors found.</p>
-                                    </div>
-                                )}
-                            </div>
+                            <DoctorSearchList 
+                                doctors={doctors}
+                                filter={doctorFilter}
+                                visitCounts={visitCountsThisMonth}
+                                plannedIds={selectedDayPlannedIds}
+                                onSelect={handleAddPlan}
+                            />
                         </ScrollArea>
                     </div>
                     <DialogFooter className="p-4 bg-muted/20 border-t">
