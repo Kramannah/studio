@@ -10,16 +10,26 @@ service cloud.firestore {
     }
 
     /** 
-     * Checks if the user is an admin or a manager.
+     * Checks if the user is an admin.
+     * Verified by UID list or official admin email.
+     */
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == "mbustamante@hovidinc.com")
+      );
+    }
+
+    /** 
+     * Checks if the user is a manager.
      * UIDs sourced from src/lib/admins.ts
      */
-    function isAdminOrManager() {
+    function isManager() {
       return isSignedIn() && request.auth.uid in [
-        "SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admins
         "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
         "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
         "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2",
-        "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"  // Managers
+        "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
       ];
     }
 
@@ -30,39 +40,53 @@ service cloud.firestore {
 
     // --- Collection Rules ---
 
-    // Generic rule for user-owned collections
-    match /{collectionName}/{docId} {
-      allow read: if isSignedIn() && (
-        isAdminOrManager() || 
-        (collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && isOwner(resource.data))
-      );
-      
-      allow create: if isSignedIn() && (
-        collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && 
-        isOwner(request.resource.data)
-      );
+    // Explicit rules for user-owned collections to ensure 'list' operations are permitted
+    
+    match /doctors/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
+    }
 
-      allow update, delete: if isSignedIn() && (
-        isAdminOrManager() ||
-        (collectionName in ['doctors', 'coverageEntries', 'nonCallDays', 'plans', 'planningRequests', 'timeLogs'] && isOwner(resource.data))
-      );
+    match /coverageEntries/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
+    }
+
+    match /plans/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
+    }
+
+    match /nonCallDays/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
+    }
+
+    match /timeLogs/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
+    }
+
+    match /planningRequests/{id} {
+      allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isSignedIn() && isOwner(request.resource.data);
     }
 
     // Inventory and Allocation rules
     match /q4Allocation/{docId} {
       allow read: if isSignedIn();
-      allow write: if isAdminOrManager();
+      allow write: if isAdmin();
     }
 
     match /marketingSamples/{docId} {
       allow read: if isSignedIn();
-      allow write: if isAdminOrManager();
+      allow write: if isAdmin();
     }
 
     // Static lookup data
     match /clinics/{clinicId} {
       allow read: if isSignedIn();
-      allow write: if isAdminOrManager();
+      allow write: if isAdmin();
     }
   }
 }

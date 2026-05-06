@@ -59,6 +59,45 @@
         "plannedDate": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "doctorId", "plannedDate"]
+    },
+    "PlanningPermissionRequest": {
+      "title": "PlanningPermissionRequest",
+      "description": "A request to unlock planning for a specific week.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "weekStartDate": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" },
+        "status": { "enum": ["pending", "approved", "rejected"] },
+        "requestedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "weekStartDate", "status"]
+    },
+    "TimeLog": {
+      "title": "TimeLog",
+      "description": "User attendance logs (Time In / Time Out).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timeIn": { "type": "string", "format": "date-time" },
+        "timeOut": { "type": "string", "format": "date-time" },
+        "locationType": { "enum": ["inbase", "outbase"] },
+        "timeInPhoto": { "type": "string" },
+        "timeOutPhoto": { "type": "string" }
+      },
+      "required": ["userId", "timeIn", "locationType"]
+    },
+    "Q4Allocation": {
+      "title": "Q4Allocation",
+      "description": "Inventory and marketing sample allocations.",
+      "type": "object",
+      "properties": {
+        "prodGroupProdSubGroup": { "type": "string" },
+        "displayMaterialName": { "type": "string" },
+        "allocationQuantity": { "type": "number" },
+        "quarter": { "enum": ["Q3", "Q4"] }
+      },
+      "required": ["displayMaterialName", "allocationQuantity"]
     }
   },
   "auth": {
@@ -69,8 +108,8 @@
     "/coverageEntries/{id}": { "schema": { "$ref": "#/backend/entities/CoverageEntry" }, "description": "Submitted call reports." },
     "/nonCallDays/{id}": { "schema": { "$ref": "#/backend/entities/NonCallDay" }, "description": "Leave and non-activity requests." },
     "/plans/{id}": { "schema": { "$ref": "#/backend/entities/Plan" }, "description": "Scheduled visit plans." },
-    "/planningRequests/{id}": { "schema": "object", "description": "Requests to unlock past planning weeks." },
-    "/timeLogs/{id}": { "schema": "object", "description": "User attendance logs (Time In / Time Out)." },
-    "/q4Allocation/{id}": { "schema": "object", "description": "Inventory and marketing sample allocations." }
+    "/planningRequests/{id}": { "schema": { "$ref": "#/backend/entities/PlanningPermissionRequest" }, "description": "Requests to unlock past planning weeks." },
+    "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs (Time In / Time Out)." },
+    "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Inventory and marketing sample allocations." }
   }
 }
