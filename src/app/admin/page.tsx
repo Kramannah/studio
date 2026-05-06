@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint } from 'lucide-react';
-import Link from 'next/link';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -21,6 +20,11 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
+import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
+import { useUserProfiles } from '@/hooks/use-user-profiles';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -34,11 +38,13 @@ const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(m
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
+    const { profiles, updateProfile, loading: profilesLoading } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
+    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string } | null>(null);
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
@@ -57,6 +63,10 @@ export default function AdminPage() {
         allNonCallDaysIndividual,
         individualPlanningRequests,
         individualUsedQuantities,
+        allNonCallDays,
+        allPlanningRequests,
+        updateNonCallDayStatus,
+        updatePlanningRequestStatus,
         loading: dataLoading,
         fetchUserData,
         deleteEntry,
@@ -66,7 +76,18 @@ export default function AdminPage() {
     } = useAdminData(selectedManagerId);
 
     const allAccounts = useMemo(() => {
-        const all = Object.entries(USER_DATA_MAP).map(([uid, data]) => {
+        // Merge static map with dynamic profiles
+        const mergedMap = { ...USER_DATA_MAP };
+        Object.entries(profiles).forEach(([uid, p]) => {
+            mergedMap[uid] = {
+                code: mergedMap[uid]?.code || p.code || "USER",
+                firstName: p.firstName || mergedMap[uid]?.firstName || "Unknown",
+                lastName: p.lastName || mergedMap[uid]?.lastName || "User",
+                email: p.email || mergedMap[uid]?.email || "N/A"
+            };
+        });
+
+        const all = Object.entries(mergedMap).map(([uid, data]) => {
             const isAdmin = ADMIN_UIDS.includes(uid);
             const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
             let role = 'PMR';
@@ -74,12 +95,15 @@ export default function AdminPage() {
             else if (isManager) role = 'Manager';
 
             let district = 'N/A';
-            const managerUid = Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
+            const profile = profiles[uid];
+            const managerUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
             
             if (role === 'PMR') {
                 if (managerUid) {
-                    const mData = USER_DATA_MAP[managerUid];
+                    const mData = mergedMap[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
+                } else {
+                    district = 'Unassigned / HQ';
                 }
             } else if (role === 'Manager') {
                 district = 'District Sales Manager';
@@ -101,21 +125,25 @@ export default function AdminPage() {
             a.district.toLowerCase().includes(q) ||
             (a.email && a.email.toLowerCase().includes(q))
         ).sort((a, b) => a.lastName.localeCompare(b.lastName));
-    }, [accountSearch]);
+    }, [accountSearch, profiles]);
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
-        return MANAGER_TEAMS[selectedManagerId] || [];
-    }, [selectedManagerId]);
+        const hardcoded = MANAGER_TEAMS[selectedManagerId] || [];
+        const dynamic = Object.entries(profiles)
+            .filter(([_, p]) => p.managerId === selectedManagerId)
+            .map(([uid, _]) => uid);
+        return Array.from(new Set([...hardcoded, ...dynamic]));
+    }, [selectedManagerId, profiles]);
 
     const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
         managedUserIds.forEach((id) => {
-            const u = USER_DATA_MAP[id];
-            map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id}`);
+            const u = profiles[id] || USER_DATA_MAP[id];
+            map.set(id, u ? `${(u as any).code || 'PMR'}_${u.lastName}, ${u.firstName}` : `User ${id}`);
         });
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
-    }, [managedUserIds]);
+    }, [managedUserIds, profiles]);
 
     useEffect(() => {
         if (!authLoading && !hasAdminAccess) router.push('/');
@@ -126,6 +154,18 @@ export default function AdminPage() {
             fetchUserData(selectedUserId);
         }
     }, [selectedUserId, fetchUserData]);
+
+    const handleSaveAccount = async () => {
+        if (!editingAccount) return;
+        const success = await updateProfile(
+            editingAccount.uid, 
+            editingAccount.firstName, 
+            editingAccount.lastName, 
+            editingAccount.managerId,
+            editingAccount.email
+        );
+        if (success) setEditingAccount(null);
+    };
 
     if (authLoading) {
         return (
@@ -163,6 +203,7 @@ export default function AdminPage() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8">
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                        <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
                         <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
                         <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline">Allocations</TabsTrigger>
                     </TabsList>
@@ -226,6 +267,19 @@ export default function AdminPage() {
                         )}
                     </TabsContent>
 
+                    <TabsContent value="approvals" className="space-y-8">
+                        <NonCallDayApprovals 
+                            nonCallDays={allNonCallDays} 
+                            onUpdateStatus={updateNonCallDayStatus}
+                            userMap={USER_DATA_MAP}
+                        />
+                        <PlanningRequestApprovals 
+                            requests={allPlanningRequests}
+                            onUpdateStatus={updatePlanningRequestStatus}
+                            userMap={USER_DATA_MAP}
+                        />
+                    </TabsContent>
+
                     <TabsContent value="accounts">
                          <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                             <CardHeader className="bg-muted/30 border-b pb-6">
@@ -256,7 +310,8 @@ export default function AdminPage() {
                                                 <TableHead className="font-bold text-foreground">Employee Name</TableHead>
                                                 <TableHead className="font-bold text-foreground">Identifier</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
-                                                <TableHead className="font-bold text-foreground pr-6">District / Assignment</TableHead>
+                                                <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
+                                                <TableHead className="text-right pr-6">Edit</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -281,8 +336,17 @@ export default function AdminPage() {
                                                             {acc.role}
                                                         </Badge>
                                                     </TableCell>
-                                                    <TableCell className="text-sm font-medium text-muted-foreground pr-6">
+                                                    <TableCell className="text-sm font-medium text-muted-foreground">
                                                         {acc.district}
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email })}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -298,6 +362,64 @@ export default function AdminPage() {
                     </TabsContent>
                 </Tabs>
             </main>
+
+            <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline">Modify Employee Record</DialogTitle>
+                        <DialogDescription>Update employee display names and their assigned territory manager.</DialogDescription>
+                    </DialogHeader>
+                    {editingAccount && (
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="firstName">First Name</Label>
+                                <Input 
+                                    id="firstName" 
+                                    value={editingAccount.firstName} 
+                                    onChange={(e) => setEditingAccount({ ...editingAccount, firstName: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="lastName">Last Name</Label>
+                                <Input 
+                                    id="lastName" 
+                                    value={editingAccount.lastName} 
+                                    onChange={(e) => setEditingAccount({ ...editingAccount, lastName: e.target.value })}
+                                />
+                            </div>
+                             <div className="grid gap-2">
+                                <Label htmlFor="email">Technical Identifier (Email)</Label>
+                                <Input 
+                                    id="email" 
+                                    value={editingAccount.email} 
+                                    onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="manager">District DSM</Label>
+                                <Select 
+                                    value={editingAccount.managerId || ''} 
+                                    onValueChange={(v) => setEditingAccount({ ...editingAccount, managerId: v })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Unassigned / National" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">National / Unassigned</SelectItem>
+                                        {managers.map(m => (
+                                            <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setEditingAccount(null)}>Cancel</Button>
+                        <Button onClick={handleSaveAccount}>Update Profile</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
