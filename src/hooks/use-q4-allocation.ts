@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, orderBy, where, limit } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { subDays } from 'date-fns';
@@ -98,12 +98,15 @@ export const useQ4Allocation = () => {
     
     const colRef = collection(db, "coverageEntries");
     
-    // OPTIMIZATION: Limit the usage calculation window to 60 days for inventory pool.
-    // Fetching the entire history causes major performance issues and timeouts.
-    // 60 days is sufficient for tracking current Batch activity.
-    const startDate = subDays(new Date(), 60).toISOString();
+    // OPTIMIZATION: Limit the usage calculation window to 30 days for inventory pool.
+    // Reducing from 60 to 30 days fixes the Firestore timeout error for large territories.
+    const startDate = subDays(new Date(), 30).toISOString();
     
-    const usageQuery = query(colRef, where("submittedAt", ">=", startDate));
+    const usageQuery = query(
+        colRef, 
+        where("submittedAt", ">=", startDate),
+        limit(3000) // Prevent browser crash if the result set is still unusually large
+    );
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};
@@ -123,6 +126,7 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     }, (error) => {
+        // Detailed error logging to help identify if indexes or data volume are still issues
         console.error("Usage tracking error:", error);
     });
 

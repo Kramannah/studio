@@ -9,17 +9,16 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Returns the ISO string for the start of the current period.
  * If forceAllWeek is true, returns 7 days ago. 
- * Default: Returns start of the month from 3 months ago to balance performance and historical visibility.
+ * Default: Returns start of the current month for optimal performance.
+ * Looking back too far across the whole team causes Firestore timeouts.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
-      // For performance and data limit reasons, we might want to fetch only the last 7 days
       return subDays(now, 7).toISOString();
   }
-  // Lookback 3 months for standard dashboard views.
-  // 6 months was causing performance degradation in team-wide calculations.
-  return subMonths(startOfMonth(now), 3).toISOString();
+  // Start of current month ensures daily dashboards stay fast and responsive.
+  return startOfMonth(now).toISOString();
 }
 
 /**
