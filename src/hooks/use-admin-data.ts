@@ -55,17 +55,18 @@ export function useAdminData(managerId?: string) {
     return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
-  const managedUserIds = useMemo(() => {
-    if (!managerId) return [];
-    return MANAGER_TEAMS[managerId] || [];
-  }, [managerId]);
+  // Combined hardcoded and dynamic managed user IDs
+  const getManagedUserIds = useCallback((mgrId?: string) => {
+    if (!mgrId) return [];
+    return MANAGER_TEAMS[mgrId] || [];
+  }, []);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !db) return;
 
     let userFilter: string[] | null = null;
     if (managerId) {
-      userFilter = managedUserIds;
+      userFilter = getManagedUserIds(managerId);
     } else if (!isUserAdmin) {
       return;
     }
@@ -103,12 +104,12 @@ export function useAdminData(managerId?: string) {
       if (prRes.status === 'fulfilled') {
         setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
       }
-    } catch (serverError: any) {
-        console.error("Fetch Approvals Error:", serverError);
+    } catch (err) {
+        console.error("Fetch Approvals Error:", err);
     } finally {
       setLoading(false);
     }
-  }, [user, managerId, isUserAdmin, managedUserIds]);
+  }, [user, managerId, isUserAdmin, getManagedUserIds]);
 
   useEffect(() => {
     fetchTeamApprovals();
@@ -117,7 +118,7 @@ export function useAdminData(managerId?: string) {
   const fetchTeamSummary = useCallback(async () => {
       if (!managerId || !db) return;
       
-      const userFilter = managedUserIds;
+      const userFilter = getManagedUserIds(managerId);
       if (userFilter.length === 0) {
           setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
           return;
@@ -155,7 +156,7 @@ export function useAdminData(managerId?: string) {
 
         const [chunkResults, marketingSamplesSnap] = await Promise.all([
             Promise.all(chunks.map(fetchDataForChunk)),
-            getDocs(query(collection(db, "marketingSamples")))
+            getDocs(query(collection(db, "q4Allocation")))
         ]);
         
         const combined = chunkResults.reduce((acc, curr) => ({
@@ -168,9 +169,9 @@ export function useAdminData(managerId?: string) {
 
         const used: Record<string, number> = {};
         combined.entries.forEach((e: CoverageEntry) => {
-            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
-            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
-            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity); });
+            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Math.round(Number(e.primaryProductQty));
+            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Math.round(Number(e.secondaryProductQty));
+            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Math.round(Number(p.quantity)); });
         });
 
         setTeamSummaryData({
@@ -184,21 +185,13 @@ export function useAdminData(managerId?: string) {
       } finally {
         setLoadingSummary(false);
       }
-  }, [managerId, managedUserIds]);
+  }, [managerId, getManagedUserIds]);
   
   const fetchUserData = useCallback(async (userId: string) => {
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     setLoading(true);
     
-    setAllEntries([]);
-    setAllDoctors([]);
-    setAllPlans([]);
-    setAllTimeLogs([]);
-    setAllNonCallDaysIndividual([]);
-    setIndividualPlanningRequests([]);
-    setIndividualUsedQuantities({});
-
     try {
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
         
@@ -287,7 +280,6 @@ export function useAdminData(managerId?: string) {
     deleteDoc(docRef)
       .then(() => {
         setAllEntries(prev => prev.filter(e => e.id !== id));
-        if (teamSummaryData) setTeamSummaryData(prev => prev ? { ...prev, entries: prev.entries.filter(e => e.id !== id) } : null);
         toast({ variant: 'destructive', title: "Entry Deleted" });
       })
       .catch(async () => {
