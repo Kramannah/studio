@@ -4,10 +4,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, writeBatch, doc, orderBy, where, limit, getDocs } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
-import { subDays, startOfMonth, subMonths } from 'date-fns';
+import { subDays } from 'date-fns';
+
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v2';
+const CACHE_DURATION = 300000; // 5 minutes
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -71,39 +74,53 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const fetchAllocations = useCallback(() => {
+  const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
     
     setLoading(true);
-    const colRef = collection(db, "q4Allocation");
-    const q = query(colRef, orderBy("displayMaterialName", "asc"));
-    
-    return onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation));
-        setAllocations(fetched);
-      } else {
-          setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
-      }
-      setLoading(false);
-    }, (error) => {
+    try {
+        const colRef = collection(db, "q4Allocation");
+        const q = query(colRef, orderBy("displayMaterialName", "asc"));
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            setAllocations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation)));
+        } else {
+            setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
+        }
+    } catch (error) {
         console.error("Allocation fetch error:", error);
+    } finally {
         setLoading(false);
-    });
+    }
   }, [user]);
 
-  const fetchUsage = useCallback(async () => {
+  const fetchUsage = useCallback(async (force = false) => {
     if (!db || !user) return;
     
+    // 1. CHECK CACHE FIRST TO SAVE QUOTA
+    if (!force) {
+        try {
+            const cached = localStorage.getItem(USAGE_CACHE_KEY);
+            if (cached) {
+                const { data, timestamp } = JSON.parse(cached);
+                if (Date.now() - timestamp < CACHE_DURATION) {
+                    setUsedQuantities(data);
+                    return;
+                }
+            }
+        } catch (e) {}
+    }
+
     try {
       const colRef = collection(db, "coverageEntries");
-      // QUOTA OPTIMIZATION: Reduced lookback window to 14 days and switched to getDocs (one-time fetch)
-      const startDate = subDays(new Date(), 14).toISOString();
+      // QUOTA OPTIMIZATION: Reduced lookback window to 7 days and switched to one-time getDocs
+      const startDate = subDays(new Date(), 7).toISOString();
       
       const usageQuery = query(
           colRef, 
           where("submittedAt", ">=", startDate),
-          limit(300) // STRICT LIMIT: Capped to 300 docs for team-wide usage
+          limit(200) // STRICT LIMIT: Capped to 200 docs for team-wide usage
       );
 
       const snapshot = await getDocs(usageQuery);
@@ -123,22 +140,25 @@ export const useQ4Allocation = () => {
             }
         });
       });
+
       setUsedQuantities(usage);
+      // 2. SAVE TO CACHE
+      try {
+        localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
+      } catch (e) {}
+
     } catch (error: any) {
-        console.warn("Usage tracker paused to save quota:", error.message);
+        console.warn("Usage tracker optimized to save quota:", error.message);
     }
   }, [user]);
 
   useEffect(() => {
-    const unsubscribe = fetchAllocations();
+    fetchAllocations();
     fetchUsage();
-    return () => {
-        if (unsubscribe) unsubscribe();
-    };
   }, [fetchAllocations, fetchUsage]);
 
   const refetch = useCallback(async () => {
-      await fetchUsage();
+      await fetchUsage(true);
   }, [fetchUsage]);
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {

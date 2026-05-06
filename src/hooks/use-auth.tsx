@@ -1,7 +1,7 @@
 
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
 import { useToast } from './use-toast';
@@ -41,8 +41,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
+  // MEMOIZE context value to prevent unnecessary re-renders of all consuming components
+  const contextValue = useMemo(() => ({
+    user,
+    loading,
+    logout
+  }), [user, loading]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
