@@ -170,27 +170,6 @@ export function PlanningCalendar({
         return counts;
     }, [allEntries]);
 
-    const territoryStats = useMemo(() => {
-        let totalTarget = 0;
-        let totalCompleted = 0;
-        const freqStats: Record<string, { completed: number, target: number }> = {};
-
-        doctors.forEach(doc => {
-            const nameKey = `${(doc.firstName || '').toLowerCase()}|${(doc.lastName || '').toLowerCase()}`;
-            const completed = visitCountsThisMonth[nameKey] || 0;
-            const target = parseInt((doc.frequency || '1x').replace('x', ''), 10) || 0;
-
-            totalTarget += target;
-            totalCompleted += Math.min(completed, target);
-
-            if (!freqStats[doc.frequency]) freqStats[doc.frequency] = { completed: 0, target: 0 };
-            freqStats[doc.frequency].completed += Math.min(completed, target);
-            freqStats[doc.frequency].target += target;
-        });
-
-        return { totalCompleted, totalTarget, freqStats };
-    }, [doctors, visitCountsThisMonth]);
-
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -442,43 +421,28 @@ export function PlanningCalendar({
             </div>
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
-                <DialogContent className="max-w-6xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
+                <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-background">
                     <DialogHeader className="p-6 border-b shrink-0 bg-muted/20">
-                        <DialogTitle className="text-2xl font-headline font-black">Plan Visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
-                        <DialogDescription className="text-base">Select doctors from your masterlist to plan multiple visits at once.</DialogDescription>
+                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
+                        <DialogDescription className="text-base">Select doctors from your masterlist to schedule visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 flex flex-col min-h-0 p-6 space-y-6">
                         <div className="relative shrink-0">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
-                                placeholder="Search doctors by name..." 
+                                placeholder="Search doctors by name, specialty, or city..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
-                                className="pl-12 h-14 text-lg rounded-xl border-2 border-primary/50 focus-visible:ring-primary bg-card"
+                                className="pl-12 h-12 text-lg rounded-xl border-2 focus-visible:ring-primary bg-card"
                             />
                         </div>
 
-                        <div className="space-y-3 shrink-0 px-1">
-                             <div className="flex items-center gap-3">
-                                <span className="font-headline font-black text-lg uppercase tracking-tight text-foreground/80">Total Completed:</span>
-                                <span className="font-mono text-xl font-black text-primary">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
-                             </div>
-                             <div className="flex flex-wrap items-center gap-3">
-                                <span className="text-xs text-muted-foreground uppercase font-black tracking-widest">By Frequency:</span>
-                                {Object.entries(territoryStats.freqStats).sort().map(([freq, stats]) => (
-                                    <Badge key={freq} variant="secondary" className="font-mono h-8 px-4 text-sm border-2 border-primary/10 bg-muted/50 rounded-lg">
-                                        {freq}: {stats.completed}/{stats.target}
-                                    </Badge>
-                                ))}
-                             </div>
-                        </div>
-
-                        <div className="flex-1 flex flex-col min-h-0">
-                            <div className="flex-1 border-2 rounded-2xl bg-card overflow-hidden flex flex-col">
+                        <div className="flex-1 border-2 rounded-2xl bg-card overflow-hidden flex flex-col">
+                            <div className="overflow-x-auto">
                                 <Table className="table-fixed w-full">
                                     <TableHeader className="sticky top-0 bg-muted/90 backdrop-blur-md z-30 border-b-2">
-                                        <TableRow className="hover:bg-transparent h-14">
+                                        <TableRow className="hover:bg-transparent h-12">
                                             <TableHead className="w-[60px] pl-6">
                                                 <Checkbox 
                                                     checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.filter(d => !selectedDayPlannedIds.has(d.id)).length} 
@@ -492,14 +456,13 @@ export function PlanningCalendar({
                                                     }}
                                                 />
                                             </TableHead>
-                                            <TableHead className="w-[300px] font-black text-xs uppercase tracking-widest text-muted-foreground">Name</TableHead>
-                                            <TableHead className="w-[350px] font-black text-xs uppercase tracking-widest text-muted-foreground">Location</TableHead>
-                                            <TableHead className="w-[120px] font-black text-xs uppercase tracking-widest text-muted-foreground text-center">Target</TableHead>
-                                            <TableHead className="font-black text-xs uppercase tracking-widest text-muted-foreground text-right pr-8">Remaining Visits</TableHead>
+                                            <TableHead className="font-bold text-xs uppercase tracking-widest text-muted-foreground">Doctor Name</TableHead>
+                                            <TableHead className="font-bold text-xs uppercase tracking-widest text-muted-foreground">Location</TableHead>
+                                            <TableHead className="w-[120px] font-bold text-xs uppercase tracking-widest text-muted-foreground text-center">Remaining</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                 </Table>
-                                <ScrollArea className="flex-1">
+                                <ScrollArea className="max-h-[50vh]">
                                     <Table className="table-fixed w-full">
                                         <TableBody>
                                             {filteredDoctorsForSearch.length > 0 ? (
@@ -519,16 +482,16 @@ export function PlanningCalendar({
                                                                     disabled={isAlreadyPlanned}
                                                                 />
                                                             </TableCell>
-                                                            <TableCell className="w-[300px] font-bold text-primary text-base truncate">
-                                                                {doctor.firstName} {doctor.lastName}
+                                                            <TableCell>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-bold text-primary">{doctor.firstName} {doctor.lastName}</span>
+                                                                    <span className="text-[10px] text-muted-foreground uppercase font-bold">{doctor.specialty}</span>
+                                                                </div>
                                                             </TableCell>
-                                                            <TableCell className="w-[350px] text-sm text-muted-foreground truncate">
-                                                                {doctor.municipality}, {doctor.province}
+                                                            <TableCell className="text-sm text-muted-foreground truncate">
+                                                                {doctor.municipality}
                                                             </TableCell>
-                                                            <TableCell className="w-[120px] font-mono text-sm font-bold text-center">
-                                                                {doctor.frequency}
-                                                            </TableCell>
-                                                            <TableCell className="font-mono text-lg font-black text-right pr-8 text-foreground/70">
+                                                            <TableCell className="w-[120px] font-mono text-lg font-black text-center text-foreground/70">
                                                                 {remaining}
                                                             </TableCell>
                                                         </TableRow>
@@ -536,7 +499,7 @@ export function PlanningCalendar({
                                                 })
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic text-lg">No doctors found matching your search.</TableCell>
+                                                    <TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic text-lg">No doctors found matching your search.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
@@ -547,7 +510,7 @@ export function PlanningCalendar({
                     </div>
 
                     <DialogFooter className="p-6 border-t bg-muted/20 gap-4 flex-row justify-end shrink-0">
-                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-12 px-8 font-bold border-2">Close</Button>
+                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-12 px-8 font-bold border-2">Cancel</Button>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[200px] font-headline text-lg font-black h-12 shadow-lg transition-all active:scale-95">
                             {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <PlusCircle className="mr-3 w-5 h-5" />}
                             Plan {selectedDoctorIds.size} Visit(s)
