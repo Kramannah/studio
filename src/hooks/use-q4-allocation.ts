@@ -7,8 +7,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -72,6 +71,13 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const isPrivileged = useMemo(() => {
+    if (!user) return false;
+    return ADMIN_UIDS.includes(user.uid) || 
+           (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
+           Object.keys(MANAGER_TEAMS).includes(user.uid);
+  }, [user]);
+
   useEffect(() => {
     if (!db || !user) return;
     
@@ -87,12 +93,8 @@ export const useQ4Allocation = () => {
           setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
       }
       setLoading(false);
-    }, async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+    }, (error) => {
+        console.error("Allocation listen error:", error);
         setLoading(false);
     });
 
@@ -103,7 +105,13 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     const colRef = collection(db, "coverageEntries");
-    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+    
+    // PMRs must filter by their own userId to satisfy security rules on list operations
+    const usageQuery = isPrivileged 
+        ? colRef 
+        : query(colRef, where("userId", "==", user.uid));
+
+    const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
@@ -120,16 +128,12 @@ export const useQ4Allocation = () => {
         });
       });
       setUsedQuantities(usage);
-    }, async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+    }, (error) => {
+        console.error("Usage listen error:", error);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, isPrivileged]);
 
   const refetch = () => {};
 
@@ -146,12 +150,9 @@ export const useQ4Allocation = () => {
       });
       await batch.commit();
       return true;
-    } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-            path: 'q4Allocation',
-            operation: 'write',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+    } catch (err) {
+        console.error("Bulk add error:", err);
+        toast({ variant: 'destructive', title: "Upload Failed", description: "You might not have permission." });
         return false;
     }
   };
@@ -166,12 +167,9 @@ export const useQ4Allocation = () => {
           await batch.commit();
           toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
           return true;
-      } catch (serverError: any) {
-          const permissionError = new FirestorePermissionError({
-            path: 'q4Allocation',
-            operation: 'delete',
-          } satisfies SecurityRuleContext);
-          errorEmitter.emit('permission-error', permissionError);
+      } catch (err) {
+          console.error("Delete error:", err);
+          toast({ variant: 'destructive', title: "Delete Failed" });
           return false;
       }
   };

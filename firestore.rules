@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -11,12 +12,11 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is an admin.
-     * Verified by UID list or official admin email.
      */
     function isAdmin() {
       return isSignedIn() && (
         request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
-        request.auth.token.email == "mbustamante@hovidinc.com"
+        request.auth.token.email.lower() == "mbustamante@hovidinc.com"
       );
     }
 
@@ -32,42 +32,50 @@ service cloud.firestore {
       ];
     }
 
+    /**
+     * Common ownership check.
+     * Note: For list operations, the client MUST filter the query by userId.
+     */
+    function isOwner(data) {
+      return isSignedIn() && data.userId == request.auth.uid;
+    }
+
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /doctors/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /plans/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /nonCallDays/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /timeLogs/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /planningRequests/{id} {
-      allow read: if isAdmin() || isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      allow create: if isOwner(request.resource.data);
+      allow update, delete: if isAdmin() || isOwner(resource.data);
     }
 
     match /q4Allocation/{id} {
