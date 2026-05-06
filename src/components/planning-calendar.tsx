@@ -152,6 +152,14 @@ export function PlanningCalendar({
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
 
+    // CRITICAL FIX: Ensure pointer events are restored when any dialog is closed
+    // This prevents the "screen freeze" issue where the body lock isn't removed.
+    useEffect(() => {
+        if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
+            document.body.style.pointerEvents = "auto";
+        }
+    }, [isAddPlanDialogOpen, isNonCallDialogOpen, isUnlockDialogOpen]);
+
     useEffect(() => {
         setSelectedDate(new Date());
     }, []);
@@ -537,15 +545,12 @@ export function PlanningCalendar({
             <Dialog open={isAddPlanDialogOpen} onOpenChange={(open) => {
                 if (!open) {
                   setDoctorFilter("");
-                  // When closing, give a tiny moment to prevent unmount cycle freeze
-                  setTimeout(() => setIsAddPlanDialogOpen(false), 50);
-                } else {
-                  setIsAddPlanDialogOpen(true);
                 }
+                setIsAddPlanDialogOpen(open);
             }}>
                 <DialogContent 
                   className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden"
-                  onOpenAutoFocus={(e) => e.preventDefault()} // Helps prevent viewport jumping
+                  onOpenAutoFocus={(e) => e.preventDefault()}
                 >
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle className="text-2xl font-headline font-black">Add Visit Plan</DialogTitle>
@@ -598,4 +603,3 @@ export function PlanningCalendar({
         </div>
     );
 }
-
