@@ -6,8 +6,8 @@
  */
 import { initializeFirebase } from "@/firebase";
 
-const services = initializeFirebase();
+const firebaseServices = initializeFirebase();
 
-export const app = services.firebaseApp;
-export const db = services.firestore;
-export const auth = services.auth;
+export const app = firebaseServices.firebaseApp;
+export const db = firebaseServices.firestore;
+export const auth = firebaseServices.auth;
