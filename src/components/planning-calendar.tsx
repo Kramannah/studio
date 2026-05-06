@@ -91,68 +91,12 @@ export function PlanningCalendar({
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
-            document.body.style.pointerEvents = "auto";
-        }
-    }, [isAddPlanDialogOpen, isNonCallDialogOpen, isUnlockDialogOpen]);
-
-    useEffect(() => {
         setSelectedDate(new Date());
     }, []);
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
-    const approvedWeekMondays = useMemo(() => {
-        return new Set(
-            planningRequests
-                .filter(r => r.status === 'approved')
-                .map(r => format(parseISO(r.weekStartDate), 'yyyy-MM-dd'))
-        );
-    }, [planningRequests]);
-
-    const isLocked = useMemo(() => {
-        if (!selectedDate || isCurrentWeek(selectedDate) || !isPastWeek(selectedDate)) return false;
-        const mondayStr = format(getWeekMonday(selectedDate), 'yyyy-MM-dd');
-        return !approvedWeekMondays.has(mondayStr);
-    }, [selectedDate, approvedWeekMondays]);
-
-    const visitCountsThisMonth = useMemo(() => {
-        const counts: Record<string, number> = {};
-        const today = new Date();
-        allEntries.forEach(e => {
-            const dateStr = e.coverageDate;
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase().trim();
-                    counts[nameKey] = (counts[nameKey] || 0) + 1;
-                }
-            }
-        });
-        return counts;
-    }, [allEntries]);
-
-    const territoryStats = useMemo(() => {
-        let totalTarget = 0;
-        let totalCompleted = 0;
-        const freqStats: Record<string, { completed: number, target: number }> = {};
-
-        doctors.forEach(doc => {
-            const nameKey = `${doc.firstName || ''} ${doc.lastName || ''}`.toLowerCase().trim();
-            const completed = visitCountsThisMonth[nameKey] || 0;
-            const target = parseInt((doc.frequency || '1x').replace('x', ''), 10) || 0;
-
-            totalTarget += target;
-            totalCompleted += Math.min(completed, target);
-
-            if (!freqStats[doc.frequency]) freqStats[doc.frequency] = { completed: 0, target: 0 };
-            freqStats[doc.frequency].completed += Math.min(completed, target);
-            freqStats[doc.frequency].target += target;
-        });
-
-        return { totalCompleted, totalTarget, freqStats };
-    }, [doctors, visitCountsThisMonth]);
-
+    // Grouping lookups for calendar modifiers
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
         allEntries.forEach(e => {
@@ -194,6 +138,58 @@ export function PlanningCalendar({
         });
         return groups;
     }, [nonCallDays]);
+
+    const approvedWeekMondays = useMemo(() => {
+        return new Set(
+            planningRequests
+                .filter(r => r.status === 'approved')
+                .map(r => format(parseISO(r.weekStartDate), 'yyyy-MM-dd'))
+        );
+    }, [planningRequests]);
+
+    const isLocked = useMemo(() => {
+        if (!selectedDate || isCurrentWeek(selectedDate) || !isPastWeek(selectedDate)) return false;
+        const mondayStr = format(getWeekMonday(selectedDate), 'yyyy-MM-dd');
+        return !approvedWeekMondays.has(mondayStr);
+    }, [selectedDate, approvedWeekMondays]);
+
+    // Statistics for the planning modal
+    const visitCountsThisMonth = useMemo(() => {
+        const counts: Record<string, number> = {};
+        const today = new Date();
+        allEntries.forEach(e => {
+            const dateStr = e.coverageDate;
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date) && isSameMonth(date, today)) {
+                    const nameKey = `${e.firstName || ''} ${e.lastName || ''}`.toLowerCase().trim();
+                    counts[nameKey] = (counts[nameKey] || 0) + 1;
+                }
+            }
+        });
+        return counts;
+    }, [allEntries]);
+
+    const territoryStats = useMemo(() => {
+        let totalTarget = 0;
+        let totalCompleted = 0;
+        const freqStats: Record<string, { completed: number, target: number }> = {};
+
+        doctors.forEach(doc => {
+            const nameKey = `${doc.firstName || ''} ${doc.lastName || ''}`.toLowerCase().trim();
+            const completed = visitCountsThisMonth[nameKey] || 0;
+            const target = parseInt((doc.frequency || '1x').replace('x', ''), 10) || 0;
+
+            totalTarget += target;
+            totalCompleted += Math.min(completed, target);
+
+            if (!freqStats[doc.frequency]) freqStats[doc.frequency] = { completed: 0, target: 0 };
+            freqStats[doc.frequency].completed += Math.min(completed, target);
+            freqStats[doc.frequency].target += target;
+        });
+
+        return { totalCompleted, totalTarget, freqStats };
+    }, [doctors, visitCountsThisMonth]);
 
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
@@ -478,10 +474,10 @@ export function PlanningCalendar({
                              </div>
                         </div>
 
-                        <div className="border rounded-xl flex-1 flex flex-col min-h-0 bg-card overflow-hidden">
-                            <div className="shrink-0 border-b bg-muted/30">
-                                <Table className="table-fixed">
-                                    <TableHeader>
+                        <div className="flex-1 flex flex-col min-h-0">
+                            <ScrollArea className="flex-1 border rounded-xl bg-card">
+                                <Table className="table-fixed w-full">
+                                    <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-20 border-b">
                                         <TableRow className="hover:bg-transparent h-12">
                                             <TableHead className="w-[50px] pl-4"><Checkbox checked={filteredDoctorsForSearch.length > 0 && selectedDoctorIds.size === filteredDoctorsForSearch.length} onCheckedChange={(checked) => {
                                                 if (checked) setSelectedDoctorIds(new Set(filteredDoctorsForSearch.map(d => d.id)));
@@ -490,13 +486,9 @@ export function PlanningCalendar({
                                             <TableHead className="w-[200px] font-bold text-xs uppercase">Name</TableHead>
                                             <TableHead className="w-[250px] font-bold text-xs uppercase">Location</TableHead>
                                             <TableHead className="w-[100px] font-bold text-xs uppercase text-center">Target</TableHead>
-                                            <TableHead className="font-bold text-xs uppercase text-right pr-4">Remaining</TableHead>
+                                            <TableHead className="font-bold text-xs uppercase text-right pr-6">Remaining</TableHead>
                                         </TableRow>
                                     </TableHeader>
-                                </Table>
-                            </div>
-                            <ScrollArea className="flex-1">
-                                <Table className="table-fixed">
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
@@ -507,7 +499,7 @@ export function PlanningCalendar({
                                                 const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
                                                 
                                                 return (
-                                                    <TableRow key={doctor.id} className={cn("h-14", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
+                                                    <TableRow key={doctor.id} className={cn("h-14 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
                                                         <TableCell className="w-[50px] pl-4">
                                                             <Checkbox 
                                                                 checked={selectedDoctorIds.has(doctor.id)} 
@@ -524,7 +516,7 @@ export function PlanningCalendar({
                                                         <TableCell className="w-[100px] font-mono text-sm text-center">
                                                             {doctor.frequency}
                                                         </TableCell>
-                                                        <TableCell className="font-mono text-sm font-bold text-right pr-4">
+                                                        <TableCell className="font-mono text-sm font-bold text-right pr-6">
                                                             {remaining}
                                                         </TableCell>
                                                     </TableRow>
