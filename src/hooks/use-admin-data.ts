@@ -11,7 +11,6 @@ import { useToast } from "./use-toast";
 import { getQueryStartDateISO } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { parseISO, isValid } from "date-fns";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -47,6 +46,7 @@ export function useAdminData(managerId?: string) {
   const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
   const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
   const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
+  const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
 
   // Team-Wide Approvals State
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
@@ -89,7 +89,6 @@ export function useAdminData(managerId?: string) {
             if (userIds === null) { 
                 queryRef = query(collection(db, collName), orderBy(collName === 'nonCallDays' ? "date" : "requestedAt", "desc"));
             } else { 
-                // Note: Firestore 'in' queries are limited to 30 items
                 const chunks: string[][] = [];
                 for (let i = 0; i < userIds.length; i += 30) {
                     chunks.push(userIds.slice(i, i + 30));
@@ -190,35 +189,75 @@ export function useAdminData(managerId?: string) {
       }
   }, [managerId]);
   
-  const fetchUserData = useCallback(async (userId: string, forceAllWeek = false) => {
+  const fetchUserData = useCallback(async (userId: string) => {
     if (!userId || !db) return;
     setLoading(true);
+    
+    // Clear individual state to prevent stale data visibility
+    setAllEntries([]);
+    setAllDoctors([]);
+    setAllPlans([]);
+    setAllTimeLogs([]);
+    setAllNonCallDaysIndividual([]);
+    setIndividualPlanningRequests([]);
+    setIndividualUsedQuantities({});
+
     try {
-        const startDate = getQueryStartDateISO(forceAllWeek);
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
         
-        const snaps = await Promise.all([
+        // Fetch each collection individually to handle partial failures more gracefully
+        const [
+            entriesSnap, 
+            doctorsSnap, 
+            plansSnap, 
+            logsSnap, 
+            ncdSnap, 
+            requestsSnap
+        ] = await Promise.all([
             getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
             getDocs(q("plans")),
             getDocs(q("timeLogs")),
             getDocs(q("nonCallDays")),
-            getDocs(q("planningRequests")),
+            getDocs(q("planningRequests"))
         ]);
         
-        setAllEntries(snaps[0].docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => safeToDateISO(e.submittedAt) >= startDate));
-        setAllDoctors(snaps[1].docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
-        setAllPlans(snaps[2].docs.map(d => ({id: d.id, ...d.data()}) as Plan).filter(p => safeToDateISO(p.plannedDate) >= startDate));
-        setAllTimeLogs(snaps[3].docs.map(d => ({id: d.id, ...d.data()}) as TimeLog).filter(t => safeToDateISO(t.timeIn) >= startDate));
-        setAllNonCallDaysIndividual(snaps[4].docs.map(d => ({id: d.id, ...d.data()}) as NonCallDay).filter(n => safeToDateISO(n.date) >= startDate));
-        setIndividualPlanningRequests(snaps[5].docs.map(d => ({id: d.id, ...d.data()}) as PlanningPermissionRequest));
+        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
+        const doctors = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor);
+        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan);
+        const logs = logsSnap.docs.map(d => ({id: d.id, ...d.data()}) as TimeLog);
+        const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()}) as NonCallDay);
+        const requests = requestsSnap.docs.map(d => ({id: d.id, ...d.data()}) as PlanningPermissionRequest);
+
+        // Sort data for presentation
+        entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt)));
+        plans.sort((a, b) => safeToDateISO(b.plannedDate).localeCompare(safeToDateISO(a.plannedDate)));
+        logs.sort((a, b) => safeToDateISO(b.timeIn).localeCompare(safeToDateISO(a.timeIn)));
+        ncds.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date)));
+
+        // Calculate individual used quantities
+        const used: Record<string, number> = {};
+        entries.forEach((e: CoverageEntry) => {
+            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Number(e.primaryProductQty);
+            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Number(e.secondaryProductQty);
+            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Number(p.quantity); });
+        });
+
+        setAllEntries(entries);
+        setAllDoctors(doctors);
+        setAllPlans(plans);
+        setAllTimeLogs(logs);
+        setAllNonCallDaysIndividual(ncds);
+        setIndividualPlanningRequests(requests);
+        setIndividualUsedQuantities(used);
 
     } catch (err) {
-        console.error("User Drill-down Error:", err);
+        console.error("Individual PMR Data Fetch Error:", err);
+        toast({ variant: 'destructive', title: "Fetch Error", description: "Could not retrieve full PMR records." });
     } finally {
         setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
@@ -303,6 +342,7 @@ export function useAdminData(managerId?: string) {
     allTimeLogs,
     allNonCallDaysIndividual,
     individualPlanningRequests,
+    individualUsedQuantities,
     allNonCallDays, 
     allPlanningRequests,
     teamSummaryData,

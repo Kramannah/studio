@@ -62,6 +62,7 @@ export default function AdminPage() {
         allTimeLogs: individualTimeLogs,
         allNonCallDaysIndividual,
         individualPlanningRequests,
+        individualUsedQuantities,
         allNonCallDays: teamNonCallDays, 
         allPlanningRequests: teamPlanningRequests,
         teamSummaryData,
@@ -152,7 +153,7 @@ export default function AdminPage() {
                     allTimeLogs={individualTimeLogs}
                     individualPlanningRequests={individualPlanningRequests}
                     onDeleteEntry={deleteEntry}
-                    usedQuantities={{}} // Logic for individual used quantities can be derived from individualEntries
+                    usedQuantities={individualUsedQuantities}
                     userMap={USER_DATA_MAP}
                     isAdminView={true}
                     onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
