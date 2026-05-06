@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -58,7 +57,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
             "Product Group": sample.productGroup,
             "Material Name": sample.materialName,
             "Allocated Quantity": allocated,
-            "Remaining Quantity": allocated - used
+            "Remaining Quantity": Math.max(0, allocated - used)
         };
     });
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -129,7 +128,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                                   <TableRow key={sample.id} className="h-16 hover:bg-muted/30 transition-colors">
                                       <TableCell className="font-bold text-primary">{sample.productGroup}</TableCell>
                                       <TableCell className="font-medium">{sample.materialName}</TableCell>
-                                      <TableCell className="text-center font-mono font-bold">{sample.allocationQuantity}</TableCell>
+                                      <TableCell className="text-center font-mono font-bold">{Math.round(sample.allocationQuantity || 0)}</TableCell>
                                   </TableRow>
                               );
                           })

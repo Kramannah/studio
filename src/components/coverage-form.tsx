@@ -317,8 +317,9 @@ export function CoverageForm({
     return allocations
         .filter(s => s.prodGroupProdSubGroup === primaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
         .map(s => {
-            const used = usedQuantities[s.displayMaterialName] || 0;
-            const balance = (s.allocationQuantity || 0) - used;
+            const used = Math.round(usedQuantities[s.displayMaterialName] || 0);
+            const alloc = Math.round(s.allocationQuantity || 0);
+            const balance = Math.max(0, alloc - used);
             return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
         });
   }, [primaryProduct, allocations, usedQuantities]);
@@ -328,8 +329,9 @@ export function CoverageForm({
     return allocations
         .filter(s => s.prodGroupProdSubGroup === secondaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
         .map(s => {
-            const used = usedQuantities[s.displayMaterialName] || 0;
-            const balance = (s.allocationQuantity || 0) - used;
+            const used = Math.round(usedQuantities[s.displayMaterialName] || 0);
+            const alloc = Math.round(s.allocationQuantity || 0);
+            const balance = Math.max(0, alloc - used);
             return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
         });
   }, [secondaryProduct, allocations, usedQuantities]);
@@ -971,8 +973,9 @@ export function CoverageForm({
                                                                 options={allocations
                                                                     .filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
                                                                     .map(s => {
-                                                                        const used = usedQuantities[s.displayMaterialName] || 0;
-                                                                        const balance = (s.allocationQuantity || 0) - used;
+                                                                        const used = Math.round(usedQuantities[s.displayMaterialName] || 0);
+                                                                        const alloc = Math.round(s.allocationQuantity || 0);
+                                                                        const balance = Math.max(0, alloc - used);
                                                                         return { value: s.displayMaterialName, label: s.displayMaterialName, balance };
                                                                     })
                                                                 } 

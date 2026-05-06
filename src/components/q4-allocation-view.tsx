@@ -83,16 +83,20 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         const quarterAllocations = allocations.filter(s => s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4'));
         let totalAllocated = 0;
         let totalUsed = 0;
+        let totalRemaining = 0;
         
         quarterAllocations.forEach(s => {
-            totalAllocated += s.allocationQuantity || 0;
-            totalUsed += usedQuantities[s.displayMaterialName] || 0;
+            const alloc = Math.round(s.allocationQuantity || 0);
+            const used = Math.round(usedQuantities[s.displayMaterialName] || 0);
+            totalAllocated += alloc;
+            totalUsed += used;
+            totalRemaining += Math.max(0, alloc - used);
         });
 
         return {
             totalAllocated: Math.round(totalAllocated),
             totalUsed: Math.round(totalUsed),
-            remaining: Math.round(totalAllocated - totalUsed),
+            remaining: Math.round(totalRemaining),
             percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
         };
     }, [allocations, usedQuantities, activeQuarter]);
@@ -309,7 +313,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 paginatedSamples.map((sample) => {
                                                     const used = Math.round(usedQuantities[sample.displayMaterialName] || 0);
                                                     const alloc = Math.round(sample.allocationQuantity || 0);
-                                                    const balance = alloc - used;
+                                                    const balance = Math.max(0, alloc - used);
                                                     return (
                                                         <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (

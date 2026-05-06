@@ -34,14 +34,20 @@ export default function Q4AllocationPage() {
     const stats = useMemo(() => {
         let totalAllocated = 0;
         let totalUsed = 0;
+        let totalRemaining = 0;
+
         filteredSamples.forEach(s => {
-            totalAllocated += s.allocationQuantity;
-            totalUsed += (usedQuantities[s.materialName] || 0);
+            const alloc = Math.round(s.allocationQuantity || 0);
+            const used = Math.round(usedQuantities[s.materialName] || 0);
+            totalAllocated += alloc;
+            totalUsed += used;
+            totalRemaining += Math.max(0, alloc - used);
         });
+
         return {
             totalAllocated: Math.round(totalAllocated),
             totalUsed: Math.round(totalUsed),
-            remaining: Math.round(totalAllocated - totalUsed),
+            remaining: Math.round(totalRemaining),
             percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
         };
     }, [filteredSamples, usedQuantities]);
@@ -144,7 +150,7 @@ export default function Q4AllocationPage() {
                                         filteredSamples.map((sample) => {
                                             const distributed = Math.round(usedQuantities[sample.materialName] || 0);
                                             const alloc = Math.round(sample.allocationQuantity || 0);
-                                            const balance = alloc - distributed;
+                                            const balance = Math.max(0, alloc - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6 font-bold text-primary">{sample.productGroup}</TableCell>
