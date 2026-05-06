@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -51,8 +50,8 @@ export default function Home() {
   
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    const normalizedEmail = user.email?.toLowerCase() || '';
-    return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
+    const email = user.email?.toLowerCase() || '';
+    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email);
   }, [user]);
 
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);

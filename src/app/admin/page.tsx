@@ -1,21 +1,19 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { LogOut, ShieldCheck, Users, X, Bell, UserSquare, User, Package2, UserCog, Search, Mail, Pencil, Save, Loader2, Fingerprint, RefreshCw } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, Pencil, Save, Loader2, Fingerprint, RefreshCw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { USER_DATA_MAP } from '@/lib/user-data';
 import { Badge } from '@/components/ui/badge';
 import { managers } from '@/lib/managers';
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import dynamic from 'next/dynamic';
@@ -26,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { getDocs, collection, query, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full">
@@ -38,17 +37,17 @@ const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(m
 const NonCallDayApprovals = dynamic(() => import('@/components/non-call-day-approvals').then(mod => mod.NonCallDayApprovals), { loading: () => <DynamicSkeleton /> });
 const PlanningRequestApprovals = dynamic(() => import('@/components/planning-request-approvals').then(mod => mod.PlanningRequestApprovals), { loading: () => <DynamicSkeleton /> });
 
-
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
-    const { profiles, updateProfile, loading: profilesLoading } = useUserProfiles();
+    const { profiles, updateProfile, loading: profilesLoading, refetch: refetchProfiles } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
     const [discoveredUids, setDiscoveredUids] = useState<string[]>([]);
+    const [isScanning, setIsScanning] = useState(false);
     
     const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string, managerId?: string, email?: string} | null>(null);
     const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -61,35 +60,37 @@ export default function AdminPage() {
 
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
     const hasAdminAccess = isUserAdmin || isUserManager;
-    
-    useEffect(() => {
-        if (isUserManager && user && !selectedManagerId) {
-            setSelectedManagerId(user.uid);
-        }
-    }, [isUserManager, user, selectedManagerId]);
 
-    // GLOBAL ACCOUNT DISCOVERY: Scans data collections for UIDs that aren't in the static map
-    useEffect(() => {
-        if (hasAdminAccess && db) {
-            const scanForActiveUsers = async () => {
-                try {
-                    // Scan a sample of recent coverage entries to find active UIDs
-                    const snap = await getDocs(query(collection(db, "coverageEntries"), limit(500)));
-                    const uids = new Set<string>();
-                    snap.docs.forEach(doc => uids.add(doc.data().userId));
-                    
-                    // Also scan plans
-                    const planSnap = await getDocs(query(collection(db, "plans"), limit(200)));
-                    planSnap.docs.forEach(doc => uids.add(doc.data().userId));
+    // GLOBAL DISCOVERY: Scans all core collections for any unique User IDs
+    const runDiscoveryScan = useCallback(async () => {
+        if (!hasAdminAccess || !db) return;
+        setIsScanning(true);
+        try {
+            const uids = new Set<string>();
+            
+            // 1. Scan Coverage Entries (Most common source)
+            const coverageSnap = await getDocs(query(collection(db, "coverageEntries"), limit(1000)));
+            coverageSnap.docs.forEach(doc => uids.add(doc.data().userId));
+            
+            // 2. Scan Plans
+            const planSnap = await getDocs(query(collection(db, "plans"), limit(500)));
+            planSnap.docs.forEach(doc => uids.add(doc.data().userId));
 
-                    setDiscoveredUids(Array.from(uids));
-                } catch (e) {
-                    console.warn("Account discovery scan limited:", e);
-                }
-            };
-            scanForActiveUsers();
+            // 3. Scan existing Profiles (The source of truth)
+            const profileSnap = await getDocs(collection(db, "userProfiles"));
+            profileSnap.docs.forEach(doc => uids.add(doc.id));
+
+            setDiscoveredUids(Array.from(uids));
+        } catch (e) {
+            console.warn("Discovery scan restricted:", e);
+        } finally {
+            setIsScanning(false);
         }
     }, [hasAdminAccess]);
+
+    useEffect(() => {
+        if (hasAdminAccess) runDiscoveryScan();
+    }, [hasAdminAccess, runDiscoveryScan]);
 
     const { 
         allEntries: individualEntries,
@@ -116,75 +117,35 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    // COMPREHENSIVE USER MAP: Merges static directory, discovered UIDs, and Firestore profiles
+    // MERGED USER DIRECTORY: Source of truth for the entire dashboard
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
         
-        // Add discovered UIDs from data scan first
+        // 1. Add all discovered UIDs from collection scans
         discoveredUids.forEach(uid => {
             if (!map[uid]) {
                 map[uid] = {
                     code: "NEW",
                     firstName: "Discovered",
                     lastName: "User",
-                    email: "Pending Discovery..."
+                    email: "Confirming Identity..."
                 };
             }
         });
 
-        // Layer Firestore Profile Overrides (The Source of Truth)
+        // 2. Override with Firestore Profiles (Persisted Edits)
         Object.values(profiles).forEach(profile => {
             const uid = profile.userId;
-            if (map[uid]) {
-                map[uid] = { 
-                    ...map[uid], 
-                    firstName: profile.firstName || map[uid].firstName, 
-                    lastName: profile.lastName || map[uid].lastName,
-                    email: profile.email || map[uid].email
-                };
-            } else {
-                map[uid] = {
-                    code: profile.code || "NEW",
-                    firstName: profile.firstName || "Discovered",
-                    lastName: profile.lastName || "User",
-                    email: profile.email || "No Email Found"
-                };
-            }
+            const existing = map[uid] || {};
+            map[uid] = {
+                code: profile.code || existing.code || "NEW",
+                firstName: profile.firstName || existing.firstName || "New",
+                lastName: profile.lastName || existing.lastName || "User",
+                email: profile.email || existing.email || "No Email Found"
+            };
         });
         return map;
     }, [profiles, discoveredUids]);
-
-    const managedUserIds = useMemo(() => {
-        if (!selectedManagerId) return [];
-        const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
-        
-        // Add reassigned users from Firestore profiles
-        Object.values(profiles).forEach(p => {
-            if (p.managerId === selectedManagerId) baseSet.add(p.userId);
-        });
-
-        // Remove users reassigned AWAY in Firestore
-        Object.values(profiles).forEach(p => {
-            if (p.managerId && p.managerId !== selectedManagerId && baseSet.has(p.userId)) baseSet.delete(p.userId);
-        });
-
-        return Array.from(baseSet);
-    }, [selectedManagerId, profiles]);
-
-    const userMapForSelection = useMemo(() => {
-        const map = new Map<string, string>();
-        managedUserIds.forEach((id) => {
-            const u = mergedUserMap[id];
-            map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id.substring(0, 6)}...`);
-        });
-        return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
-    }, [managedUserIds, mergedUserMap]);
-    
-    const totalPendingApprovals = useMemo(() => {
-        const pendingNCD = teamNonCallDays.filter(ncd => ncd.status === 'pending').length;
-        const pendingPR = teamPlanningRequests.filter(req => req.status === 'pending').length;
-        return pendingNCD + pendingPR;
-    }, [teamNonCallDays, teamPlanningRequests]);
 
     const allAccounts = useMemo(() => {
         const all = Object.entries(mergedUserMap).map(([uid, data]) => {
@@ -212,7 +173,7 @@ export default function AdminPage() {
             return { uid, ...data, role, district, managerId: managerUid };
         });
 
-        if (!accountSearch.trim()) return all.sort((a, b) => a.code.localeCompare(b.code));
+        if (!accountSearch.trim()) return all.sort((a, b) => a.lastName.localeCompare(b.lastName));
 
         const q = accountSearch.toLowerCase();
         return all.filter(a => 
@@ -222,21 +183,25 @@ export default function AdminPage() {
             a.role.toLowerCase().includes(q) ||
             a.district.toLowerCase().includes(q) ||
             (a.email && a.email.toLowerCase().includes(q))
-        ).sort((a, b) => a.code.localeCompare(b.code));
+        ).sort((a, b) => a.lastName.localeCompare(b.lastName));
     }, [accountSearch, mergedUserMap, profiles]);
 
-    useEffect(() => {
-        if (!authLoading && !hasAdminAccess) router.push('/');
-    }, [authLoading, hasAdminAccess, router]);
+    const managedUserIds = useMemo(() => {
+        if (!selectedManagerId) return [];
+        const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
+        Object.values(profiles).forEach(p => { if (p.managerId === selectedManagerId) baseSet.add(p.userId); });
+        Object.values(profiles).forEach(p => { if (p.managerId && p.managerId !== selectedManagerId && baseSet.has(p.userId)) baseSet.delete(p.userId); });
+        return Array.from(baseSet);
+    }, [selectedManagerId, profiles]);
 
-    useEffect(() => {
-        setSelectedUserId(null);
-        if (selectedManagerId) fetchTeamSummary();
-    }, [selectedManagerId, fetchTeamSummary]);
-    
-    useEffect(() => {
-        if (selectedUserId) fetchUserData(selectedUserId);
-    }, [selectedUserId, fetchUserData]);
+    const userMapForSelection = useMemo(() => {
+        const map = new Map<string, string>();
+        managedUserIds.forEach((id) => {
+            const u = mergedUserMap[id];
+            map.set(id, u ? `${u.code}_${u.lastName}, ${u.firstName}` : `User ${id.substring(0, 6)}...`);
+        });
+        return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
+    }, [managedUserIds, mergedUserMap]);
 
     const handleSaveAccount = async () => {
         if (!editingAccount) return;
@@ -250,11 +215,16 @@ export default function AdminPage() {
         );
         if (success) {
             setEditingAccount(null);
+            await runDiscoveryScan();
         }
         setIsSavingProfile(false);
     };
 
-    if (authLoading && !selectedManagerId) {
+    useEffect(() => {
+        if (!authLoading && !hasAdminAccess) router.push('/');
+    }, [authLoading, hasAdminAccess, router]);
+
+    if (authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
@@ -262,93 +232,10 @@ export default function AdminPage() {
             </div>
         );
     }
-    
-    const renderDistrictReportsContent = () => {
-        if (dataLoading && selectedUserId) {
-            return (
-                <div className="flex items-center justify-center mt-10 w-full">
-                    <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                     <p className="ml-4 font-headline">Syncing Representative Data...</p>
-                </div>
-            )
-        }
-
-        if (!selectedManagerId) {
-             return (
-                 <Card className="mt-6 border-2 border-dashed">
-                    <CardContent className="p-12 text-center">
-                        <p className="text-muted-foreground text-lg font-headline">Please select a District Sales Manager (DSM) to view their team's data.</p>
-                    </CardContent>
-                </Card>
-             );
-        }
-        
-        if (selectedUserId) {
-             return (
-                <UserDashboard 
-                    userId={selectedUserId}
-                    allEntries={individualEntries}
-                    allDoctors={individualDoctors}
-                    allPlans={individualPlans}
-                    allNonCallDays={allNonCallDaysIndividual}
-                    allTimeLogs={individualTimeLogs}
-                    individualPlanningRequests={individualPlanningRequests}
-                    onDeleteEntry={deleteEntry}
-                    usedQuantities={individualUsedQuantities}
-                    userMap={mergedUserMap}
-                    isAdminView={true}
-                    onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
-                    onUpdateDoctor={updateDoctor}
-                    onDeleteDoctor={deleteDoctor}
-                    onDeleteDoctorsBulk={deleteDoctorsBulk}
-                    onAddDoctorsBulk={(ds) => addDoctorsBulk(ds.map(d => ({ ...d, userId: selectedUserId })))}
-                />
-            );
-        }
-
-        if (loadingSummary) {
-            return (
-                <div className="flex items-center justify-center mt-10 w-full">
-                    <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                    <p className="ml-4 font-headline">Assembling Team Overview...</p>
-                </div>
-            );
-        }
-
-        if (teamSummaryData) {
-            return <UserDashboard 
-                        userId={selectedManagerId}
-                        allEntries={teamSummaryData.entries}
-                        allDoctors={teamSummaryData.doctors}
-                        allPlans={teamSummaryData.plans}
-                        allNonCallDays={teamSummaryData.nonCallDays}
-                        allTimeLogs={teamSummaryData.timeLogs}
-                        onDeleteEntry={deleteEntry}
-                        usedQuantities={teamSummaryData.usedQuantities}
-                        userMap={mergedUserMap}
-                        isAdminView={true}
-                        onAddDoctor={(d) => addDoctor({ ...d, userId: selectedManagerId })}
-                        onUpdateDoctor={updateDoctor}
-                        onDeleteDoctor={deleteDoctor}
-                        onDeleteDoctorsBulk={deleteDoctorsBulk}
-                        onAddDoctorsBulk={(ds) => addDoctorsBulk(ds.map(d => ({ ...d, userId: selectedUserId || selectedManagerId })))}
-                    />;
-        }
-        
-        return (
-            <Alert className="mt-6 border-2">
-                <Users className="w-4 h-4 text-primary" />
-                <AlertTitle className="font-headline">Select a User</AlertTitle>
-                <AlertDescription className="text-muted-foreground">
-                    Select a PMR from the filter to view their detailed performance dashboard, or review the combined team summary.
-                </AlertDescription>
-            </Alert>
-        );
-    }
 
     return (
         <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
-             <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
+            <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
                 <div className="flex items-center gap-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
@@ -358,62 +245,49 @@ export default function AdminPage() {
                 <div className="flex items-center gap-4">
                     {user && (
                         <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
-                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">AUTH SESSION</span>
+                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SESSION</span>
                             <div className="flex items-center gap-1.5">
                                 <User className="w-3 h-3 text-primary" />
                                 <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user.email}</span>
                             </div>
                         </div>
                     )}
-                    {isUserAdmin && (
-                        <Link href="/">
-                            <Button size="sm" variant="outline" className="font-headline border-2">User View</Button>
-                        </Link>
-                    )}
                     <Button size="sm" variant="destructive" className="font-headline" onClick={() => logout()}>Logout</Button>
                 </div>
             </header>
+
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8">
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                         <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
-                        <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline flex items-center gap-2"><Package2 className="h-4 w-4" /> Sample Allocation</TabsTrigger>
-                        <TabsTrigger value="approvals" className="relative px-6 rounded-lg font-headline">
-                            <Bell className="mr-2 h-4 w-4"/>
-                            Approvals
-                            {totalPendingApprovals > 0 && <Badge className="absolute -right-1 -top-1 px-1.5 min-w-[20px]" variant="destructive">{totalPendingApprovals}</Badge>}
-                        </TabsTrigger>
+                        <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline">Allocations</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="district-reports">
-                        <Card className="mb-8 border-2 shadow-sm">
+                         <Card className="mb-8 border-2 shadow-sm">
                             <CardHeader>
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                      <div className="space-y-3">
-                                        <CardTitle className="flex items-center gap-2 font-headline text-xl">
-                                            <UserSquare className="text-primary" /> District Manager
-                                        </CardTitle>
+                                        <CardTitle className="font-headline text-xl">District Manager</CardTitle>
                                         <Select onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin}>
                                             <SelectTrigger className="w-full border-2 h-11 font-headline">
                                                 <SelectValue placeholder="Select a DSM..." />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {managers.map(m => <SelectItem key={m.uid} value={m.uid} className="font-headline">{m.name}</SelectItem>)}
+                                                {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className={cn("space-y-3", !selectedManagerId && "opacity-50 pointer-events-none")}>
-                                        <CardTitle className="flex items-center gap-2 font-headline text-xl">
-                                            <Users className="text-primary" /> Representative
-                                        </CardTitle>
+                                        <CardTitle className="font-headline text-xl">Representative</CardTitle>
                                         <div className="flex items-center gap-2">
                                             <Select onValueChange={setSelectedUserId} value={selectedUserId || ''}>
                                                 <SelectTrigger className="w-full border-2 h-11 font-headline">
                                                     <SelectValue placeholder="All Representatives (Summary)" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {Array.from(userMapForSelection.entries()).map(([uid, name]) => <SelectItem key={uid} value={uid} className="font-headline">{name}</SelectItem>)}
+                                                    {Array.from(userMapForSelection.entries()).map(([uid, name]) => <SelectItem key={uid} value={uid}>{name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                             {selectedUserId && <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}><X className="w-5 h-5"/></Button>}
@@ -422,7 +296,31 @@ export default function AdminPage() {
                                 </div>
                             </CardHeader>
                         </Card>
-                        {renderDistrictReportsContent()}
+                        
+                        {selectedUserId ? (
+                             <UserDashboard 
+                                userId={selectedUserId}
+                                allEntries={individualEntries}
+                                allDoctors={individualDoctors}
+                                allPlans={individualPlans}
+                                allNonCallDays={allNonCallDaysIndividual}
+                                allTimeLogs={individualTimeLogs}
+                                individualPlanningRequests={individualPlanningRequests}
+                                onDeleteEntry={deleteEntry}
+                                usedQuantities={individualUsedQuantities}
+                                userMap={mergedUserMap}
+                                isAdminView={true}
+                                onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
+                                onUpdateDoctor={updateDoctor}
+                                onDeleteDoctor={deleteDoctor}
+                            />
+                        ) : (
+                            <Alert className="border-2">
+                                <AlertCircle className="w-4 h-4 text-primary" />
+                                <AlertTitle className="font-headline">Representative Insight</AlertTitle>
+                                <AlertDescription>Select a specific PMR to view their full masterlist and coverage timeline.</AlertDescription>
+                            </Alert>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="accounts">
@@ -431,18 +329,23 @@ export default function AdminPage() {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
-                                            <UserCog className="text-primary" /> System User Directory
+                                            <UserCog className="text-primary" /> Registered User Directory
                                         </CardTitle>
-                                        <CardDescription>All identified active accounts. Manage names, identifiers, and territory assignments here.</CardDescription>
+                                        <CardDescription>Every account that has accessed the system is listed here. Manage identities and DSM assignments.</CardDescription>
                                     </div>
-                                    <div className="relative max-w-md w-full">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                        <Input 
-                                            placeholder="Search by name, code, or identifier..." 
-                                            className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
-                                            value={accountSearch}
-                                            onChange={(e) => setAccountSearch(e.target.value)}
-                                        />
+                                    <div className="flex items-center gap-3 w-full max-w-md">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                            <Input 
+                                                placeholder="Search by name, code, or identifier..." 
+                                                className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                                value={accountSearch}
+                                                onChange={(e) => setAccountSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <Button variant="outline" size="icon" onClick={() => runDiscoveryScan()} disabled={isScanning} className="h-11 w-11 rounded-xl border-2">
+                                            <RefreshCw className={cn("w-4 h-4", isScanning && "animate-spin")} />
+                                        </Button>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -474,14 +377,11 @@ export default function AdminPage() {
                                                         <TableCell>
                                                             <div className="flex items-center gap-2 text-sm">
                                                                 <Fingerprint className="h-3 w-3 text-muted-foreground" />
-                                                                <span className="font-medium text-xs font-mono">{acc.email || 'No identifier set'}</span>
+                                                                <span className="font-medium text-xs font-mono">{acc.email}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <Badge 
-                                                                variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}
-                                                                className="px-3"
-                                                            >
+                                                            <Badge variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}>
                                                                 {acc.role}
                                                             </Badge>
                                                         </TableCell>
@@ -506,14 +406,7 @@ export default function AdminPage() {
                                                     </TableRow>
                                                 ))
                                             ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={6} className="h-64 text-center">
-                                                        <div className="flex flex-col items-center justify-center opacity-30">
-                                                            <Search className="w-16 h-16 mb-2" />
-                                                            <p className="font-headline font-bold uppercase tracking-widest">No matching accounts found</p>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
+                                                <TableRow><TableCell colSpan={6} className="h-64 text-center">No accounts discovered yet.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>
@@ -525,11 +418,6 @@ export default function AdminPage() {
                     <TabsContent value="sample-allocation">
                         <Q4AllocationView />
                     </TabsContent>
-
-                    <TabsContent value="approvals" className="space-y-8">
-                        <NonCallDayApprovals nonCallDays={teamNonCallDays} onUpdateStatus={updateNonCallDayStatus} userMap={mergedUserMap} />
-                        <PlanningRequestApprovals requests={teamPlanningRequests} onUpdateStatus={updatePlanningRequestStatus} userMap={mergedUserMap} />
-                    </TabsContent>
                 </Tabs>
             </main>
 
@@ -537,58 +425,37 @@ export default function AdminPage() {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="font-headline text-xl">Edit Account Profile</DialogTitle>
-                        <DialogDescription>Update employee name, identifier, or territory assignment.</DialogDescription>
+                        <DialogDescription>Update employee identity and territory assignment.</DialogDescription>
                     </DialogHeader>
                     {editingAccount && (
                         <div className="space-y-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="firstName" className="text-right">First Name</Label>
-                                <Input 
-                                    id="firstName" 
-                                    className="col-span-3" 
-                                    value={editingAccount.firstName}
-                                    onChange={(e) => setEditingAccount({...editingAccount, firstName: e.target.value})}
-                                />
+                                <Input id="firstName" className="col-span-3" value={editingAccount.firstName} onChange={(e) => setEditingAccount({...editingAccount, firstName: e.target.value})} />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="lastName" className="text-right">Last Name</Label>
-                                <Input 
-                                    id="lastName" 
-                                    className="col-span-3" 
-                                    value={editingAccount.lastName}
-                                    onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})}
-                                />
+                                <Input id="lastName" className="col-span-3" value={editingAccount.lastName} onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})} />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="email" className="text-right">Identifier</Label>
-                                <Input 
-                                    id="email" 
-                                    className="col-span-3 font-mono text-xs" 
-                                    value={editingAccount.email || ""}
-                                    placeholder="email@hovidinc.com"
-                                    onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})}
-                                />
+                                <Input id="email" className="col-span-3 font-mono text-xs" value={editingAccount.email || ""} placeholder="email@hovidinc.com" onChange={(e) => setEditingAccount({...editingAccount, email: e.target.value})} />
                             </div>
-                            {allAccounts.find(a => a.uid === editingAccount.uid)?.role === 'PMR' && (
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="manager" className="text-right">District DSM</Label>
-                                    <div className="col-span-3">
-                                        <Select 
-                                            value={editingAccount.managerId || ""} 
-                                            onValueChange={(val) => setEditingAccount({...editingAccount, managerId: val})}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Select District Manager..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {managers.map(m => (
-                                                    <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="manager" className="text-right">District DSM</Label>
+                                <div className="col-span-3">
+                                    <Select value={editingAccount.managerId || ""} onValueChange={(val) => setEditingAccount({...editingAccount, managerId: val})}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select District Manager..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {managers.map(m => (
+                                                <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     )}
                     <DialogFooter>
