@@ -8,6 +8,8 @@ import { collection, onSnapshot, query, writeBatch, doc, orderBy, where } from '
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
   { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
@@ -71,13 +73,6 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const isPrivileged = useMemo(() => {
-    if (!user) return false;
-    return ADMIN_UIDS.includes(user.uid) || 
-           (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) ||
-           Object.keys(MANAGER_TEAMS).includes(user.uid);
-  }, [user]);
-
   useEffect(() => {
     if (!db || !user) return;
     
@@ -94,7 +89,11 @@ export const useQ4Allocation = () => {
       }
       setLoading(false);
     }, (error) => {
-        console.error("Allocation listen error:", error);
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
 
@@ -106,10 +105,9 @@ export const useQ4Allocation = () => {
     
     const colRef = collection(db, "coverageEntries");
     
-    // PMRs must filter by their own userId to satisfy security rules on list operations
-    const usageQuery = isPrivileged 
-        ? colRef 
-        : query(colRef, where("userId", "==", user.uid));
+    // To ensure a consistent balance for all users, we calculate usage based on ALL coverage entries.
+    // This allows the "Sample Allocation" view to reflect the total pool usage for the whole team.
+    const usageQuery = colRef;
 
     const unsubscribe = onSnapshot(usageQuery, (snapshot) => {
       const usage: Record<string, number> = {};
@@ -129,11 +127,15 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     }, (error) => {
-        console.error("Usage listen error:", error);
+        const permissionError = new FirestorePermissionError({
+          path: colRef.path,
+          operation: 'list',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => unsubscribe();
-  }, [user, isPrivileged]);
+  }, [user]);
 
   const refetch = () => {};
 

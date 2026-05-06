@@ -34,7 +34,6 @@ service cloud.firestore {
 
     /**
      * Common ownership check.
-     * Note: For list operations, the client MUST filter the query by userId.
      */
     function isOwner(data) {
       return isSignedIn() && data.userId == request.auth.uid;
@@ -43,7 +42,9 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read: if isAdmin() || isManager() || isOwner(resource.data);
+      // In medical sales orgs using a shared pool, users need to see total consumption.
+      // We allow reading of entries to all signed-in users to support the shared Sample Allocation balance.
+      allow read: if isSignedIn();
       allow create: if isOwner(request.resource.data);
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
