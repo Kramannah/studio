@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
@@ -93,7 +93,6 @@ export function PlanningCalendar({
         setSelectedDate(new Date());
     }, []);
 
-    // Restoration of pointer events on body after closing dialogs
     useEffect(() => {
         if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
             document.body.style.pointerEvents = 'auto';
@@ -387,29 +386,6 @@ export function PlanningCalendar({
                         </div>
                     </div>
 
-                    {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')]?.[0] && (
-                        <div className="flex items-center justify-between p-5 border-2 rounded-xl bg-destructive/5">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-destructive/10 rounded-full">
-                                    <CalendarOff className="w-6 h-6 text-destructive" />
-                                </div>
-                                <div className="space-y-1">
-                                    {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')].map((ncd) => (
-                                        <div key={ncd.id}>
-                                            <p className="text-xl font-black text-destructive leading-tight">{ncd.reason}</p>
-                                            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-                                                {dayTypeLabels[ncd.dayType]}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <Badge variant="outline" className="h-10 px-4 text-sm font-bold uppercase gap-2 border-2">
-                                <StatusIcon status={nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status} /> {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status}
-                            </Badge>
-                        </div>
-                    )}
-
                     <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
                         <Table>
                             <TableHeader>
@@ -453,12 +429,12 @@ export function PlanningCalendar({
 
             <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
                 <DialogContent className="w-[94vw] max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-background border-2 shadow-2xl">
-                    <DialogHeader className="p-4 shrink-0 bg-muted/20">
+                    <DialogHeader className="p-4 shrink-0">
                         <DialogTitle className="text-lg font-headline font-black">Plan Visits: {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
                         <DialogDescription className="text-sm">Select doctors from your masterlist to bulk schedule visits.</DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 flex flex-col min-h-0 p-4 space-y-4 overflow-hidden">
+                    <div className="flex-1 flex flex-col min-h-0 p-4 pt-0 space-y-4 overflow-hidden">
                         <div className="relative shrink-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input 
@@ -486,16 +462,16 @@ export function PlanningCalendar({
                             </div>
                         </div>
 
-                        <div className="flex-1 border-2 rounded-xl bg-card overflow-hidden flex flex-col relative">
+                        <div className="flex-1 overflow-hidden flex flex-col relative">
                             <div className="flex-1 w-full overflow-y-auto scrollbar-hide">
                                 <Table className="w-full">
-                                    <TableHeader className="sticky top-0 bg-muted z-20">
+                                    <TableHeader className="sticky top-0 bg-background z-20">
                                         <TableRow className="h-10 hover:bg-transparent">
-                                            <TableHead className="w-[40px] pl-4"></TableHead>
+                                            <TableHead className="w-[40px] pl-0"></TableHead>
                                             <TableHead className="w-[200px] text-xs font-bold uppercase tracking-tighter">Doctor Name</TableHead>
                                             <TableHead className="text-xs font-bold uppercase tracking-tighter">Location</TableHead>
                                             <TableHead className="w-[60px] text-center text-xs font-bold uppercase tracking-tighter">Freq</TableHead>
-                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase tracking-tighter pr-4">Left</TableHead>
+                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase tracking-tighter pr-0">Left</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -509,7 +485,7 @@ export function PlanningCalendar({
                                                 
                                                 return (
                                                     <TableRow key={doctor.id} className={cn("h-10 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
-                                                        <TableCell className="w-[40px] pl-4">
+                                                        <TableCell className="w-[40px] pl-0">
                                                             <Checkbox 
                                                                 checked={selectedDoctorIds.has(doctor.id)} 
                                                                 onCheckedChange={() => toggleDoctorSelection(doctor.id)}
@@ -525,7 +501,7 @@ export function PlanningCalendar({
                                                         <TableCell className="w-[60px] text-center font-bold text-[10px]">
                                                             {doctor.frequency}
                                                         </TableCell>
-                                                        <TableCell className="w-[60px] font-mono text-xs font-black text-center pr-4">
+                                                        <TableCell className="w-[60px] font-mono text-xs font-black text-center pr-0">
                                                             {remaining}
                                                         </TableCell>
                                                     </TableRow>
@@ -542,7 +518,7 @@ export function PlanningCalendar({
                         </div>
                     </div>
 
-                    <DialogFooter className="p-4 bg-muted/20 gap-3 flex-row justify-end shrink-0">
+                    <DialogFooter className="p-4 pt-0 gap-3 flex-row justify-end shrink-0">
                         <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-10 px-6 font-bold border-2 text-sm">Close</Button>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[160px] font-headline text-base font-black h-10 shadow-lg transition-all active:scale-95 bg-primary text-primary-foreground hover:bg-primary/90">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
