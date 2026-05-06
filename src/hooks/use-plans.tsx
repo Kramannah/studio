@@ -41,10 +41,10 @@ export const usePlans = () => {
       try {
         const startDate = getQueryStartDateISO();
         
+        // Simplified query to avoid index requirement
         const plansQuery = query(
           collection(db, "plans"), 
-          where("userId", "==", user.uid),
-          where("plannedDate", ">=", startDate)
+          where("userId", "==", user.uid)
         );
         
         const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
@@ -56,7 +56,11 @@ export const usePlans = () => {
 
         const allPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
-          allPlans.push({ id: doc.id, ...doc.data() } as Plan);
+          const data = doc.data() as Plan;
+          // In-memory date filtering
+          if (data.plannedDate && data.plannedDate >= startDate) {
+              allPlans.push({ id: doc.id, ...data });
+          }
         });
 
         allPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));

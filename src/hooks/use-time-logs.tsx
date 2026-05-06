@@ -27,16 +27,20 @@ export const useTimeLogs = () => {
     try {
       const startDate = getQueryStartDateISO();
       
+      // Simplified query to avoid index requirement
       const q = query(
         collection(db, "timeLogs"), 
-        where("userId", "==", user.uid),
-        where("timeIn", ">=", startDate)
+        where("userId", "==", user.uid)
       );
       
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
-        fetchedLogs.push({ id: doc.id, ...doc.data() } as TimeLog);
+        const data = doc.data() as TimeLog;
+        // In-memory date filtering
+        if (data.timeIn && data.timeIn >= startDate) {
+            fetchedLogs.push({ id: doc.id, ...data });
+        }
       });
 
       fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));

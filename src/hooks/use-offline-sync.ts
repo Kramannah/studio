@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
+import { isValid, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -43,16 +44,21 @@ export const useOfflineSync = (userId?: string) => {
     try {
       const startDate = getQueryStartDateISO();
       
+      // Removed the range filter from the query to avoid needing a composite index
       const q = query(
         collection(db, "coverageEntries"), 
-        where("userId", "==", userId),
-        where("submittedAt", ">=", startDate)
+        where("userId", "==", userId)
       );
       
       const querySnapshot = await getDocs(q);
       const entries: CoverageEntry[] = [];
+      
       querySnapshot.forEach(doc => {
-        entries.push({ id: doc.id, ...doc.data() } as CoverageEntry);
+        const data = doc.data() as CoverageEntry;
+        // Perform filtering in-memory
+        if (data.submittedAt && data.submittedAt >= startDate) {
+            entries.push({ id: doc.id, ...data });
+        }
       });
       
       entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));

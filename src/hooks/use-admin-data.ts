@@ -137,11 +137,12 @@ export function useAdminData(managerId?: string) {
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk), where("submittedAt", ">=", startDate)));
-            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk), where("timeIn", ">=", startDate)));
+            // Removed range filters from queries to avoid needing composite indexes
+            const entriesPromise = getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk)));
+            const timeLogsPromise = getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk)));
             const doctorsPromise = getDocs(query(collection(db, "doctors"), where("userId", "in", chunk)));
-            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk), where("date", ">=", startDate)));
-            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk), where("plannedDate", ">=", startDate)));
+            const nonCallDaysPromise = getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk)));
+            const plansPromise = getDocs(query(collection(db, "plans"), where("userId", "in", chunk)));
 
             const [entriesSnap, timeLogsSnap, doctorsSnap, nonCallDaysSnap, plansSnap] = await Promise.all([
                 entriesPromise,
@@ -151,12 +152,13 @@ export function useAdminData(managerId?: string) {
                 plansPromise,
             ]);
 
+            // Perform in-memory filtering for date fields
             return {
-                entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
-                timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog),
+                entries: entriesSnap.docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry).filter(e => e.submittedAt >= startDate),
+                timeLogs: timeLogsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog).filter(t => t.timeIn >= startDate),
                 doctors: doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
-                plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan),
+                nonCallDays: nonCallDaysSnap.docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay).filter(n => n.date >= startDate),
+                plans: plansSnap.docs.map(d => ({ id: d.id, ...d.data() }) as Plan).filter(p => p.plannedDate >= startDate),
             }
         };
 
@@ -224,16 +226,22 @@ export function useAdminData(managerId?: string) {
     try {
         const startDate = getQueryStartDateISO(forceAllWeek);
         const q = (coll: string) => query(collection(db, coll), where("userId", "==", userId));
-        const qDated = (coll: string, dateField: string) => query(collection(db, coll), where("userId", "==", userId), where(dateField, ">=", startDate));
         
+        // Use simplified queries without range filters to avoid index requirements
         const [entriesSnap, doctorsSnap, plansSnap] = await Promise.all([
-            getDocs(qDated("coverageEntries", "submittedAt")),
+            getDocs(q("coverageEntries")),
             getDocs(q("doctors")),
-            getDocs(qDated("plans", "plannedDate")),
+            getDocs(q("plans")),
         ]);
         
-        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
-        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()}) as Plan);
+        // Filter in-memory
+        const entries = entriesSnap.docs
+            .map(d => ({id: d.id, ...d.data()}) as CoverageEntry)
+            .filter(e => e.submittedAt >= startDate);
+            
+        const plans = plansSnap.docs
+            .map(d => ({id: d.id, ...d.data()}) as Plan)
+            .filter(p => p.plannedDate >= startDate);
         
         setAllEntries(entries);
         setAllDoctors(doctorsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Doctor));
