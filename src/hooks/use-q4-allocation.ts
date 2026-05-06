@@ -6,6 +6,7 @@ import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, writeBatch, doc, orderBy, deleteDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
+import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
@@ -63,6 +64,7 @@ export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
 ];
 
 export const useQ4Allocation = () => {
+  const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(
     OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
   );
@@ -72,7 +74,11 @@ export const useQ4Allocation = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || !user) {
+        setLoading(false);
+        return;
+    };
+    
     setLoading(true);
     const colRef = collection(db, "q4Allocation");
     const q = query(colRef, orderBy("displayMaterialName", "asc"));
@@ -95,10 +101,14 @@ export const useQ4Allocation = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || !user) {
+        setLoadingUsage(false);
+        return;
+    };
+    
     setLoadingUsage(true);
     const colRef = collection(db, "coverageEntries");
     const q = query(colRef);
@@ -131,7 +141,7 @@ export const useQ4Allocation = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const refetch = () => {};
 
