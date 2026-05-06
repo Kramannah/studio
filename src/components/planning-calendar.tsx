@@ -5,7 +5,7 @@ import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -31,7 +31,6 @@ import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { cn, isPastWeek, getWeekMonday, isCurrentWeek } from "@/lib/utils";
-import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -41,7 +40,6 @@ type PlanningCalendarProps = {
   entries: CoverageEntry[];
   offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
-  onAddPlansBulk?: (doctors: Doctor[], plannedDate: Date) => void;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor, plannedDate: Date) => void;
   nonCallDays: NonCallDay[];
@@ -67,57 +65,6 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
     }
 }
 
-/**
- * Memoized Row for the Add Plan Dialog to prevent full list re-renders
- */
-const DoctorPlanRow = React.memo(({ 
-    doctor, 
-    isPlanned, 
-    isSelected, 
-    onToggle, 
-    visitCount 
-}: { 
-    doctor: Doctor, 
-    isPlanned: boolean, 
-    isSelected: boolean, 
-    onToggle: (id: string) => void,
-    visitCount: number
-}) => {
-    const target = parseInt(doctor.frequency.replace('x', ''), 10);
-    const balance = Math.max(0, target - visitCount);
-
-    return (
-        <div 
-            className={cn(
-                "flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-muted/50", 
-                isPlanned ? "bg-muted/20 opacity-60" : "bg-card shadow-sm cursor-pointer border-border/50",
-                isSelected && "border-primary bg-primary/5"
-            )}
-            onClick={() => !isPlanned && onToggle(doctor.id)}
-        >
-            <div className="flex items-center gap-4">
-                <Checkbox 
-                    className="h-6 w-6 rounded-md"
-                    checked={isSelected || isPlanned}
-                    disabled={isPlanned}
-                    onCheckedChange={() => !isPlanned && onToggle(doctor.id)}
-                />
-                <div>
-                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
-                        {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
-                    </p>
-                </div>
-            </div>
-            <Badge variant={isPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
-                {isPlanned ? 'SCHEDULED' : `Remaining: ${balance}`}
-            </Badge>
-        </div>
-    );
-});
-DoctorPlanRow.displayName = "DoctorPlanRow";
-
-
 export function PlanningCalendar({ 
     doctors, 
     plans, 
@@ -126,7 +73,6 @@ export function PlanningCalendar({
     entries, 
     offlineEntries = [],
     onAddPlan, 
-    onAddPlansBulk,
     onRemovePlan, 
     onLogCall, 
     nonCallDays, 
@@ -138,25 +84,12 @@ export function PlanningCalendar({
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
-    const [selectedDoctorIdsForPlan, setSelectedDoctorIdsForPlan] = useState<string[]>([]);
 
     useEffect(() => {
         setSelectedDate(new Date());
     }, []);
 
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
-
-    // Handle dialog closure reset in a separate cleanup to avoid thread locking
-    const handleAddPlanDialogChange = (open: boolean) => {
-        setIsAddPlanDialogOpen(open);
-        if (!open) {
-            // Small delay to allow the modal closure animation to finish before heavy state cleanup
-            setTimeout(() => {
-                setSelectedDoctorIdsForPlan([]);
-                setDoctorFilter("");
-            }, 150);
-        }
-    };
 
     const isLocked = useMemo(() => {
         if (!selectedDate) return false;
@@ -183,27 +116,6 @@ export function PlanningCalendar({
         });
         return counts;
     }, [allEntries]);
-
-    const categoryProgress = useMemo(() => {
-        const stats = {
-            '1x': { covered: 0, total: 0 },
-            '2x': { covered: 0, total: 0 },
-            '3x': { covered: 0, total: 0 },
-            '4x': { covered: 0, total: 0 },
-        };
-        
-        doctors.forEach(d => {
-            const freq = d.frequency;
-            if (stats[freq]) {
-                stats[freq].total += 1;
-                const nameKey = `${d.firstName} ${d.lastName}`.toLowerCase();
-                if ((visitCountsThisMonth[nameKey] || 0) > 0) {
-                    stats[freq].covered += 1;
-                }
-            }
-        });
-        return stats;
-    }, [doctors, visitCountsThisMonth]);
 
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
@@ -236,11 +148,6 @@ export function PlanningCalendar({
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
         return plansByDate[dateStr] || [];
     }, [plansByDate, selectedDate]);
-
-    // High performance Set for plan status checking in the dialog
-    const plannedDoctorIdsSet = useMemo(() => {
-        return new Set(selectedDayPlans.map(p => p.doctorId));
-    }, [selectedDayPlans]);
 
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
@@ -301,30 +208,13 @@ export function PlanningCalendar({
         );
     }, [doctors, doctorFilter]);
 
-    const handleAddSelectedPlans = useCallback(() => {
-        if (selectedDate && selectedDoctorIdsForPlan.length > 0) {
-            const doctorMap = new Map(doctors.map(d => [d.id, d]));
-            const selectedDoctors = selectedDoctorIdsForPlan
-                .map(id => doctorMap.get(id))
-                .filter((d): d is Doctor => !!d);
-
-            if (onAddPlansBulk) {
-                onAddPlansBulk(selectedDoctors, selectedDate);
-            } else {
-                // Fallback if hook isn't updated yet
-                selectedDoctors.forEach(doctor => {
-                    onAddPlan(doctor, selectedDate);
-                });
-            }
+    const handleAddPlan = (doctor: Doctor) => {
+        if (selectedDate) {
+            onAddPlan(doctor, selectedDate);
             setIsAddPlanDialogOpen(false);
+            setDoctorFilter("");
         }
-    }, [selectedDate, selectedDoctorIdsForPlan, doctors, onAddPlan, onAddPlansBulk]);
-    
-    const handleToggleDoctorSelection = useCallback((id: string) => {
-        setSelectedDoctorIdsForPlan(prev => 
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    }, []);
+    };
 
     const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
@@ -568,19 +458,15 @@ export function PlanningCalendar({
                 </div>
             </div>
 
-            <Dialog open={isAddPlanDialogOpen} onOpenChange={handleAddPlanDialogChange}>
-                <DialogContent className="max-w-xl w-[95vw] h-[90dvh] md:h-auto md:max-h-[90dvh] p-0 border-none flex flex-col overflow-hidden">
-                    <DialogHeader className="p-6 pb-2 shrink-0">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <DialogTitle className="text-2xl font-headline font-black">Add Visit Plans</DialogTitle>
-                                <DialogDescription>Search and select doctors for {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
-                            </div>
-                        </div>
+            <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
+                <DialogContent className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden">
+                    <DialogHeader className="p-6 pb-2">
+                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plan</DialogTitle>
+                        <DialogDescription>Search and select a doctor to visit on {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-hidden p-6 pt-0 flex flex-col space-y-4">
-                        <div className="relative shrink-0">
+                        <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
                                 placeholder="Search by name, specialty, or location..." 
@@ -591,35 +477,33 @@ export function PlanningCalendar({
                             />
                         </div>
 
-                        <div className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 py-4 px-2 border-2 border-primary/10 rounded-2xl bg-primary/5 shadow-inner shrink-0">
-                            {(Object.keys(categoryProgress) as Array<keyof typeof categoryProgress>).map(freq => (
-                                <div key={freq} className="flex flex-col items-center">
-                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">{freq}</span>
-                                    <span className="text-lg font-black text-primary tabular-nums leading-none">
-                                        {categoryProgress[freq].covered}/{categoryProgress[freq].total}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <ScrollArea className="flex-1 border rounded-xl p-2 bg-muted/10 min-h-[200px]">
+                        <ScrollArea className="flex-1 border rounded-xl p-2 bg-muted/10">
                             <div className="space-y-2">
                                 {filteredDoctors.length > 0 ? (
                                     filteredDoctors.map(doctor => {
                                         const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
                                         const count = visitCountsThisMonth[nameKey] || 0;
-                                        const isPlanned = plannedDoctorIdsSet.has(doctor.id);
-                                        const isSelected = selectedDoctorIdsForPlan.includes(doctor.id);
+                                        const isAlreadyPlanned = selectedDayPlans.some(p => p.doctorId === doctor.id);
 
                                         return (
-                                            <DoctorPlanRow 
-                                                key={doctor.id}
-                                                doctor={doctor}
-                                                isPlanned={isPlanned}
-                                                isSelected={isSelected}
-                                                visitCount={count}
-                                                onToggle={handleToggleDoctorSelection}
-                                            />
+                                            <div 
+                                                key={doctor.id} 
+                                                className={cn(
+                                                    "flex items-center justify-between p-4 rounded-xl border transition-all", 
+                                                    isAlreadyPlanned ? "bg-muted/20 opacity-60 pointer-events-none" : "bg-card shadow-sm cursor-pointer hover:border-primary border-border/50"
+                                                )}
+                                                onClick={() => !isAlreadyPlanned && handleAddPlan(doctor)}
+                                            >
+                                                <div>
+                                                    <p className="font-bold text-lg leading-tight">{doctor.firstName} {doctor.lastName}</p>
+                                                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">
+                                                        {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
+                                                    </p>
+                                                </div>
+                                                <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[10px] font-black h-6">
+                                                    {isAlreadyPlanned ? 'PLANNED' : `Visits: ${count}`}
+                                                </Badge>
+                                            </div>
                                         )
                                     })
                                 ) : (
@@ -631,15 +515,8 @@ export function PlanningCalendar({
                             </div>
                         </ScrollArea>
                     </div>
-                    <DialogFooter className="p-6 shrink-0 bg-muted/20 border-t flex flex-col gap-2">
-                        <Button 
-                            className="w-full h-14 text-xl font-black rounded-xl shadow-lg" 
-                            onClick={handleAddSelectedPlans} 
-                            disabled={selectedDoctorIdsForPlan.length === 0}
-                        >
-                            Add {selectedDoctorIdsForPlan.length} to Schedule
-                        </Button>
-                        <Button variant="ghost" className="w-full h-10" onClick={() => setIsAddPlanDialogOpen(false)}>
+                    <DialogFooter className="p-4 bg-muted/20 border-t">
+                        <Button variant="ghost" className="w-full" onClick={() => setIsAddPlanDialogOpen(false)}>
                             Cancel
                         </Button>
                     </DialogFooter>

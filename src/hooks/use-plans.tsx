@@ -122,49 +122,6 @@ export const usePlans = () => {
       });
   }, [user, toast]);
 
-  const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
-    if (!user || !db || doctors.length === 0) return;
-    
-    const dateISO = plannedDate.toISOString();
-    const plansToCreate = doctors.map(d => ({
-        userId: user.uid,
-        doctorId: d.id,
-        doctorFirstName: d.firstName,
-        doctorLastName: d.lastName,
-        plannedDate: dateISO,
-        callType: 'planned' as const,
-    }));
-
-    if (isOnline) {
-        const batch = writeBatch(db);
-        const addedPlans: Plan[] = [];
-        
-        plansToCreate.forEach(p => {
-            const newDocRef = doc(collection(db, "plans"));
-            batch.set(newDocRef, p);
-            addedPlans.push({ id: newDocRef.id, ...p });
-        });
-
-        batch.commit()
-            .then(() => {
-                setMasterPlans(prev => [...prev, ...addedPlans]);
-                toast({ title: "Schedule Updated", description: `${doctors.length} visits added.` });
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: 'plans',
-                    operation: 'create',
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-            });
-    } else {
-        const offlineAdded: Plan[] = plansToCreate.map(p => ({ id: crypto.randomUUID(), ...p }));
-        setOfflinePlans(prev => [...prev, ...offlineAdded]);
-        localStorage.setItem(getOfflineKey(), JSON.stringify([...offlinePlans, ...offlineAdded]));
-        toast({ title: "Saved Offline", description: `${doctors.length} visits stored locally.` });
-    }
-  }, [user, isOnline, toast, offlinePlans, getOfflineKey]);
-
   const removePlan = async (id: string) => {
     if (!db) return;
     const docRef = doc(db, "plans", id);
@@ -234,7 +191,6 @@ export const usePlans = () => {
       plans: allPlans, 
       planningRequests,
       addPlan, 
-      addPlansBulk,
       removePlan, 
       requestPlanningPermission,
       loading, 
