@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, query, doc, setDoc } from "firebase/firestore";
+import { collection, getDocs, query, doc, setDoc, FirestoreError } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
@@ -18,7 +18,14 @@ export function useUserProfiles() {
         if (!db) return;
         setLoading(true);
         try {
-            const snapshot = await getDocs(query(collection(db, "userProfiles")));
+            const snapshot = await getDocs(query(collection(db, "userProfiles")))
+              .catch(async (e: FirestoreError) => {
+                  errorEmitter.emit('permission-error', new FirestorePermissionError({
+                      path: 'userProfiles',
+                      operation: 'list',
+                  }));
+                  throw e;
+              });
             const data: Record<string, UserProfile> = {};
             snapshot.forEach(d => {
                 const p = { id: d.id, ...d.data() } as UserProfile;
@@ -26,7 +33,7 @@ export function useUserProfiles() {
             });
             setProfiles(data);
         } catch (error) {
-            console.error("Error fetching user profiles:", error);
+            // Handled via errorEmitter
         } finally {
             setLoading(false);
         }

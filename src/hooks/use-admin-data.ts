@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, FirestoreError } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -90,10 +90,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 }
                 const snapshots = await Promise.all(chunks.map(chunk => 
                     getDocs(query(collection(db, collName), where("userId", "in", chunk)))
+                      .catch(async (e: FirestoreError) => {
+                          errorEmitter.emit('permission-error', new FirestorePermissionError({
+                              path: collName,
+                              operation: 'list',
+                          }));
+                          throw e;
+                      })
                 ));
                 return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
-            const snapshot = await getDocs(queryRef);
+            const snapshot = await getDocs(queryRef).catch(async (e: FirestoreError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: collName,
+                    operation: 'list',
+                }));
+                throw e;
+            });
             return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         };
       
@@ -109,7 +122,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
       }
     } catch (err) {
-        console.error("Fetch Approvals Error:", err);
+        // Handled via errorEmitter
     } finally {
       setLoading(false);
     }
@@ -136,12 +149,22 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
+            const fetchSingle = (collName: string) => 
+                getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
+                .catch(async (e: FirestoreError) => {
+                    errorEmitter.emit('permission-error', new FirestorePermissionError({
+                        path: collName,
+                        operation: 'list',
+                    }));
+                    throw e;
+                });
+
             const snaps = await Promise.allSettled([
-                getDocs(query(collection(db, "coverageEntries"), where("userId", "in", chunk))),
-                getDocs(query(collection(db, "timeLogs"), where("userId", "in", chunk))),
-                getDocs(query(collection(db, "doctors"), where("userId", "in", chunk))),
-                getDocs(query(collection(db, "nonCallDays"), where("userId", "in", chunk))),
-                getDocs(query(collection(db, "plans"), where("userId", "in", chunk))),
+                fetchSingle("coverageEntries"),
+                fetchSingle("timeLogs"),
+                fetchSingle("doctors"),
+                fetchSingle("nonCallDays"),
+                fetchSingle("plans"),
             ]);
 
             const getResults = (index: number) => {
@@ -158,9 +181,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
         };
 
-        const [chunkResults, q4Snap] = await Promise.all([
+        const [chunkResults] = await Promise.all([
             Promise.all(chunks.map(fetchDataForChunk)),
-            getDocs(query(collection(db, "q4Allocation")))
         ]);
         
         const combined = chunkResults.reduce((acc, curr) => ({
@@ -185,7 +207,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         });
 
       } catch (err) {
-          console.error("Team Summary Error:", err);
+          // Handled via errorEmitter
       } finally {
         setLoadingSummary(false);
       }
@@ -195,7 +217,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     
-    // Clear previous PMR states to ensure the UI doesn't flicker with old data
     setAllEntries([]);
     setAllDoctors([]);
     setAllPlans([]);
@@ -207,15 +228,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     
     try {
-        const q = (coll: string) => query(collection(db, coll), where("userId", "==", sanitizedUserId));
+        const q = (coll: string) => query(collection(db!, coll), where("userId", "==", sanitizedUserId));
         
+        const fetchS = (collName: string) => 
+            getDocs(q(collName)).catch(async (e: FirestoreError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: collName,
+                    operation: 'list',
+                }));
+                throw e;
+            });
+
         const results = await Promise.allSettled([
-            getDocs(q("coverageEntries")),
-            getDocs(q("doctors")),
-            getDocs(q("plans")),
-            getDocs(q("timeLogs")),
-            getDocs(q("nonCallDays")),
-            getDocs(q("planningRequests"))
+            fetchS("coverageEntries"),
+            fetchS("doctors"),
+            fetchS("plans"),
+            fetchS("timeLogs"),
+            fetchS("nonCallDays"),
+            fetchS("planningRequests")
         ]);
         
         const getVal = <T>(idx: number): T[] => {
@@ -258,12 +288,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err) {
-        console.error("Individual PMR Data Fetch Error:", err);
-        toast({ variant: 'destructive', title: "Fetch Error", description: "Could not retrieve full PMR records." });
+        // Handled via errorEmitter
     } finally {
         setLoadingIndividual(false);
     }
-  }, [toast]);
+  }, []);
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
       const docRef = doc(db!, 'nonCallDays', id);
