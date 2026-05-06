@@ -122,6 +122,42 @@ export const usePlans = () => {
       });
   }, [user, toast]);
 
+  const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
+    if (!user || !db || doctors.length === 0) return;
+    const batch = writeBatch(db);
+    const dateISO = plannedDate.toISOString();
+    
+    const newPlans: Plan[] = [];
+
+    doctors.forEach(doctor => {
+        const docRef = doc(collection(db, "plans"));
+        const newPlan = {
+            userId: user.uid,
+            doctorId: doctor.id,
+            doctorFirstName: doctor.firstName,
+            doctorLastName: doctor.lastName,
+            plannedDate: dateISO,
+            callType: 'planned' as const,
+        };
+        batch.set(docRef, newPlan);
+        newPlans.push({ id: docRef.id, ...newPlan });
+    });
+
+    try {
+        await batch.commit();
+        setMasterPlans(prev => [...prev, ...newPlans]);
+        toast({ title: "Visits Scheduled", description: `Added ${doctors.length} doctors to your plan.` });
+        return true;
+    } catch (serverError: any) {
+        const permissionError = new FirestorePermissionError({
+          path: 'plans',
+          operation: 'write',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+        return false;
+    }
+  }, [user, toast]);
+
   const removePlan = async (id: string) => {
     if (!db) return;
     const docRef = doc(db, "plans", id);
@@ -191,6 +227,7 @@ export const usePlans = () => {
       plans: allPlans, 
       planningRequests,
       addPlan, 
+      addPlansBulk,
       removePlan, 
       requestPlanningPermission,
       loading, 

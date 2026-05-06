@@ -4,12 +4,12 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek } from "date-fns";
+import { format, parseISO, isSameDay, isThisMonth, startOfToday, isValid, isSameWeek, isSameMonth } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, List, CheckCheck, ClipboardList, ChevronDown, Settings2, Lock, Unlock, Loader2 } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import {
   DropdownMenu,
@@ -31,6 +31,7 @@ import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { cn, isPastWeek, getWeekMonday, isCurrentWeek } from "@/lib/utils";
+import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -40,6 +41,7 @@ type PlanningCalendarProps = {
   entries: CoverageEntry[];
   offlineEntries?: CoverageEntry[];
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
+  onAddPlansBulk: (doctors: Doctor[], plannedDate: Date) => Promise<boolean>;
   onRemovePlan: (planId: string) => void;
   onLogCall: (doctor: Doctor, plannedDate: Date) => void;
   nonCallDays: NonCallDay[];
@@ -65,73 +67,6 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
     }
 }
 
-// Memoized Doctor List for performance optimization
-const DoctorSearchList = React.memo(({ 
-    doctors, 
-    filter, 
-    visitCounts, 
-    plannedIds, 
-    onSelect 
-}: { 
-    doctors: Doctor[], 
-    filter: string, 
-    visitCounts: Record<string, number>, 
-    plannedIds: Set<string>,
-    onSelect: (d: Doctor) => void 
-}) => {
-    const filtered = useMemo(() => {
-        const q = filter.toLowerCase().trim();
-        if (!q) return doctors.slice(0, 30);
-        return doctors.filter(d => 
-            `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
-            (d.municipality && d.municipality.toLowerCase().includes(q)) ||
-            (d.specialty && d.specialty.toLowerCase().includes(q))
-        ).slice(0, 100); // Limit to 100 for performance
-    }, [doctors, filter]);
-
-    if (filtered.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <Search className="w-8 h-8 mb-2 opacity-20" />
-                <p>No doctors found.</p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-2">
-            {filtered.map(doctor => {
-                const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
-                const count = visitCounts[nameKey] || 0;
-                const isAlreadyPlanned = plannedIds.has(doctor.id);
-
-                return (
-                    <div 
-                        key={doctor.id} 
-                        className={cn(
-                            "flex items-center justify-between p-4 rounded-xl border transition-all", 
-                            isAlreadyPlanned ? "bg-muted/20 opacity-60 pointer-events-none" : "bg-card shadow-sm cursor-pointer hover:border-primary border-border/50"
-                        )}
-                        onClick={() => !isAlreadyPlanned && onSelect(doctor)}
-                    >
-                        <div className="flex-1 min-w-0 mr-2">
-                            <p className="font-bold text-base leading-tight truncate">{doctor.firstName} {doctor.lastName}</p>
-                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-tight truncate">
-                                {doctor.municipality} • {doctor.specialty} • Target: {doctor.frequency}
-                            </p>
-                        </div>
-                        <Badge variant={isAlreadyPlanned ? "outline" : "secondary"} className="text-[9px] font-black h-5 shrink-0">
-                            {isAlreadyPlanned ? 'PLANNED' : `Visits: ${count}`}
-                        </Badge>
-                    </div>
-                );
-            })}
-        </div>
-    );
-});
-
-DoctorSearchList.displayName = "DoctorSearchList";
-
 export function PlanningCalendar({ 
     doctors, 
     plans, 
@@ -140,6 +75,7 @@ export function PlanningCalendar({
     entries, 
     offlineEntries = [],
     onAddPlan, 
+    onAddPlansBulk,
     onRemovePlan, 
     onLogCall, 
     nonCallDays, 
@@ -151,9 +87,9 @@ export function PlanningCalendar({
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
+    const [selectedDoctorIds, setSelectedDoctorIds] = useState<Set<string>>(new Set());
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // CRITICAL RECOVERY: Ensure click interactions are restored after dialog closure.
-    // This addresses Radix UI's body lock persisting in some browser environments.
     useEffect(() => {
         if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
             document.body.style.pointerEvents = "auto";
@@ -182,11 +118,12 @@ export function PlanningCalendar({
 
     const visitCountsThisMonth = useMemo(() => {
         const counts: Record<string, number> = {};
+        const today = new Date();
         allEntries.forEach(e => {
-            const dateStr = e.submittedAt || e.coverageDate;
+            const dateStr = e.coverageDate;
             if (dateStr) {
                 const date = parseISO(dateStr);
-                if (isValid(date) && isThisMonth(date)) {
+                if (isValid(date) && isSameMonth(date, today)) {
                     const nameKey = `${e.firstName} ${e.lastName}`.toLowerCase();
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
@@ -194,6 +131,27 @@ export function PlanningCalendar({
         });
         return counts;
     }, [allEntries]);
+
+    const territoryStats = useMemo(() => {
+        let totalTarget = 0;
+        let totalCompleted = 0;
+        const freqStats: Record<string, { completed: number, target: number }> = {};
+
+        doctors.forEach(doc => {
+            const nameKey = `${doc.firstName} ${doc.lastName}`.toLowerCase();
+            const completed = visitCountsThisMonth[nameKey] || 0;
+            const target = parseInt(doc.frequency.replace('x', ''), 10) || 0;
+
+            totalTarget += target;
+            totalCompleted += Math.min(completed, target);
+
+            if (!freqStats[doc.frequency]) freqStats[doc.frequency] = { completed: 0, target: 0 };
+            freqStats[doc.frequency].completed += Math.min(completed, target);
+            freqStats[doc.frequency].target += target;
+        });
+
+        return { totalCompleted, totalTarget, freqStats };
+    }, [doctors, visitCountsThisMonth]);
 
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
@@ -231,64 +189,14 @@ export function PlanningCalendar({
         return new Set(selectedDayPlans.map(p => p.doctorId));
     }, [selectedDayPlans]);
 
-    const entriesByDate = useMemo(() => {
-        const groups: Record<string, CoverageEntry[]> = {};
-        allEntries.forEach(e => {
-            const dateStr = e.coverageDate;
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (isValid(date)) {
-                    const groupStr = format(date, 'yyyy-MM-dd');
-                    if (!groups[groupStr]) groups[groupStr] = [];
-                    groups[groupStr].push(e);
-                }
-            }
-        });
-        return groups;
-    }, [allEntries]);
-
-    const selectedDayStats = useMemo(() => {
-        if (!selectedDate) return { total: 0, covered: 0, notYetCovered: 0 };
-        const dateString = format(selectedDate, 'yyyy-MM-dd');
-        const dayEntries = entriesByDate[dateString] || [];
-        
-        let covered = 0;
-        selectedDayPlans.forEach(plan => {
-            const isCovered = dayEntries.some(entry => 
-                entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
-                entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
-            );
-            if (isCovered) covered++;
-        });
-
-        return {
-            total: selectedDayPlans.length,
-            covered,
-            notYetCovered: Math.max(0, selectedDayPlans.length - covered)
-        };
-    }, [selectedDate, selectedDayPlans, entriesByDate]);
-    
-    const selectedDayNonCallEntry = useMemo(() => {
-        if (!selectedDate) return undefined;
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        return (nonCallDaysByDate[dateStr] || [])[0];
-    }, [nonCallDaysByDate, selectedDate]);
-    
-    const plannedDays = useMemo(() => {
-        return Object.keys(plansByDate).map(dateStr => parseISO(dateStr));
-    }, [plansByDate]);
-
-    const nonCallCalendarDays = useMemo(() => {
-        return Object.keys(nonCallDaysByDate).map(dateStr => parseISO(dateStr));
-    }, [nonCallDaysByDate]);
-
-    const handleAddPlan = useCallback((doctor: Doctor) => {
-        if (selectedDate) {
-            onAddPlan(doctor, selectedDate);
-            setIsAddPlanDialogOpen(false);
-            setDoctorFilter("");
-        }
-    }, [selectedDate, onAddPlan]);
+    const filteredDoctorsForSearch = useMemo(() => {
+        const q = doctorFilter.toLowerCase().trim();
+        return doctors.filter(d => 
+            `${d.firstName} ${d.lastName}`.toLowerCase().includes(q) ||
+            (d.municipality && d.municipality.toLowerCase().includes(q)) ||
+            (d.specialty && d.specialty.toLowerCase().includes(q))
+        );
+    }, [doctors, doctorFilter]);
 
     const handleSaveNonCallDay = useCallback((data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
@@ -310,79 +218,28 @@ export function PlanningCalendar({
         }
     }
 
-    const PlanTable = ({ plansToRender }: { plansToRender: Plan[] }) => (
-        <Table>
-            <TableHeader>
-                <TableRow className="bg-muted/50">
-                    <TableHead className="font-bold">Doctor</TableHead>
-                    <TableHead className="hidden md:table-cell font-bold">Location</TableHead>
-                    <TableHead className="font-bold">Status</TableHead>
-                    <TableHead className="text-right font-bold">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {plansToRender.length > 0 ? (
-                    plansToRender.map((plan) => {
-                        const doctor = doctors.find(d => d.id === plan.doctorId);
-                        if (!doctor) return null;
+    const toggleDoctorSelection = (id: string) => {
+        if (selectedDayPlannedIds.has(id)) return;
+        setSelectedDoctorIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
-                        const dateStr = typeof plan.plannedDate === 'string' ? format(parseISO(plan.plannedDate), 'yyyy-MM-dd') : format(plan.plannedDate, 'yyyy-MM-dd');
-                        const dayEntries = entriesByDate[dateStr] || [];
-                        const isCovered = dayEntries.some(entry => 
-                            entry.firstName?.toLowerCase() === plan.doctorFirstName.toLowerCase() &&
-                            entry.lastName?.toLowerCase() === plan.doctorLastName.toLowerCase()
-                        );
-                        
-                        const isLogCallDisabled = readOnly || isCovered;
-                        const isRemovalDisabled = readOnly || isLocked || isCovered;
-
-                        return (
-                        <TableRow key={plan.id} className="h-16">
-                            <TableCell>
-                                <Button 
-                                    variant="link" 
-                                    className="p-0 h-auto font-bold text-left text-base text-primary hover:no-underline"
-                                    onClick={() => handleLogCallClick(plan)}
-                                    disabled={isLogCallDisabled}
-                                >
-                                    {plan.doctorFirstName} {plan.doctorLastName}
-                                </Button>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                                <span className="text-sm text-muted-foreground font-medium">{doctor.municipality}</span>
-                            </TableCell>
-                             <TableCell>
-                                {isCovered ? (
-                                    <Badge variant="secondary" className="text-primary text-xs h-6 px-2 font-bold">Covered</Badge>
-                                ) : (
-                                    <Badge variant="outline" className="text-xs h-6 px-2 font-bold">Planned</Badge>
-                                )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                 {!readOnly && (
-                                     <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-10 w-10"
-                                        onClick={() => onRemovePlan(plan.id)}
-                                        disabled={isRemovalDisabled}
-                                     >
-                                         <XCircle size={18} className="text-destructive opacity-70 hover:opacity-100 transition-opacity"/>
-                                     </Button>
-                                 )}
-                            </TableCell>
-                        </TableRow>
-                    )})
-                ) : (
-                    <TableRow>
-                        <TableCell colSpan={4} className="h-32 text-center text-muted-foreground text-lg italic">
-                            No visits planned for this day.
-                        </TableCell>
-                    </TableRow>
-                )}
-            </TableBody>
-        </Table>
-    );
+    const handleBulkSubmit = async () => {
+        if (selectedDoctorIds.size === 0 || !selectedDate) return;
+        setIsSubmitting(true);
+        const doctorsToPlan = doctors.filter(d => selectedDoctorIds.has(d.id));
+        const success = await onAddPlansBulk(doctorsToPlan, selectedDate);
+        if (success) {
+            setIsAddPlanDialogOpen(false);
+            setSelectedDoctorIds(new Set());
+            setDoctorFilter("");
+        }
+        setIsSubmitting(false);
+    };
 
     if (doctors.length === 0 && !readOnly) {
         return (
@@ -394,12 +251,6 @@ export function PlanningCalendar({
         );
     }
 
-    // HANDLER FOR OPENING MODALS FROM DROPDOWN
-    // Prevent default selection to avoid focus conflicts between Dropdown and Dialog overlays.
-    const handleOpenDialog = (setter: (v: boolean) => void) => {
-        setter(true);
-    };
-    
     return (
         <div className="w-full space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -417,8 +268,8 @@ export function PlanningCalendar({
                             selected={selectedDate}
                             onSelect={setSelectedDate}
                             modifiers={{ 
-                                planned: plannedDays,
-                                nonCall: nonCallCalendarDays,
+                                planned: Object.keys(plansByDate).map(d => parseISO(d)),
+                                nonCall: Object.keys(nonCallDaysByDate).map(d => parseISO(d)),
                                 weekend: { dayOfWeek: [0, 6] }
                             }}
                             modifiersStyles={{
@@ -453,25 +304,6 @@ export function PlanningCalendar({
                                 {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
-                            <div className="flex flex-wrap items-center gap-3">
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/20 bg-background/50 flex gap-2 items-center">
-                                        <ClipboardList className="w-3.5 h-3.5 text-primary" />
-                                        <span className="text-primary">{selectedDayStats.total}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase">Planned</span>
-                                    </Badge>
-                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-green-500/20 bg-green-500/5 flex gap-2 items-center">
-                                        <CheckCheck className="w-3.5 h-3.5 text-green-500" />
-                                        <span className="text-green-500">{selectedDayStats.covered}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase">Covered</span>
-                                    </Badge>
-                                    <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/20 bg-orange-500/5 flex gap-2 items-center">
-                                        <Clock className="w-3.5 h-3.5 text-orange-500" />
-                                        <span className="text-orange-500">{selectedDayStats.notYetCovered}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase">Not Covered</span>
-                                    </Badge>
-                                </div>
-                            </div>
                         </div>
                         <div className="flex gap-3">
                             <DropdownMenu modal={false}>
@@ -485,116 +317,184 @@ export function PlanningCalendar({
                                 <DropdownMenuContent align="end" className="w-56">
                                     <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
                                     {isLocked ? (
-                                        <DropdownMenuItem 
-                                            onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsUnlockDialogOpen); }}
-                                            className="gap-2 py-3"
-                                        >
-                                            <Unlock className="w-4 h-4 text-primary" />
-                                            Unlock Planning
+                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsUnlockDialogOpen(true); }} className="gap-2 py-3">
+                                            <Unlock className="w-4 h-4 text-primary" /> Unlock Planning
                                         </DropdownMenuItem>
                                     ) : (
-                                        <DropdownMenuItem 
-                                            onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsAddPlanDialogOpen); }}
-                                            className="gap-2 py-3"
-                                        >
-                                            <PlusCircle className="w-4 h-4 text-primary" />
-                                            Add Visit Plans
+                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsAddPlanDialogOpen(true); }} className="gap-2 py-3">
+                                            <PlusCircle className="w-4 h-4 text-primary" /> Add Visit Plans
                                         </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem 
-                                        onSelect={(e) => { e.preventDefault(); handleOpenDialog(setIsNonCallDialogOpen); }}
-                                        className="gap-2 py-3"
-                                        disabled={isLocked}
-                                    >
-                                        <CalendarOff className="w-4 h-4 text-orange-500" />
-                                        Log Leave / Non-Call
+                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsNonCallDialogOpen(true); }} className="gap-2 py-3" disabled={isLocked}>
+                                        <CalendarOff className="w-4 h-4 text-orange-500" /> Log Leave / Non-Call
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
                     </div>
 
-                    {selectedDayNonCallEntry && (
-                        <div className="flex items-center justify-between p-5 border-2 rounded-xl bg-destructive/5 animate-in slide-in-from-top-4 duration-300">
+                    {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')]?.[0] && (
+                        <div className="flex items-center justify-between p-5 border-2 rounded-xl bg-destructive/5">
                             <div className="flex items-center gap-4">
                                 <div className="p-3 bg-destructive/10 rounded-full">
                                     <CalendarOff className="w-6 h-6 text-destructive" />
                                 </div>
                                 <div>
-                                    <p className="text-xl font-black text-destructive leading-tight">{selectedDayNonCallEntry.reason}</p>
+                                    <p className="text-xl font-black text-destructive leading-tight">{nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].reason}</p>
                                     <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-                                        {dayTypeLabels[selectedDayNonCallEntry.dayType]} {selectedDayNonCallEntry.remarks ? `• ${selectedDayNonCallEntry.remarks}` : ''}
+                                        {dayTypeLabels[nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].dayType]}
                                     </p>
                                 </div>
                             </div>
                             <Badge variant="outline" className="h-10 px-4 text-sm font-bold uppercase gap-2 border-2">
-                                <StatusIcon status={selectedDayNonCallEntry.status} /> {selectedDayNonCallEntry.status}
+                                <StatusIcon status={nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status} /> {nonCallDaysByDate[format(selectedDate || new Date(), 'yyyy-MM-dd')][0].status}
                             </Badge>
                         </div>
                     )}
 
                     <Card className="shadow-lg border-2 rounded-xl overflow-hidden">
-                        <PlanTable plansToRender={selectedDayPlans} />
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50 h-14">
+                                    <TableHead className="font-bold">Doctor</TableHead>
+                                    <TableHead className="hidden md:table-cell font-bold">Location</TableHead>
+                                    <TableHead className="font-bold">Status</TableHead>
+                                    <TableHead className="text-right font-bold">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {selectedDayPlans.length > 0 ? (
+                                    selectedDayPlans.map((plan) => {
+                                        const doctor = doctors.find(d => d.id === plan.doctorId);
+                                        const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
+                                        const isCovered = (entriesByDate[dateStr] || []).some(e => e.firstName === plan.doctorFirstName && e.lastName === plan.doctorLastName);
+                                        return (
+                                            <TableRow key={plan.id} className="h-16">
+                                                <TableCell><Button variant="link" className="p-0 font-bold text-base text-primary" onClick={() => handleLogCallClick(plan)} disabled={readOnly || isCovered}>{plan.doctorFirstName} {plan.doctorLastName}</Button></TableCell>
+                                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground font-medium">{doctor?.municipality}</TableCell>
+                                                <TableCell>{isCovered ? <Badge variant="secondary" className="text-primary font-bold">Covered</Badge> : <Badge variant="outline" className="font-bold">Planned</Badge>}</TableCell>
+                                                <TableCell className="text-right">{!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive"/></Button>}</TableCell>
+                                            </TableRow>
+                                        )
+                                    })
+                                ) : (
+                                    <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground text-lg italic">No visits planned for this day.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     </Card>
                 </div>
             </div>
 
-            <Dialog open={isAddPlanDialogOpen} onOpenChange={(open) => {
-                if (!open) setDoctorFilter("");
-                setIsAddPlanDialogOpen(open);
-            }}>
-                <DialogContent 
-                  className="max-w-xl w-[95vw] h-[80dvh] p-0 border-none flex flex-col overflow-hidden"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                >
-                    <DialogHeader className="p-6 pb-2">
-                        <DialogTitle className="text-2xl font-headline font-black">Add Visit Plan</DialogTitle>
-                        <DialogDescription>Select a doctor to visit on {selectedDate ? format(selectedDate, "PPP") : ""}.</DialogDescription>
+            <Dialog open={isAddPlanDialogOpen} onOpenChange={setIsAddPlanDialogOpen}>
+                <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden bg-background">
+                    <DialogHeader className="p-6 border-b">
+                        <DialogTitle className="text-2xl font-headline font-black">Plan Visits for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
+                        <DialogDescription className="text-base">Select doctors from your masterlist to plan multiple visits at once.</DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-hidden p-6 pt-0 flex flex-col space-y-4">
+                    <div className="flex-1 overflow-hidden p-6 space-y-6">
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <Input 
-                                placeholder="Filter masterlist..." 
+                                placeholder="Search doctors by name..." 
                                 value={doctorFilter} 
                                 onChange={(e) => setDoctorFilter(e.target.value)} 
-                                className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2" 
-                                autoFocus
+                                className="pl-12 h-12 text-lg rounded-xl border-2 border-primary/50 focus-visible:ring-primary"
                             />
                         </div>
 
-                        <ScrollArea className="flex-1 border rounded-xl p-2 bg-muted/10">
-                            <DoctorSearchList 
-                                doctors={doctors}
-                                filter={doctorFilter}
-                                visitCounts={visitCountsThisMonth}
-                                plannedIds={selectedDayPlannedIds}
-                                onSelect={handleAddPlan}
-                            />
-                        </ScrollArea>
+                        <div className="space-y-2">
+                             <div className="flex items-center gap-2">
+                                <span className="font-headline font-bold text-sm">Total Completed:</span>
+                                <span className="font-mono text-sm font-black">{territoryStats.totalCompleted} / {territoryStats.totalTarget}</span>
+                             </div>
+                             <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">By Frequency:</span>
+                                {Object.entries(territoryStats.freqStats).sort().map(([freq, stats]) => (
+                                    <Badge key={freq} variant="secondary" className="font-mono h-7 px-3 border border-primary/10">
+                                        {freq}: {stats.completed}/{stats.target}
+                                    </Badge>
+                                ))}
+                             </div>
+                        </div>
+
+                        <div className="border rounded-xl overflow-hidden flex-1 flex flex-col">
+                            <Table>
+                                <TableHeader className="bg-muted/30 h-12 sticky top-0 z-10">
+                                    <TableRow className="hover:bg-transparent">
+                                        <TableHead className="w-12"><Checkbox checked={selectedDoctorIds.size === filteredDoctorsForSearch.length && filteredDoctorsForSearch.length > 0} onCheckedChange={(checked) => {
+                                            if (checked) setSelectedDoctorIds(new Set(filteredDoctorsForSearch.map(d => d.id)));
+                                            else setSelectedDoctorIds(new Set());
+                                        }}/></TableHead>
+                                        <TableHead className="font-bold text-xs uppercase">Name</TableHead>
+                                        <TableHead className="font-bold text-xs uppercase">Location</TableHead>
+                                        <TableHead className="font-bold text-xs uppercase">Target</TableHead>
+                                        <TableHead className="font-bold text-xs uppercase">Remaining Visits</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                            </Table>
+                            <ScrollArea className="flex-1">
+                                <Table>
+                                    <TableBody>
+                                        {filteredDoctorsForSearch.map(doctor => {
+                                            const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase();
+                                            const completedCount = visitCountsThisMonth[nameKey] || 0;
+                                            const targetCount = parseInt(doctor.frequency.replace('x', ''), 10) || 0;
+                                            const remaining = Math.max(0, targetCount - completedCount);
+                                            const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
+                                            
+                                            return (
+                                                <TableRow key={doctor.id} className={cn("h-14", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
+                                                    <TableCell className="w-12">
+                                                        <Checkbox 
+                                                            checked={selectedDoctorIds.has(doctor.id)} 
+                                                            onCheckedChange={() => toggleDoctorSelection(doctor.id)}
+                                                            disabled={isAlreadyPlanned}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-bold text-primary">{doctor.firstName} {doctor.lastName}</TableCell>
+                                                    <TableCell className="text-xs text-muted-foreground">{doctor.municipality}, {doctor.province}</TableCell>
+                                                    <TableCell className="font-mono text-sm">{doctor.frequency}</TableCell>
+                                                    <TableCell className="font-mono text-sm font-bold">{remaining}</TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </ScrollArea>
+                        </div>
                     </div>
-                    <DialogFooter className="p-4 bg-muted/20 border-t">
-                        <Button variant="ghost" className="w-full" onClick={() => setIsAddPlanDialogOpen(false)}>
-                            Cancel
+
+                    <DialogFooter className="p-6 border-t bg-muted/20 gap-4 flex-row justify-end">
+                        <Button variant="ghost" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[140px] font-headline text-base h-11">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2" />}
+                            Plan {selectedDoctorIds.size} Visit(s)
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {selectedDate && <NonCallDayDialog 
-                isOpen={isNonCallDialogOpen}
-                onOpenChange={setIsNonCallDialogOpen}
-                onSave={handleSaveNonCallDay}
-                selectedDate={selectedDate}
-            />}
-
-            {selectedDate && <PlanningPermissionDialog
-                isOpen={isUnlockDialogOpen}
-                onOpenChange={setIsUnlockDialogOpen}
-                onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)}
-                weekStartDate={getWeekMonday(selectedDate)}
-            />}
+            {selectedDate && <NonCallDayDialog isOpen={isNonCallDialogOpen} onOpenChange={setIsNonCallDialogOpen} onSave={handleSaveNonCallDay} selectedDate={selectedDate} />}
+            {selectedDate && <PlanningPermissionDialog isOpen={isUnlockDialogOpen} onOpenChange={setIsUnlockDialogOpen} onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)} weekStartDate={getWeekMonday(selectedDate)} />}
         </div>
     );
+}
+
+// Internal helper for selectedDayStats
+const entriesByDateHelper = (entries: CoverageEntry[]) => {
+    const groups: Record<string, CoverageEntry[]> = {};
+    entries.forEach(e => {
+        const dateStr = e.coverageDate;
+        if (dateStr) {
+            const date = parseISO(dateStr);
+            if (isValid(date)) {
+                const groupStr = format(date, 'yyyy-MM-dd');
+                if (!groups[groupStr]) groups[groupStr] = [];
+                groups[groupStr].push(e);
+            }
+        }
+    });
+    return groups;
 }
