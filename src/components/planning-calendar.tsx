@@ -201,6 +201,23 @@ export function PlanningCalendar({
         return plansByDate[dateStr] || [];
     }, [plansByDate, selectedDate]);
 
+    const selectedDayStats = useMemo(() => {
+        if (!selectedDate) return { total: 0, covered: 0, notCovered: 0 };
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        const dayPlans = plansByDate[dateStr] || [];
+        const dayEntries = entriesByDate[dateStr] || [];
+        
+        const coveredCount = dayPlans.filter(p => 
+            dayEntries.some(e => e.firstName === p.doctorFirstName && e.lastName === p.doctorLastName)
+        ).length;
+
+        return {
+            total: dayPlans.length,
+            covered: coveredCount,
+            notCovered: dayPlans.length - coveredCount
+        };
+    }, [selectedDate, plansByDate, entriesByDate]);
+
     const selectedDayPlannedIds = useMemo(() => {
         return new Set(selectedDayPlans.map(p => p.doctorId));
     }, [selectedDayPlans]);
@@ -317,9 +334,20 @@ export function PlanningCalendar({
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
                         <div className="space-y-3">
                             <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
-                                {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                                Daily Plan for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
+                            <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
+                                    Total Visits: {selectedDayStats.total}
+                                </Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">
+                                    Covered: {selectedDayStats.covered}
+                                </Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-destructive/30 text-destructive bg-destructive/10">
+                                    Not Covered: {selectedDayStats.notCovered}
+                                </Badge>
+                            </div>
                         </div>
                         <div className="flex gap-3">
                             <DropdownMenu modal={false}>
