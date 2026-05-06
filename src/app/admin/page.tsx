@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -47,7 +48,7 @@ export default function AdminPage() {
     const [activeTab, setActiveTab] = useState('district-reports');
     const [accountSearch, setAccountSearch] = useState('');
     
-    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string} | null>(null);
+    const [editingAccount, setEditingAccount] = useState<{uid: string, firstName: string, lastName: string, managerId?: string} | null>(null);
     const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     const isUserAdmin = useMemo(() => {
@@ -90,11 +91,6 @@ export default function AdminPage() {
         addDoctorsBulk
     } = useAdminData(selectedManagerId);
 
-    const managedUserIds = useMemo(() => {
-        if (!selectedManagerId) return [];
-        return MANAGER_TEAMS[selectedManagerId] || [];
-    }, [selectedManagerId]);
-
     // Merged user map for selection and display
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -105,6 +101,23 @@ export default function AdminPage() {
         });
         return map;
     }, [profiles]);
+
+    const managedUserIds = useMemo(() => {
+        if (!selectedManagerId) return [];
+        const baseSet = new Set(MANAGER_TEAMS[selectedManagerId] || []);
+        
+        // Add reassigned users
+        Object.values(profiles).forEach(p => {
+            if (p.managerId === selectedManagerId) baseSet.add(p.userId);
+        });
+
+        // Remove users reassigned AWAY
+        Object.values(profiles).forEach(p => {
+            if (p.managerId && p.managerId !== selectedManagerId && baseSet.has(p.userId)) baseSet.delete(p.userId);
+        });
+
+        return Array.from(baseSet);
+    }, [selectedManagerId, profiles]);
 
     const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
@@ -131,7 +144,10 @@ export default function AdminPage() {
 
             let district = 'N/A';
             if (role === 'PMR') {
-                const managerUid = Object.keys(MANAGER_TEAMS).find(mUid => MANAGER_TEAMS[mUid].includes(uid));
+                // Prioritize Firestore override
+                const customManagerId = profiles[uid]?.managerId;
+                const managerUid = customManagerId || Object.keys(MANAGER_TEAMS).find(mUid => MANAGER_TEAMS[mUid].includes(uid));
+                
                 if (managerUid) {
                     const mData = mergedUserMap[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
@@ -156,7 +172,7 @@ export default function AdminPage() {
             a.district.toLowerCase().includes(q) ||
             (a.email && a.email.toLowerCase().includes(q))
         ).sort((a, b) => a.code.localeCompare(b.code));
-    }, [accountSearch, mergedUserMap]);
+    }, [accountSearch, mergedUserMap, profiles]);
 
     useEffect(() => {
         if (!authLoading && !hasAdminAccess) router.push('/');
@@ -174,7 +190,7 @@ export default function AdminPage() {
     const handleSaveAccount = async () => {
         if (!editingAccount) return;
         setIsSavingProfile(true);
-        const success = await updateProfile(editingAccount.uid, editingAccount.firstName, editingAccount.lastName);
+        const success = await updateProfile(editingAccount.uid, editingAccount.firstName, editingAccount.lastName, editingAccount.managerId);
         if (success) {
             setEditingAccount(null);
         }
@@ -419,7 +435,12 @@ export default function AdminPage() {
                                                             <Button 
                                                                 variant="ghost" 
                                                                 size="icon" 
-                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName })}
+                                                                onClick={() => setEditingAccount({ 
+                                                                    uid: acc.uid, 
+                                                                    firstName: acc.firstName, 
+                                                                    lastName: acc.lastName,
+                                                                    managerId: profiles[acc.uid]?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mUid].includes(acc.uid))
+                                                                })}
                                                             >
                                                                 <Pencil className="h-4 w-4" />
                                                             </Button>
@@ -457,8 +478,8 @@ export default function AdminPage() {
             <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="font-headline text-xl">Edit Employee Name</DialogTitle>
-                        <DialogDescription>Update the display name for this account across the system.</DialogDescription>
+                        <DialogTitle className="font-headline text-xl">Edit Account Profile</DialogTitle>
+                        <DialogDescription>Update employee name or district assignment.</DialogDescription>
                     </DialogHeader>
                     {editingAccount && (
                         <div className="space-y-4 py-4">
@@ -480,6 +501,26 @@ export default function AdminPage() {
                                     onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})}
                                 />
                             </div>
+                            {allAccounts.find(a => a.uid === editingAccount.uid)?.role === 'PMR' && (
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="manager" className="text-right">District DSM</Label>
+                                    <div className="col-span-3">
+                                        <Select 
+                                            value={editingAccount.managerId || ""} 
+                                            onValueChange={(val) => setEditingAccount({...editingAccount, managerId: val})}
+                                        >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select District Manager..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {managers.map(m => (
+                                                    <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                     <DialogFooter>

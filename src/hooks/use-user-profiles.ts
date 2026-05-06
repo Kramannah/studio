@@ -36,17 +36,21 @@ export function useUserProfiles() {
         fetchProfiles();
     }, [fetchProfiles]);
 
-    const updateProfile = async (userId: string, firstName: string, lastName: string) => {
+    const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string) => {
         if (!db) return false;
         
         const docId = userId; // Use UID as doc ID for simplicity
         const docRef = doc(db, "userProfiles", docId);
-        const payload = {
+        const payload: any = {
             userId,
             firstName,
             lastName,
             updatedAt: new Date().toISOString()
         };
+        
+        if (managerId) {
+            payload.managerId = managerId;
+        }
 
         try {
             await setDoc(docRef, payload, { merge: true });
@@ -54,7 +58,7 @@ export function useUserProfiles() {
                 ...prev,
                 [userId]: { id: docId, ...payload }
             }));
-            toast({ title: "Profile Updated", description: "The employee name has been successfully changed." });
+            toast({ title: "Account Updated", description: "The employee record has been successfully modified." });
             return true;
         } catch (serverError: any) {
             errorEmitter.emit('permission-error', new FirestorePermissionError({

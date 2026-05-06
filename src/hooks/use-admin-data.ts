@@ -58,12 +58,34 @@ export function useAdminData(managerId?: string) {
     return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
   }, [user]);
 
+  // Merge static teams with custom manager assignments from Firestore
+  const managedUserIds = useMemo(() => {
+    if (!managerId) return [];
+    const baseSet = new Set(MANAGER_TEAMS[managerId] || []);
+    
+    // Add users reassigned to this manager via userProfiles
+    Object.values(customProfiles).forEach(profile => {
+        if (profile.managerId === managerId) {
+            baseSet.add(profile.userId);
+        }
+    });
+
+    // Remove users who have been reassigned AWAY from this manager via userProfiles
+    Object.values(customProfiles).forEach(profile => {
+        if (profile.managerId && profile.managerId !== managerId && baseSet.has(profile.userId)) {
+            baseSet.delete(profile.userId);
+        }
+    });
+
+    return Array.from(baseSet);
+  }, [managerId, customProfiles]);
+
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !db) return;
 
     let userFilter: string[] | null = null;
     if (managerId) {
-      userFilter = MANAGER_TEAMS[managerId] || [];
+      userFilter = managedUserIds;
     } else if (!isUserAdmin) {
       return;
     }
@@ -106,7 +128,7 @@ export function useAdminData(managerId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [user, managerId, isUserAdmin]);
+  }, [user, managerId, isUserAdmin, managedUserIds]);
 
   useEffect(() => {
     fetchTeamApprovals();
@@ -115,7 +137,7 @@ export function useAdminData(managerId?: string) {
   const fetchTeamSummary = useCallback(async (forceAllWeek = false) => {
       if (!managerId || !db) return;
       
-      const userFilter = MANAGER_TEAMS[managerId] || [];
+      const userFilter = managedUserIds;
       if (userFilter.length === 0) {
           setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
           return;
@@ -183,7 +205,7 @@ export function useAdminData(managerId?: string) {
       } finally {
         setLoadingSummary(false);
       }
-  }, [managerId]);
+  }, [managerId, managedUserIds]);
   
   const fetchUserData = useCallback(async (userId: string) => {
     if (!userId || !db) return;

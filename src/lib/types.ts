@@ -128,6 +128,7 @@ export interface UserProfile {
     userId: string;
     firstName: string;
     lastName: string;
+    managerId?: string;
     updatedAt: string;
 }
 

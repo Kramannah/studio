@@ -151,6 +151,7 @@
         "userId": { "type": "string" },
         "firstName": { "type": "string" },
         "lastName": { "type": "string" },
+        "managerId": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "firstName", "lastName"]
