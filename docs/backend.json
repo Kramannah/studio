@@ -14,7 +14,19 @@
         "frequency": { "enum": ["1x", "2x", "3x", "4x"] },
         "hacme": { "enum": ["YES", "NO"] },
         "province": { "type": "string" },
-        "municipality": { "type": "string" }
+        "municipality": { "type": "string" },
+        "placeOfPractice": { "type": "string" },
+        "dapavid": { "type": "string" },
+        "hofovir": { "type": "string" },
+        "inox": { "type": "string" },
+        "irinovid": { "type": "string" },
+        "ondavid": { "type": "string" },
+        "ricamTablet": { "type": "string" },
+        "tocovid100mg": { "type": "string" },
+        "tocovid200mg": { "type": "string" },
+        "tocovidVitality": { "type": "string" },
+        "virestCream": { "type": "string" },
+        "virestTab": { "type": "string" }
       },
       "required": ["userId", "firstName", "lastName", "frequency"]
     },
@@ -26,13 +38,38 @@
         "userId": { "type": "string" },
         "firstName": { "type": "string" },
         "lastName": { "type": "string" },
+        "specialty": { "type": "string" },
+        "clinic": { "type": "string" },
         "coverageDate": { "type": "string", "format": "date-time" },
         "submittedAt": { "type": "string", "format": "date-time" },
         "coverageType": { "enum": ["inbase", "outbase", "joint"] },
+        "callType": { "enum": ["planned", "unplanned"] },
         "primaryProduct": { "type": "string" },
         "primaryProductQty": { "type": "number" },
+        "primarySampleName": { "type": "string" },
+        "secondaryProduct": { "type": "string" },
+        "secondaryProductQty": { "type": "number" },
+        "secondarySampleName": { "type": "string" },
+        "reminderProducts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productName": { "type": "string" },
+              "sampleName": { "type": "string" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
         "photos": { "type": "array", "items": { "type": "string" } },
-        "signature": { "type": "string" }
+        "signature": { "type": "string" },
+        "jointCallWith": { "type": "string" },
+        "jointCallSignature": { "type": "string" },
+        "topicsDiscussed": { "type": "string" },
+        "doctorsIssue": { "type": "string" },
+        "planOfAction": { "type": "string" },
+        "whatWentWell": { "type": "string" },
+        "areasForImprovement": { "type": "string" }
       },
       "required": ["userId", "firstName", "lastName", "submittedAt"]
     },
@@ -44,6 +81,7 @@
         "userId": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
         "reason": { "type": "string" },
+        "remarks": { "type": "string" },
         "dayType": { "enum": ["wholeday", "halfday-am", "halfday-pm"] },
         "status": { "enum": ["pending", "approved", "rejected"] }
       },
@@ -56,7 +94,10 @@
       "properties": {
         "userId": { "type": "string" },
         "doctorId": { "type": "string" },
-        "plannedDate": { "type": "string", "format": "date-time" }
+        "doctorFirstName": { "type": "string" },
+        "doctorLastName": { "type": "string" },
+        "plannedDate": { "type": "string", "format": "date-time" },
+        "callType": { "enum": ["planned", "unplanned"] }
       },
       "required": ["userId", "doctorId", "plannedDate"]
     },
@@ -101,7 +142,7 @@
     }
   },
   "auth": {
-    "providers": ["password", "anonymous"]
+    "providers": ["password"]
   },
   "firestore": {
     "/doctors/{id}": { "schema": { "$ref": "#/backend/entities/Doctor" }, "description": "User's master list of doctors." },
@@ -109,7 +150,7 @@
     "/nonCallDays/{id}": { "schema": { "$ref": "#/backend/entities/NonCallDay" }, "description": "Leave and non-activity requests." },
     "/plans/{id}": { "schema": { "$ref": "#/backend/entities/Plan" }, "description": "Scheduled visit plans." },
     "/planningRequests/{id}": { "schema": { "$ref": "#/backend/entities/PlanningPermissionRequest" }, "description": "Requests to unlock past planning weeks." },
-    "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs (Time In / Time Out)." },
+    "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs." },
     "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Inventory and marketing sample allocations." }
   }
 }

@@ -16,13 +16,13 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == "mbustamante@hovidinc.com")
+        (request.auth.token.email != null && request.auth.token.email == "mbustamante@hovidinc.com")
       );
     }
 
     /** 
      * Checks if the user is a manager.
-     * UIDs sourced from src/lib/admins.ts
+     * UIDs sourced from territory management configuration.
      */
     function isManager() {
       return isSignedIn() && request.auth.uid in [
@@ -40,14 +40,15 @@ service cloud.firestore {
 
     // --- Collection Rules ---
 
-    // Explicit rules for user-owned collections to ensure 'list' operations are permitted
-    
-    match /doctors/{id} {
+    // Allow Admins and Managers full read access to all reporting collections
+    // Users are restricted to their own data via filters in the application
+
+    match /coverageEntries/{id} {
       allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
       allow create: if isSignedIn() && isOwner(request.resource.data);
     }
 
-    match /coverageEntries/{id} {
+    match /doctors/{id} {
       allow read, update, delete: if isAdmin() || isManager() || isOwner(resource.data);
       allow create: if isSignedIn() && isOwner(request.resource.data);
     }
@@ -73,18 +74,12 @@ service cloud.firestore {
     }
 
     // Inventory and Allocation rules
-    match /q4Allocation/{docId} {
+    match /q4Allocation/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    match /marketingSamples/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // Static lookup data
-    match /clinics/{clinicId} {
+    match /marketingSamples/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
