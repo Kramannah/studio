@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs, FirestoreError } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
-import { subDays } from 'date-fns';
+import { subDays, parseISO, isValid, isAfter } from 'date-fns';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -15,80 +15,24 @@ import { FirestorePermissionError } from '@/firebase/errors';
 const USAGE_CACHE_KEY = 'hovid_usage_cache_v3';
 const CACHE_DURATION = 300000; // 5 minutes
 
-export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 1's-CE1207-10/2028", allocationQuantity: 40, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 50mg", displayMaterialName: "SQ3_Tocovid 50mg 8+2 Promopack-CC10001-9/31/2025", allocationQuantity: 48, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "PQ3_Tocovid Flyers with scalp massager white", allocationQuantity: 20, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Difluvid", displayMaterialName: "SQ3_Difluvid 1's-CE05506-4/30/2027", allocationQuantity: 30, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Dapavid", displayMaterialName: "SQ3_Dapavid Starter Dose-A11682507-4/30/2027", allocationQuantity: 50, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Hovideuform XR500", displayMaterialName: "SQ3_Hovideuform XR 1's-CD07504-6/30/2026", allocationQuantity: 91, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "CNS/Pain - Celevid", displayMaterialName: "SQ3_Celevid 1's-CF01615-12/31/2027", allocationQuantity: 50, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Gastro - Hovizol", displayMaterialName: "SQ3_Hovizol 1's-CD02504-1/31/2026", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Inox", displayMaterialName: "PQ3_Inox Portable Mini Fan-Blue", allocationQuantity: 5, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Syrup", displayMaterialName: "SQ3_Ricam Syrup 60ml-CF05029-4/30/2028", allocationQuantity: 15, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "CNS/Pain - Pengesic", displayMaterialName: "SQ3_Pengesic 1's-CC05534-4/30/2026", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Inox", displayMaterialName: "SQ3_Inox 1's-CD11501-10/31/2026", allocationQuantity: 105, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Inox", displayMaterialName: "PQ3_Integumentary System Notepad", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 100mg", displayMaterialName: "SQ3_Tocovid 100mg 1's-CF02508-1/31/2029", allocationQuantity: 40, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Difluvid", displayMaterialName: "PQ3_Difluvid OB Mat", allocationQuantity: 5, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Gastro - Gascovid Double Action", displayMaterialName: "SQ3_Gascovid 1's-CE08616-7/31/2026", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Dermatology - Calazin", displayMaterialName: "SQ3_Calazin-CF03089-2/29/2028", allocationQuantity: 75, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Terbivid", displayMaterialName: "SQ3_Terbivid 15g-CF04079-3/31/2027", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Hovideuform 500", displayMaterialName: "SQ3_Hovideuform 500mg 1's-CC09503-8/31/2025", allocationQuantity: 91, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Viral - Virest Tab", displayMaterialName: "SQ3_Virest Tab 1's-CD10502-9/30/2026", allocationQuantity: 60, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Viral - Virest Tab", displayMaterialName: "SQ3_Virest Tab 1's-CE07507-6/30/2027", allocationQuantity: 75, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "CNS/Pain - Biovid Forte", displayMaterialName: "SQ3_Biovid 1's-CD10503-9/30/2026", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "CNS/Pain - Celevid", displayMaterialName: "PQ3_Hot & Cold Compress Celevid", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "PQ3_Tocovid L Type Plastic Folder", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Syrup", displayMaterialName: "SQ3_Ricam Syrup 60ml-CE07047-6/30/2027", allocationQuantity: 15, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Tablet", displayMaterialName: "PQ3_Ricam/Rinityn Flyers with Ballpen", allocationQuantity: 15, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Dapavid", displayMaterialName: "SQ3_Dapavid 28's-A11682301-10/31/2025", allocationQuantity: 5, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Tablet", displayMaterialName: "SQ3_Ricam Tab 1's-CE11501-10/31/2027", allocationQuantity: 900, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Tablet", displayMaterialName: "PQ3_Scissor with Ricam Lanyard", allocationQuantity: 30, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 50mg", displayMaterialName: "SQ3_Tocovid 50mg 8+2 Promopack-CC07001-6/30/2025", allocationQuantity: 12, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Dapavid", displayMaterialName: "SQ3_Dapavid 1's-A11682404-7/30/2026", allocationQuantity: 165, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Inox", displayMaterialName: "SQ3_Inox 1's-CE07504-6/30/2027", allocationQuantity: 135, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Dermatology - Hovicor", displayMaterialName: "SQ3_Hovicor 5g-CE08087-7/31/2027", allocationQuantity: 24, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "CNS/Pain - Celevid", displayMaterialName: "PQ3_Celevid Hot & Cold Compress", allocationQuantity: 4, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Dapavid", displayMaterialName: "SQ3_Dapavid 1's-A11682401-4/30/2026", allocationQuantity: 190, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Viral - Hofovir", displayMaterialName: "SQ3_Hofovir 5's-231118401-10/31/2026", allocationQuantity: 20, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Endocrine - Dapavid", displayMaterialName: "PQ3_Dapavid Moleskin Notebook Green", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Viral - Virest Tab", displayMaterialName: "PQ3_Pocket Flavor Inhaler with Lanyard", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "PQ3_Tocovid Flyers with Orange Scrunchies", allocationQuantity: 20, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Dermatology - Calazin", displayMaterialName: "PQ3_Hovid Calendar 2025", allocationQuantity: 40, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "PQ3_Love Your Atay Flyers", allocationQuantity: 500, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid Vitality", displayMaterialName: "SQ3_Tocovid Vitality Sachet 53g-G41107-11/24/2026", allocationQuantity: 30, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Fungals - Terbivid", displayMaterialName: "PQ3_Terbivid Tube Pen", allocationQuantity: 20, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Gastro - Gascovid Double Action", displayMaterialName: "SQ3_Gascovid 60's-CE08616-7/31/2026", allocationQuantity: 3, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Antihistamine - Ricam Tablet", displayMaterialName: "SQ3_Ricam Tab 1's-CE07505-6/30/2027", allocationQuantity: 1500, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Anti-Viral - Hofovir", displayMaterialName: "PQ3_Hofovir Penlight", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Gastro - Gascovid Double Action", displayMaterialName: "SQ3_Gascovid 1's-CE05501-4/30/2026", allocationQuantity: 45, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid D'Repair", displayMaterialName: "SQ3_Tocovid D'Repair Cream-CC06029-5/31/25", allocationQuantity: 10, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Tocovid - Tocovid 200mg", displayMaterialName: "SQ3_Tocovid 200mg 2's-CE04059-3/31/2027", allocationQuantity: 60, quarter: 'Q4' },
-  { prodGroupProdSubGroup: "Dermatology - Hovicor", displayMaterialName: "SQ3_Hovicor 5g-CE05121-4/30/2027", allocationQuantity: 24, quarter: 'Q4' }
-];
-
 export const useQ4Allocation = () => {
   const { user } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>(
-    OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item }))
-  );
+  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const isUserAdminOrManager = () => {
+  const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
     const email = user.email?.toLowerCase() || '';
     return ADMIN_UIDS.includes(user.uid) || 
            ADMIN_EMAILS.some(e => e.toLowerCase() === email) || 
            Object.keys(MANAGER_TEAMS).includes(user.uid);
-  };
+  }, [user]);
 
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
     
-    setLoading(true);
     try {
         const colRef = collection(db, "q4Allocation");
         const q = query(colRef, orderBy("displayMaterialName", "asc"));
@@ -96,16 +40,12 @@ export const useQ4Allocation = () => {
         
         if (!snapshot.empty) {
             setAllocations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation)));
-        } else {
-            setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
         }
     } catch (error: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'q4Allocation',
           operation: 'list',
         }));
-    } finally {
-        setLoading(false);
     }
   }, [user]);
 
@@ -127,24 +67,16 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      const startDate = subDays(new Date(), 90).toISOString(); // 90 days for quarterly context
+      const startDate = subDays(new Date(), 90);
       
       let usageQuery;
       if (isUserAdminOrManager()) {
-          // Admins/Managers see all usage for their territory oversight
-          usageQuery = query(
-              colRef, 
-              where("submittedAt", ">=", startDate),
-              limit(500)
-          );
+          // Managers/Admins can see territory usage trends
+          usageQuery = query(colRef, limit(1000));
       } else {
-          // PMRs see ONLY their own usage to comply with isOwner rule
-          usageQuery = query(
-              colRef, 
-              where("userId", "==", user.uid),
-              where("submittedAt", ">=", startDate),
-              limit(500)
-          );
+          // PMRs MUST query by userId to satisfy security rules
+          // We remove the date filter from the query to avoid needing a composite index
+          usageQuery = query(colRef, where("userId", "==", user.uid));
       }
 
       const snapshot = await getDocs(usageQuery);
@@ -152,34 +84,46 @@ export const useQ4Allocation = () => {
       
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
+        
+        // Manual date filtering to bypass Firestore index requirements
+        const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+        if (!isValid(subDate) || !isAfter(subDate!, startDate)) return;
+
         if (entry.primarySampleName && entry.primaryProductQty) {
-            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Math.round(Number(entry.primaryProductQty));
+            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Math.round(Number(entry.secondaryProductQty));
+            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
         }
-        entry.reminderProducts?.forEach(prod => {
-            if (prod.sampleName && prod.quantity) {
-                usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Math.round(Number(prod.quantity));
-            }
-        });
+        if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
+            entry.reminderProducts.forEach(prod => {
+                if (prod.sampleName && prod.quantity) {
+                    usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
+                }
+            });
+        }
       });
 
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage tracker restricted by permissions, falling back to local context.");
-        // If team-wide query fails, we don't trigger global error listener to avoid crashing UI
+        console.warn("Usage tracker restricted or requires sync:", error);
     }
-  }, [user]);
+  }, [user, isUserAdminOrManager]);
 
   useEffect(() => {
-    fetchAllocations();
-    fetchUsage();
+    const init = async () => {
+        setLoading(true);
+        await Promise.all([fetchAllocations(), fetchUsage()]);
+        setLoading(false);
+    };
+    init();
   }, [fetchAllocations, fetchUsage]);
 
   const refetch = useCallback(async () => {
+      setLoading(true);
       await fetchUsage(true);
+      setLoading(false);
   }, [fetchUsage]);
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
@@ -195,6 +139,7 @@ export const useQ4Allocation = () => {
       });
       await batch.commit();
       toast({ title: "Import Successful", description: `Database updated for ${quarter}.` });
+      fetchAllocations();
       return true;
     } catch (err) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -212,6 +157,7 @@ export const useQ4Allocation = () => {
       try {
           await batch.commit();
           toast({ title: "Deleted Successfully" });
+          fetchAllocations();
           return true;
       } catch (err) {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
