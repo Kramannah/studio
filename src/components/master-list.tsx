@@ -225,8 +225,8 @@ const DoctorRow = ({
                 )}
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span>{doctor.firstName} {doctor.lastName}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">{doctor.hcpCode || 'No HCP Code'}</span>
+                        <span>{String(doctor.firstName || "")} {String(doctor.lastName || "")}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{String(doctor.hcpCode || 'No HCP Code')}</span>
                     </div>
                 </TableCell>
                 <TableCell>
@@ -356,13 +356,27 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const filteredDoctors = useMemo(() => {
-        return doctors.filter(doctor =>
-            `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(filter.toLowerCase()) ||
-            (doctor.specialty || "").toLowerCase().includes(filter.toLowerCase()) ||
-            (doctor.clinic || "").toLowerCase().includes(filter.toLowerCase()) ||
-            (doctor.province || "").toLowerCase().includes(filter.toLowerCase()) ||
-            (doctor.municipality || "").toLowerCase().includes(filter.toLowerCase())
-        );
+        if (!doctors || !Array.isArray(doctors)) return [];
+        
+        // Normalize search term once for safety
+        const q = String(filter || "").toLowerCase().trim();
+        
+        return doctors.filter(doctor => {
+            if (!doctor || typeof doctor !== 'object') return false;
+            
+            // Extreme safe string casting to prevent TypeError on non-string data
+            const name = `${String(doctor.firstName || "")} ${String(doctor.lastName || "")}`.toLowerCase();
+            const specialty = String(doctor.specialty || "").toLowerCase();
+            const clinic = String(doctor.clinic || "").toLowerCase();
+            const province = String(doctor.province || "").toLowerCase();
+            const municipality = String(doctor.municipality || "").toLowerCase();
+            
+            return name.includes(q) || 
+                   specialty.includes(q) || 
+                   clinic.includes(q) || 
+                   province.includes(q) || 
+                   municipality.includes(q);
+        });
     }, [doctors, filter]);
 
     const totalPages = Math.ceil(filteredDoctors.length / itemsPerPage);
@@ -379,7 +393,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const frequencyCounts = useMemo(() => {
         return doctors.reduce((acc, doctor) => {
             const freq = doctor.frequency;
-            acc[freq] = (acc[freq] || 0) + 1;
+            if (freq) acc[freq] = (acc[freq] || 0) + 1;
             return acc;
         }, {} as Record<'1x' | '2x' | '3x' | '4x', number>);
     }, [doctors]);
@@ -595,7 +609,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     </div>
 
                     <div className="flex flex-col items-start gap-3 mt-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex flex-1 items-center gap-2 w-full max-w-xl">
+                        <div className="flex flex-1 items-center gap-2 w-full max-xl:max-w-xl">
                             <div className="relative flex-1">
                                 <Search className="absolute w-4 h-4 -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
                                 <Input

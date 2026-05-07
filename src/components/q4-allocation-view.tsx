@@ -67,17 +67,21 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const filteredSamples = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return [];
-        const safeSearch = (search || "").toLowerCase().trim();
+        
+        // Pre-normalize search term to prevent per-item processing
+        const safeSearch = String(search || "").toLowerCase().trim();
         
         return allocations.filter(s => {
-            if (!s) return false;
-            // Quarter matching
-            const matchesQuarter = s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4');
+            if (!s || typeof s !== 'object') return false;
+            
+            // Quarter matching with safe string casting
+            const q = String(s.quarter || 'Q4');
+            const matchesQuarter = q === activeQuarter;
             if (!matchesQuarter) return false;
 
-            // Search matching with ultra-safe string handling
-            const name = String(s.displayMaterialName || "").toLowerCase();
-            const group = String(s.prodGroupProdSubGroup || "").toLowerCase();
+            // Search matching with ultra-safe string handling to prevent toLowerCase crashes
+            const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
+            const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
             return name.includes(safeSearch) || group.includes(safeSearch);
         });
@@ -96,14 +100,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const stats = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-        const quarterAllocations = allocations.filter(s => s && (s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4')));
+        
+        const quarterAllocations = allocations.filter(s => s && String(s.quarter || 'Q4') === activeQuarter);
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
         
         quarterAllocations.forEach(s => {
             const alloc = Math.round(Number(s.allocationQuantity || 0));
-            const used = Math.round(Number(usedQuantities[s.displayMaterialName || ""] || 0));
+            // Ensure usedQuantities lookup is safe
+            const name = String(s.displayMaterialName || s.materialName || "");
+            const used = Math.round(Number(usedQuantities[name] || 0));
+            
             totalAllocated += alloc;
             totalUsed += used;
             totalRemaining += Math.max(0, alloc - used);
@@ -330,7 +338,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     if (!sample) return null;
-                                                    const used = Math.round(Number(usedQuantities[sample.displayMaterialName || ""] || 0));
+                                                    const name = String(sample.displayMaterialName || sample.materialName || "Unknown Item");
+                                                    const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized");
+                                                    const used = Math.round(Number(usedQuantities[name] || 0));
                                                     const alloc = Math.round(Number(sample.allocationQuantity || 0));
                                                     const balance = Math.max(0, alloc - used);
                                                     return (
@@ -345,8 +355,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                             )}
                                                             <TableCell className={cn(readOnly && "pl-6")}>
                                                                 <div className="flex flex-col">
-                                                                    <span className="font-medium text-sm">{sample.displayMaterialName || "Unknown Item"}</span>
-                                                                    <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup || "Uncategorized"}</span>
+                                                                    <span className="font-medium text-sm">{name}</span>
+                                                                    <span className="text-[10px] uppercase font-bold text-primary opacity-70">{group}</span>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-center font-mono">{alloc}</TableCell>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -32,10 +33,20 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const itemsPerPage = 15;
 
   const filteredSamples = useMemo(() => {
-    return samples.filter(sample =>
-      (sample.productGroup || "").toLowerCase().includes(filter.toLowerCase()) ||
-      (sample.materialName || "").toLowerCase().includes(filter.toLowerCase())
-    );
+    if (!samples || !Array.isArray(samples)) return [];
+    
+    // Normalize filter once to prevent redundant processing inside loop
+    const safeFilter = String(filter || "").toLowerCase().trim();
+    
+    return samples.filter(sample => {
+      if (!sample || typeof sample !== 'object') return false;
+      
+      // Explicit string conversion for all searchable fields to prevent TypeError
+      const group = String(sample.productGroup || "").toLowerCase();
+      const name = String(sample.materialName || "").toLowerCase();
+      
+      return group.includes(safeFilter) || name.includes(safeFilter);
+    });
   }, [samples, filter]);
 
   useEffect(() => {
@@ -51,11 +62,12 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
-        const used = Math.round(usedQuantities[sample.materialName] || 0);
+        const name = String(sample.materialName || "Unknown Item");
+        const used = Math.round(usedQuantities[name] || 0);
         const allocated = Math.round(sample.allocationQuantity || 0);
         return {
-            "Product Group": sample.productGroup,
-            "Material Name": sample.materialName,
+            "Product Group": String(sample.productGroup || "Uncategorized"),
+            "Material Name": name,
             "Allocated Quantity": allocated,
             "Remaining Quantity": Math.max(0, allocated - used)
         };
@@ -126,8 +138,8 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                           paginatedSamples.map((sample) => {
                               return (
                                   <TableRow key={sample.id} className="h-16 hover:bg-muted/30 transition-colors">
-                                      <TableCell className="font-bold text-primary">{sample.productGroup}</TableCell>
-                                      <TableCell className="font-medium">{sample.materialName}</TableCell>
+                                      <TableCell className="font-bold text-primary">{String(sample.productGroup || "Uncategorized")}</TableCell>
+                                      <TableCell className="font-medium">{String(sample.materialName || "Unknown Item")}</TableCell>
                                       <TableCell className="text-center font-mono font-bold">{Math.round(sample.allocationQuantity || 0)}</TableCell>
                                   </TableRow>
                               );

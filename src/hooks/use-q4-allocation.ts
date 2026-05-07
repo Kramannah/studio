@@ -11,7 +11,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v6';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v7';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -23,9 +23,9 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = (user.email || '').toLowerCase();
+    const email = String(user.email || '').toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
-           ADMIN_EMAILS.some(e => e.toLowerCase() === email) || 
+           ADMIN_EMAILS.some(e => String(e || "").toLowerCase() === email) || 
            Object.keys(MANAGER_TEAMS).includes(user.uid);
   }, [user]);
 
@@ -40,11 +40,11 @@ export const useQ4Allocation = () => {
                 snapshot = await getDocs(collection(db, "q4Allocation"));
             }
         } catch (e) {
-            console.warn("Primary allocation fetch failed, using fallback:", e);
+            console.warn("Primary allocation fetch issue, checking fallback...");
             try {
                 snapshot = await getDocs(collection(db, "q4Allocation"));
             } catch (fallbackError) {
-                console.error("Fatal: Could not access any allocation collections.");
+                console.error("Fatal: Inventory data source inaccessible.");
             }
         }
         
@@ -53,7 +53,7 @@ export const useQ4Allocation = () => {
                 const data = doc.data();
                 if (!data) return null;
                 
-                // Extremely safe field mapping
+                // Extremely safe field mapping with explicit string casting
                 const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
                 const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
                 const qty = Number(data.allocationQuantity || 0);
@@ -63,12 +63,12 @@ export const useQ4Allocation = () => {
                     prodGroupProdSubGroup: group,
                     displayMaterialName: name,
                     allocationQuantity: isNaN(qty) ? 0 : qty,
-                    quarter: data.quarter || 'Q4'
+                    quarter: String(data.quarter || 'Q4')
                 } as Q4Allocation;
             }).filter((item): item is Q4Allocation => item !== null);
 
-            // Sort in memory to avoid index requirements
-            fetched.sort((a, b) => (a.displayMaterialName || "").localeCompare(b.displayMaterialName || ""));
+            // Sort in memory to bypass index requirements
+            fetched.sort((a, b) => String(a.displayMaterialName || "").localeCompare(String(b.displayMaterialName || "")));
             setAllocations(fetched);
         }
     } catch (error: any) {
@@ -93,7 +93,7 @@ export const useQ4Allocation = () => {
                 }
             }
         } catch (e) {
-            console.warn("Usage cache corrupted, clearing...");
+            console.warn("Usage cache reset.");
             localStorage.removeItem(USAGE_CACHE_KEY);
         }
     }
@@ -111,35 +111,37 @@ export const useQ4Allocation = () => {
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
       
-      snapshot.docs.forEach(doc => {
-        const entry = doc.data() as CoverageEntry;
-        if (!entry) return;
+      if (snapshot && snapshot.docs) {
+          snapshot.docs.forEach(doc => {
+            const entry = doc.data() as CoverageEntry;
+            if (!entry) return;
 
-        // Defensive quantity accumulation
-        const processSample = (name?: string, qty?: number) => {
-            if (name && qty) {
-                const cleanName = String(name);
-                const cleanQty = Number(qty);
-                if (!isNaN(cleanQty)) {
-                    usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
+            // Defensive quantity accumulation
+            const processSample = (name?: any, qty?: any) => {
+                if (name && qty) {
+                    const cleanName = String(name);
+                    const cleanQty = Number(qty);
+                    if (!isNaN(cleanQty)) {
+                        usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
+                    }
                 }
-            }
-        };
+            };
 
-        processSample(entry.primarySampleName, entry.primaryProductQty);
-        processSample(entry.secondarySampleName, entry.secondaryProductQty);
-        
-        if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach(prod => {
-                if (prod) processSample(prod.sampleName, prod.quantity);
-            });
-        }
-      });
+            processSample(entry.primarySampleName, entry.primaryProductQty);
+            processSample(entry.secondarySampleName, entry.secondaryProductQty);
+            
+            if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
+                entry.reminderProducts.forEach(prod => {
+                    if (prod) processSample(prod.sampleName, prod.quantity);
+                });
+            }
+          });
+      }
 
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Distribution tracker calculation failed:", error);
+        console.warn("Distribution tracker calculation issue:", error);
     }
   }, [user, isUserAdminOrManager]);
 
