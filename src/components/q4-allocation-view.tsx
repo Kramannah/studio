@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -40,7 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Q4AllocationViewProps {
@@ -68,15 +67,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const filteredSamples = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return [];
         
+        // Defensive search and quarter state checks
         const safeSearch = String(search ?? "").toLowerCase().trim();
         const quarterStr = String(activeQuarter ?? "Q4");
         
         return allocations.filter(s => {
             if (!s || typeof s !== 'object') return false;
             
+            // Validate quarter strictly
             const q = String(s.quarter ?? 'Q4');
             if (q !== quarterStr) return false;
 
+            // Ultra-safe field access with null coalescing to prevent "toLowerCase of undefined"
             const name = String(s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
             
@@ -84,7 +86,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         });
     }, [allocations, search, activeQuarter]);
 
-    const totalPages = Math.ceil(filteredSamples.length / itemsPerPage);
+    const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
     const paginatedSamples = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
         return filteredSamples.slice(start, start + itemsPerPage);
@@ -107,7 +109,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         quarterAllocations.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.displayMaterialName ?? s.materialName ?? "");
+            const name = String(s.displayMaterialName ?? s.materialName ?? "Unknown");
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -126,8 +128,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
         const sampleData = [
-            { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 },
-            { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Tablet', 'DisplayMaterialName': 'PQ3_Pistachio with Ricam Sticker', 'AllocationQuantity': 675 }
+            { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
         ];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
@@ -168,11 +169,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 };
 
                 if (colMap.name === -1 || colMap.qty === -1) {
-                    toast({ 
-                        variant: "destructive", 
-                        title: "Format Error", 
-                        description: "Column headers must match the template exactly." 
-                    });
+                    toast({ variant: "destructive", title: "Format Error", description: "Column headers must match the template exactly." });
                     setIsUploading(false);
                     return;
                 }
@@ -210,26 +207,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     };
 
     const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedIds(filteredSamples.map(s => s.id));
-        } else {
-            setSelectedIds([]);
-        }
+        if (checked) setSelectedIds(filteredSamples.map(s => s.id));
+        else setSelectedIds([]);
     };
 
     const handleSelectRow = (id: string, checked: boolean) => {
-        if (checked) {
-            setSelectedIds(prev => [...prev, id]);
-        } else {
-            setSelectedIds(prev => prev.filter(i => i !== id));
-        }
+        if (checked) setSelectedIds(prev => [...prev, id]);
+        else setSelectedIds(prev => prev.filter(i => i !== id));
     };
 
     const handleDeleteSelected = async () => {
         const success = await deleteAllocationsBulk(selectedIds);
-        if (success) {
-            setSelectedIds([]);
-        }
+        if (success) setSelectedIds([]);
     };
 
     if (!mounted) return null;
@@ -297,9 +286,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Delete {selectedIds.length} Products?</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            This will remove these products from the {activeQuarter} list.
-                                                        </AlertDialogDescription>
+                                                        <AlertDialogDescription>This will remove these products from the {activeQuarter} list.</AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -361,7 +348,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                             <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
                                                             <TableCell className="text-center pr-6">
                                                                 <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
-                                                                    "font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center",
+                                                                    "font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center",
                                                                     balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
                                                                 )}>
                                                                     {balance}
@@ -381,9 +368,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                         
                         {totalPages > 1 && (
                             <div className="flex items-center justify-between px-1">
-                                <p className="text-sm text-muted-foreground">
-                                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
-                                </p>
+                                <p className="text-sm text-muted-foreground">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
@@ -396,29 +381,20 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                         <div className="space-y-6">
                             <Card className="border-2 shadow-lg bg-primary/5">
                                 <CardHeader>
-                                    <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary">
-                                        <PackagePlus className="w-5 h-5" />
-                                        Import {activeQuarter}
-                                    </CardTitle>
+                                    <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary"><PackagePlus className="w-5 h-5" /> Import {activeQuarter}</CardTitle>
                                     <CardDescription>Populate Batch {activeQuarter} via Excel.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline">
-                                        <FileDown className="mr-2 h-4 w-4" /> Get Template
-                                    </Button>
+                                    <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline"><FileDown className="mr-2 h-4 w-4" /> Get Template</Button>
                                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-                                    <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">
-                                        {isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}
-                                    </Button>
+                                    <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">{isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}</Button>
                                 </CardContent>
                             </Card>
 
                             <Alert className="border-2 bg-muted/30">
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertTitle className="font-headline font-bold">Import Guide</AlertTitle>
-                                <AlertDescription className="text-xs leading-normal opacity-70">
-                                    Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.
-                                </AlertDescription>
+                                <AlertDescription className="text-xs leading-normal opacity-70">Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.</AlertDescription>
                             </Alert>
                         </div>
                     )}

@@ -33,12 +33,15 @@ export default function Q4AllocationPage() {
     const filteredSamples = useMemo(() => {
         if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
         
-        const safeSearch = String(search ?? "").toLowerCase().trim();
+        // Defensive search term normalization
+        const rawSearch = search ?? "";
+        const safeSearch = String(rawSearch).toLowerCase().trim();
         
         return marketingSamples.filter(s => {
             if (!s || typeof s !== 'object') return false;
             
             // Ultra-safe string conversion for all fields to prevent toLowerCase crashes
+            // Using null-coalescing ?? to catch explicit nulls which String() would turn into "null"
             const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
             const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
             
@@ -55,7 +58,7 @@ export default function Q4AllocationPage() {
         filteredSamples.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.materialName ?? s.displayMaterialName ?? "");
+            const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown");
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -173,7 +176,7 @@ export default function Q4AllocationPage() {
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
                                             const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
-                                            const group = String(sample.productGroup ?? sample.productGroup ?? "Uncategorized");
+                                            const group = String(sample.productGroup ?? "Uncategorized");
                                             const distributed = Math.round(Number(usedQuantities[name] ?? 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                             const balance = Math.max(0, alloc - distributed);
