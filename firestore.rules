@@ -39,12 +39,11 @@ service cloud.firestore {
     }
 
     // --- Broad Access for Oversight Roles ---
-    // DEFINITIVE FIX: Allow recursive read for admins and managers to support territory oversight.
     match /{document=**} {
       allow read: if isAdmin() || isManager();
     }
 
-    // --- Specific Collection Rules for PMRs ---
+    // --- Specific Collection Rules ---
 
     match /coverageEntries/{id} {
       allow read: if isOwner(resource.data) || isAdmin() || isManager(); 
@@ -83,6 +82,11 @@ service cloud.firestore {
     }
 
     match /q4Allocation/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    
+    match /marketingSamples/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }

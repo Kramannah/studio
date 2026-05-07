@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "Doctor": {
@@ -167,7 +166,8 @@
     "/plans/{id}": { "schema": { "$ref": "#/backend/entities/Plan" }, "description": "Scheduled visit plans." },
     "/planningRequests/{id}": { "schema": { "$ref": "#/backend/entities/PlanningPermissionRequest" }, "description": "Requests to unlock past planning weeks." },
     "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs." },
-    "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Inventory and marketing sample allocations." },
+    "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Legacy inventory allocations." },
+    "/marketingSamples/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Official marketing items and samples." },
     "/userProfiles/{id}": { "schema": { "$ref": "#/backend/entities/UserProfile" }, "description": "User profile overrides." }
   }
 }

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,7 +11,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v3';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v4';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -34,16 +33,31 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-        const colRef = collection(db, "q4Allocation");
-        const q = query(colRef, orderBy("displayMaterialName", "asc"));
-        const snapshot = await getDocs(q);
+        // Try the new collection name first
+        let colRef = collection(db, "marketingSamples");
+        let q = query(colRef, orderBy("displayMaterialName", "asc"));
+        let snapshot = await getDocs(q).catch(async () => {
+            // Fallback to legacy name if new one doesn't work or is empty
+            colRef = collection(db, "q4Allocation");
+            q = query(colRef, orderBy("displayMaterialName", "asc"));
+            return await getDocs(q);
+        });
         
         if (!snapshot.empty) {
-            setAllocations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Q4Allocation)));
+            setAllocations(snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    prodGroupProdSubGroup: data.prodGroupProdSubGroup || data.productGroup || "",
+                    displayMaterialName: data.displayMaterialName || data.materialName || "",
+                    allocationQuantity: data.allocationQuantity || 0,
+                    quarter: data.quarter || 'Q4'
+                } as Q4Allocation;
+            }));
         }
     } catch (error: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'q4Allocation',
+          path: 'marketingSamples',
           operation: 'list',
         }));
     }
@@ -67,15 +81,12 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      const startDate = subDays(new Date(), 90);
+      const startDate = subDays(new Date(), 120); // Extended range for broader context
       
       let usageQuery;
       if (isUserAdminOrManager()) {
-          // Managers/Admins can see territory usage trends
-          usageQuery = query(colRef, limit(1000));
+          usageQuery = query(colRef, limit(2000));
       } else {
-          // PMRs MUST query by userId to satisfy security rules
-          // We remove the date filter from the query to avoid needing a composite index
           usageQuery = query(colRef, where("userId", "==", user.uid));
       }
 
@@ -84,8 +95,6 @@ export const useQ4Allocation = () => {
       
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
-        
-        // Manual date filtering to bypass Firestore index requirements
         const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
         if (!isValid(subDate) || !isAfter(subDate!, startDate)) return;
 
@@ -107,7 +116,7 @@ export const useQ4Allocation = () => {
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage tracker restricted or requires sync:", error);
+        console.warn("Usage tracker synchronization required:", error);
     }
   }, [user, isUserAdminOrManager]);
 
@@ -122,9 +131,9 @@ export const useQ4Allocation = () => {
 
   const refetch = useCallback(async () => {
       setLoading(true);
-      await fetchUsage(true);
+      await Promise.all([fetchAllocations(), fetchUsage(true)]);
       setLoading(false);
-  }, [fetchUsage]);
+  }, [fetchAllocations, fetchUsage]);
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
     if (!db) return false;
@@ -134,7 +143,7 @@ export const useQ4Allocation = () => {
         const baseId = item.displayMaterialName.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!baseId) return;
         const docId = `${quarter.toLowerCase()}_${baseId}`;
-        const docRef = doc(db, "q4Allocation", docId);
+        const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
@@ -143,7 +152,7 @@ export const useQ4Allocation = () => {
       return true;
     } catch (err) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'q4Allocation',
+          path: 'marketingSamples',
           operation: 'write',
         }));
         return false;
@@ -153,7 +162,7 @@ export const useQ4Allocation = () => {
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => batch.delete(doc(db, "q4Allocation", id)));
+      ids.forEach(id => batch.delete(doc(db, "marketingSamples", id)));
       try {
           await batch.commit();
           toast({ title: "Deleted Successfully" });
@@ -161,7 +170,7 @@ export const useQ4Allocation = () => {
           return true;
       } catch (err) {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'q4Allocation',
+            path: 'marketingSamples',
             operation: 'delete',
           }));
           return false;

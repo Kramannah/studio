@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -24,11 +23,15 @@ export const useMarketingSamples = () => {
     }
     
     try {
-      // 1. Fetch official allocations
-      const samplesSnap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")))
+      // 1. Fetch official allocations from marketingSamples
+      const samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")))
+        .catch(async () => {
+            // Fallback to legacy name if needed
+            return await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+        })
         .catch((e) => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'q4Allocation',
+                path: 'marketingSamples',
                 operation: 'list',
             }));
             throw e;
@@ -38,8 +41,8 @@ export const useMarketingSamples = () => {
           const data = doc.data();
           return { 
               id: doc.id, 
-              productGroup: data.prodGroupProdSubGroup || "Uncategorized", 
-              materialName: data.displayMaterialName || "Unknown", 
+              productGroup: data.prodGroupProdSubGroup || data.productGroup || "Uncategorized", 
+              materialName: data.displayMaterialName || data.materialName || "Unknown", 
               allocationQuantity: data.allocationQuantity || 0 
           } as MarketingSample;
       });
@@ -47,7 +50,6 @@ export const useMarketingSamples = () => {
       setMarketingSamples(fetchedSamples);
 
       // 2. Fetch user-specific usage from coverage entries
-      // Simple equality query to avoid requiring composite indexes
       const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", currentUser.uid)))
         .catch((e) => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -78,11 +80,6 @@ export const useMarketingSamples = () => {
 
     } catch (error: any) {
         console.error("Marketing samples fetch error:", error);
-        toast({
-            variant: "destructive",
-            title: "Inventory Sync Failed",
-            description: "Could not retrieve your latest sample allocations. Please check your connection."
-        });
     } finally {
       setLoading(false);
     }
