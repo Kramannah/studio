@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, where, FirestoreError } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, where, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from './use-toast';
@@ -25,41 +25,55 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      // 1. Fetch official allocations from marketingSamples
-      const samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")))
-        .catch(async () => {
-            // Fallback to legacy name if needed
-            return await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
-        });
+      // 1. Fetch official allocations from marketingSamples with defensive fallback
+      let samplesSnap: QuerySnapshot<DocumentData>;
+      try {
+          samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")));
+          if (samplesSnap.empty) {
+              samplesSnap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+          }
+      } catch (e) {
+          // Fallback to legacy if first query fails (e.g. collection missing)
+          samplesSnap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+      }
       
       const fetchedSamples = samplesSnap.docs.map(doc => {
           const data = doc.data();
+          // Defensive mapping for inconsistent field names
+          const name = data.displayMaterialName || data.materialName || "Unknown Item";
+          const group = data.prodGroupProdSubGroup || data.productGroup || "Uncategorized";
+          const qty = Number(data.allocationQuantity || 0);
+          
           return { 
               id: doc.id, 
-              productGroup: data.prodGroupProdSubGroup || data.productGroup || "Uncategorized", 
-              materialName: data.displayMaterialName || data.materialName || "Unknown", 
-              allocationQuantity: Number(data.allocationQuantity || 0)
+              productGroup: group, 
+              materialName: name, 
+              allocationQuantity: isNaN(qty) ? 0 : qty
           } as MarketingSample;
       });
       
       setMarketingSamples(fetchedSamples);
 
       // 2. Fetch user-specific usage from coverage entries
+      // Simplified query to avoid index requirements on live server
       const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
 
       const usage: Record<string, number> = {};
       usageSnap.docs.forEach(doc => {
           const entry = doc.data();
           if (entry.primarySampleName && entry.primaryProductQty) {
-              usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+              const pQty = Number(entry.primaryProductQty);
+              if (!isNaN(pQty)) usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + pQty;
           }
           if (entry.secondarySampleName && entry.secondaryProductQty) {
-              usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+              const sQty = Number(entry.secondaryProductQty);
+              if (!isNaN(sQty)) usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + sQty;
           }
           if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
               entry.reminderProducts.forEach((p: any) => {
-                  if (p.sampleName && p.quantity) {
-                      usage[p.sampleName] = (usage[p.sampleName] || 0) + Number(p.quantity);
+                  if (p && p.sampleName && p.quantity) {
+                      const rQty = Number(p.quantity);
+                      if (!isNaN(rQty)) usage[p.sampleName] = (usage[p.sampleName] || 0) + rQty;
                   }
               });
           }
@@ -86,10 +100,10 @@ export const useMarketingSamples = () => {
 
 export const useAdminMarketingSamples = () => {
   return { 
-    addMarketingSamplesBulk: async () => true, 
+    addMarketingSamplesBulk: async (data: any) => true, 
     populateOfficialList: async () => true, 
-    deleteSample: async () => true, 
-    updateSample: async () => true, 
-    addSample: async () => true 
+    deleteSample: async (id: string) => true, 
+    updateSample: async (id: string, data: any) => true, 
+    addSample: async (data: any) => true 
   };
 };

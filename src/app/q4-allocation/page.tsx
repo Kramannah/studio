@@ -31,20 +31,23 @@ export default function Q4AllocationPage() {
     }, [user, authLoading, router]);
 
     const filteredSamples = useMemo(() => {
-        return marketingSamples.filter(s => 
-            (s.materialName || "").toLowerCase().includes(search.toLowerCase()) ||
-            (s.productGroup || "").toLowerCase().includes(search.toLowerCase())
-        );
+        if (!marketingSamples) return [];
+        return marketingSamples.filter(s => {
+            if (!s) return false;
+            return (s.materialName || "").toLowerCase().includes(search.toLowerCase()) ||
+                   (s.productGroup || "").toLowerCase().includes(search.toLowerCase());
+        });
     }, [marketingSamples, search]);
 
     const stats = useMemo(() => {
+        if (!filteredSamples) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
 
         filteredSamples.forEach(s => {
             const alloc = Math.round(Number(s.allocationQuantity || 0));
-            const used = Math.round(Number(usedQuantities[s.materialName] || 0));
+            const used = Math.round(Number(usedQuantities[s.materialName || ""] || 0));
             totalAllocated += alloc;
             totalUsed += used;
             totalRemaining += Math.max(0, alloc - used);
@@ -58,7 +61,7 @@ export default function Q4AllocationPage() {
         };
     }, [filteredSamples, usedQuantities]);
 
-    if (authLoading || !mounted) return (
+    if (!mounted || authLoading) return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <RefreshCw className="animate-spin text-primary w-12 h-12" />
         </div>
@@ -158,13 +161,14 @@ export default function Q4AllocationPage() {
                                         </TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const distributed = Math.round(Number(usedQuantities[sample.materialName] || 0));
+                                            if (!sample) return null;
+                                            const distributed = Math.round(Number(usedQuantities[sample.materialName || ""] || 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity || 0));
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
-                                                <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
-                                                    <TableCell className="pl-6 font-bold text-primary">{sample.productGroup}</TableCell>
-                                                    <TableCell className="font-medium">{sample.materialName}</TableCell>
+                                                <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b">
+                                                    <TableCell className="pl-6 font-bold text-primary">{sample.productGroup || "Uncategorized"}</TableCell>
+                                                    <TableCell className="font-medium">{sample.materialName || "Unknown Item"}</TableCell>
                                                     <TableCell className="text-center font-mono">{alloc}</TableCell>
                                                     <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
                                                     <TableCell className="text-center pr-6">

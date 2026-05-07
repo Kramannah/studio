@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -55,12 +56,19 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
+    const [mounted, setMounted] = useState(false);
     const itemsPerPage = 10;
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const filteredSamples = useMemo(() => {
+        if (!allocations) return [];
         return allocations.filter(s => {
+            if (!s) return false;
             const matchesQuarter = s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4');
             const matchesSearch = (s.displayMaterialName || "").toLowerCase().includes(search.toLowerCase()) ||
                                  (s.prodGroupProdSubGroup || "").toLowerCase().includes(search.toLowerCase());
@@ -80,14 +88,15 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
-        const quarterAllocations = allocations.filter(s => s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4'));
+        if (!allocations) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        const quarterAllocations = allocations.filter(s => s && (s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4')));
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
         
         quarterAllocations.forEach(s => {
-            const alloc = Math.round(s.allocationQuantity || 0);
-            const used = Math.round(usedQuantities[s.displayMaterialName] || 0);
+            const alloc = Math.round(Number(s.allocationQuantity || 0));
+            const used = Math.round(Number(usedQuantities[s.displayMaterialName || ""] || 0));
             totalAllocated += alloc;
             totalUsed += used;
             totalRemaining += Math.max(0, alloc - used);
@@ -210,6 +219,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         }
     };
 
+    if (!mounted) return null;
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
              <Tabs value={activeQuarter} onValueChange={(v) => setActiveQuarter(v as any)} className="w-full">
@@ -308,14 +319,15 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                         </TableHeader>
                                         <TableBody>
                                             {dataLoading ? (
-                                                <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing...</p></TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing...</p></TableCell></TableRow>
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
-                                                    const used = Math.round(usedQuantities[sample.displayMaterialName] || 0);
-                                                    const alloc = Math.round(sample.allocationQuantity || 0);
+                                                    if (!sample) return null;
+                                                    const used = Math.round(Number(usedQuantities[sample.displayMaterialName || ""] || 0));
+                                                    const alloc = Math.round(Number(sample.allocationQuantity || 0));
                                                     const balance = Math.max(0, alloc - used);
                                                     return (
-                                                        <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                        <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (
                                                                 <TableCell className="pl-6">
                                                                     <Checkbox 
@@ -326,8 +338,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                             )}
                                                             <TableCell className={cn(readOnly && "pl-6")}>
                                                                 <div className="flex flex-col">
-                                                                    <span className="font-medium text-sm">{sample.displayMaterialName}</span>
-                                                                    <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup}</span>
+                                                                    <span className="font-medium text-sm">{sample.displayMaterialName || "Unknown Item"}</span>
+                                                                    <span className="text-[10px] uppercase font-bold text-primary opacity-70">{sample.prodGroupProdSubGroup || "Uncategorized"}</span>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell className="text-center font-mono">{alloc}</TableCell>
@@ -344,7 +356,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     );
                                                 })
                                             ) : (
-                                                <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found for {activeQuarter}.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found for {activeQuarter}.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>

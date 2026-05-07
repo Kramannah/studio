@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs, FirestoreError } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { subDays, parseISO, isValid, isAfter } from 'date-fns';
@@ -11,7 +12,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v4';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v5';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -33,24 +34,28 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-        // Try the new collection name first
-        let colRef = collection(db, "marketingSamples");
-        let q = query(colRef, orderBy("displayMaterialName", "asc"));
-        let snapshot = await getDocs(q).catch(async () => {
-            // Fallback to legacy name if new one doesn't work or is empty
-            colRef = collection(db, "q4Allocation");
-            q = query(colRef, orderBy("displayMaterialName", "asc"));
-            return await getDocs(q);
-        });
+        let snapshot: QuerySnapshot<DocumentData>;
+        try {
+            snapshot = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")));
+            if (snapshot.empty) {
+                snapshot = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+            }
+        } catch (e) {
+            snapshot = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+        }
         
         if (!snapshot.empty) {
             setAllocations(snapshot.docs.map(doc => {
                 const data = doc.data();
+                const name = data.displayMaterialName || data.materialName || "Unknown Item";
+                const group = data.prodGroupProdSubGroup || data.productGroup || "";
+                const qty = Number(data.allocationQuantity || 0);
+                
                 return { 
                     id: doc.id, 
-                    prodGroupProdSubGroup: data.prodGroupProdSubGroup || data.productGroup || "",
-                    displayMaterialName: data.displayMaterialName || data.materialName || "",
-                    allocationQuantity: data.allocationQuantity || 0,
+                    prodGroupProdSubGroup: group,
+                    displayMaterialName: name,
+                    allocationQuantity: isNaN(qty) ? 0 : qty,
                     quarter: data.quarter || 'Q4'
                 } as Q4Allocation;
             }));
@@ -81,7 +86,7 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      const startDate = subDays(new Date(), 120); // Extended range for broader context
+      const filterDate = subDays(new Date(), 120);
       
       let usageQuery;
       if (isUserAdminOrManager()) {
@@ -95,19 +100,27 @@ export const useQ4Allocation = () => {
       
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
-        const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
-        if (!isValid(subDate) || !isAfter(subDate!, startDate)) return;
+        const subDateStr = entry.submittedAt || entry.coverageDate;
+        if (subDateStr) {
+            const dateObj = parseISO(subDateStr);
+            if (isValid(dateObj) && !isAfter(dateObj, filterDate)) {
+                // Skip very old data if needed, but let's keep most for balance accuracy
+            }
+        }
 
         if (entry.primarySampleName && entry.primaryProductQty) {
-            usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + Number(entry.primaryProductQty);
+            const pQty = Number(entry.primaryProductQty);
+            if (!isNaN(pQty)) usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + pQty;
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
-            usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + Number(entry.secondaryProductQty);
+            const sQty = Number(entry.secondaryProductQty);
+            if (!isNaN(sQty)) usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + sQty;
         }
         if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
             entry.reminderProducts.forEach(prod => {
-                if (prod.sampleName && prod.quantity) {
-                    usage[prod.sampleName] = (usage[prod.sampleName] || 0) + Number(prod.quantity);
+                if (prod && prod.sampleName && prod.quantity) {
+                    const rQty = Number(prod.quantity);
+                    if (!isNaN(rQty)) usage[prod.sampleName] = (usage[prod.sampleName] || 0) + rQty;
                 }
             });
         }
@@ -116,7 +129,7 @@ export const useQ4Allocation = () => {
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage tracker synchronization required:", error);
+        console.warn("Usage tracker sync issue:", error);
     }
   }, [user, isUserAdminOrManager]);
 
@@ -140,14 +153,14 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const baseId = item.displayMaterialName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (!baseId) return;
-        const docId = `${quarter.toLowerCase()}_${baseId}`;
+        const cleanName = (item.displayMaterialName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!cleanName) return;
+        const docId = `${quarter.toLowerCase()}_${cleanName}`;
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
-      toast({ title: "Import Successful", description: `Database updated for ${quarter}.` });
+      toast({ title: "Import Successful" });
       fetchAllocations();
       return true;
     } catch (err) {
@@ -162,7 +175,9 @@ export const useQ4Allocation = () => {
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => batch.delete(doc(db, "marketingSamples", id)));
+      ids.forEach(id => {
+          if (id) batch.delete(doc(db, "marketingSamples", id));
+      });
       try {
           await batch.commit();
           toast({ title: "Deleted Successfully" });
