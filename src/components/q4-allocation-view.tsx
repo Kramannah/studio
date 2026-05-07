@@ -66,13 +66,20 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, []);
 
     const filteredSamples = useMemo(() => {
-        if (!allocations) return [];
+        if (!allocations || !Array.isArray(allocations)) return [];
+        const safeSearch = (search || "").toLowerCase().trim();
+        
         return allocations.filter(s => {
             if (!s) return false;
+            // Quarter matching
             const matchesQuarter = s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4');
-            const matchesSearch = (s.displayMaterialName || "").toLowerCase().includes(search.toLowerCase()) ||
-                                 (s.prodGroupProdSubGroup || "").toLowerCase().includes(search.toLowerCase());
-            return matchesQuarter && matchesSearch;
+            if (!matchesQuarter) return false;
+
+            // Search matching with ultra-safe string handling
+            const name = String(s.displayMaterialName || "").toLowerCase();
+            const group = String(s.prodGroupProdSubGroup || "").toLowerCase();
+            
+            return name.includes(safeSearch) || group.includes(safeSearch);
         });
     }, [allocations, search, activeQuarter]);
 
@@ -88,7 +95,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
-        if (!allocations) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
         const quarterAllocations = allocations.filter(s => s && (s.quarter === activeQuarter || (!s.quarter && activeQuarter === 'Q4')));
         let totalAllocated = 0;
         let totalUsed = 0;

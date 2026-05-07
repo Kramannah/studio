@@ -32,12 +32,15 @@ export default function Q4AllocationPage() {
 
     const filteredSamples = useMemo(() => {
         if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
+        const safeSearch = (search || "").toLowerCase().trim();
+        
         return marketingSamples.filter(s => {
             if (!s) return false;
-            const name = s.materialName || "";
-            const group = s.productGroup || "";
-            return name.toLowerCase().includes(search.toLowerCase()) ||
-                   group.toLowerCase().includes(search.toLowerCase());
+            // Ultra-safe string checks
+            const name = String(s.materialName || "").toLowerCase();
+            const group = String(s.productGroup || "").toLowerCase();
+            
+            return name.includes(safeSearch) || group.includes(safeSearch);
         });
     }, [marketingSamples, search]);
 

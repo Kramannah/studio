@@ -39,15 +39,22 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
   }, [onSelect]);
 
   const filteredDoctors = React.useMemo(() => {
-    if (!value) return doctors;
-    const lowercasedValue = value.toLowerCase();
-    return doctors.filter(doctor =>
-      doctor.firstName.toLowerCase().includes(lowercasedValue) ||
-      doctor.lastName.toLowerCase().includes(lowercasedValue) ||
-      `${doctor.firstName.toLowerCase()} ${doctor.lastName.toLowerCase()}`.includes(lowercasedValue) ||
-      (doctor.province && doctor.province.toLowerCase().includes(lowercasedValue)) ||
-      (doctor.municipality && doctor.municipality.toLowerCase().includes(lowercasedValue))
-    );
+    const lowercasedValue = (value || "").toLowerCase();
+    if (!lowercasedValue) return doctors;
+    
+    return doctors.filter(doctor => {
+      const firstName = String(doctor.firstName || "").toLowerCase();
+      const lastName = String(doctor.lastName || "").toLowerCase();
+      const fullName = `${firstName} ${lastName}`;
+      const province = String(doctor.province || "").toLowerCase();
+      const municipality = String(doctor.municipality || "").toLowerCase();
+      
+      return firstName.includes(lowercasedValue) ||
+             lastName.includes(lowercasedValue) ||
+             fullName.includes(lowercasedValue) ||
+             province.includes(lowercasedValue) ||
+             municipality.includes(lowercasedValue);
+    });
   }, [doctors, value]);
 
   return (

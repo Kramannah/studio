@@ -120,14 +120,21 @@ export default function AdminPage() {
         if (!accountSearch.trim()) return all.sort((a, b) => a.lastName.localeCompare(b.lastName));
 
         const q = accountSearch.toLowerCase();
-        return all.filter(a => 
-            a.code.toLowerCase().includes(q) || 
-            a.firstName.toLowerCase().includes(q) || 
-            a.lastName.toLowerCase().includes(q) ||
-            a.role.toLowerCase().includes(q) ||
-            a.district.toLowerCase().includes(q) ||
-            (a.email && a.email.toLowerCase().includes(q))
-        ).sort((a, b) => a.lastName.localeCompare(b.lastName));
+        return all.filter(a => {
+            const code = String(a.code || "").toLowerCase();
+            const firstName = String(a.firstName || "").toLowerCase();
+            const lastName = String(a.lastName || "").toLowerCase();
+            const role = String(a.role || "").toLowerCase();
+            const district = String(a.district || "").toLowerCase();
+            const email = String(a.email || "").toLowerCase();
+            
+            return code.includes(q) || 
+                   firstName.includes(q) || 
+                   lastName.includes(q) ||
+                   role.includes(q) ||
+                   district.includes(q) ||
+                   email.includes(q);
+        }).sort((a, b) => a.lastName.localeCompare(b.lastName));
     }, [accountSearch, profiles]);
 
     const managedUserIds = useMemo(() => {
