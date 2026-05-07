@@ -1,7 +1,8 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, orderBy, FirestoreError } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, FirestoreError, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -70,45 +71,52 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     let userFilter: string[] | null = null;
     if (managerId) {
       userFilter = getManagedUserIds(managerId);
+      if (userFilter.length === 0) {
+          setAllNonCallDays([]);
+          setAllPlanningRequests([]);
+          return;
+      }
     } else if (!isUserAdmin) {
       return;
     }
 
     setLoading(true);
     try {
-        const fetchCollection = async (collName: string, userIds: string[] | null) => {
-            if (userIds !== null && userIds.length === 0) return [];
-            
-            let queryRef;
-            if (userIds === null) { 
-                queryRef = query(collection(db!, collName));
-            } else { 
-                const chunks: string[][] = [];
-                for (let i = 0; i < userIds.length; i += 10) {
-                    chunks.push(userIds.slice(i, i + 10));
+        const fetchCollection = async (collName: string, userIds: string[] | null): Promise<any[]> => {
+            try {
+                let q;
+                if (userIds === null) {
+                    q = query(collection(db!, collName));
+                } else {
+                    const chunks: string[][] = [];
+                    for (let i = 0; i < userIds.length; i += 10) {
+                        chunks.push(userIds.slice(i, i + 10));
+                    }
+                    const snapshots = await Promise.all(chunks.map(chunk => 
+                        getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
+                    ));
+                    return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 }
-                const snapshots = await Promise.all(chunks.map(chunk => 
-                    getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
-                ));
-                return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                const snapshot = await getDocs(q);
+                return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch (err) {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: collName,
+                    operation: 'list',
+                }));
+                return [];
             }
-            const snapshot = await getDocs(queryRef);
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         };
       
-      const [ncdRes, prRes] = await Promise.allSettled([
+      const [ncdRes, prRes] = await Promise.all([
           fetchCollection("nonCallDays", userFilter),
           fetchCollection("planningRequests", userFilter)
       ]);
       
-      if (ncdRes.status === 'fulfilled') {
-        setAllNonCallDays((ncdRes.value as NonCallDay[]).sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
-      }
-      if (prRes.status === 'fulfilled') {
-        setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
-      }
+      setAllNonCallDays(ncdRes.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
+      setAllPlanningRequests(prRes.sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
     } catch (err: any) {
-        // Handled via listener if needed
+        console.error("Team approvals fetch failed", err);
     } finally {
       setLoading(false);
     }
@@ -135,10 +143,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
-            const fetchSingle = (collName: string) => 
-                getDocs(query(collection(db!, collName), where("userId", "in", chunk)));
+            const fetchSingle = async (collName: string): Promise<QuerySnapshot<DocumentData> | { docs: [] }> => {
+                try {
+                    return await getDocs(query(collection(db!, collName), where("userId", "in", chunk)));
+                } catch (e) {
+                    errorEmitter.emit('permission-error', new FirestorePermissionError({
+                        path: collName,
+                        operation: 'list',
+                    }));
+                    return { docs: [] };
+                }
+            };
 
-            const snaps = await Promise.allSettled([
+            const snaps = await Promise.all([
                 fetchSingle("coverageEntries"),
                 fetchSingle("timeLogs"),
                 fetchSingle("doctors"),
@@ -146,17 +163,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 fetchSingle("plans"),
             ]);
 
-            const getResults = (index: number) => {
-                const res = snaps[index];
-                return res.status === 'fulfilled' ? res.value.docs : [];
-            };
-
             return {
-                entries: getResults(0).map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
-                timeLogs: getResults(1).map(d => ({ id: d.id, ...d.data() }) as TimeLog),
-                doctors: getResults(2).map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: getResults(3).map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
-                plans: getResults(4).map(d => ({ id: d.id, ...d.data() }) as Plan),
+                entries: snaps[0].docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
+                timeLogs: snaps[1].docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog),
+                doctors: snaps[2].docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
+                nonCallDays: snaps[3].docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
+                plans: snaps[4].docs.map(d => ({ id: d.id, ...d.data() }) as Plan),
             };
         };
 
@@ -184,7 +196,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         });
 
       } catch (err: any) {
-         // Handled via listener
+         console.error("Team summary fetch failed", err);
       } finally {
         setLoadingSummary(false);
       }
@@ -197,10 +209,20 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     
     try {
-        const fetchS = (collName: string) => 
-            getDocs(query(collection(db!, collName), where("userId", "==", sanitizedUserId)));
+        const fetchS = async (collName: string): Promise<any[]> => {
+            try {
+                const snap = await getDocs(query(collection(db!, collName), where("userId", "==", sanitizedUserId)));
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            } catch (e) {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: collName,
+                    operation: 'list',
+                }));
+                return [];
+            }
+        };
 
-        const results = await Promise.allSettled([
+        const results = await Promise.all([
             fetchS("coverageEntries"),
             fetchS("doctors"),
             fetchS("plans"),
@@ -209,17 +231,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchS("planningRequests")
         ]);
         
-        const getVal = <T>(idx: number): T[] => {
-            const res = results[idx];
-            return res.status === 'fulfilled' ? res.value.docs.map(d => ({id: d.id, ...d.data()}) as T) : [];
-        };
-
-        const entries = getVal<CoverageEntry>(0);
-        const doctors = getVal<Doctor>(1);
-        const plans = getVal<Plan>(2);
-        const logs = getVal<TimeLog>(3);
-        const ncds = getVal<NonCallDay>(4);
-        const requests = getVal<PlanningPermissionRequest>(5);
+        const entries = results[0] as CoverageEntry[];
+        const doctors = results[1] as Doctor[];
+        const plans = results[2] as Plan[];
+        const logs = results[3] as TimeLog[];
+        const ncds = results[4] as NonCallDay[];
+        const requests = results[5] as PlanningPermissionRequest[];
 
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
@@ -244,7 +261,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        // Handled via listener
+        console.error("User data fetch failed", err);
     } finally {
         setLoadingIndividual(false);
     }

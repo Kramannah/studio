@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -86,7 +87,7 @@ export function TeamSummary({ data, loading }: TeamSummaryProps) {
             reachPercent,
             topSpecialties,
             dailyTrend,
-            totalInventoryUsed: Object.values(data.usedQuantities).reduce((a, b) => a + b, 0)
+            totalInventoryUsed: Object.values(data.usedQuantities || {}).reduce((a, b) => a + b, 0)
         };
     }, [data, mounted]);
 
