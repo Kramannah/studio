@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { TeamSummaryData } from "@/hooks/use-admin-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -36,8 +36,14 @@ const SummaryStat = ({ title, value, subValue, icon: Icon, color }: { title: str
 );
 
 export function TeamSummary({ data, loading }: TeamSummaryProps) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const stats = useMemo(() => {
-        if (!data || !data.entries) return null;
+        if (!data || !data.entries || !mounted) return null;
 
         const totalCalls = data.entries.length;
         const totalPMRs = new Set(data.entries.map(e => e.userId)).size;
@@ -82,9 +88,9 @@ export function TeamSummary({ data, loading }: TeamSummaryProps) {
             dailyTrend,
             totalInventoryUsed: Object.values(data.usedQuantities).reduce((a, b) => a + b, 0)
         };
-    }, [data]);
+    }, [data, mounted]);
 
-    if (loading) {
+    if (!mounted || loading) {
         return (
             <div className="flex flex-col items-center justify-center h-80 gap-4">
                 <RefreshCw className="w-10 h-10 animate-spin text-primary" />

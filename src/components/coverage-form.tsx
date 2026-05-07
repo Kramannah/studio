@@ -147,9 +147,6 @@ const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<
     });
 };
 
-/**
- * Reusable Searchable Select Component for Products and Samples
- */
 const SearchableSelect = ({ 
     options, 
     value, 
@@ -166,10 +163,7 @@ const SearchableSelect = ({
     showBalance?: boolean
 }) => {
     const [open, setOpen] = useState(false);
-    
-    // Filter options to ensure no empty values cause runtime crashes in Select/Command
     const validOptions = useMemo(() => options.filter(o => o.value && o.value.trim() !== ""), [options]);
-
     const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
@@ -248,6 +242,7 @@ export function CoverageForm({
   const [autocompleteValue, setAutocompleteValue] = useState('');
   const [proofMethod, setProofMethod] = useState<'photo' | 'signature' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [signatureState, setSignatureState] = useState<{
     isOpen: boolean;
     target: 'signature' | 'jointCallSignature' | null;
@@ -265,7 +260,7 @@ export function CoverageForm({
       clinic: "",
       hacme: "NO",
       coverageType: "inbase",
-      coverageDate: new Date(),
+      coverageDate: undefined, // Will be set in useEffect to avoid hydration error
       photos: [],
       signature: null,
       jointCallSignature: null,
@@ -288,6 +283,11 @@ export function CoverageForm({
       isOffline: false,
     },
   })
+
+  useEffect(() => {
+      setMounted(true);
+      form.setValue("coverageDate", initialDate || new Date());
+  }, [initialDate, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -467,10 +467,10 @@ export function CoverageForm({
         } else {
             setProofMethod(null);
         }
-    } else if (!initialDoctor) {
+    } else if (!initialDoctor && mounted) {
         resetForm();
     }
-  }, [entryToEdit, initialDoctor, form, resetForm]);
+  }, [entryToEdit, initialDoctor, form, resetForm, mounted]);
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
@@ -594,6 +594,8 @@ export function CoverageForm({
       setIsSubmitting(false);
     }
   }
+
+  if (!mounted) return null;
 
   const isEditMode = !!entryToEdit;
 

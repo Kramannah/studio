@@ -35,8 +35,15 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
 
 export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
     const summaryRef = useRef<HTMLDivElement>(null);
-    const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+    const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        const initialMonth = format(new Date(), 'yyyy-MM');
+        setSelectedMonth(initialMonth);
+        setMounted(true);
+    }, []);
 
     const availableMonths = useMemo(() => {
         const monthSet = new Set<string>();
@@ -46,13 +53,14 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
                 monthSet.add(format(submittedDate, 'yyyy-MM'));
             }
         });
-        // Add current month if not present
+        // Add current month
         monthSet.add(format(new Date(), 'yyyy-MM'));
 
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); // Sort descending
     }, [entries]);
     
     useEffect(() => {
+        if (!selectedMonth) return;
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
         const start = startOfMonth(monthDate);
         const end = endOfMonth(monthDate);
@@ -112,7 +120,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, {} as Record<string, number>);
         
-        // Call Concentration logic: Reverted to 3x achievement based on high-frequency targets in masterlist
         const highFreqDoctors = doctors.filter(d => {
             const freq = parseInt(d.frequency.replace('x', ''), 10) || 0;
             return freq >= 3;
@@ -126,7 +133,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // Coverage Reach: Percentage of all doctors visited at least once
         const totalDoctorsInList = doctors.length;
         const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName?.toLowerCase()} ${e.lastName?.toLowerCase()}`));
         const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
@@ -176,7 +182,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
 
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
 
-        // Call Rate Adjustment Logic
         const originalMonthlyTarget = doctors.reduce((acc, doc) => {
             const frequency = parseInt(doc.frequency.replace('x', ''), 10) || 0;
             return acc + frequency;
@@ -223,7 +228,6 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             .sort((a, b) => b.count - a.count)
             .slice(0, 5);
 
-        // Incentive Days Logic
         const nonCallDayMap = filteredNonCallDays.reduce((acc, day) => {
             const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
             if (isValid(dayDate)) {
@@ -353,6 +357,8 @@ Summary:
         XLSX.writeFile(workbook, `call_summary_${selectedMonth}_report.xlsx`);
     };
 
+
+    if (!mounted) return null;
 
     if (entries.length === 0 && doctors.length === 0) {
         return (

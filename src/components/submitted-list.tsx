@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -275,10 +274,18 @@ export function SubmittedList({
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [activeTab, setActiveTab] = useState("list");
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-    const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+    const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [currentPage, setCurrentPage] = useState(1);
+    const [mounted, setMounted] = useState(false);
     const itemsPerPage = 10;
+
+    useEffect(() => {
+        const now = new Date();
+        setSelectedDate(now);
+        setSelectedMonth(format(now, 'yyyy-MM'));
+        setMounted(true);
+    }, []);
     
     const availableMonths = useMemo(() => {
         const monthSet = new Set<string>();
@@ -293,6 +300,7 @@ export function SubmittedList({
     }, [entries]);
 
     useEffect(() => {
+        if (!selectedMonth) return;
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
         setSelectedDate(monthDate);
         setCurrentPage(1);
@@ -308,6 +316,7 @@ export function SubmittedList({
     };
 
     const monthRange = useMemo(() => {
+        if (!selectedMonth) return { start: new Date(), end: new Date() };
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
         return {
             start: startOfMonth(monthDate),
@@ -403,6 +412,8 @@ export function SubmittedList({
         XLSX.utils.book_append_sheet(workbook, worksheet, "Coverage Report");
         XLSX.writeFile(workbook, `Coverage_Report_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
     };
+
+    if (!mounted) return null;
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
@@ -524,7 +535,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                month={parse(selectedMonth, 'yyyy-MM', new Date())}
+                                month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : new Date()}
                                 modifiers={{ 
                                     hasEntry: entryDates,
                                 }}
