@@ -126,8 +126,8 @@ export function TeamSummary({ data, loading }: TeamSummaryProps) {
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={stats.dailyTrend}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                                <XAxis dataKey="name" fontSize={10} fontVariant="bold" />
-                                <YAxis fontSize={10} fontVariant="bold" />
+                                <XAxis dataKey="name" fontSize={10} />
+                                <YAxis fontSize={10} />
                                 <Tooltip 
                                     contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))', fontWeight: 'bold' }}
                                 />

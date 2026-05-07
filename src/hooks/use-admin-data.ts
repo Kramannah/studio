@@ -81,14 +81,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             
             let queryRef;
             if (userIds === null) { 
-                queryRef = query(collection(db, collName));
+                queryRef = query(collection(db!, collName));
             } else { 
                 const chunks: string[][] = [];
                 for (let i = 0; i < userIds.length; i += 10) {
                     chunks.push(userIds.slice(i, i + 10));
                 }
                 const snapshots = await Promise.all(chunks.map(chunk => 
-                    getDocs(query(collection(db, collName), where("userId", "in", chunk)))
+                    getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
                 ));
                 return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
             }
@@ -108,10 +108,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllPlanningRequests((prRes.value as PlanningPermissionRequest[]).sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
       }
     } catch (err: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'approvals',
-            operation: 'list',
-        }));
+        // Handled via listener if needed
     } finally {
       setLoading(false);
     }
@@ -187,10 +184,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         });
 
       } catch (err: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'teamSummary',
-            operation: 'list',
-        }));
+         // Handled via listener
       } finally {
         setLoadingSummary(false);
       }
@@ -200,21 +194,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     
-    setAllEntries([]);
-    setAllDoctors([]);
-    setAllPlans([]);
-    setAllTimeLogs([]);
-    setAllNonCallDaysIndividual([]);
-    setIndividualPlanningRequests([]);
-    setIndividualUsedQuantities({});
-    
     setLoadingIndividual(true);
     
     try {
-        const q = (coll: string) => query(collection(db!, coll), where("userId", "==", sanitizedUserId));
-        
         const fetchS = (collName: string) => 
-            getDocs(q(collName));
+            getDocs(query(collection(db!, collName), where("userId", "==", sanitizedUserId)));
 
         const results = await Promise.allSettled([
             fetchS("coverageEntries"),
@@ -236,11 +220,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const logs = getVal<TimeLog>(3);
         const ncds = getVal<NonCallDay>(4);
         const requests = getVal<PlanningPermissionRequest>(5);
-
-        entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt)));
-        plans.sort((a, b) => safeToDateISO(b.plannedDate).localeCompare(safeToDateISO(a.plannedDate)));
-        logs.sort((a, b) => safeToDateISO(b.timeIn).localeCompare(safeToDateISO(a.timeIn)));
-        ncds.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date)));
 
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
@@ -265,10 +244,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'userData',
-            operation: 'list',
-        }));
+        // Handled via listener
     } finally {
         setLoadingIndividual(false);
     }

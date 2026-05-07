@@ -1,11 +1,4 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  disable: true, // KEEP DISABLED: Essential for resolving ChunkLoadErrors in this environment
-  register: false,
-  skipWaiting: true,
-});
-
 const nextConfig = {
   output: 'standalone',
   typescript: {
@@ -23,4 +16,4 @@ const nextConfig = {
   reactStrictMode: false, // Helps with some hydration/chunk load edge cases in cloud dev environments
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;
