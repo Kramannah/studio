@@ -4,12 +4,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs, FirestoreError } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { subDays } from 'date-fns';
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v2';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v3';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const OFFICIAL_BATCH_ITEMS: Omit<Q4Allocation, 'id'>[] = [
@@ -74,6 +77,14 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
+  const isUserAdminOrManager = () => {
+    if (!user) return false;
+    const email = user.email?.toLowerCase() || '';
+    return ADMIN_UIDS.includes(user.uid) || 
+           ADMIN_EMAILS.some(e => e.toLowerCase() === email) || 
+           Object.keys(MANAGER_TEAMS).includes(user.uid);
+  };
+
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
     
@@ -88,8 +99,11 @@ export const useQ4Allocation = () => {
         } else {
             setAllocations(OFFICIAL_BATCH_ITEMS.map((item, idx) => ({ id: `hardcoded_${idx}`, ...item })));
         }
-    } catch (error) {
-        console.error("Allocation fetch error:", error);
+    } catch (error: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'q4Allocation',
+          operation: 'list',
+        }));
     } finally {
         setLoading(false);
     }
@@ -98,7 +112,6 @@ export const useQ4Allocation = () => {
   const fetchUsage = useCallback(async (force = false) => {
     if (!db || !user) return;
     
-    // 1. CHECK CACHE FIRST TO SAVE QUOTA
     if (!force) {
         try {
             const cached = localStorage.getItem(USAGE_CACHE_KEY);
@@ -114,14 +127,25 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      // QUOTA OPTIMIZATION: Reduced lookback window to 7 days and switched to one-time getDocs
-      const startDate = subDays(new Date(), 7).toISOString();
+      const startDate = subDays(new Date(), 90).toISOString(); // 90 days for quarterly context
       
-      const usageQuery = query(
-          colRef, 
-          where("submittedAt", ">=", startDate),
-          limit(200) // STRICT LIMIT: Capped to 200 docs for team-wide usage
-      );
+      let usageQuery;
+      if (isUserAdminOrManager()) {
+          // Admins/Managers see all usage for their territory oversight
+          usageQuery = query(
+              colRef, 
+              where("submittedAt", ">=", startDate),
+              limit(500)
+          );
+      } else {
+          // PMRs see ONLY their own usage to comply with isOwner rule
+          usageQuery = query(
+              colRef, 
+              where("userId", "==", user.uid),
+              where("submittedAt", ">=", startDate),
+              limit(500)
+          );
+      }
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -142,13 +166,10 @@ export const useQ4Allocation = () => {
       });
 
       setUsedQuantities(usage);
-      // 2. SAVE TO CACHE
-      try {
-        localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
-      } catch (e) {}
-
+      localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage tracker optimized to save quota:", error.message);
+        console.warn("Usage tracker restricted by permissions, falling back to local context.");
+        // If team-wide query fails, we don't trigger global error listener to avoid crashing UI
     }
   }, [user]);
 
@@ -173,10 +194,13 @@ export const useQ4Allocation = () => {
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
+      toast({ title: "Import Successful", description: `Database updated for ${quarter}.` });
       return true;
     } catch (err) {
-        console.error("Bulk add error:", err);
-        toast({ variant: 'destructive', title: "Upload Failed", description: "You might not have permission." });
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'q4Allocation',
+          operation: 'write',
+        }));
         return false;
     }
   };
@@ -184,16 +208,16 @@ export const useQ4Allocation = () => {
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => {
-          batch.delete(doc(db, "q4Allocation", id));
-      });
+      ids.forEach(id => batch.delete(doc(db, "q4Allocation", id)));
       try {
           await batch.commit();
-          toast({ title: "Deleted Successfully", description: `${ids.length} products removed.` });
+          toast({ title: "Deleted Successfully" });
           return true;
       } catch (err) {
-          console.error("Delete error:", err);
-          toast({ variant: 'destructive', title: "Delete Failed" });
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'q4Allocation',
+            operation: 'delete',
+          }));
           return false;
       }
   };
