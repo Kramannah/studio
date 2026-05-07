@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from './use-toast';
@@ -25,23 +25,20 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      // 1. Fetch official allocations with deep resilience
+      // 1. Fetch official allocations with safe collection switching
       let samplesSnap: QuerySnapshot<DocumentData> | null = null;
       
       try {
-          // Try primary collection first
           samplesSnap = await getDocs(collection(db, "marketingSamples"));
-          
-          // If explicitly empty, try fallback
           if (samplesSnap.empty) {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           }
       } catch (e) {
-          console.warn("Primary inventory fetch failed, attempting fallback:", e);
+          console.warn("Primary inventory access issue, attempting fallback...");
           try {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           } catch (fallbackError) {
-              console.error("All inventory fetch paths failed:", fallbackError);
+              console.error("All inventory collections inaccessible.");
           }
       }
       
@@ -51,8 +48,9 @@ export const useMarketingSamples = () => {
               const data = doc.data();
               if (!data) return;
               
-              const name = data.displayMaterialName || data.materialName || "Unknown Item";
-              const group = data.prodGroupProdSubGroup || data.productGroup || "Uncategorized";
+              // Extreme string protection for fields
+              const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
+              const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
               const qty = Number(data.allocationQuantity || 0);
               
               fetchedSamples.push({ 
@@ -64,11 +62,11 @@ export const useMarketingSamples = () => {
           });
       }
       
-      // Sort in memory to avoid missing index errors on server
-      fetchedSamples.sort((a, b) => a.materialName.localeCompare(b.materialName));
+      // Sort in memory
+      fetchedSamples.sort((a, b) => (a.materialName || "").localeCompare(b.materialName || ""));
       setMarketingSamples(fetchedSamples);
 
-      // 2. Fetch user-specific usage
+      // 2. Fetch usage specifically for this representative
       try {
           const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
           const usage: Record<string, number> = {};
@@ -77,34 +75,32 @@ export const useMarketingSamples = () => {
               const entry = doc.data();
               if (!entry) return;
               
-              if (entry.primarySampleName && entry.primaryProductQty) {
-                  const pQty = Number(entry.primaryProductQty);
-                  if (!isNaN(pQty)) usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + pQty;
-              }
-              if (entry.secondarySampleName && entry.secondaryProductQty) {
-                  const sQty = Number(entry.secondaryProductQty);
-                  if (!isNaN(sQty)) usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + sQty;
-              }
+              const addQty = (name?: string, qty?: number) => {
+                  if (name && qty) {
+                      const cleanName = String(name);
+                      const cleanQty = Number(qty);
+                      if (!isNaN(cleanQty)) {
+                          usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
+                      }
+                  }
+              };
+
+              addQty(entry.primarySampleName, entry.primaryProductQty);
+              addQty(entry.secondarySampleName, entry.secondaryProductQty);
+              
               if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
                   entry.reminderProducts.forEach((p: any) => {
-                      if (p && p.sampleName && p.quantity) {
-                          const rQty = Number(p.quantity);
-                          if (!isNaN(rQty)) usage[p.sampleName] = (usage[p.sampleName] || 0) + rQty;
-                      }
+                      if (p) addQty(p.sampleName, p.quantity);
                   });
               }
           });
           setUsedQuantities(usage);
       } catch (usageError) {
-          console.warn("Usage tracking data could not be fully loaded:", usageError);
+          console.warn("Personal usage data could not be computed.");
       }
 
     } catch (error: any) {
         console.error("Critical error in inventory engine:", error);
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples',
-            operation: 'list',
-        }));
     } finally {
       setLoading(false);
     }

@@ -36,7 +36,7 @@ export default function Q4AllocationPage() {
         
         return marketingSamples.filter(s => {
             if (!s) return false;
-            // Ultra-safe string checks
+            // Ultra-safe string handling to prevent toLowerCase crashes
             const name = String(s.materialName || "").toLowerCase();
             const group = String(s.productGroup || "").toLowerCase();
             
@@ -53,7 +53,8 @@ export default function Q4AllocationPage() {
         filteredSamples.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity || 0));
-            const used = Math.round(Number(usedQuantities[s.materialName || ""] || 0));
+            // Ensure usedQuantities lookup is safe
+            const used = Math.round(Number(usedQuantities[String(s.materialName || "")] || 0));
             totalAllocated += alloc;
             totalUsed += used;
             totalRemaining += Math.max(0, alloc - used);
@@ -168,13 +169,13 @@ export default function Q4AllocationPage() {
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
-                                            const distributed = Math.round(Number(usedQuantities[sample.materialName || ""] || 0));
+                                            const distributed = Math.round(Number(usedQuantities[String(sample.materialName || "")] || 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity || 0));
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
                                                 <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                    <TableCell className="pl-6 font-bold text-primary">{sample.productGroup || "Uncategorized"}</TableCell>
-                                                    <TableCell className="font-medium">{sample.materialName || "Unknown Item"}</TableCell>
+                                                    <TableCell className="pl-6 font-bold text-primary">{String(sample.productGroup || "Uncategorized")}</TableCell>
+                                                    <TableCell className="font-medium">{String(sample.materialName || "Unknown Item")}</TableCell>
                                                     <TableCell className="text-center font-mono">{alloc}</TableCell>
                                                     <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
                                                     <TableCell className="text-center pr-6">
