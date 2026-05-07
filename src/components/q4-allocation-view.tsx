@@ -68,18 +68,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const filteredSamples = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return [];
         
-        // Pre-normalize search term to prevent per-item processing
+        // Normalize search term once for safety
         const safeSearch = String(search || "").toLowerCase().trim();
+        const quarterStr = String(activeQuarter);
         
         return allocations.filter(s => {
             if (!s || typeof s !== 'object') return false;
             
-            // Quarter matching with safe string casting
+            // Quarter matching with ultra-safe casting
             const q = String(s.quarter || 'Q4');
-            const matchesQuarter = q === activeQuarter;
-            if (!matchesQuarter) return false;
+            if (q !== quarterStr) return false;
 
-            // Search matching with ultra-safe string handling to prevent toLowerCase crashes
+            // Search matching with explicit string casting for all fields to prevent toLowerCase crashes
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
@@ -101,14 +101,16 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const stats = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
         
-        const quarterAllocations = allocations.filter(s => s && String(s.quarter || 'Q4') === activeQuarter);
+        const quarterStr = String(activeQuarter);
+        const quarterAllocations = allocations.filter(s => s && String(s.quarter || 'Q4') === quarterStr);
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
         
         quarterAllocations.forEach(s => {
+            if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity || 0));
-            // Ensure usedQuantities lookup is safe
+            // Ensure usedQuantities lookup is safe with explicit casting
             const name = String(s.displayMaterialName || s.materialName || "");
             const used = Math.round(Number(usedQuantities[name] || 0));
             

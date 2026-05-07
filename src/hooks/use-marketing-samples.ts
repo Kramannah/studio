@@ -48,7 +48,7 @@ export const useMarketingSamples = () => {
               const data = doc.data();
               if (!data) return;
               
-              // Extreme string protection for fields
+              // Extreme string protection for fields to prevent toLowerCase crashes in components
               const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
               const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
               const qty = Number(data.allocationQuantity || 0);
@@ -62,8 +62,8 @@ export const useMarketingSamples = () => {
           });
       }
       
-      // Sort in memory
-      fetchedSamples.sort((a, b) => (a.materialName || "").localeCompare(b.materialName || ""));
+      // Sort in memory with string safety
+      fetchedSamples.sort((a, b) => String(a.materialName || "").localeCompare(String(b.materialName || "")));
       setMarketingSamples(fetchedSamples);
 
       // 2. Fetch usage specifically for this representative
@@ -75,7 +75,7 @@ export const useMarketingSamples = () => {
               const entry = doc.data();
               if (!entry) return;
               
-              const addQty = (name?: string, qty?: number) => {
+              const addQty = (name?: any, qty?: any) => {
                   if (name && qty) {
                       const cleanName = String(name);
                       const cleanQty = Number(qty);

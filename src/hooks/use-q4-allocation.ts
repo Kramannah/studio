@@ -11,7 +11,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v7';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v8';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -53,7 +53,7 @@ export const useQ4Allocation = () => {
                 const data = doc.data();
                 if (!data) return null;
                 
-                // Extremely safe field mapping with explicit string casting
+                // Extremely safe field mapping with explicit string casting to prevent client crashes
                 const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
                 const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
                 const qty = Number(data.allocationQuantity || 0);
@@ -67,7 +67,7 @@ export const useQ4Allocation = () => {
                 } as Q4Allocation;
             }).filter((item): item is Q4Allocation => item !== null);
 
-            // Sort in memory to bypass index requirements
+            // Sort in memory to bypass index requirements and ensure string safety
             fetched.sort((a, b) => String(a.displayMaterialName || "").localeCompare(String(b.displayMaterialName || "")));
             setAllocations(fetched);
         }
@@ -84,7 +84,7 @@ export const useQ4Allocation = () => {
             const cached = localStorage.getItem(USAGE_CACHE_KEY);
             if (cached) {
                 const parsed = JSON.parse(cached);
-                // Robust verification of cached data structure
+                // Robust verification of cached data structure before property access
                 if (parsed && typeof parsed === 'object' && parsed.data && parsed.timestamp) {
                     if (Date.now() - parsed.timestamp < CACHE_DURATION) {
                         setUsedQuantities(parsed.data);
@@ -116,7 +116,7 @@ export const useQ4Allocation = () => {
             const entry = doc.data() as CoverageEntry;
             if (!entry) return;
 
-            // Defensive quantity accumulation
+            // Defensive quantity accumulation with explicit casting
             const processSample = (name?: any, qty?: any) => {
                 if (name && qty) {
                     const cleanName = String(name);
