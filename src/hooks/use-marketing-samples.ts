@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, where, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from './use-toast';
@@ -25,63 +25,82 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      // 1. Fetch official allocations from marketingSamples with defensive fallback
-      let samplesSnap: QuerySnapshot<DocumentData>;
+      // 1. Fetch official allocations with deep resilience
+      let samplesSnap: QuerySnapshot<DocumentData> | null = null;
+      
       try {
-          samplesSnap = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")));
+          // Try primary collection first
+          samplesSnap = await getDocs(collection(db, "marketingSamples"));
+          
+          // If explicitly empty, try fallback
           if (samplesSnap.empty) {
-              samplesSnap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+              samplesSnap = await getDocs(collection(db, "q4Allocation"));
           }
       } catch (e) {
-          // Fallback to legacy if first query fails (e.g. collection missing)
-          samplesSnap = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+          console.warn("Primary inventory fetch failed, attempting fallback:", e);
+          try {
+              samplesSnap = await getDocs(collection(db, "q4Allocation"));
+          } catch (fallbackError) {
+              console.error("All inventory fetch paths failed:", fallbackError);
+          }
       }
       
-      const fetchedSamples = samplesSnap.docs.map(doc => {
-          const data = doc.data();
-          // Defensive mapping for inconsistent field names
-          const name = data.displayMaterialName || data.materialName || "Unknown Item";
-          const group = data.prodGroupProdSubGroup || data.productGroup || "Uncategorized";
-          const qty = Number(data.allocationQuantity || 0);
-          
-          return { 
-              id: doc.id, 
-              productGroup: group, 
-              materialName: name, 
-              allocationQuantity: isNaN(qty) ? 0 : qty
-          } as MarketingSample;
-      });
+      const fetchedSamples: MarketingSample[] = [];
+      if (samplesSnap && !samplesSnap.empty) {
+          samplesSnap.docs.forEach(doc => {
+              const data = doc.data();
+              if (!data) return;
+              
+              const name = data.displayMaterialName || data.materialName || "Unknown Item";
+              const group = data.prodGroupProdSubGroup || data.productGroup || "Uncategorized";
+              const qty = Number(data.allocationQuantity || 0);
+              
+              fetchedSamples.push({ 
+                  id: doc.id, 
+                  productGroup: group, 
+                  materialName: name, 
+                  allocationQuantity: isNaN(qty) ? 0 : qty
+              });
+          });
+      }
       
+      // Sort in memory to avoid missing index errors on server
+      fetchedSamples.sort((a, b) => a.materialName.localeCompare(b.materialName));
       setMarketingSamples(fetchedSamples);
 
-      // 2. Fetch user-specific usage from coverage entries
-      // Simplified query to avoid index requirements on live server
-      const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
-
-      const usage: Record<string, number> = {};
-      usageSnap.docs.forEach(doc => {
-          const entry = doc.data();
-          if (entry.primarySampleName && entry.primaryProductQty) {
-              const pQty = Number(entry.primaryProductQty);
-              if (!isNaN(pQty)) usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + pQty;
-          }
-          if (entry.secondarySampleName && entry.secondaryProductQty) {
-              const sQty = Number(entry.secondaryProductQty);
-              if (!isNaN(sQty)) usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + sQty;
-          }
-          if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
-              entry.reminderProducts.forEach((p: any) => {
-                  if (p && p.sampleName && p.quantity) {
-                      const rQty = Number(p.quantity);
-                      if (!isNaN(rQty)) usage[p.sampleName] = (usage[p.sampleName] || 0) + rQty;
-                  }
-              });
-          }
-      });
-      setUsedQuantities(usage);
+      // 2. Fetch user-specific usage
+      try {
+          const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
+          const usage: Record<string, number> = {};
+          
+          usageSnap.docs.forEach(doc => {
+              const entry = doc.data();
+              if (!entry) return;
+              
+              if (entry.primarySampleName && entry.primaryProductQty) {
+                  const pQty = Number(entry.primaryProductQty);
+                  if (!isNaN(pQty)) usage[entry.primarySampleName] = (usage[entry.primarySampleName] || 0) + pQty;
+              }
+              if (entry.secondarySampleName && entry.secondaryProductQty) {
+                  const sQty = Number(entry.secondaryProductQty);
+                  if (!isNaN(sQty)) usage[entry.secondarySampleName] = (usage[entry.secondarySampleName] || 0) + sQty;
+              }
+              if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
+                  entry.reminderProducts.forEach((p: any) => {
+                      if (p && p.sampleName && p.quantity) {
+                          const rQty = Number(p.quantity);
+                          if (!isNaN(rQty)) usage[p.sampleName] = (usage[p.sampleName] || 0) + rQty;
+                      }
+                  });
+              }
+          });
+          setUsedQuantities(usage);
+      } catch (usageError) {
+          console.warn("Usage tracking data could not be fully loaded:", usageError);
+      }
 
     } catch (error: any) {
-        console.error("Marketing samples fetch error:", error);
+        console.error("Critical error in inventory engine:", error);
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: 'marketingSamples',
             operation: 'list',

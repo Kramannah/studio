@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, orderBy, where, limit, getDocs, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, limit, getDocs, FirestoreError, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { subDays, parseISO, isValid, isAfter } from 'date-fns';
@@ -34,21 +34,27 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-        let snapshot: QuerySnapshot<DocumentData>;
+        let snapshot: QuerySnapshot<DocumentData> | null = null;
         try {
-            snapshot = await getDocs(query(collection(db, "marketingSamples"), orderBy("displayMaterialName", "asc")));
+            snapshot = await getDocs(collection(db, "marketingSamples"));
             if (snapshot.empty) {
-                snapshot = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+                snapshot = await getDocs(collection(db, "q4Allocation"));
             }
         } catch (e) {
-            snapshot = await getDocs(query(collection(db, "q4Allocation"), orderBy("displayMaterialName", "asc")));
+            console.warn("Primary allocation fetch failed, using legacy fallback:", e);
+            try {
+                snapshot = await getDocs(collection(db, "q4Allocation"));
+            } catch (fallbackError) {
+                console.error("Fatal: Could not access any allocation collections.");
+            }
         }
         
-        if (!snapshot.empty) {
-            setAllocations(snapshot.docs.map(doc => {
+        if (snapshot && !snapshot.empty) {
+            const fetched = snapshot.docs.map(doc => {
                 const data = doc.data();
+                if (!data) return null;
                 const name = data.displayMaterialName || data.materialName || "Unknown Item";
-                const group = data.prodGroupProdSubGroup || data.productGroup || "";
+                const group = data.prodGroupProdSubGroup || data.productGroup || "Uncategorized";
                 const qty = Number(data.allocationQuantity || 0);
                 
                 return { 
@@ -58,9 +64,14 @@ export const useQ4Allocation = () => {
                     allocationQuantity: isNaN(qty) ? 0 : qty,
                     quarter: data.quarter || 'Q4'
                 } as Q4Allocation;
-            }));
+            }).filter((item): item is Q4Allocation => item !== null);
+
+            // Sort in memory to prevent index crashes
+            fetched.sort((a, b) => a.displayMaterialName.localeCompare(b.displayMaterialName));
+            setAllocations(fetched);
         }
     } catch (error: any) {
+        console.error("Critical error in allocation engine:", error);
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'marketingSamples',
           operation: 'list',
@@ -86,11 +97,10 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      const filterDate = subDays(new Date(), 120);
       
       let usageQuery;
       if (isUserAdminOrManager()) {
-          usageQuery = query(colRef, limit(2000));
+          usageQuery = query(colRef, limit(1000)); // Limit to prevent browser timeouts
       } else {
           usageQuery = query(colRef, where("userId", "==", user.uid));
       }
@@ -100,13 +110,7 @@ export const useQ4Allocation = () => {
       
       snapshot.docs.forEach(doc => {
         const entry = doc.data() as CoverageEntry;
-        const subDateStr = entry.submittedAt || entry.coverageDate;
-        if (subDateStr) {
-            const dateObj = parseISO(subDateStr);
-            if (isValid(dateObj) && !isAfter(dateObj, filterDate)) {
-                // Skip very old data if needed, but let's keep most for balance accuracy
-            }
-        }
+        if (!entry) return;
 
         if (entry.primarySampleName && entry.primaryProductQty) {
             const pQty = Number(entry.primaryProductQty);
@@ -129,14 +133,14 @@ export const useQ4Allocation = () => {
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage tracker sync issue:", error);
+        console.warn("Distribution tracker could not calculate real-time usage:", error);
     }
   }, [user, isUserAdminOrManager]);
 
   useEffect(() => {
     const init = async () => {
         setLoading(true);
-        await Promise.all([fetchAllocations(), fetchUsage()]);
+        await Promise.allSettled([fetchAllocations(), fetchUsage()]);
         setLoading(false);
     };
     init();
@@ -144,7 +148,7 @@ export const useQ4Allocation = () => {
 
   const refetch = useCallback(async () => {
       setLoading(true);
-      await Promise.all([fetchAllocations(), fetchUsage(true)]);
+      await Promise.allSettled([fetchAllocations(), fetchUsage(true)]);
       setLoading(false);
   }, [fetchAllocations, fetchUsage]);
 

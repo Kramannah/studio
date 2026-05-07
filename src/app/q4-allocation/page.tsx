@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
-    const { marketingSamples, usedQuantities, loading: dataLoading, refetch } = useMarketingSamples();
+    const { marketingSamples = [], usedQuantities = {}, loading: dataLoading, refetch } = useMarketingSamples();
     const [search, setSearch] = useState('');
     const [mounted, setMounted] = useState(false);
 
@@ -25,27 +25,30 @@ export default function Q4AllocationPage() {
     }, []);
 
     useEffect(() => {
-        if (!authLoading && !user) {
+        if (!authLoading && !user && mounted) {
             router.push('/');
         }
-    }, [user, authLoading, router]);
+    }, [user, authLoading, router, mounted]);
 
     const filteredSamples = useMemo(() => {
-        if (!marketingSamples) return [];
+        if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
         return marketingSamples.filter(s => {
             if (!s) return false;
-            return (s.materialName || "").toLowerCase().includes(search.toLowerCase()) ||
-                   (s.productGroup || "").toLowerCase().includes(search.toLowerCase());
+            const name = s.materialName || "";
+            const group = s.productGroup || "";
+            return name.toLowerCase().includes(search.toLowerCase()) ||
+                   group.toLowerCase().includes(search.toLowerCase());
         });
     }, [marketingSamples, search]);
 
     const stats = useMemo(() => {
-        if (!filteredSamples) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        if (!filteredSamples || filteredSamples.length === 0) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
 
         filteredSamples.forEach(s => {
+            if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity || 0));
             const used = Math.round(Number(usedQuantities[s.materialName || ""] || 0));
             totalAllocated += alloc;
@@ -76,8 +79,8 @@ export default function Q4AllocationPage() {
                             <ChevronLeft className="w-6 h-6" />
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Q4 Batch 1 Allocation</h1>
-                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory Oversight & Distribution</p>
+                            <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Marketing Material Oversight</h1>
+                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory & Distribution Analytics</p>
                         </div>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => refetch()} disabled={dataLoading}>
@@ -92,7 +95,7 @@ export default function Q4AllocationPage() {
                     <Card className="border-2 shadow-sm bg-primary/5">
                         <CardHeader className="pb-2">
                             <CardDescription className="font-headline font-bold text-primary flex items-center gap-2 uppercase tracking-tighter">
-                                <PackageCheck className="w-4 h-4" /> Total Batch Allocation
+                                <PackageCheck className="w-4 h-4" /> Total Items Allocated
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -102,7 +105,7 @@ export default function Q4AllocationPage() {
                     <Card className="border-2 shadow-sm bg-orange-500/5">
                         <CardHeader className="pb-2">
                             <CardDescription className="font-headline font-bold text-orange-500 flex items-center gap-2 uppercase tracking-tighter">
-                                <TrendingUp className="w-4 h-4" /> Current Distribution
+                                <TrendingUp className="w-4 h-4" /> Samples Issued
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -112,7 +115,7 @@ export default function Q4AllocationPage() {
                     <Card className="border-2 shadow-sm bg-green-500/5">
                         <CardHeader className="pb-2">
                             <CardDescription className="font-headline font-bold text-green-500 flex items-center gap-2 uppercase tracking-tighter">
-                                <Filter className="w-4 h-4" /> Remaining Stock
+                                <Filter className="w-4 h-4" /> Available Balance
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -125,8 +128,8 @@ export default function Q4AllocationPage() {
                     <CardHeader className="bg-muted/30 border-b pb-6">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="space-y-1">
-                                <CardTitle className="text-xl font-black font-headline">Product Allocation List</CardTitle>
-                                <CardDescription>Detailed monitoring for the Q4 Batch 1 inventory.</CardDescription>
+                                <CardTitle className="text-xl font-black font-headline">Material Distribution List</CardTitle>
+                                <CardDescription>Real-time monitoring of your official sample inventory.</CardDescription>
                             </div>
                             <div className="relative max-w-md w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -146,8 +149,8 @@ export default function Q4AllocationPage() {
                                     <TableRow className="h-12 hover:bg-transparent">
                                         <TableHead className="font-bold text-foreground pl-6">Product Group</TableHead>
                                         <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Initial Alloc</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Distributed</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground">Allocation</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground">Issued</TableHead>
                                         <TableHead className="text-center font-bold text-foreground pr-6">Balance</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -156,7 +159,7 @@ export default function Q4AllocationPage() {
                                         <TableRow>
                                             <TableCell colSpan={5} className="h-64 text-center">
                                                 <RefreshCw className="w-10 h-10 animate-spin mx-auto text-primary opacity-20" />
-                                                <p className="mt-4 text-muted-foreground font-headline font-bold uppercase tracking-widest text-xs">Loading Secure Data...</p>
+                                                <p className="mt-4 text-muted-foreground font-headline font-bold uppercase tracking-widest text-xs">Synchronizing Inventory...</p>
                                             </TableCell>
                                         </TableRow>
                                     ) : filteredSamples.length > 0 ? (
@@ -166,7 +169,7 @@ export default function Q4AllocationPage() {
                                             const alloc = Math.round(Number(sample.allocationQuantity || 0));
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
-                                                <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b">
+                                                <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                     <TableCell className="pl-6 font-bold text-primary">{sample.productGroup || "Uncategorized"}</TableCell>
                                                     <TableCell className="font-medium">{sample.materialName || "Unknown Item"}</TableCell>
                                                     <TableCell className="text-center font-mono">{alloc}</TableCell>
@@ -187,7 +190,7 @@ export default function Q4AllocationPage() {
                                             <TableCell colSpan={5} className="h-64 text-center">
                                                 <div className="flex flex-col items-center justify-center opacity-30">
                                                     <Search className="w-16 h-16 mb-2" />
-                                                    <p className="font-headline font-bold uppercase tracking-widest">No matching samples found</p>
+                                                    <p className="font-headline font-bold uppercase tracking-widest">No matching materials found</p>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -201,8 +204,8 @@ export default function Q4AllocationPage() {
                 <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-xl border-2">
                     <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                     <div className="text-xs text-muted-foreground leading-relaxed">
-                        <p className="font-bold text-foreground mb-1 uppercase tracking-tight">Technical Policy Reminder</p>
-                        <p>This oversight list reflects distribution data synced from the <span className="font-bold text-primary">SFE Offline Coverage</span> engine. Allocation balances are calculated based on the primary, secondary, and reminder products issued during provider visits. Ensure all pending offline records are synced to maintain data accuracy.</p>
+                        <p className="font-bold text-foreground mb-1 uppercase tracking-tight">Compliance & Data Policy</p>
+                        <p>This oversight reflects data synchronized from the <span className="font-bold text-primary">SFE Offline</span> engine. Balances are calculated based on issued samples recorded during provider visits. Please ensure all pending offline records are synced for accurate tracking.</p>
                     </div>
                 </div>
             </main>
