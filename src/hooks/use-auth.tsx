@@ -1,4 +1,3 @@
-
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
@@ -24,6 +23,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    // If auth is not initialized, stop loading
+    if (!auth) {
+        setLoading(false);
+        return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
@@ -33,6 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = async () => {
+    if (!auth) return;
     try {
         await firebaseSignOut(auth);
         toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
@@ -41,7 +47,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  // MEMOIZE context value to prevent unnecessary re-renders of all consuming components
   const contextValue = useMemo(() => ({
     user,
     loading,

@@ -69,6 +69,11 @@
 }
 
 @layer utilities {
+  .font-headline {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+  }
+  
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }

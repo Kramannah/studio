@@ -8,7 +8,12 @@ import { initializeFirebase } from "@/firebase";
  */
 const getServices = () => {
   if (typeof window === 'undefined') return null;
-  return initializeFirebase();
+  try {
+    return initializeFirebase();
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+    return null;
+  }
 };
 
 const currentServices = getServices();
