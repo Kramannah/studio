@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -152,7 +151,15 @@ export default function Home() {
     });
   },[plans]);
   
-  if (authLoading) return <div className="flex items-center justify-center min-h-screen bg-background"><RefreshCw className="w-12 h-12 animate-spin text-primary" /></div>;
+  if (authLoading) return (
+    <div 
+        className="flex items-center justify-center min-h-screen bg-background" 
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100vw' }}
+    >
+        <RefreshCw className="w-12 h-12 animate-spin text-primary" />
+    </div>
+  );
+  
   if (!user) return <LoginPage />;
 
   const handleCrmClick = () => {

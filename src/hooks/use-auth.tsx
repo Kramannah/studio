@@ -23,18 +23,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // If auth is not initialized, stop loading
+    // Safety fallback: ensure loading is never stuck indefinitely
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 8000);
+
     if (!auth) {
         setLoading(false);
+        clearTimeout(timer);
         return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
       setLoading(false);
+      clearTimeout(timer);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   const logout = async () => {
