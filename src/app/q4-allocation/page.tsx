@@ -33,15 +33,14 @@ export default function Q4AllocationPage() {
     const filteredSamples = useMemo(() => {
         if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
         
-        // Pre-normalize search query for safety and performance
-        const safeSearch = String(search || "").toLowerCase().trim();
+        const safeSearch = String(search ?? "").toLowerCase().trim();
         
         return marketingSamples.filter(s => {
             if (!s || typeof s !== 'object') return false;
             
-            // Ultra-safe string handling to prevent toLowerCase crashes on non-string data
-            const name = String(s.materialName || s.displayMaterialName || "").toLowerCase();
-            const group = String(s.productGroup || s.prodGroupProdSubGroup || "").toLowerCase();
+            // Ultra-safe string conversion for all fields to prevent toLowerCase crashes
+            const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
+            const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
             
             return name.includes(safeSearch) || group.includes(safeSearch);
         });
@@ -55,10 +54,9 @@ export default function Q4AllocationPage() {
 
         filteredSamples.forEach(s => {
             if (!s) return;
-            const alloc = Math.round(Number(s.allocationQuantity || 0));
-            // Ensure usedQuantities lookup is safe with explicit casting
-            const name = String(s.materialName || s.displayMaterialName || "");
-            const used = Math.round(Number(usedQuantities[name] || 0));
+            const alloc = Math.round(Number(s.allocationQuantity ?? 0));
+            const name = String(s.materialName ?? s.displayMaterialName ?? "");
+            const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
             totalUsed += used;
@@ -174,10 +172,10 @@ export default function Q4AllocationPage() {
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
-                                            const name = String(sample.materialName || sample.displayMaterialName || "Unknown Item");
-                                            const group = String(sample.productGroup || sample.prodGroupProdSubGroup || "Uncategorized");
-                                            const distributed = Math.round(Number(usedQuantities[name] || 0));
-                                            const alloc = Math.round(Number(sample.allocationQuantity || 0));
+                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
+                                            const group = String(sample.productGroup ?? sample.productGroup ?? "Uncategorized");
+                                            const distributed = Math.round(Number(usedQuantities[name] ?? 0));
+                                            const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
                                                 <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
