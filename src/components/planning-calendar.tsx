@@ -27,7 +27,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
-import { getWeekMonday, isCurrentWeek, isPastWeek } from "@/lib/utils";
+import { getWeekMonday, isCurrentWeek, isPastWeek, cn } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
@@ -289,7 +289,12 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
-    if (!mounted) return null;
+    if (!mounted) return (
+        <div className="flex flex-col items-center justify-center p-20 gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Initializing Calendar...</p>
+        </div>
+    );
 
     if (doctors.length === 0 && !readOnly) {
         return (

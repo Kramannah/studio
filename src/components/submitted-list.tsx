@@ -20,6 +20,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
@@ -407,8 +408,9 @@ export function SubmittedList({
     };
 
     if (!mounted) return (
-        <div className="flex items-center justify-center p-20">
+        <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Reports...</p>
         </div>
     );
 
