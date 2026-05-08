@@ -45,7 +45,12 @@ type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'mas
 export default function Home() {
   const { user, loading: authLoading, logout } = useAuth();
   const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
   
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const email = user.email?.toLowerCase() || '';
@@ -128,16 +133,16 @@ export default function Home() {
     offlineEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
             const qty = Math.round(Number(entry.primaryProductQty));
-            quantities[entry.primarySampleName] = (quantities[entry.primarySampleName] || 0) + qty;
+            quantities[entry.primarySampleName.toLowerCase().trim()] = (quantities[entry.primarySampleName.toLowerCase().trim()] || 0) + qty;
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
             const qty = Math.round(Number(entry.secondaryProductQty));
-            quantities[entry.secondarySampleName] = (quantities[entry.secondarySampleName] || 0) + qty;
+            quantities[entry.secondarySampleName.toLowerCase().trim()] = (quantities[entry.secondarySampleName.toLowerCase().trim()] || 0) + qty;
         }
         entry.reminderProducts?.forEach(prod => {
             if (prod.sampleName && prod.quantity) {
                 const qty = Math.round(Number(prod.quantity));
-                quantities[prod.sampleName] = (quantities[prod.sampleName] || 0) + qty;
+                quantities[prod.sampleName.toLowerCase().trim()] = (quantities[prod.sampleName.toLowerCase().trim()] || 0) + qty;
             }
         });
     });
@@ -145,17 +150,15 @@ export default function Home() {
   }, [globalUsedQuantities, offlineEntries]);
 
   const todaysPlans = useMemo(() => {
+    if (!mounted) return [];
     return plans.filter(p => {
         const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
         return isValid(plannedDate) && isToday(plannedDate);
     });
-  },[plans]);
+  },[plans, mounted]);
   
-  if (authLoading) return (
-    <div 
-        className="flex items-center justify-center min-h-screen bg-background" 
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100vw' }}
-    >
+  if (!mounted || authLoading) return (
+    <div className="flex items-center justify-center min-h-screen bg-background">
         <RefreshCw className="w-12 h-12 animate-spin text-primary" />
     </div>
   );

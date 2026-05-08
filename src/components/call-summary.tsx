@@ -96,11 +96,13 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     }, [nonCallDays, appliedRange, mounted]);
 
     const insights = useMemo(() => {
-        if (!mounted) return null;
+        if (!mounted || !appliedRange.start) return null;
         const filteredEntries = filteredEntriesForRange;
         
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${String(entry.firstName || "").toLowerCase()} ${String(entry.lastName || "").toLowerCase()}`.trim();
+            const first = String(entry.firstName || "").toLowerCase().trim();
+            const last = String(entry.lastName || "").toLowerCase().trim();
+            const providerName = `${first} ${last}`;
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -113,7 +115,9 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         
         const totalHighFreqTarget = highFreqDoctors.length;
         const actualHighFreqAchieved = highFreqDoctors.filter(d => {
-            const key = `${String(d.firstName || "").toLowerCase()} ${String(d.lastName || "").toLowerCase()}`.trim();
+            const first = String(d.firstName || "").toLowerCase().trim();
+            const last = String(d.lastName || "").toLowerCase().trim();
+            const key = `${first} ${last}`;
             const visitCount = providerVisits[key] || 0;
             return visitCount >= 3;
         }).length;
@@ -121,10 +125,20 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
         const totalDoctorsInList = doctors.length;
-        const visitedDoctorNames = new Set(filteredEntries.map(e => `${String(e.firstName || "").toLowerCase()} ${String(e.lastName || "").toLowerCase()}`.trim()));
+        const visitedDoctorNames = new Set(filteredEntries.map(e => {
+            const first = String(e.firstName || "").toLowerCase().trim();
+            const last = String(e.lastName || "").toLowerCase().trim();
+            return `${first} ${last}`;
+        }));
+        
         const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
-            doctors.some(d => `${String(d.firstName || "").toLowerCase()} ${String(d.lastName || "").toLowerCase()}`.trim() === name)
+            doctors.some(d => {
+                const first = String(d.firstName || "").toLowerCase().trim();
+                const last = String(d.lastName || "").toLowerCase().trim();
+                return `${first} ${last}` === name;
+            })
         ).length;
+        
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
@@ -172,13 +186,16 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         const callRatePercentage = adjustedTarget > 0 ? Math.round((totalCalls / adjustedTarget) * 100) : 0;
 
         const topProducts = Object.entries(filteredEntries.reduce((acc, e) => {
-            if (e.primaryProduct) acc[e.primaryProduct] = (acc[e.primaryProduct] || 0) + 1;
-            if (e.secondaryProduct) acc[e.secondaryProduct] = (acc[e.secondaryProduct] || 0) + 1;
+            const p = String(e.primaryProduct || "").trim();
+            const s = String(e.secondaryProduct || "").trim();
+            if (p) acc[p] = (acc[p] || 0) + 1;
+            if (s) acc[s] = (acc[s] || 0) + 1;
             return acc;
         }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
 
         const topSpecialties = Object.entries(filteredEntries.reduce((acc, e) => {
-            if (e.specialty) acc[e.specialty] = (acc[e.specialty] || 0) + 1;
+            const spec = String(e.specialty || "").trim();
+            if (spec) acc[spec] = (acc[spec] || 0) + 1;
             return acc;
         }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
 
@@ -234,7 +251,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     if (!mounted) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Monthly Performance...</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Performance...</p>
         </div>
     );
 

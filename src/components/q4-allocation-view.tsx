@@ -72,7 +72,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
             const itemQuarter = String(s.quarter || "").toUpperCase();
             if (itemQuarter !== activeQuarter) return false;
             
-            // Hardened string checks for search
+            // Hardened string checks for search to prevent TypeError
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
@@ -99,7 +99,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            // CRITICAL: Normalize key to match usage engine logic
+            // Normalize key using lower case and trim to ensure it matches collected usage data
             const nameKey = String(s.displayMaterialName || s.materialName || "").toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
@@ -171,7 +171,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     if (!mounted) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Calculating Usage History...</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Initializing Inventory...</p>
         </div>
     );
 
@@ -232,7 +232,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl">
-                                                        <Trash2 className="h-5 w-5" />
+                                                        <Trash2 className="h-5 v-5" />
                                                     </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
@@ -268,10 +268,10 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     const sId = sample.id;
-                                                    const name = String(sample.displayMaterialName || sample.materialName || "Unknown").trim();
+                                                    const name = String(sample.displayMaterialName || sample.materialName || "Unknown Item").trim();
                                                     const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized").trim();
                                                     
-                                                    // CRITICAL: Normalize key to match usage engine logic
+                                                    // CRITICAL: Normalize key to match usage engine logic (lower case + trimmed)
                                                     const used = Number(usedQuantities?.[name.toLowerCase().trim()] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
                                                     
@@ -315,7 +315,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <p className="text-sm text-muted-foreground">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
-                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
                                 </div>
                             </div>
                         )}

@@ -267,8 +267,8 @@ export function SubmittedList({
     const [activeTab, setActiveTab] = useState("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [selectedMonth, setSelectedMonth] = useState<string>("");
-    const [currentPage, setCurrentPage] = useState(1);
     const [mounted, setMounted] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     useEffect(() => {

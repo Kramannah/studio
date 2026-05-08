@@ -8,6 +8,7 @@ import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { getQueryStartDateISO } from '@/lib/utils';
 
 export const useQ4Allocation = () => {
   const { user } = useAuth();
@@ -64,11 +65,12 @@ export const useQ4Allocation = () => {
     
     try {
       const colRef = collection(db, "coverageEntries");
+      const startDate = getQueryStartDateISO(); // Get start of 6 months ago to prevent timeout
       
-      // Fetch user's entries or district entries without date filter to prevent timeouts/missing counts
+      // Fetch user's entries or district entries with a date filter to prevent timeouts
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(2000))
-        : query(colRef, where("userId", "==", user.uid));
+        ? query(colRef, where("submittedAt", ">=", startDate), orderBy("submittedAt", "desc"), limit(2000))
+        : query(colRef, where("userId", "==", user.uid), where("submittedAt", ">=", startDate));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -78,7 +80,7 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
-            // CRITICAL: Normalize keys to ensure accurate matching (lower case + trimmed)
+            // CRITICAL: Normalize keys using lower case + trimmed name to ensure accurate matching
             const safeName = String(name || "").toLowerCase().trim();
             if (!safeName) return;
             
