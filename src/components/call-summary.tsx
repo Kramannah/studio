@@ -2,10 +2,10 @@
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, isSameDay, startOfMonth, endOfMonth, parse } from "date-fns";
+import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -53,18 +53,22 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
                 monthSet.add(format(submittedDate, 'yyyy-MM'));
             }
         });
-        // Add current month
+        // Add current month (safe because it's in useMemo)
         monthSet.add(format(new Date(), 'yyyy-MM'));
 
-        return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); // Sort descending
+        return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); 
     }, [entries]);
     
     useEffect(() => {
         if (!selectedMonth) return;
-        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-        const start = startOfMonth(monthDate);
-        const end = endOfMonth(monthDate);
-        setAppliedRange({ start, end });
+        try {
+            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            if (isValid(monthDate)) {
+                const start = startOfMonth(monthDate);
+                const end = endOfMonth(monthDate);
+                setAppliedRange({ start, end });
+            }
+        } catch (e) {}
     }, [selectedMonth]);
 
     const getUserName = (userId: string) => {
@@ -115,28 +119,30 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         }
         
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName?.toLowerCase()} ${entry.lastName?.toLowerCase()}`;
+            const providerName = `${String(entry.firstName || "").toLowerCase()} ${String(entry.lastName || "").toLowerCase()}`.trim();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
         const highFreqDoctors = doctors.filter(d => {
-            const freq = parseInt(d.frequency.replace('x', ''), 10) || 0;
+            const freqStr = String(d.frequency || "1x").replace('x', '');
+            const freq = parseInt(freqStr, 10) || 0;
             return freq >= 3;
         });
         
         const totalHighFreqTarget = highFreqDoctors.length;
         const actualHighFreqAchieved = highFreqDoctors.filter(d => {
-            const visitCount = providerVisits[`${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}`] || 0;
+            const key = `${String(d.firstName || "").toLowerCase()} ${String(d.lastName || "").toLowerCase()}`.trim();
+            const visitCount = providerVisits[key] || 0;
             return visitCount >= 3;
         }).length;
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
         const totalDoctorsInList = doctors.length;
-        const visitedDoctorNames = new Set(filteredEntries.map(e => `${e.firstName?.toLowerCase()} ${e.lastName?.toLowerCase()}`));
+        const visitedDoctorNames = new Set(filteredEntries.map(e => `${String(e.firstName || "").toLowerCase()} ${String(e.lastName || "").toLowerCase()}`.trim()));
         const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
-            doctors.some(d => `${d.firstName.toLowerCase()} ${d.lastName.toLowerCase()}` === name)
+            doctors.some(d => `${String(d.firstName || "").toLowerCase()} ${String(d.lastName || "").toLowerCase()}`.trim() === name)
         ).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
@@ -183,7 +189,8 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         monthlyPerformance.sort((a,b) => a.date.getTime() - b.date.getTime());
 
         const originalMonthlyTarget = doctors.reduce((acc, doc) => {
-            const frequency = parseInt(doc.frequency.replace('x', ''), 10) || 0;
+            const freqStr = String(doc.frequency || "1x").replace('x', '');
+            const frequency = parseInt(freqStr, 10) || 0;
             return acc + frequency;
         }, 0);
         
@@ -270,7 +277,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             totalInbaseDays: inbaseDays.size,
             totalOutbaseDays: outbaseDays.size,
             incentiveDays,
-            monthlyPerformance: monthlyPerformance.slice(-6), // last 6 months
+            monthlyPerformance: monthlyPerformance.slice(-6), 
             topProducts,
             topSpecialties,
             isDataAvailable: true,
@@ -354,7 +361,7 @@ Summary:
         const specialtiesSheet = XLSX.utils.json_to_sheet(specialtiesData);
         XLSX.utils.book_append_sheet(workbook, specialtiesSheet, "Top Specialties");
 
-        XLSX.writeFile(workbook, `call_summary_${selectedMonth}_report.xlsx`);
+        XLSX.writeFile(workbook, `call_summary_${selectedMonth || 'current'}_report.xlsx`);
     };
 
 
@@ -390,11 +397,14 @@ Summary:
                                     <SelectValue placeholder="Select a month" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {availableMonths.map(month => (
-                                        <SelectItem key={month} value={month}>
-                                            {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
-                                        </SelectItem>
-                                    ))}
+                                    {availableMonths.map(month => {
+                                        try {
+                                            const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
+                                            return <SelectItem key={month} value={month}>{label}</SelectItem>
+                                        } catch (e) {
+                                            return null;
+                                        }
+                                    })}
                                 </SelectContent>
                             </Select>
                             <Button variant="outline" onClick={handleDownloadExcel}><Download className="mr-2"/> Download Excel</Button>

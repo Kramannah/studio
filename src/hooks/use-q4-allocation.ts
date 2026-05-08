@@ -1,11 +1,9 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
-import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
@@ -14,7 +12,6 @@ export const useQ4Allocation = () => {
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
@@ -36,7 +33,6 @@ export const useQ4Allocation = () => {
             const data = doc.data();
             if (!data) return null;
             
-            // Atomic field mapping with safe fallbacks
             const materialName = String(data.displayMaterialName || data.materialName || "Unknown Item").trim();
             const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").trim();
             const qty = Number(data.allocationQuantity || 0);
@@ -63,7 +59,6 @@ export const useQ4Allocation = () => {
     
     try {
       const colRef = collection(db, "coverageEntries");
-      // Admin/Managers see total distribution for oversight, PMRs see personal
       const usageQuery = isUserAdminOrManager() 
         ? query(colRef)
         : query(colRef, where("userId", "==", user.uid));
@@ -76,14 +71,12 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const process = (name?: any, qty?: any) => {
-            const safeName = String(name || "").trim();
+            const safeName = String(name || "").toLowerCase().trim();
             if (!safeName) return;
             
-            // Use case-insensitive keys for matching
-            const key = safeName.toLowerCase();
             const safeQty = Math.round(Number(qty || 0));
             if (!isNaN(safeQty) && safeQty !== 0) {
-                usage[key] = (usage[key] || 0) + safeQty;
+                usage[safeName] = (usage[safeName] || 0) + safeQty;
             }
         };
 

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -13,7 +12,6 @@ import {
     Download, 
     Search, 
     Loader2, 
-    FileSpreadsheet, 
     AlertCircle, 
     PackageCheck,
     RefreshCw,
@@ -42,6 +40,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format, parse } from "date-fns";
 
 interface Q4AllocationViewProps {
     readOnly?: boolean;
@@ -73,7 +72,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
             if (!s) return false;
             if (String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
             
-            // Ultra defensive string normalization
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
@@ -97,20 +95,19 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
         const quarterAllocations = (allocations || []).filter(s => s && String(s.quarter || "").toUpperCase() === activeQuarter);
         let totalAllocated = 0;
-        let totalUsed = 0;
+        let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            const name = String(s.displayMaterialName || s.materialName || "Unknown").trim();
-            // Matching is case-insensitive
-            const used = Number(usedQuantities?.[name.toLowerCase()] || 0);
+            const nameKey = String(s.displayMaterialName || s.materialName || "Unknown").toLowerCase().trim();
+            const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
-            totalUsed += used;
+            totalUsedCount += used;
         });
 
-        const remaining = Math.max(0, totalAllocated - totalUsed);
-        const percent = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
+        const remaining = Math.max(0, totalAllocated - totalUsedCount);
+        const percent = totalAllocated > 0 ? Math.round((totalUsedCount / totalAllocated) * 100) : 0;
 
-        return { totalAllocated, totalUsed, remaining, percent };
+        return { totalAllocated, totalUsed: totalUsedCount, remaining, percent };
     }, [allocations, usedQuantities, activeQuarter, mounted]);
 
     const handleDownloadTemplate = () => {
@@ -266,7 +263,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     const sId = sample.id;
                                                     const name = String(sample.displayMaterialName || sample.materialName || "Unknown").trim();
                                                     const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized").trim();
-                                                    // Normalize for case-insensitive lookup
                                                     const used = Number(usedQuantities?.[name.toLowerCase()] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
                                                     return (
@@ -309,7 +305,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <p className="text-sm text-muted-foreground">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
-                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
                                 </div>
                             </div>
                         )}

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useAuth } from '@/hooks/use-auth';
@@ -34,7 +33,6 @@ export default function Q4AllocationPage() {
         
         return marketingSamples.filter(s => {
             if (!s) return false;
-            // Ultra-defensive string casting for filtering
             const name = String(s.materialName || s.displayMaterialName || "").toLowerCase();
             const group = String(s.productGroup || s.prodGroupProdSubGroup || "").toLowerCase();
             return name.includes(q) || group.includes(q);
@@ -42,15 +40,15 @@ export default function Q4AllocationPage() {
     }, [marketingSamples, search, mounted]);
 
     const stats = useMemo(() => {
-        let totalAllocated = 0, totalUsed = 0;
+        let totalAllocated = 0, totalUsedCount = 0;
         filteredSamples.forEach(s => {
-            const name = String(s.materialName || s.displayMaterialName || "");
+            const nameKey = String(s.materialName || s.displayMaterialName || "Unknown").toLowerCase().trim();
             totalAllocated += Number(s.allocationQuantity || 0);
-            totalUsed += Number(usedQuantities[name] || 0);
+            totalUsedCount += Number(usedQuantities[nameKey] || 0);
         });
-        const remaining = Math.max(0, totalAllocated - totalUsed);
-        const percent = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
-        return { totalAllocated, totalUsed, remaining, percent };
+        const remaining = Math.max(0, totalAllocated - totalUsedCount);
+        const percent = totalAllocated > 0 ? Math.round((totalUsedCount / totalAllocated) * 100) : 0;
+        return { totalAllocated, totalUsed: totalUsedCount, remaining, percent };
     }, [filteredSamples, usedQuantities]);
 
     if (!mounted || authLoading) return (
@@ -135,7 +133,8 @@ export default function Q4AllocationPage() {
                                         filteredSamples.map((sample) => {
                                             const name = String(sample.materialName || sample.displayMaterialName || "Unknown");
                                             const group = String(sample.productGroup || sample.prodGroupProdSubGroup || "Uncategorized");
-                                            const distributed = Number(usedQuantities[name] || 0);
+                                            const nameKey = name.toLowerCase().trim();
+                                            const distributed = Number(usedQuantities[nameKey] || 0);
                                             const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">

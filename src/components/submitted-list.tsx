@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -7,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, Clock, CheckCheck, LayoutList, ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, FileSpreadsheet } from "lucide-react";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -282,8 +281,11 @@ export function SubmittedList({
     const availableMonths = useMemo(() => {
         const monthSet = new Set<string>();
         entries.forEach(entry => {
-            const date = entry.coverageDate ? parseISO(entry.coverageDate) : null;
-            if (date && isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
+            const dateStr = String(entry.coverageDate || "");
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (date && isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
+            }
         });
         monthSet.add(format(new Date(), 'yyyy-MM'));
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
@@ -291,9 +293,13 @@ export function SubmittedList({
 
     useEffect(() => {
         if (!selectedMonth) return;
-        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-        setSelectedDate(monthDate);
-        setCurrentPage(1);
+        try {
+            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            if (isValid(monthDate)) {
+                setSelectedDate(monthDate);
+                setCurrentPage(1);
+            }
+        } catch (e) {}
     }, [selectedMonth]);
 
     useEffect(() => {
@@ -307,13 +313,19 @@ export function SubmittedList({
 
     const monthRange = useMemo(() => {
         if (!selectedMonth) return { start: new Date(), end: new Date() };
-        const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-        return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
+        try {
+            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
+        } catch (e) {
+            return { start: new Date(), end: new Date() };
+        }
     }, [selectedMonth]);
 
     const filteredByMonth = useMemo(() => {
         return entries.filter(e => {
-            const date = e.coverageDate ? parseISO(e.coverageDate) : null;
+            const dateStr = String(e.coverageDate || "");
+            if (!dateStr) return false;
+            const date = parseISO(dateStr);
             return date && isValid(date) && isWithinInterval(date, monthRange);
         });
     }, [entries, monthRange]);
@@ -321,10 +333,13 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         filteredByMonth.forEach(e => {
-            const date = e.coverageDate ? parseISO(e.coverageDate) : null;
-            if (date && isValid(date)) {
-                const key = format(date, 'yyyy-MM-dd');
-                counts[key] = (counts[key] || 0) + 1;
+            const dateStr = String(e.coverageDate || "");
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (date && isValid(date)) {
+                    const key = format(date, 'yyyy-MM-dd');
+                    counts[key] = (counts[key] || 0) + 1;
+                }
             }
         });
         return counts;
@@ -347,7 +362,9 @@ export function SubmittedList({
         }
         if (activeTab === 'calendar' && selectedDate) {
             res = res.filter(e => {
-                const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+                const dateStr = String(e.coverageDate || "");
+                if (!dateStr) return false;
+                const d = parseISO(dateStr);
                 return d && isSameDay(d, selectedDate);
             });
         }
@@ -362,7 +379,8 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const covDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+            const dateStr = String(entry.coverageDate || "");
+            const covDate = dateStr ? parseISO(dateStr) : null;
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {
                 const u = userMap[entry.userId];
@@ -382,7 +400,7 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Report_${selectedMonth}.xlsx`);
+        XLSX.writeFile(workbook, `Report_${selectedMonth || 'current'}.xlsx`);
     };
 
     if (!mounted) return null;
@@ -402,11 +420,12 @@ export function SubmittedList({
                         <SelectValue placeholder="Select month" />
                     </SelectTrigger>
                     <SelectContent>
-                        {availableMonths.map(month => (
-                            <SelectItem key={month} value={month}>
-                                {format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy')}
-                            </SelectItem>
-                        ))}
+                        {availableMonths.map(month => {
+                            try {
+                                const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
+                                return <SelectItem key={month} value={month}>{label}</SelectItem>
+                            } catch (e) { return null; }
+                        })}
                     </SelectContent>
                 </Select>
                 <div className="relative w-full">
@@ -461,7 +480,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : new Date()}
+                                month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
                                 modifiers={{ hasEntry: entryDates }}
                                 modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
                                 components={{
