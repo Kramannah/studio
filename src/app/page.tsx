@@ -53,8 +53,8 @@ export default function Home() {
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    const email = user.email?.toLowerCase() || '';
-    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email);
+    const email = (user.email ?? "").toLowerCase();
+    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
   }, [user]);
 
   const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
@@ -133,16 +133,19 @@ export default function Home() {
     offlineEntries.forEach(entry => {
         if (entry.primarySampleName && entry.primaryProductQty) {
             const qty = Math.round(Number(entry.primaryProductQty));
-            quantities[entry.primarySampleName.toLowerCase().trim()] = (quantities[entry.primarySampleName.toLowerCase().trim()] || 0) + qty;
+            const key = (entry.primarySampleName ?? "").toLowerCase().trim();
+            quantities[key] = (quantities[key] || 0) + qty;
         }
         if (entry.secondarySampleName && entry.secondaryProductQty) {
             const qty = Math.round(Number(entry.secondaryProductQty));
-            quantities[entry.secondarySampleName.toLowerCase().trim()] = (quantities[entry.secondarySampleName.toLowerCase().trim()] || 0) + qty;
+            const key = (entry.secondarySampleName ?? "").toLowerCase().trim();
+            quantities[key] = (quantities[key] || 0) + qty;
         }
         entry.reminderProducts?.forEach(prod => {
             if (prod.sampleName && prod.quantity) {
                 const qty = Math.round(Number(prod.quantity));
-                quantities[prod.sampleName.toLowerCase().trim()] = (quantities[prod.sampleName.toLowerCase().trim()] || 0) + qty;
+                const key = (prod.sampleName ?? "").toLowerCase().trim();
+                quantities[key] = (quantities[key] || 0) + qty;
             }
         });
     });

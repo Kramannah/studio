@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -48,8 +47,8 @@ export default function AdminPage() {
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
-        const email = user.email?.toLowerCase() || '';
-        return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email);
+        const email = (user.email ?? "").toLowerCase();
+        return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
     }, [user]);
 
     const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
@@ -117,9 +116,9 @@ export default function AdminPage() {
             return { uid, ...data, role, district, managerId: managerUid };
         });
 
-        if (!accountSearch.trim()) return all.sort((a, b) => a.lastName.localeCompare(b.lastName));
+        if (!accountSearch.trim()) return all.sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
 
-        const q = accountSearch.toLowerCase();
+        const q = (accountSearch ?? "").toLowerCase();
         return all.filter(a => {
             const code = String(a.code || "").toLowerCase();
             const firstName = String(a.firstName || "").toLowerCase();
@@ -134,7 +133,7 @@ export default function AdminPage() {
                    role.includes(q) ||
                    district.includes(q) ||
                    email.includes(q);
-        }).sort((a, b) => a.lastName.localeCompare(b.lastName));
+        }).sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
     }, [accountSearch, profiles]);
 
     const managedUserIds = useMemo(() => {

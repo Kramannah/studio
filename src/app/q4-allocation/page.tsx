@@ -29,12 +29,12 @@ export default function Q4AllocationPage() {
 
     const filteredSamples = useMemo(() => {
         if (!mounted || !marketingSamples) return [];
-        const q = (search ?? "").toString().toLowerCase().trim();
+        const q = (search ?? "").toLowerCase().trim();
         
         return marketingSamples.filter(s => {
             if (!s) return false;
-            const name = (s.materialName ?? s.displayMaterialName ?? "").toString().toLowerCase();
-            const group = (s.productGroup ?? s.prodGroupProdSubGroup ?? "").toString().toLowerCase();
+            const name = (s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
+            const group = (s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
             return name.includes(q) || group.includes(q);
         });
     }, [marketingSamples, search, mounted]);
@@ -42,7 +42,7 @@ export default function Q4AllocationPage() {
     const stats = useMemo(() => {
         let totalAllocated = 0, totalUsedCount = 0;
         filteredSamples.forEach(s => {
-            const nameKey = (s.materialName ?? s.displayMaterialName ?? "Unknown").toString().toLowerCase().trim();
+            const nameKey = (s.materialName ?? s.displayMaterialName ?? "Unknown").toLowerCase().trim();
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += Number(usedQuantities[nameKey] || 0);
         });
@@ -133,7 +133,7 @@ export default function Q4AllocationPage() {
                                         filteredSamples.map((sample) => {
                                             const name = (sample.materialName ?? sample.displayMaterialName ?? "Unknown Item").toString();
                                             const group = (sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized").toString();
-                                            const nameKey = name.toLowerCase().trim();
+                                            const nameKey = (name ?? "").toLowerCase().trim();
                                             const distributed = Number(usedQuantities[nameKey] || 0);
                                             const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (
