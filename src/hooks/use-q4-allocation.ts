@@ -50,7 +50,7 @@ export const useQ4Allocation = () => {
             } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
 
-        fetched.sort((a, b) => String(a.displayMaterialName ?? "").localeCompare(String(b.displayMaterialName ?? "")));
+        fetched.sort((a, b) => (a.displayMaterialName ?? "").toLowerCase().localeCompare((b.displayMaterialName ?? "").toLowerCase()));
         setAllocations(fetched);
     } catch (error: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -79,7 +79,6 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
-            // Safe string normalization to prevent Application Errors and ensure matching accuracy
             const safeName = (name ?? "").toString().toLowerCase().trim();
             if (!safeName) return;
             
@@ -100,6 +99,9 @@ export const useQ4Allocation = () => {
 
       setUsedQuantities(usage);
     } catch (error: any) {
+        if (error.message && error.message.includes("requires an index")) {
+            console.warn("Firestore index missing for usage query. Click the link in the error overlay to create it.");
+        }
         console.error("Usage Tracking Error:", error);
     }
   }, [user, isUserAdminOrManager]);
