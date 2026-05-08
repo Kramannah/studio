@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { MarketingSample } from "@/lib/types";
@@ -40,16 +39,15 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const filteredSamples = useMemo(() => {
     if (!mounted || !samples || !Array.isArray(samples)) return [];
     
-    const safeFilter = String(filter || "").toLowerCase().trim();
+    const safeFilter = (filter ?? "").toString().toLowerCase().trim();
     
     return samples.filter(sample => {
         if (!sample) return false;
         
-        // Strict string conversion and property guarding to prevent toLowerCase TypeError
-        const group = String(sample.productGroup || "").toLowerCase();
-        const name = String(sample.materialName || "").toLowerCase();
+        const group = (sample.productGroup ?? "").toString().toLowerCase();
+        const name = (sample.materialName ?? "").toString().toLowerCase();
         
-        return group.indexOf(safeFilter) !== -1 || name.indexOf(safeFilter) !== -1;
+        return group.includes(safeFilter) || name.includes(safeFilter);
     });
   }, [samples, filter, mounted]);
 
@@ -66,11 +64,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
-        const name = String(sample.materialName || "Unknown Item");
-        const used = Number(usedQuantities[name] || 0);
+        const name = (sample.materialName ?? "Unknown Item").toString();
+        const used = Number(usedQuantities[name.toLowerCase().trim()] || 0);
         const allocated = Number(sample.allocationQuantity || 0);
         return {
-            "Product Group": String(sample.productGroup || "Uncategorized"),
+            "Product Group": (sample.productGroup ?? "Uncategorized").toString(),
             "Material Name": name,
             "Allocated Quantity": allocated,
             "Remaining Quantity": Math.max(0, allocated - used)
@@ -144,8 +142,8 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                           paginatedSamples.map((sample) => {
                               return (
                                   <TableRow key={sample.id} className="h-16 hover:bg-muted/30 transition-colors">
-                                      <TableCell className="font-bold text-primary">{String(sample.productGroup || "Uncategorized")}</TableCell>
-                                      <TableCell className="font-medium">{String(sample.materialName || "Unknown Item")}</TableCell>
+                                      <TableCell className="font-bold text-primary">{(sample.productGroup ?? "Uncategorized").toString()}</TableCell>
+                                      <TableCell className="font-medium">{(sample.materialName ?? "Unknown Item").toString()}</TableCell>
                                       <TableCell className="text-center font-mono font-bold">{Number(sample.allocationQuantity || 0)}</TableCell>
                                   </TableRow>
                               );
