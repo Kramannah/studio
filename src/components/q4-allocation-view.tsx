@@ -72,6 +72,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
             const itemQuarter = String(s.quarter || "").toUpperCase();
             if (itemQuarter !== activeQuarter) return false;
             
+            // Hardened string checks for search
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
@@ -98,6 +99,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
+            // CRITICAL: Normalize key to match usage engine logic
             const nameKey = String(s.displayMaterialName || s.materialName || "").toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
@@ -167,8 +169,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     };
 
     if (!mounted) return (
-        <div className="flex items-center justify-center p-20">
+        <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Calculating Usage History...</p>
         </div>
     );
 
@@ -267,8 +270,11 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     const sId = sample.id;
                                                     const name = String(sample.displayMaterialName || sample.materialName || "Unknown").trim();
                                                     const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized").trim();
-                                                    const used = Number(usedQuantities?.[name.toLowerCase()] || 0);
+                                                    
+                                                    // CRITICAL: Normalize key to match usage engine logic
+                                                    const used = Number(usedQuantities?.[name.toLowerCase().trim()] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
+                                                    
                                                     return (
                                                         <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (
@@ -320,24 +326,20 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             <Card className="border-2 shadow-lg bg-muted/20">
                                 <CardHeader>
                                     <CardTitle className="font-black font-headline">Bulk Upload</CardTitle>
-                                    <CardDescription>Update your material list for {activeQuarter} using an Excel file.</CardDescription>
+                                    <CardDescription>Update material list for {activeQuarter}.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-12 font-headline">
-                                        <FileDown className="mr-2 h-5 w-5" /> Download Template
+                                        <FileDown className="mr-2 h-5 w-5" /> Template
                                     </Button>
                                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
                                     <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-12 font-headline shadow-lg transition-all active:scale-95">
-                                        {isUploading ? <><Loader2 className="mr-2 animate-spin" /> Uploading...</> : <><Download className="mr-2 h-5 w-5 rotate-180" /> Select Excel File</>}
+                                        {isUploading ? <><Loader2 className="mr-2 animate-spin" /> Uploading...</> : <><Download className="mr-2 h-5 w-5 rotate-180" /> Select File</>}
                                     </Button>
-                                    <Alert className="bg-background/50 border-2">
-                                        <AlertCircle className="h-4 w-4" />
-                                        <AlertDescription className="text-[10px] leading-tight">Ensure headers match exactly: ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity</AlertDescription>
-                                    </Alert>
                                 </CardContent>
                             </Card>
                             <Button variant="outline" onClick={() => refetch()} disabled={dataLoading} className="w-full border-2 h-12 font-headline">
-                                <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh Live Feed
+                                <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh Counts
                             </Button>
                         </div>
                     )}

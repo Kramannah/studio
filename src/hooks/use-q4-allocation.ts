@@ -3,10 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { getQueryStartDateISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
@@ -64,13 +63,12 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-      const startDate = getQueryStartDateISO();
       const colRef = collection(db, "coverageEntries");
       
-      // Limit query to recent entries to prevent timeout on live server
+      // Fetch user's entries or district entries without date filter to prevent timeouts/missing counts
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, where("submittedAt", ">=", startDate))
-        : query(colRef, where("userId", "==", user.uid), where("submittedAt", ">=", startDate));
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(2000))
+        : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -80,6 +78,7 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
+            // CRITICAL: Normalize keys to ensure accurate matching (lower case + trimmed)
             const safeName = String(name || "").toLowerCase().trim();
             if (!safeName) return;
             
@@ -100,10 +99,7 @@ export const useQ4Allocation = () => {
 
       setUsedQuantities(usage);
     } catch (error: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'coverageEntries',
-            operation: 'list'
-        }));
+        console.error("Usage Tracking Error:", error);
     }
   }, [user, isUserAdminOrManager]);
 

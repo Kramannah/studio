@@ -26,7 +26,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     if (!value && typeof value !== 'number') return null;
     return (
         <div>
-            <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{label}</p>
             <p className="text-sm font-medium text-foreground">{value}</p>
         </div>
     )
@@ -131,17 +131,17 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                     <TableCell colSpan={6} className="p-0 border-b">
                         <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><List className="w-3 h-3" /> Call Details</h4>
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><List className="w-3 h-3" /> Call Details</h4>
                                 <DetailItem label="Objective" value={entry.callObjective} />
                                 <DetailItem label="Coverage Type" value={entry.coverageType} />
                             </div>
                             <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
                                 <DetailItem label="Primary Product" value={entry.primaryProduct} />
                                 <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
                                 {entry.reminderProducts && entry.reminderProducts.length > 0 && (
                                     <div>
-                                        <p className="text-xs font-semibold text-muted-foreground">Reminder Items</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Reminder Items</p>
                                         <div className="mt-1 space-y-1">
                                             {entry.reminderProducts.map((p, i) => (
                                                 <p key={i} className="text-xs font-medium">{p.sampleName} (x{p.quantity})</p>
@@ -151,7 +151,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                                 )}
                             </div>
                             <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
                                 <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
                                 <DetailItem label="Next Steps" value={entry.planOfAction} />
                             </div>
@@ -279,6 +279,7 @@ export function SubmittedList({
     }, []);
     
     const availableMonths = useMemo(() => {
+        if (!mounted) return [];
         const monthSet = new Set<string>();
         entries.forEach(entry => {
             const dateStr = String(entry.coverageDate || "");
@@ -289,10 +290,10 @@ export function SubmittedList({
         });
         monthSet.add(format(new Date(), 'yyyy-MM'));
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
-    }, [entries]);
+    }, [entries, mounted]);
 
     useEffect(() => {
-        if (!selectedMonth) return;
+        if (!selectedMonth || !mounted) return;
         try {
             const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
             if (isValid(monthDate)) {
@@ -300,7 +301,7 @@ export function SubmittedList({
                 setCurrentPage(1);
             }
         } catch (e) {}
-    }, [selectedMonth]);
+    }, [selectedMonth, mounted]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -312,23 +313,24 @@ export function SubmittedList({
     };
 
     const monthRange = useMemo(() => {
-        if (!selectedMonth) return { start: new Date(), end: new Date() };
+        if (!selectedMonth || !mounted) return { start: new Date(), end: new Date() };
         try {
             const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
             return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
         } catch (e) {
             return { start: new Date(), end: new Date() };
         }
-    }, [selectedMonth]);
+    }, [selectedMonth, mounted]);
 
     const filteredByMonth = useMemo(() => {
+        if (!mounted) return [];
         return entries.filter(e => {
             const dateStr = String(e.coverageDate || "");
             if (!dateStr) return false;
             const date = parseISO(dateStr);
             return date && isValid(date) && isWithinInterval(date, monthRange);
         });
-    }, [entries, monthRange]);
+    }, [entries, monthRange, mounted]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -350,6 +352,7 @@ export function SubmittedList({
     }, [entriesCountByDate]);
 
     const filtered = useMemo(() => {
+        if (!mounted) return [];
         let res = [...filteredByMonth];
         const q = String(searchQuery || "").toLowerCase().trim();
         if (q) {
@@ -369,7 +372,7 @@ export function SubmittedList({
             });
         }
         return res;
-    }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
+    }, [filteredByMonth, searchQuery, activeTab, selectedDate, mounted]);
 
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
     const paginatedEntries = useMemo(() => {
