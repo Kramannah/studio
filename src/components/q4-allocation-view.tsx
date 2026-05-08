@@ -239,8 +239,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                         <AlertDialogDescription>This action will permanently remove these items from the material list.</AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                         <AlertDialogAction onClick={() => deleteAllocationsBulk(selectedIds).then(() => setSelectedIds([]))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>

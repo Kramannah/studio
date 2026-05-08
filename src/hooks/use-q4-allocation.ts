@@ -18,11 +18,11 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = String(user.email ?? "").toLowerCase().trim();
+    const email = (user.email ?? "").toLowerCase().trim();
     if (!email) return false;
     
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => String(e ?? "").toLowerCase().trim() === email);
+                  ADMIN_EMAILS.some(e => (e ?? "").toLowerCase().trim() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
     return isAdmin || isManager;
   }, [user]);
@@ -79,7 +79,7 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
-            const safeName = String(name ?? "").toLowerCase().trim();
+            const safeName = (name ?? "").toString().toLowerCase().trim();
             if (!safeName) return;
             
             const safeQty = Math.round(Number(qty || 0));
@@ -126,7 +126,7 @@ export const useQ4Allocation = () => {
       data.forEach(item => {
         const name = String(item.displayMaterialName ?? "").trim();
         if (!name) return;
-        const cleanId = String(name ?? "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanId = (name ?? "").toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `${quarter.toLowerCase()}_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });

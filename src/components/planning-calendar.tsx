@@ -165,7 +165,7 @@ export function PlanningCalendar({
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${String(e.firstName ?? "").toLowerCase()}|${String(e.lastName ?? "").toLowerCase()}`;
+                    const nameKey = `${(e.firstName ?? "").toLowerCase()}|${(e.lastName ?? "").toLowerCase()}`;
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
             }
@@ -185,7 +185,7 @@ export function PlanningCalendar({
         doctors.forEach(d => {
             const freq = String(d.frequency || '1x');
             const target = parseInt(freq.replace('x', ''), 10) || 0;
-            const nameKey = `${String(d.firstName ?? "").toLowerCase()}|${String(d.lastName ?? "").toLowerCase()}`;
+            const nameKey = `${(d.firstName ?? "").toLowerCase()}|${(d.lastName ?? "").toLowerCase()}`;
             const actual = visitCountsThisMonth[nameKey] || 0;
             const completed = Math.min(target, actual);
 
@@ -220,8 +220,8 @@ export function PlanningCalendar({
         
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
-                String(e.firstName ?? "").toLowerCase() === String(p.doctorFirstName ?? "").toLowerCase() && 
-                String(e.lastName ?? "").toLowerCase() === String(p.doctorLastName ?? "").toLowerCase()
+                (e.firstName ?? "").toLowerCase() === (p.doctorFirstName ?? "").toLowerCase() && 
+                (e.lastName ?? "").toLowerCase() === (p.doctorLastName ?? "").toLowerCase()
             )
         ).length;
 
@@ -237,12 +237,12 @@ export function PlanningCalendar({
     }, [selectedDayPlans]);
 
     const filteredDoctorsForSearch = useMemo(() => {
-        const q = String(doctorFilter ?? "").toLowerCase().trim();
+        const q = (doctorFilter ?? "").toLowerCase().trim();
         if (!q) return doctors;
         return doctors.filter(d => 
-            `${String(d.firstName ?? "")} ${String(d.lastName ?? "")}`.toLowerCase().includes(q) ||
-            String(d.municipality ?? "").toLowerCase().includes(q) ||
-            String(d.specialty ?? "").toLowerCase().includes(q)
+            `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase().includes(q) ||
+            (d.municipality ?? "").toLowerCase().includes(q) ||
+            (d.specialty ?? "").toLowerCase().includes(q)
         );
     }, [doctors, doctorFilter]);
 
@@ -455,8 +455,8 @@ export function PlanningCalendar({
                                         const doctor = doctors.find(d => d.id === plan.doctorId);
                                         const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
                                         const isCovered = (entriesByDate[dateStr] || []).some(e => 
-                                            String(e.firstName ?? "").toLowerCase() === String(plan.doctorFirstName ?? "").toLowerCase() && 
-                                            String(e.lastName ?? "").toLowerCase() === String(plan.doctorLastName ?? "").toLowerCase()
+                                            (e.firstName ?? "").toLowerCase() === (plan.doctorFirstName ?? "").toLowerCase() && 
+                                            (e.lastName ?? "").toLowerCase() === (plan.doctorLastName ?? "").toLowerCase()
                                         );
                                         return (
                                             <TableRow key={plan.id} className="h-16">
@@ -541,7 +541,7 @@ export function PlanningCalendar({
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
-                                                const nameKey = `${String(doctor.firstName ?? "").toLowerCase()}|${String(doctor.lastName ?? "").toLowerCase()}`;
+                                                const nameKey = `${(doctor.firstName ?? "").toLowerCase()}|${(doctor.lastName ?? "").toLowerCase()}`;
                                                 const actualCount = visitCountsThisMonth[nameKey] || 0;
                                                 const freq = String(doctor.frequency || '1x');
                                                 const targetCount = parseInt(freq.replace('x', ''), 10) || 0;

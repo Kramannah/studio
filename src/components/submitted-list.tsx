@@ -44,11 +44,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
-        const eFirst = String(entry.firstName ?? "").toLowerCase().trim();
-        const eLast = String(entry.lastName ?? "").toLowerCase().trim();
+        const eFirst = (entry.firstName ?? "").toLowerCase().trim();
+        const eLast = (entry.lastName ?? "").toLowerCase().trim();
         return doctors.find(d => 
-            String(d.firstName ?? "").toLowerCase().trim() === eFirst && 
-            String(d.lastName ?? "").toLowerCase().trim() === eLast
+            (d.firstName ?? "").toLowerCase().trim() === eFirst && 
+            (d.lastName ?? "").toLowerCase().trim() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -355,12 +355,12 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         let res = [...filteredByMonth];
-        const q = String(searchQuery ?? "").toLowerCase().trim();
+        const q = (searchQuery ?? "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const first = String(e.firstName ?? "").toLowerCase();
-                const last = String(e.lastName ?? "").toLowerCase();
-                const clinic = String(e.clinic ?? "").toLowerCase();
+                const first = (e.firstName ?? "").toLowerCase();
+                const last = (e.lastName ?? "").toLowerCase();
+                const clinic = (e.clinic ?? "").toLowerCase();
                 return first.includes(q) || last.includes(q) || clinic.includes(q);
             });
         }
@@ -446,7 +446,7 @@ export function SubmittedList({
                         className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
-                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
+                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:auto overflow-hidden">
                     <TabsTrigger value="list" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><List className="w-7 h-7" /></TabsTrigger>
                     <TabsTrigger value="calendar" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><CalendarIcon className="w-7 h-7" /></TabsTrigger>
                 </TabsList>
