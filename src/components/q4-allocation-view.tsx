@@ -65,15 +65,15 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const filteredSamples = useMemo(() => {
         if (!mounted || !allocations) return [];
-        const q = (search ?? "").toString().toLowerCase().trim();
+        const q = (search ?? "").toLowerCase().trim();
         
         return allocations.filter(s => {
             if (!s) return false;
             const itemQuarter = (s.quarter ?? "").toString().toUpperCase();
             if (itemQuarter !== activeQuarter) return false;
             
-            const name = (s.displayMaterialName ?? s.materialName ?? "").toString().toLowerCase();
-            const group = (s.prodGroupProdSubGroup ?? s.productGroup ?? "").toString().toLowerCase();
+            const name = (s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
+            const group = (s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
             
             return name.includes(q) || group.includes(q);
         });
@@ -98,7 +98,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            const nameKey = (s.displayMaterialName ?? s.materialName ?? "").toString().toLowerCase().trim();
+            const nameKey = (s.displayMaterialName ?? s.materialName ?? "").toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += used;
