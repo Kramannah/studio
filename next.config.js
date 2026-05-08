@@ -13,7 +13,7 @@ const nextConfig = {
   env: {
     TZ: 'Asia/Manila',
   },
-  reactStrictMode: false, // Helps with some hydration/chunk load edge cases in cloud dev environments
+  reactStrictMode: false,
 };
 
 module.exports = nextConfig;

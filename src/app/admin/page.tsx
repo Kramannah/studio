@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, LayoutDashboard } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -17,7 +17,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
@@ -34,6 +33,7 @@ const DynamicSkeleton = () => (
 
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
 const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton /> });
+const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton /> });
 
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
@@ -44,6 +44,11 @@ export default function AdminPage() {
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [accountSearch, setAccountSearch] = useState('');
     const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string } | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
@@ -67,7 +72,6 @@ export default function AdminPage() {
         teamSummaryData,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
-        loading: dataLoading,
         loadingSummary,
         loadingIndividual,
         fetchUserData,
@@ -98,7 +102,7 @@ export default function AdminPage() {
 
             let district = 'N/A';
             const profile = profiles[uid];
-            const managerUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
+            const managerUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
             
             if (role === 'PMR') {
                 if (managerUid) {
@@ -116,23 +120,16 @@ export default function AdminPage() {
             return { uid, ...data, role, district, managerId: managerUid };
         });
 
-        if (!accountSearch.trim()) return all.sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
+        const q = (accountSearch ?? "").toLowerCase().trim();
+        if (!q) return all.sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
 
-        const q = (accountSearch ?? "").toLowerCase();
         return all.filter(a => {
-            const code = String(a.code || "").toLowerCase();
-            const firstName = String(a.firstName || "").toLowerCase();
-            const lastName = String(a.lastName || "").toLowerCase();
-            const role = String(a.role || "").toLowerCase();
-            const district = String(a.district || "").toLowerCase();
-            const email = String(a.email || "").toLowerCase();
-            
-            return code.includes(q) || 
-                   firstName.includes(q) || 
-                   lastName.includes(q) ||
-                   role.includes(q) ||
-                   district.includes(q) ||
-                   email.includes(q);
+            return (a.code ?? "").toLowerCase().includes(q) || 
+                   (a.firstName ?? "").toLowerCase().includes(q) || 
+                   (a.lastName ?? "").toLowerCase().includes(q) ||
+                   (a.role ?? "").toLowerCase().includes(q) ||
+                   (a.district ?? "").toLowerCase().includes(q) ||
+                   (a.email ?? "").toLowerCase().includes(q);
         }).sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
     }, [accountSearch, profiles]);
 
@@ -155,8 +152,8 @@ export default function AdminPage() {
     }, [managedUserIds, profiles]);
 
     useEffect(() => {
-        if (!authLoading && !hasAdminAccess) router.push('/');
-    }, [authLoading, hasAdminAccess, router]);
+        if (mounted && !authLoading && !hasAdminAccess) router.push('/');
+    }, [authLoading, hasAdminAccess, router, mounted]);
 
     useEffect(() => {
         if (selectedUserId) {
@@ -178,7 +175,7 @@ export default function AdminPage() {
         if (success) setEditingAccount(null);
     };
 
-    if (authLoading) {
+    if (!mounted || authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background text-primary">
                 <RefreshCw className="w-12 h-12 animate-spin" />
@@ -197,15 +194,13 @@ export default function AdminPage() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    {user && (
-                        <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
-                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SESSION</span>
-                            <div className="flex items-center gap-1.5">
-                                <User className="w-3 h-3 text-primary" />
-                                <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user.email}</span>
-                            </div>
+                    <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SESSION</span>
+                        <div className="flex items-center gap-1.5">
+                            <User className="w-3 h-3 text-primary" />
+                            <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user?.email}</span>
                         </div>
-                    )}
+                    </div>
                     <Button size="sm" variant="destructive" className="font-headline" onClick={() => logout()}>Logout</Button>
                 </div>
             </header>
@@ -374,7 +369,7 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="sample-allocation">
-                        <Q4AllocationView />
+                        <Q4AllocationView readOnly={false} />
                     </TabsContent>
                 </Tabs>
             </main>

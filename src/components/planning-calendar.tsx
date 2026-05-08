@@ -3,7 +3,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameDay, isSameMonth, isValid } from "date-fns";
+import { format, parseISO, isSameMonth, isValid } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -93,12 +93,6 @@ export function PlanningCalendar({
         setMounted(true);
     }, []);
 
-    useEffect(() => {
-        if (!isAddPlanDialogOpen && !isNonCallDialogOpen && !isUnlockDialogOpen) {
-            document.body.style.pointerEvents = 'auto';
-        }
-    }, [isAddPlanDialogOpen, isNonCallDialogOpen, isUnlockDialogOpen]);
-
     const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
 
     const entriesByDate = useMemo(() => {
@@ -165,7 +159,7 @@ export function PlanningCalendar({
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${(e.firstName ?? "").toLowerCase()}|${(e.lastName ?? "").toLowerCase()}`;
+                    const nameKey = `${((e.firstName ?? "")).toLowerCase()}|${((e.lastName ?? "")).toLowerCase()}`;
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
             }
@@ -182,10 +176,10 @@ export function PlanningCalendar({
             '4x': { completed: 0, target: 0 },
         };
 
-        doctors.forEach(d => {
+        (doctors || []).forEach(d => {
             const freq = String(d.frequency || '1x');
             const target = parseInt(freq.replace('x', ''), 10) || 0;
-            const nameKey = `${(d.firstName ?? "").toLowerCase()}|${(d.lastName ?? "").toLowerCase()}`;
+            const nameKey = `${((d.firstName ?? "")).toLowerCase()}|${((d.lastName ?? "")).toLowerCase()}`;
             const actual = visitCountsThisMonth[nameKey] || 0;
             const completed = Math.min(target, actual);
 
@@ -220,8 +214,8 @@ export function PlanningCalendar({
         
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
-                (e.firstName ?? "").toLowerCase() === (p.doctorFirstName ?? "").toLowerCase() && 
-                (e.lastName ?? "").toLowerCase() === (p.doctorLastName ?? "").toLowerCase()
+                ((e.firstName ?? "")).toLowerCase() === ((p.doctorFirstName ?? "")).toLowerCase() && 
+                ((e.lastName ?? "")).toLowerCase() === ((p.doctorLastName ?? "")).toLowerCase()
             )
         ).length;
 
@@ -238,11 +232,11 @@ export function PlanningCalendar({
 
     const filteredDoctorsForSearch = useMemo(() => {
         const q = (doctorFilter ?? "").toLowerCase().trim();
-        if (!q) return doctors;
-        return doctors.filter(d => 
-            `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase().includes(q) ||
-            (d.municipality ?? "").toLowerCase().includes(q) ||
-            (d.specialty ?? "").toLowerCase().includes(q)
+        if (!q) return doctors || [];
+        return (doctors || []).filter(d => 
+            `${((d.firstName ?? ""))} ${((d.lastName ?? ""))}`.toLowerCase().includes(q) ||
+            ((d.municipality ?? "")).toLowerCase().includes(q) ||
+            ((d.specialty ?? "")).toLowerCase().includes(q)
         );
     }, [doctors, doctorFilter]);
 
@@ -259,7 +253,7 @@ export function PlanningCalendar({
     }, [selectedDate, onAddNonCallDay]);
     
     const handleLogCallClick = (plan: Plan) => {
-        const doctor = doctors.find(d => d.id === plan.doctorId);
+        const doctor = (doctors || []).find(d => d.id === plan.doctorId);
         const date = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
         if (doctor && isValid(date)) {
             onLogCall(doctor, date);
@@ -279,7 +273,7 @@ export function PlanningCalendar({
     const handleBulkSubmit = async () => {
         if (selectedDoctorIds.size === 0 || !selectedDate) return;
         setIsSubmitting(true);
-        const doctorsToPlan = doctors.filter(d => selectedDoctorIds.has(d.id));
+        const doctorsToPlan = (doctors || []).filter(d => selectedDoctorIds.has(d.id));
         const success = await onAddPlansBulk(doctorsToPlan, selectedDate);
         if (success) {
             setIsAddPlanDialogOpen(false);
@@ -296,7 +290,7 @@ export function PlanningCalendar({
         </div>
     );
 
-    if (doctors.length === 0 && !readOnly) {
+    if ((!doctors || doctors.length === 0) && !readOnly) {
         return (
             <Card className="border-2 border-dashed">
                 <CardContent className="p-12 text-center">
@@ -452,11 +446,11 @@ export function PlanningCalendar({
                             <TableBody>
                                 {selectedDayPlans.length > 0 ? (
                                     selectedDayPlans.map((plan) => {
-                                        const doctor = doctors.find(d => d.id === plan.doctorId);
+                                        const doctor = (doctors || []).find(d => d.id === plan.doctorId);
                                         const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
                                         const isCovered = (entriesByDate[dateStr] || []).some(e => 
-                                            (e.firstName ?? "").toLowerCase() === (plan.doctorFirstName ?? "").toLowerCase() && 
-                                            (e.lastName ?? "").toLowerCase() === (plan.doctorLastName ?? "").toLowerCase()
+                                            ((e.firstName ?? "")).toLowerCase() === ((plan.doctorFirstName ?? "")).toLowerCase() && 
+                                            ((e.lastName ?? "")).toLowerCase() === ((plan.doctorLastName ?? "")).toLowerCase()
                                         );
                                         return (
                                             <TableRow key={plan.id} className="h-16">
@@ -541,7 +535,7 @@ export function PlanningCalendar({
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
-                                                const nameKey = `${(doctor.firstName ?? "").toLowerCase()}|${(doctor.lastName ?? "").toLowerCase()}`;
+                                                const nameKey = `${((doctor.firstName ?? "")).toLowerCase()}|${((doctor.lastName ?? "")).toLowerCase()}`;
                                                 const actualCount = visitCountsThisMonth[nameKey] || 0;
                                                 const freq = String(doctor.frequency || '1x');
                                                 const targetCount = parseInt(freq.replace('x', ''), 10) || 0;

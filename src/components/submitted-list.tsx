@@ -46,9 +46,9 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const doctor = useMemo(() => {
         const eFirst = (entry.firstName ?? "").toLowerCase().trim();
         const eLast = (entry.lastName ?? "").toLowerCase().trim();
-        return doctors.find(d => 
-            (d.firstName ?? "").toLowerCase().trim() === eFirst && 
-            (d.lastName ?? "").toLowerCase().trim() === eLast
+        return (doctors || []).find(d => 
+            ((d.firstName ?? "")).toLowerCase().trim() === eFirst && 
+            ((d.lastName ?? "")).toLowerCase().trim() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -282,7 +282,7 @@ export function SubmittedList({
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
         const monthSet = new Set<string>();
-        entries.forEach(entry => {
+        (entries || []).forEach(entry => {
             const dateStr = String(entry.coverageDate ?? "");
             if (dateStr) {
                 const date = parseISO(dateStr);
@@ -325,7 +325,7 @@ export function SubmittedList({
 
     const filteredByMonth = useMemo(() => {
         if (!mounted) return [];
-        return entries.filter(e => {
+        return (entries || []).filter(e => {
             const dateStr = String(e.coverageDate ?? "");
             if (!dateStr) return false;
             const date = parseISO(dateStr);
@@ -358,9 +358,9 @@ export function SubmittedList({
         const q = (searchQuery ?? "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const first = (e.firstName ?? "").toLowerCase();
-                const last = (e.lastName ?? "").toLowerCase();
-                const clinic = (e.clinic ?? "").toLowerCase();
+                const first = ((e.firstName ?? "")).toLowerCase();
+                const last = ((e.lastName ?? "")).toLowerCase();
+                const clinic = ((e.clinic ?? "")).toLowerCase();
                 return first.includes(q) || last.includes(q) || clinic.includes(q);
             });
         }

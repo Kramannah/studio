@@ -69,11 +69,11 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         
         return allocations.filter(s => {
             if (!s) return false;
-            const itemQuarter = (s.quarter ?? "").toString().toUpperCase();
+            const itemQuarter = ((s.quarter ?? "")).toString().toUpperCase();
             if (itemQuarter !== activeQuarter) return false;
             
-            const name = (s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
-            const group = (s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
+            const name = ((s.displayMaterialName ?? s.materialName ?? "")).toLowerCase();
+            const group = ((s.prodGroupProdSubGroup ?? s.productGroup ?? "")).toLowerCase();
             
             return name.includes(q) || group.includes(q);
         });
@@ -93,12 +93,12 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const stats = useMemo(() => {
         if (!mounted) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
 
-        const quarterAllocations = (allocations || []).filter(s => s && (s.quarter ?? "").toString().toUpperCase() === activeQuarter);
+        const quarterAllocations = (allocations || []).filter(s => s && ((s.quarter ?? "")).toString().toUpperCase() === activeQuarter);
         let totalAllocated = 0;
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            const nameKey = (s.displayMaterialName ?? s.materialName ?? "").toLowerCase().trim();
+            const nameKey = ((s.displayMaterialName ?? s.materialName ?? "")).toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += used;
@@ -147,8 +147,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 if (colMap.name === -1 || colMap.qty === -1) throw new Error("Format mismatch. Please use the provided template.");
                 
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
-                    prodGroupProdSubGroup: (row[colMap.group] ?? "Uncategorized").toString().trim(),
-                    displayMaterialName: (row[colMap.name] ?? "").toString().trim(),
+                    prodGroupProdSubGroup: ((row[colMap.group] ?? "Uncategorized")).toString().trim(),
+                    displayMaterialName: ((row[colMap.name] ?? "")).toString().trim(),
                     allocationQuantity: Math.round(Number(String(row[colMap.qty] ?? '0').replace(/[^0-9.]/g, '')))
                 })).filter(s => s.displayMaterialName);
                 
@@ -266,8 +266,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     const sId = sample.id;
-                                                    const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
-                                                    const group = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
+                                                    const name = ((sample.displayMaterialName ?? sample.materialName ?? "Unknown Item")).toString().trim();
+                                                    const group = ((sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized")).toString().trim();
                                                     
                                                     const used = Number(usedQuantities?.[name.toLowerCase().trim()] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);

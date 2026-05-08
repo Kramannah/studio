@@ -3,7 +3,7 @@
 import type { CoverageEntry, Doctor } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "./ui/button";
 import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, Pill, Settings2 } from "lucide-react";
 import { Input } from "./ui/input";
@@ -355,11 +355,11 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const filteredDoctors = useMemo(() => {
-        const q = (filter || "").toLowerCase().trim();
+        const q = (filter ?? "").toLowerCase().trim();
         return (doctors || []).filter(d => {
-            const name = `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase();
-            const specialty = (d.specialty || "").toLowerCase();
-            const clinic = (d.clinic || "").toLowerCase();
+            const name = `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase();
+            const specialty = (d.specialty ?? "").toLowerCase();
+            const clinic = (d.clinic ?? "").toLowerCase();
             return name.includes(q) || specialty.includes(q) || clinic.includes(q);
         });
     }, [doctors, filter]);
@@ -376,7 +376,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     }, [filteredDoctors, currentPage]);
 
     const frequencyCounts = useMemo(() => {
-        return doctors.reduce((acc, d) => {
+        return (doctors || []).reduce((acc, d) => {
             if (d.frequency) acc[d.frequency] = (acc[d.frequency] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -423,7 +423,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     return;
                 }
 
-                const headerRow: string[] = json[0].map((h: any) => String(h || '').toLowerCase().trim());
+                const headerRow: string[] = json[0].map((h: any) => String(h ?? '').toLowerCase().trim());
                 const bodyRows = json.slice(1);
 
                 const findColIndex = (possibleNames: string[]) => {
@@ -485,7 +485,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                         province: getVal(colMap.province),
                         municipality: getVal(colMap.municipality),
                         placeOfPractice: getVal(colMap.placeOfPractice),
-                        coverageType: getVal(colMap.coverageType).toLowerCase() === 'outbase' ? 'outbase' : 'inbase'
+                        coverageType: (getVal(colMap.coverageType) ?? "").toLowerCase() === 'outbase' ? 'outbase' : 'inbase'
                     };
 
                     productKeys.forEach(key => {
