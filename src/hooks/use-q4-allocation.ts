@@ -6,6 +6,9 @@ import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { getQueryStartDateISO } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export const useQ4Allocation = () => {
   const { user } = useAuth();
@@ -50,7 +53,10 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => a.displayMaterialName.localeCompare(b.displayMaterialName));
         setAllocations(fetched);
     } catch (error: any) {
-        console.error("Allocation Fetch Error:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'marketingSamples',
+            operation: 'list'
+        }));
     }
   }, [user]);
 
@@ -58,10 +64,13 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
+      const startDate = getQueryStartDateISO();
       const colRef = collection(db, "coverageEntries");
+      
+      // Limit query to recent entries to prevent timeout on live server
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef)
-        : query(colRef, where("userId", "==", user.uid));
+        ? query(colRef, where("submittedAt", ">=", startDate))
+        : query(colRef, where("userId", "==", user.uid), where("submittedAt", ">=", startDate));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -70,7 +79,7 @@ export const useQ4Allocation = () => {
         const entry = docSnap.data();
         if (!entry) return;
 
-        const process = (name?: any, qty?: any) => {
+        const processItem = (name?: any, qty?: any) => {
             const safeName = String(name || "").toLowerCase().trim();
             if (!safeName) return;
             
@@ -80,18 +89,21 @@ export const useQ4Allocation = () => {
             }
         };
 
-        process(entry.primarySampleName, entry.primaryProductQty);
-        process(entry.secondarySampleName, entry.secondaryProductQty);
+        processItem(entry.primarySampleName, entry.primaryProductQty);
+        processItem(entry.secondarySampleName, entry.secondaryProductQty);
         if (Array.isArray(entry.reminderProducts)) {
             entry.reminderProducts.forEach((p: any) => {
-                if (p) process(p.sampleName, p.quantity);
+                if (p) processItem(p.sampleName, p.quantity);
             });
         }
       });
 
       setUsedQuantities(usage);
     } catch (error: any) {
-        console.error("Usage Tracker Error:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'coverageEntries',
+            operation: 'list'
+        }));
     }
   }, [user, isUserAdminOrManager]);
 
@@ -127,7 +139,6 @@ export const useQ4Allocation = () => {
       await refetch();
       return true;
     } catch (err) {
-        console.error("Bulk add error:", err);
         return false;
     }
   };

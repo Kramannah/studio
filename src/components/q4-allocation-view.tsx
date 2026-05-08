@@ -40,7 +40,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, parse } from "date-fns";
 
 interface Q4AllocationViewProps {
     readOnly?: boolean;
@@ -70,7 +69,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         
         return allocations.filter(s => {
             if (!s) return false;
-            if (String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
+            const itemQuarter = String(s.quarter || "").toUpperCase();
+            if (itemQuarter !== activeQuarter) return false;
             
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
@@ -98,7 +98,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            const nameKey = String(s.displayMaterialName || s.materialName || "Unknown").toLowerCase().trim();
+            const nameKey = String(s.displayMaterialName || s.materialName || "").toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += used;
@@ -112,7 +112,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
-        const sampleData = [{ 'ProdGroupProdSubGroup': 'Antihistamine', 'DisplayMaterialName': 'Sample Item', 'AllocationQuantity': 100 }];
+        const sampleData = [{ 'ProdGroupProdSubGroup': 'Category', 'DisplayMaterialName': 'Sample Item', 'AllocationQuantity': 100 }];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
@@ -166,7 +166,11 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         reader.readAsArrayBuffer(file);
     };
 
-    if (!mounted) return null;
+    if (!mounted) return (
+        <div className="flex items-center justify-center p-20">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+    );
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -305,7 +309,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <p className="text-sm text-muted-foreground">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
-                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
                                 </div>
                             </div>
                         )}
