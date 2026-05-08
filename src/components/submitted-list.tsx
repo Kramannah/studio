@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -42,8 +43,15 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     
+    // ATOMIC STRING NORMALIZATION: Prevents TypeError if doctor properties are undefined
     const doctor = useMemo(() => {
-        return doctors.find(d => d.firstName.toLowerCase() === (entry.firstName || "").toLowerCase() && d.lastName.toLowerCase() === (entry.lastName || "").toLowerCase());
+        return doctors.find(d => {
+            const dFirst = String(d.firstName ?? "").toLowerCase();
+            const dLast = String(d.lastName ?? "").toLowerCase();
+            const eFirst = String(entry.firstName ?? "").toLowerCase();
+            const eLast = String(entry.lastName ?? "").toLowerCase();
+            return dFirst === eFirst && dLast === eLast;
+        });
     }, [doctors, entry.firstName, entry.lastName]);
 
     const isEditable = useMemo(() => {
@@ -61,12 +69,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
             <TableRow className="h-16 hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span className="font-bold text-primary">{entry.firstName} {entry.lastName}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{entry.specialty}</span>
+                        <span className="font-bold text-primary">{String(entry.firstName ?? "")} {String(entry.lastName ?? "")}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{String(entry.specialty ?? "N/A")}</span>
                     </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                    <span className="text-sm font-medium">{entry.clinic}</span>
+                    <span className="text-sm font-medium">{String(entry.clinic ?? "N/A")}</span>
                 </TableCell>
                 <TableCell>
                     <span className="text-sm tabular-nums">
@@ -74,7 +82,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                     </span>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                    <Badge variant="secondary" className="text-[10px] font-bold">{doctor?.frequency || 'N/A'}</Badge>
+                    <Badge variant="secondary" className="text-[10px] font-bold">{String(doctor?.frequency ?? 'N/A')}</Badge>
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
@@ -88,31 +96,29 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                             <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><MoreHorizontal className="w-5 h-5"/></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48">
-                                    <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || '', entry.lastName || '')} className="gap-2 py-3">
+                                    <DropdownMenuItem onClick={() => onShowHistory(String(entry.firstName ?? ''), String(entry.lastName ?? ''))} className="gap-2 py-3">
                                         <History className="w-4 h-4 text-primary"/> Visits History
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable} className="gap-2 py-3">
                                         <Edit className="w-4 h-4 text-primary"/> Edit Report
                                     </DropdownMenuItem>
                                     {!readOnly && (
-                                        <>
-                                            <DropdownMenuItem className="text-destructive focus:text-destructive gap-2 py-3">
-                                                <AlertDialogTrigger className="flex items-center gap-2 w-full">
-                                                    <Trash2 className="w-4 h-4"/> Delete Entry
-                                                </AlertDialogTrigger>
-                                            </DropdownMenuItem>
-                                        </>
+                                        <DropdownMenuItem className="text-destructive focus:text-destructive gap-2 py-3">
+                                            <AlertDialogTrigger className="flex items-center gap-2 w-full">
+                                                <Trash2 className="w-4 h-4"/> Delete Entry
+                                            </AlertDialogTrigger>
+                                        </DropdownMenuItem>
                                     )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Delete this report?</AlertDialogTitle>
-                                    <AlertDialogDescription>This action cannot be undone. This visit will be removed from your monthly totals.</AlertDialogDescription>
+                                    <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => onDelete(entry.id)} className="bg-destructive text-destructive-foreground">Delete Permanentely</AlertDialogAction>
+                                    <AlertDialogAction onClick={() => onDelete(entry.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
@@ -132,18 +138,16 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                                 <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><List className="w-3 h-3" /> Call Details</h4>
                                 <DetailItem label="Objective" value={entry.callObjective} />
                                 <DetailItem label="Coverage Type" value={entry.coverageType} />
-                                {entry.clinic && <DetailItem label="Clinic Address" value={entry.clinic} />}
                             </div>
                             <div className="space-y-4">
                                 <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
                                 <DetailItem label="Primary Product" value={entry.primaryProduct} />
                                 <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
-                                {entry.secondaryProduct && <DetailItem label="Secondary Product" value={entry.secondaryProduct} />}
                             </div>
                             <div className="space-y-4">
                                 <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
                                 <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
-                                <DetailItem label="Next Steps / Plan" value={entry.planOfAction} />
+                                <DetailItem label="Next Steps" value={entry.planOfAction} />
                             </div>
                         </div>
                     </TableCell>
@@ -168,26 +172,22 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         try {
             const q = query(
                 collection(db, "coverageEntries"),
-                where("firstName", "==", doctorName.first),
-                where("lastName", "==", doctorName.last),
+                where("firstName", "==", String(doctorName.first)),
+                where("lastName", "==", String(doctorName.last)),
                 orderBy("coverageDate", "desc")
             );
             const snapshot = await getDocs(q);
-            const entries = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-            setHistory(entries);
+            setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry)));
         } catch (error) {
-            console.error("Error fetching doctor history:", error);
+            console.error("History fetch error:", error);
         } finally {
             setLoading(false);
         }
     }, [doctorName]);
 
     useEffect(() => {
-        if (isOpen && doctorName) {
-            fetchHistory();
-        } else {
-            setHistory([]);
-        }
+        if (isOpen && doctorName) fetchHistory();
+        else setHistory([]);
     }, [isOpen, doctorName, fetchHistory]);
 
     return (
@@ -196,45 +196,33 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                 <DialogHeader className="p-6 bg-muted/20 border-b">
                     <DialogTitle className="text-2xl font-black font-headline text-primary">Visits History</DialogTitle>
                     <DialogDescription className="text-lg">
-                        Full coverage timeline for <span className="font-bold text-foreground">Dr. {doctorName?.first} {doctorName?.last}</span>
+                        Timeline for <span className="font-bold text-foreground">Dr. {String(doctorName?.first ?? "")} {String(doctorName?.last ?? "")}</span>
                     </DialogDescription>
                 </DialogHeader>
-                
                 <div className="flex-1 overflow-hidden">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-80 gap-4">
                             <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                            <p className="text-muted-foreground font-bold uppercase tracking-widest text-[10px]">Accessing Archives...</p>
                         </div>
                     ) : history.length > 0 ? (
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => (
-                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm hover:border-primary/30 transition-colors">
+                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
                                         <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
                                             <CardTitle className="text-base font-black font-headline text-primary">
-                                                {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "Date Missing"}
+                                                {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "N/A"}
                                             </CardTitle>
-                                            <Badge variant="secondary" className="capitalize font-bold border border-primary/20">{entry.coverageType}</Badge>
+                                            <Badge variant="secondary" className="capitalize">{String(entry.coverageType ?? "N/A")}</Badge>
                                         </CardHeader>
                                         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-3">
                                                 <DetailItem label="Objective" value={entry.callObjective} />
-                                                <div className="flex gap-4">
-                                                    <DetailItem label="Primary Product" value={entry.primaryProduct} />
-                                                    <DetailItem label="Qty" value={entry.primaryProductQty} />
-                                                </div>
+                                                <DetailItem label="Product" value={entry.primaryProduct} />
                                             </div>
                                             <div className="space-y-3">
-                                                <DetailItem label="Doctor Concerns" value={entry.doctorsIssue} />
-                                                <DetailItem label="Agreed Plan" value={entry.planOfAction} />
-                                                <div className="pt-2">
-                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Proof of Call</p>
-                                                    <div className="flex gap-2">
-                                                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={60} height={60} className="rounded-md object-cover border-2 border-primary/20" />}
-                                                        {entry.signature && <div className="p-1 bg-white border-2 rounded-md shadow-sm"><Image src={entry.signature} alt="sig" width={80} height={40} /></div>}
-                                                    </div>
-                                                </div>
+                                                <DetailItem label="Issues" value={entry.doctorsIssue} />
+                                                <DetailItem label="Plan" value={entry.planOfAction} />
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -242,10 +230,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                             </div>
                         </ScrollArea>
                     ) : (
-                        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                            <History className="w-16 h-16 mb-4 opacity-10" />
-                            <p className="text-lg italic font-headline">No other historical visits found for this provider.</p>
-                        </div>
+                        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground italic">No history found.</div>
                     )}
                 </div>
             </DialogContent>
@@ -291,9 +276,7 @@ export function SubmittedList({
         const monthSet = new Set<string>();
         entries.forEach(entry => {
             const date = entry.coverageDate ? parseISO(entry.coverageDate) : null;
-            if (date && isValid(date)) {
-                monthSet.add(format(date, 'yyyy-MM'));
-            }
+            if (date && isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
         });
         monthSet.add(format(new Date(), 'yyyy-MM'));
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
@@ -318,10 +301,7 @@ export function SubmittedList({
     const monthRange = useMemo(() => {
         if (!selectedMonth) return { start: new Date(), end: new Date() };
         const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-        return {
-            start: startOfMonth(monthDate),
-            end: endOfMonth(monthDate)
-        };
+        return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
     }, [selectedMonth]);
 
     const filteredByMonth = useMemo(() => {
@@ -351,20 +331,26 @@ export function SubmittedList({
     }, [filteredByMonth]);
 
     const filtered = useMemo(() => {
-        let res = [...filteredByMonth];
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            res = res.filter(e => `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) || (e.clinic || "").toLowerCase().includes(q));
+        try {
+            let res = [...filteredByMonth];
+            const q = String(searchQuery ?? "").toLowerCase().trim();
+            if (q) {
+                res = res.filter(e => {
+                    const name = String(`${e.firstName ?? ""} ${e.lastName ?? ""}`).toLowerCase();
+                    const clinic = String(e.clinic ?? "").toLowerCase();
+                    return name.includes(q) || clinic.includes(q);
+                });
+            }
+            if (activeTab === 'calendar' && selectedDate) {
+                res = res.filter(e => {
+                    const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+                    return d && isSameDay(d, selectedDate);
+                });
+            }
+            return res;
+        } catch (e) {
+            return [];
         }
-
-        if (activeTab === 'calendar' && selectedDate) {
-            res = res.filter(e => {
-                const d = e.coverageDate ? parseISO(e.coverageDate) : null;
-                return d && isSameDay(d, selectedDate);
-            });
-        }
-
-        return res;
     }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
 
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -375,42 +361,24 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
             const covDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
-            
-            // Map User ID to Name if userMap is provided
             let userName = entry.userId;
-            if (userMap && userMap[entry.userId]) {
+            if (userMap?.[entry.userId]) {
                 const u = userMap[entry.userId];
                 userName = `${u.firstName} ${u.lastName} (${u.code})`;
             }
-
             return {
-                "User Name/Code": userName,
-                "Doctor Name": `${entry.firstName} ${entry.lastName}`,
-                "Specialty": entry.specialty || "N/A",
-                "Clinic": entry.clinic || "N/A",
+                "User": userName,
+                "Doctor": `${entry.firstName ?? ""} ${entry.lastName ?? ""}`,
+                "Specialty": entry.specialty ?? "N/A",
+                "Clinic": entry.clinic ?? "N/A",
                 "Coverage Date": covDate && isValid(covDate) ? format(covDate, "yyyy-MM-dd") : "N/A",
-                "Submitted At": subDate && isValid(subDate) ? format(subDate, "yyyy-MM-dd HH:mm") : "N/A",
-                "Coverage Type": entry.coverageType || "N/A",
-                "Call Type": entry.callType || "N/A",
-                "Objective": entry.callObjective || "N/A",
-                "Primary Product": entry.primaryProduct || "N/A",
-                "Primary Qty": entry.primaryProductQty || 0,
-                "Secondary Product": entry.secondaryProduct || "N/A",
-                "Secondary Qty": entry.secondaryProductQty || 0,
-                "Topics Discussed": entry.topicsDiscussed || "N/A",
-                "Doctor Issues": entry.doctorsIssue || "N/A",
-                "Plan of Action": entry.planOfAction || "N/A",
-                "Reflection (Went Well)": entry.whatWentWell || "N/A",
-                "Reflection (Improvement)": entry.areasForImprovement || "N/A"
+                "Type": entry.coverageType ?? "N/A",
+                "Product": entry.primaryProduct ?? "N/A",
+                "Qty": entry.primaryProductQty ?? 0
             };
         });
-
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Coverage Report");
-        XLSX.writeFile(workbook, `Coverage_Report_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+        XLSX.writeFile(XLSX.utils.book_new(), `Report_${selectedMonth}.xlsx`);
     };
 
     if (!mounted) return null;
@@ -420,10 +388,9 @@ export function SubmittedList({
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
             <Button onClick={handleDownloadExcel} variant="outline" className="border-2 font-headline h-11 w-full md:w-auto">
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Download as Excel
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
             </Button>
         </div>
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-8">
                 <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -448,85 +415,40 @@ export function SubmittedList({
                     />
                 </div>
                 <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
-                    <TabsTrigger 
-                        value="list" 
-                        className="rounded-lg h-full px-5 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
-                    >
-                        <List className="w-7 h-7" />
-                    </TabsTrigger>
-                    <TabsTrigger 
-                        value="calendar" 
-                        className="rounded-lg h-full px-5 flex items-center justify-center data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
-                    >
-                        <CalendarIcon className="w-7 h-7" />
-                    </TabsTrigger>
+                    <TabsTrigger value="list" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><List className="w-7 h-7" /></TabsTrigger>
+                    <TabsTrigger value="calendar" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><CalendarIcon className="w-7 h-7" /></TabsTrigger>
                 </TabsList>
             </div>
-
             <TabsContent value="list" className="mt-0 w-full">
                 <Card className="shadow-lg border-2 rounded-xl overflow-hidden w-full">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
-                                    <TableHead className="font-bold text-foreground">Provider</TableHead>
-                                    <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
-                                    <TableHead className="font-bold text-foreground">Date</TableHead>
-                                    <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
-                                    <TableHead className="font-bold text-foreground">Proof</TableHead>
-                                    <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            {paginatedEntries.length > 0 ? (
-                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                            ) : (
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic font-headline">
-                                            No matching reports found in the current view.
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            )}
-                        </Table>
-                    </div>
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
+                                <TableHead className="font-bold text-foreground">Provider</TableHead>
+                                <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
+                                <TableHead className="font-bold text-foreground">Date</TableHead>
+                                <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
+                                <TableHead className="font-bold text-foreground">Proof</TableHead>
+                                <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        {paginatedEntries.length > 0 ? (
+                            paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                        ) : (
+                            <TableBody><TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found.</TableCell></TableRow></TableBody>
+                        )}
+                    </Table>
                 </Card>
-
-                {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-6 px-1">
-                        <p className="text-sm text-muted-foreground font-medium">
-                            Showing <span className="text-foreground font-bold">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-foreground font-bold">{Math.min(currentPage * itemsPerPage, filtered.length)}</span> of <span className="text-foreground font-bold">{filtered.length}</span> reports
-                        </p>
+                        <p className="text-sm text-muted-foreground font-medium">Page {currentPage} of {totalPages}</p>
                         <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                disabled={currentPage === 1}
-                                className="h-9 px-4 border-2 rounded-lg font-headline"
-                            >
-                                <ChevronLeft className="w-4 h-4 mr-2" />
-                                Previous
-                            </Button>
-                            <Badge variant="secondary" className="h-9 px-4 rounded-lg font-bold text-sm">
-                                Page {currentPage} of {totalPages}
-                            </Badge>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                disabled={currentPage === totalPages}
-                                className="h-9 px-4 border-2 rounded-lg font-headline"
-                            >
-                                Next
-                                <ChevronRight className="w-4 h-4 ml-2" />
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="h-9 px-4 border-2 rounded-lg font-headline">Previous</Button>
+                            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="h-9 px-4 border-2 rounded-lg font-headline">Next</Button>
                         </div>
                     </div>
                 )}
             </TabsContent>
-            
             <TabsContent value="calendar" className="mt-0 w-full">
                 <div className="flex flex-col xl:flex-row gap-8 items-start w-full">
                     <div className="w-full xl:w-[420px] shrink-0">
@@ -536,84 +458,28 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : new Date()}
-                                modifiers={{ 
-                                    hasEntry: entryDates,
-                                }}
-                                modifiersStyles={{
-                                    hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' }
-                                }}
-                                components={{
-                                    DayContent: ({ date }) => {
-                                        const dateKey = format(date, 'yyyy-MM-dd');
-                                        const count = entryCountsByDate[dateKey];
-                                        return (
-                                            <div className="relative flex items-center justify-center w-full h-full">
-                                                {date.getDate()}
-                                                {count > 0 && (
-                                                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-black shadow-sm border border-background">
-                                                        {count}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        );
-                                    },
-                                }}
+                                modifiers={{ hasEntry: entryDates }}
+                                modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
                                 className="w-full p-4"
                             />
                         </Card>
-                        <div className="mt-6 p-5 rounded-2xl bg-primary/5 border-2 border-primary/10">
-                            <p className="text-xs font-black text-primary uppercase tracking-widest mb-2 leading-none">Calendar Guide</p>
-                            <p className="text-sm text-muted-foreground leading-relaxed">Dates highlighted with a <span className="text-primary font-bold">green border</span> contain submitted reports. Tap a date to filter the report list.</p>
-                        </div>
                     </div>
-                    
                     <div className="flex-1 w-full space-y-6">
-                        <div className="bg-muted/30 p-6 rounded-2xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                             <h3 className="text-2xl font-black font-headline tracking-tight text-foreground">
-                                {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
-                            </h3>
-                            <Badge variant="outline" className="h-10 px-5 font-bold border-2 border-primary/20 bg-background/50 flex gap-3 items-center w-fit">
-                                <CheckCheck className="w-5 h-5 text-primary" />
-                                <span className="text-primary text-lg tabular-nums">{filtered.length}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Reports Filed</span>
-                            </Badge>
-                        </div>
-
                         <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
-                                            <TableHead className="font-bold text-foreground">Provider</TableHead>
-                                            <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
-                                            <TableHead className="font-bold text-foreground">Proof</TableHead>
-                                            <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    {filtered.length > 0 ? (
-                                        filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                                    ) : (
-                                        <TableBody>
-                                            <TableRow>
-                                                <TableCell colSpan={4} className="h-56 text-center text-muted-foreground text-lg italic font-headline">
-                                                    No activity recorded for this date.
-                                                </TableCell>
-                                            </TableRow>
-                                        </TableBody>
-                                    )}
-                                </Table>
-                            </div>
+                            <Table>
+                                <TableHeader><TableRow className="bg-muted/50 h-14"><TableHead className="font-bold pl-6">Provider</TableHead><TableHead className="text-right pr-6">Actions</TableHead></TableRow></TableHeader>
+                                {filtered.length > 0 ? (
+                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                ) : (
+                                    <TableBody><TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity for this date.</TableCell></TableRow></TableBody>
+                                )}
+                            </Table>
                         </Card>
                     </div>
                 </div>
             </TabsContent>
         </Tabs>
-
-        <DoctorHistoryDialog 
-            doctorName={historyDoctor} 
-            isOpen={isHistoryOpen} 
-            onOpenChange={setIsHistoryOpen} 
-        />
+        <DoctorHistoryDialog doctorName={historyDoctor} isOpen={isHistoryOpen} onOpenChange={setIsHistoryOpen} />
       </div>
     );
 }

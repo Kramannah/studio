@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v12';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v13';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -52,9 +52,9 @@ export const useQ4Allocation = () => {
                 const data = doc.data();
                 if (!data) return null;
                 
-                // DEEP SANITIZATION: Assign hard defaults at retrieval point
-                const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
-                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
+                // ATOMIC SANITIZATION: Force all values to valid types immediately
+                const rawName = data.displayMaterialName ?? data.materialName ?? "";
+                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "";
                 const rawQty = data.allocationQuantity ?? data.quantity ?? 0;
                 const rawQuarter = data.quarter ?? "Q4";
 
@@ -74,7 +74,6 @@ export const useQ4Allocation = () => {
                 };
             }).filter((item): item is Q4Allocation => item !== null);
 
-            // Safe in-memory sorting
             fetched.sort((a, b) => String(a.displayMaterialName).localeCompare(String(b.displayMaterialName)));
             setAllocations(fetched);
         } else {
@@ -107,7 +106,6 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
-      
       let usageQuery;
       if (isUserAdminOrManager()) {
           usageQuery = query(colRef, limit(2000)); 
@@ -176,7 +174,6 @@ export const useQ4Allocation = () => {
       data.forEach(item => {
         const name = String(item.displayMaterialName ?? "").trim();
         if (!name) return;
-        
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `${String(quarter).toLowerCase()}_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
@@ -194,7 +191,7 @@ export const useQ4Allocation = () => {
       if (!db) return false;
       const batch = writeBatch(db);
       ids.forEach(id => {
-          if (id) batch.delete(doc(db, "marketingSamples", id));
+          if (id) batch.delete(doc(db, "marketingSamples", String(id)));
       });
       try {
           await batch.commit();

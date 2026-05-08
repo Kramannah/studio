@@ -9,14 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronLeft, Search, PackageCheck, TrendingUp, Info, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, Search, PackageCheck, TrendingUp, RefreshCw, Filter } from 'lucide-react';
 import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { cn } from '@/lib/utils';
 
-/**
- * Standalone page for Marketing Material Oversight.
- * Implements extreme defensive patterns to prevent client-side crashes on malformed data.
- */
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -29,57 +25,47 @@ export default function Q4AllocationPage() {
     }, []);
 
     useEffect(() => {
-        if (!authLoading && !user && mounted) {
-            router.push('/');
-        }
+        if (!authLoading && !user && mounted) router.push('/');
     }, [user, authLoading, router, mounted]);
 
-    // NUCLEAR DEFENSIVE FILTERING: Force every comparison target to a valid string using template literals.
+    // ABSOLUTE STRING NORMALIZATION: Prevents any TypeError by casting all properties to strings
     const filteredSamples = useMemo(() => {
         try {
             if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
-            
-            const safeSearch = String(search || "").toLowerCase().trim();
+            const safeSearch = String(search ?? "").toLowerCase().trim();
             
             return marketingSamples.filter(s => {
                 if (!s || typeof s !== 'object') return false;
-                
-                // ATOMIC STRING NORMALIZATION: Guaranteed string conversion for every property check.
-                const name = `${s.materialName ?? s.displayMaterialName ?? ""}`.toLowerCase();
-                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? ""}`.toLowerCase();
-                
+                const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
+                const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });
         } catch (e) {
-            console.error("Critical filter logic error caught:", e);
             return [];
         }
     }, [marketingSamples, search]);
 
     const stats = useMemo(() => {
-        if (!filteredSamples || filteredSamples.length === 0) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-        let totalAllocated = 0;
-        let totalUsed = 0;
-        let totalRemaining = 0;
-
-        filteredSamples.forEach(s => {
-            if (!s) return;
-            const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            // Use String template literal for guaranteed string key
-            const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown Item"}`;
-            const used = Math.round(Number(usedQuantities[name] ?? 0));
-            
-            totalAllocated += alloc;
-            totalUsed += used;
-            totalRemaining += Math.max(0, alloc - used);
-        });
-
-        return {
-            totalAllocated: Math.round(totalAllocated),
-            totalUsed: Math.round(totalUsed),
-            remaining: Math.round(totalRemaining),
-            percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
-        };
+        try {
+            if (!filteredSamples.length) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+            let totalAllocated = 0, totalUsed = 0, totalRemaining = 0;
+            filteredSamples.forEach(s => {
+                const alloc = Number(s.allocationQuantity ?? 0);
+                const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown");
+                const used = Number(usedQuantities[name] ?? 0);
+                totalAllocated += alloc;
+                totalUsed += used;
+                totalRemaining += Math.max(0, alloc - used);
+            });
+            return {
+                totalAllocated: Math.round(totalAllocated),
+                totalUsed: Math.round(totalUsed),
+                remaining: Math.round(totalRemaining),
+                percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
+            };
+        } catch (e) {
+            return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        }
     }, [filteredSamples, usedQuantities]);
 
     if (!mounted || authLoading) return (
@@ -93,66 +79,52 @@ export default function Q4AllocationPage() {
             <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-sm px-4 py-4 md:px-8">
                 <div className="flex items-center justify-between max-w-[1600px] mx-auto w-full">
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                            <ChevronLeft className="w-6 h-6" />
-                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft className="w-6 h-6" /></Button>
                         <div>
                             <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Marketing Material Oversight</h1>
-                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory & Distribution Analytics</p>
+                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory Analytics</p>
                         </div>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => refetch()} disabled={dataLoading}>
                         <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} />
-                        Refresh Data
+                        Refresh
                     </Button>
                 </div>
             </header>
 
             <main className="flex-1 p-4 md:p-8 max-w-[1600px] mx-auto w-full space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="border-2 shadow-sm bg-primary/5">
-                        <CardHeader className="pb-2">
-                            <CardDescription className="font-headline font-bold text-primary flex items-center gap-2 uppercase tracking-tighter">
-                                <PackageCheck className="w-4 h-4" /> Total Items Allocated
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-black font-mono">{stats.totalAllocated} <span className="text-sm font-normal text-muted-foreground">units</span></div>
-                        </CardContent>
+                    <Card className="border-2 shadow-sm bg-primary/5 p-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">Total Allocated</p>
+                            <p className="text-3xl font-black font-mono">{stats.totalAllocated}</p>
+                        </div>
+                        <PackageCheck className="w-8 h-8 text-primary opacity-20" />
                     </Card>
-                    <Card className="border-2 shadow-sm bg-orange-500/5">
-                        <CardHeader className="pb-2">
-                            <CardDescription className="font-headline font-bold text-orange-500 flex items-center gap-2 uppercase tracking-tighter">
-                                <TrendingUp className="w-4 h-4" /> Samples Issued
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-black font-mono text-orange-500">{stats.totalUsed} <span className="text-sm font-normal text-muted-foreground">units ({stats.percent}%)</span></div>
-                        </CardContent>
+                    <Card className="border-2 shadow-sm bg-orange-500/5 p-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Units Issued</p>
+                            <p className="text-3xl font-black font-mono text-orange-500">{stats.totalUsed} <span className="text-xs">({stats.percent}%)</span></p>
+                        </div>
+                        <TrendingUp className="w-8 h-8 text-orange-500 opacity-20" />
                     </Card>
-                    <Card className="border-2 shadow-sm bg-green-500/5">
-                        <CardHeader className="pb-2">
-                            <CardDescription className="font-headline font-bold text-green-500 flex items-center gap-2 uppercase tracking-tighter">
-                                <Filter className="w-4 h-4" /> Available Balance
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-black font-mono text-green-500">{stats.remaining} <span className="text-sm font-normal text-muted-foreground">units</span></div>
-                        </CardContent>
+                    <Card className="border-2 shadow-sm bg-green-500/5 p-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">Balance</p>
+                            <p className="text-3xl font-black font-mono text-green-500">{stats.remaining}</p>
+                        </div>
+                        <Filter className="w-8 h-8 text-green-500 opacity-20" />
                     </Card>
                 </div>
 
                 <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
-                    <CardHeader className="bg-muted/30 border-b pb-6">
+                    <CardHeader className="bg-muted/30 border-b">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="space-y-1">
-                                <CardTitle className="text-xl font-black font-headline">Material Distribution List</CardTitle>
-                                <CardDescription>Real-time monitoring of your official sample inventory.</CardDescription>
-                            </div>
+                            <CardTitle className="text-xl font-black font-headline">Distribution List</CardTitle>
                             <div className="relative max-w-md w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input 
-                                    placeholder="Search material or group..." 
+                                    placeholder="Search products..." 
                                     className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
@@ -164,71 +136,49 @@ export default function Q4AllocationPage() {
                         <div className="overflow-x-auto">
                             <Table>
                                 <TableHeader className="bg-muted/20">
-                                    <TableRow className="h-12 hover:bg-transparent">
-                                        <TableHead className="font-bold text-foreground pl-6">Product Group</TableHead>
-                                        <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Allocation</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Issued</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground pr-6">Balance</TableHead>
+                                    <TableRow className="h-12">
+                                        <TableHead className="font-bold text-foreground pl-6">Material Name</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground w-32">Alloc</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground w-32">Issued</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground w-32 pr-6">Balance</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {dataLoading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="h-64 text-center">
-                                                <RefreshCw className="w-10 h-10 animate-spin mx-auto text-primary opacity-20" />
-                                                <p className="mt-4 text-muted-foreground font-headline font-bold uppercase tracking-widest text-xs">Synchronizing Inventory...</p>
-                                            </TableCell>
-                                        </TableRow>
+                                        <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            if (!sample) return null;
-                                            const sId = String(sample.id || Math.random());
-                                            const name = `${sample.materialName ?? sample.displayMaterialName ?? "Unknown Item"}`;
-                                            const group = `${sample.productGroup ?? "Uncategorized"}`;
-                                            const distributed = Math.round(Number(usedQuantities[name] ?? 0));
-                                            const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
+                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown");
+                                            const group = String(sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized");
+                                            const distributed = Number(usedQuantities[name] ?? 0);
+                                            const alloc = Number(sample.allocationQuantity ?? 0);
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
-                                                <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                    <TableCell className="pl-6 font-bold text-primary">{group}</TableCell>
-                                                    <TableCell className="font-medium">{name}</TableCell>
-                                                    <TableCell className="text-center font-mono">{alloc}</TableCell>
-                                                    <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
+                                                <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
+                                                    <TableCell className="pl-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-sm">{name}</span>
+                                                            <span className="text-[10px] font-black uppercase text-primary opacity-70">{group}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono">{Math.round(alloc)}</TableCell>
+                                                    <TableCell className="text-center font-mono text-orange-500">{Math.round(distributed)}</TableCell>
                                                     <TableCell className="text-center pr-6">
-                                                        <Badge variant={balance <= 0 ? "destructive" : "secondary"} className={cn(
-                                                            "font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center",
-                                                            balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
-                                                        )}>
-                                                            {balance}
+                                                        <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center">
+                                                            {Math.round(balance)}
                                                         </Badge>
                                                     </TableCell>
                                                 </TableRow>
                                             );
                                         })
                                     ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="h-64 text-center">
-                                                <div className="flex flex-col items-center justify-center opacity-30">
-                                                    <Search className="w-16 h-16 mb-2" />
-                                                    <p className="font-headline font-bold uppercase tracking-widest">No matching materials found</p>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
+                                        <TableRow><TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic">No matching materials.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
                         </div>
                     </CardContent>
                 </Card>
-
-                <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-xl border-2">
-                    <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                    <div className="text-xs text-muted-foreground leading-relaxed">
-                        <p className="font-bold text-foreground mb-1 uppercase tracking-tight">Compliance & Data Policy</p>
-                        <p>This oversight reflects data synchronized from the <span className="font-bold text-primary">SFE Offline</span> engine. Balances are calculated based on issued samples recorded during provider visits. Please ensure all pending offline records are synced for accurate tracking.</p>
-                    </div>
-                </div>
             </main>
         </div>
     );

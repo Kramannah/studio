@@ -47,10 +47,6 @@ interface Q4AllocationViewProps {
     readOnly?: boolean;
 }
 
-/**
- * Unified component for viewing sample allocations.
- * Implements extreme defensive patterns to prevent client-side crashes on malformed data.
- */
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
@@ -69,30 +65,25 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         setMounted(true);
     }, []);
 
-    // NUCLEAR DEFENSIVE FILTERING: Prevents crash even if Firestore records are severely malformed.
+    // NUCLEAR DEFENSIVE FILTERING: Uses try-catch and absolute string conversion to prevent TypeError
     const filteredSamples = useMemo(() => {
         try {
             if (!allocations || !Array.isArray(allocations)) return [];
-            
-            // Atomic normalization of search term
-            const safeSearch = String(search || "").toLowerCase().trim();
-            const quarterStr = String(activeQuarter || "Q4");
+            const safeSearch = String(search ?? "").toLowerCase().trim();
+            const quarterStr = String(activeQuarter ?? "Q4");
             
             return allocations.filter(s => {
                 if (!s || typeof s !== 'object') return false;
-                
-                // Quarter match with safety string casting
                 const q = String(s.quarter ?? 'Q4');
                 if (q !== quarterStr) return false;
 
-                // ATOMIC STRING NORMALIZATION: Guarantee strings for all properties
-                const name = `${s.displayMaterialName ?? s.materialName ?? ""}`.toLowerCase();
-                const group = `${s.prodGroupProdSubGroup ?? s.productGroup ?? ""}`.toLowerCase();
+                const name = String(s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
+                const group = String(s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
                 
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });
         } catch (e) {
-            console.error("Critical error in inventory filtering caught:", e);
+            console.error("Filter calculation failed, returning safe empty list", e);
             return [];
         }
     }, [allocations, search, activeQuarter]);
@@ -109,53 +100,51 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
-        if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-        
-        const quarterStr = String(activeQuarter || 'Q4');
-        const quarterAllocations = allocations.filter(s => s && String(s.quarter ?? 'Q4') === quarterStr);
-        let totalAllocated = 0;
-        let totalUsed = 0;
-        let totalRemaining = 0;
-        
-        quarterAllocations.forEach(s => {
-            if (!s) return;
-            const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            // Use String template literal for guaranteed string key
-            const name = `${s.displayMaterialName ?? s.materialName ?? "Unknown Item"}`;
-            const used = Math.round(Number(usedQuantities[name] ?? 0));
+        try {
+            if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
             
-            totalAllocated += alloc;
-            totalUsed += used;
-            totalRemaining += Math.max(0, alloc - used);
-        });
+            const quarterStr = String(activeQuarter ?? 'Q4');
+            const quarterAllocations = allocations.filter(s => s && String(s.quarter ?? 'Q4') === quarterStr);
+            let totalAllocated = 0;
+            let totalUsed = 0;
+            let totalRemaining = 0;
+            
+            quarterAllocations.forEach(s => {
+                if (!s) return;
+                const alloc = Number(s.allocationQuantity ?? 0);
+                const name = String(s.displayMaterialName ?? s.materialName ?? "Unknown");
+                const used = Number(usedQuantities[name] ?? 0);
+                
+                totalAllocated += alloc;
+                totalUsed += used;
+                totalRemaining += Math.max(0, alloc - used);
+            });
 
-        return {
-            totalAllocated: Math.round(totalAllocated),
-            totalUsed: Math.round(totalUsed),
-            remaining: Math.round(totalRemaining),
-            percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
-        };
+            return {
+                totalAllocated: Math.round(totalAllocated),
+                totalUsed: Math.round(totalUsed),
+                remaining: Math.round(totalRemaining),
+                percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
+            };
+        } catch (e) {
+            return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        }
     }, [allocations, usedQuantities, activeQuarter]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
-        const sampleData = [
-            { 'ProdGroupProdSubGroup': 'Antihistamine - Ricam Syrup', 'DisplayMaterialName': 'PQ3_Frutos Candy', 'AllocationQuantity': 180 }
-        ];
+        const sampleData = [{ 'ProdGroupProdSubGroup': 'Antihistamine', 'DisplayMaterialName': 'Sample Item', 'AllocationQuantity': 100 }];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
-        XLSX.writeFile(workbook, `${activeQuarter}_Allocation_Template.xlsx`);
+        XLSX.writeFile(workbook, `Template_${activeQuarter}.xlsx`);
     };
 
-    const handleUploadClick = () => {
-        fileInputRef.current?.click();
-    };
+    const handleUploadClick = () => fileInputRef.current?.click();
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-
         setIsUploading(true);
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -164,73 +153,33 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 const workbook = XLSX.read(data, { type: 'array' });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-                if (json.length < 2) {
-                    toast({ variant: "destructive", title: "Empty File", description: "Your file contains no data rows." });
-                    setIsUploading(false);
-                    return;
-                }
-
-                const headerRow = json[0].map((h: any) => String(h ?? '').toLowerCase().trim().replace(/\s/g, ''));
+                if (json.length < 2) throw new Error("Empty file");
+                const headerRow = json[0].map((h: any) => String(h ?? '').toLowerCase().trim());
                 const bodyRows = json.slice(1);
-
                 const colMap = {
                     group: headerRow.findIndex((h: string) => h.includes('prodgroupprodsubgroup')),
                     name: headerRow.findIndex((h: string) => h.includes('displaymaterialname')),
                     qty: headerRow.findIndex((h: string) => h.includes('allocationquantity'))
                 };
-
-                if (colMap.name === -1 || colMap.qty === -1) {
-                    toast({ variant: "destructive", title: "Format Error", description: "Column headers must match the template exactly." });
-                    setIsUploading(false);
-                    return;
-                }
-
-                const samplesToAdd: Omit<Q4Allocation, 'id'>[] = [];
-                for (const row of bodyRows) {
-                    const name = String(row[colMap.name] ?? '').trim();
-                    const group = colMap.group > -1 ? String(row[colMap.group] ?? '').trim() : "Uncategorized";
-                    const qty = parseInt(String(row[colMap.qty] ?? '0').replace(/[^0-9]/g, ''));
-
-                    if (name && !isNaN(qty)) {
-                        samplesToAdd.push({ 
-                            prodGroupProdSubGroup: group, 
-                            displayMaterialName: name, 
-                            allocationQuantity: qty 
-                        });
-                    }
-                }
-
+                if (colMap.name === -1 || colMap.qty === -1) throw new Error("Format mismatch");
+                const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
+                    prodGroupProdSubGroup: String(row[colMap.group] ?? "Uncategorized").trim(),
+                    displayMaterialName: String(row[colMap.name] ?? "").trim(),
+                    allocationQuantity: parseInt(String(row[colMap.qty] ?? '0').replace(/[^0-9]/g, ''))
+                })).filter(s => s.displayMaterialName);
                 if (samplesToAdd.length > 0) {
-                    const success = await addAllocationsBulk(samplesToAdd, activeQuarter);
-                    if (success) {
-                        toast({ title: "Import Successful", description: `${samplesToAdd.length} items added to ${activeQuarter}.` });
-                        refetch();
-                    }
+                    await addAllocationsBulk(samplesToAdd, activeQuarter);
+                    toast({ title: "Import Successful" });
+                    refetch();
                 }
             } catch (err) {
-                toast({ variant: "destructive", title: "Error", description: "Could not parse Excel file." });
+                toast({ variant: "destructive", title: "Upload Failed" });
             } finally {
                 setIsUploading(false);
                 if (fileInputRef.current) fileInputRef.current.value = "";
             }
         };
         reader.readAsArrayBuffer(file);
-    };
-
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) setSelectedIds(filteredSamples.map(s => String(s.id)));
-        else setSelectedIds([]);
-    };
-
-    const handleSelectRow = (id: string, checked: boolean) => {
-        if (checked) setSelectedIds(prev => [...prev, String(id)]);
-        else setSelectedIds(prev => prev.filter(i => i !== String(id)));
-    };
-
-    const handleDeleteSelected = async () => {
-        const success = await deleteAllocationsBulk(selectedIds);
-        if (success) setSelectedIds([]);
     };
 
     if (!mounted) return null;
@@ -276,7 +225,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline">Batch Oversight: {activeQuarter}</CardTitle>
-                                        <CardDescription>{readOnly ? 'Live status of your sample inventory for the current period.' : 'Monitoring inventory for current batch period.'}</CardDescription>
+                                        <CardDescription>Live status of your sample inventory for the current period.</CardDescription>
                                     </div>
                                     <div className="flex items-center gap-2 w-full max-sm:max-w-sm">
                                         <div className="relative flex-1">
@@ -291,18 +240,17 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                         {selectedIds.length > 0 && !readOnly && (
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
-                                                    <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl animate-in zoom-in duration-200">
+                                                    <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl">
                                                         <Trash2 className="h-5 w-5" />
                                                     </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Delete {selectedIds.length} Products?</AlertDialogTitle>
-                                                        <AlertDialogDescription>This will remove these products from the {activeQuarter} list.</AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground">Delete Permanently</AlertDialogAction>
+                                                        <AlertDialogAction onClick={() => deleteAllocationsBulk(selectedIds).then(() => setSelectedIds([]))} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>
@@ -315,14 +263,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                     <Table>
                                         <TableHeader className="bg-muted/20">
                                             <TableRow className="h-12 hover:bg-transparent">
-                                                {!readOnly && (
-                                                    <TableHead className="w-12 pl-6">
-                                                        <Checkbox 
-                                                            checked={filteredSamples.length > 0 && selectedIds.length === filteredSamples.length}
-                                                            onCheckedChange={handleSelectAll}
-                                                        />
-                                                    </TableHead>
-                                                )}
+                                                {!readOnly && <TableHead className="w-12 pl-6" />}
                                                 <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
                                                 <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
                                                 <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
@@ -331,15 +272,14 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                         </TableHeader>
                                         <TableBody>
                                             {dataLoading ? (
-                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Syncing...</p></TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
-                                                    if (!sample) return null;
                                                     const sId = String(sample.id);
-                                                    const name = `${sample.displayMaterialName ?? sample.materialName ?? "Unknown Item"}`;
-                                                    const group = `${sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized"}`;
-                                                    const used = Math.round(Number(usedQuantities[name] ?? 0));
-                                                    const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
+                                                    const name = String(sample.displayMaterialName ?? sample.materialName ?? "Unknown");
+                                                    const group = String(sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized");
+                                                    const used = Number(usedQuantities[name] ?? 0);
+                                                    const alloc = Number(sample.allocationQuantity ?? 0);
                                                     const balance = Math.max(0, alloc - used);
                                                     return (
                                                         <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
@@ -347,7 +287,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                 <TableCell className="pl-6">
                                                                     <Checkbox 
                                                                         checked={selectedIds.includes(sId)}
-                                                                        onCheckedChange={(checked) => handleSelectRow(sId, !!checked)}
+                                                                        onCheckedChange={(checked) => checked ? setSelectedIds(p => [...p, sId]) : setSelectedIds(p => p.filter(i => i !== sId))}
                                                                     />
                                                                 </TableCell>
                                                             )}
@@ -357,21 +297,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                     <span className="text-[10px] uppercase font-bold text-primary opacity-70">{group}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="text-center font-mono">{alloc}</TableCell>
-                                                            <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
+                                                            <TableCell className="text-center font-mono">{Math.round(alloc)}</TableCell>
+                                                            <TableCell className="text-center font-mono text-orange-500">{Math.round(used)}</TableCell>
                                                             <TableCell className="text-center pr-6">
-                                                                <Badge variant={balance <= 0 ? "destructive" : "outline"} className={cn(
-                                                                    "font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center",
-                                                                    balance > 0 && "bg-green-500/10 text-green-500 border-green-500/20"
-                                                                )}>
-                                                                    {balance}
+                                                                <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center">
+                                                                    {Math.round(balance)}
                                                                 </Badge>
                                                             </TableCell>
                                                         </TableRow>
                                                     );
                                                 })
                                             ) : (
-                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found for {activeQuarter}.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>
@@ -389,28 +326,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             </div>
                         )}
                     </div>
-
-                    {!readOnly && (
-                        <div className="space-y-6">
-                            <Card className="border-2 shadow-lg bg-primary/5">
-                                <CardHeader>
-                                    <CardTitle className="font-headline text-lg flex items-center gap-2 text-primary"><PackagePlus className="w-5 h-5" /> Import {activeQuarter}</CardTitle>
-                                    <CardDescription>Populate Batch {activeQuarter} via Excel.</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-11 font-headline"><FileDown className="mr-2 h-4 w-4" /> Get Template</Button>
-                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls, .csv" />
-                                    <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-11 font-headline shadow-lg">{isUploading ? <Loader2 className="animate-spin" /> : <><Download className="mr-2 h-4 w-4 rotate-180" /> Bulk Upload</>}</Button>
-                                </CardContent>
-                            </Card>
-
-                            <Alert className="border-2 bg-muted/30">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle className="font-headline font-bold">Import Guide</AlertTitle>
-                                <AlertDescription className="text-xs leading-normal opacity-70">Headers required: <strong>ProdGroupProdSubGroup</strong>, <strong>DisplayMaterialName</strong>, and <strong>AllocationQuantity</strong>.</AlertDescription>
-                            </Alert>
-                        </div>
-                    )}
                 </div>
              </Tabs>
         </div>
