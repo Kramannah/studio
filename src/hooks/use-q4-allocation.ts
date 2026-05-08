@@ -4,13 +4,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, limit, getDocs } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v15';
-const CACHE_DURATION = 300000; // 5 minutes
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v16';
+const CACHE_DURATION = 60000; // 1 minute cache for performance
 
 export const useQ4Allocation = () => {
   const { user } = useAuth();
@@ -70,8 +70,10 @@ export const useQ4Allocation = () => {
 
     try {
       const colRef = collection(db, "coverageEntries");
+      // If admin, we want to see global distributions for oversight
+      // If PMR, only their own
       let usageQuery = isUserAdminOrManager() 
-        ? query(colRef, limit(3000))
+        ? query(colRef)
         : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
@@ -83,17 +85,20 @@ export const useQ4Allocation = () => {
 
         const process = (name?: any, qty?: any) => {
             const safeName = String(name || "").trim();
-            const safeQty = Number(qty || 0);
-            if (safeName && !isNaN(safeQty)) {
-                const current = typeof usage[safeName] === 'number' ? usage[safeName] : 0;
-                usage[safeName] = current + safeQty;
+            if (!safeName) return;
+            
+            const safeQty = Math.round(Number(qty || 0));
+            if (!isNaN(safeQty) && safeQty !== 0) {
+                usage[safeName] = (usage[safeName] || 0) + safeQty;
             }
         };
 
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
         if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p: any) => p && process(p.sampleName, p.quantity));
+            entry.reminderProducts.forEach((p: any) => {
+                if (p) process(p.sampleName, p.quantity);
+            });
         }
       });
 

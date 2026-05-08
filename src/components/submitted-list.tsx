@@ -308,13 +308,6 @@ export function SubmittedList({
         });
     }, [entries, monthRange]);
 
-    const entryDates = useMemo(() => {
-        return filteredByMonth.map(e => {
-            const d = e.coverageDate ? parseISO(e.coverageDate) : null;
-            return d && isValid(d) ? d : null;
-        }).filter((d): d is Date => d !== null);
-    }, [filteredByMonth]);
-
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         filteredByMonth.forEach(e => {
@@ -326,6 +319,10 @@ export function SubmittedList({
         });
         return counts;
     }, [filteredByMonth]);
+
+    const entryDates = useMemo(() => {
+        return Object.keys(entriesCountByDate).map(d => parseISO(d));
+    }, [entriesCountByDate]);
 
     const filtered = useMemo(() => {
         let res = [...filteredByMonth];

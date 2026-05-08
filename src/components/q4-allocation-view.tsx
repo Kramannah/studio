@@ -71,9 +71,12 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         
         return allocations.filter(s => {
             if (!s || String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
+            
+            // Ultra defensive string casting to prevent TypeError on live server
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
-            return name.indexOf(q) !== -1 || group.indexOf(q) !== -1;
+            
+            return name.includes(q) || group.includes(q);
         });
     }, [allocations, search, activeQuarter, mounted]);
 
@@ -145,7 +148,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
                     prodGroupProdSubGroup: String(row[colMap.group] || "Uncategorized").trim(),
                     displayMaterialName: String(row[colMap.name] || "").trim(),
-                    allocationQuantity: parseInt(String(row[colMap.qty] || '0').replace(/[^0-9]/g, ''))
+                    allocationQuantity: Math.round(Number(String(row[colMap.qty] || '0').replace(/[^0-9.]/g, '')))
                 })).filter(s => s.displayMaterialName);
                 
                 if (samplesToAdd.length > 0) {

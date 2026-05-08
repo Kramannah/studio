@@ -34,17 +34,17 @@ export default function Q4AllocationPage() {
         
         return marketingSamples.filter(s => {
             if (!s) return false;
-            // Always cast to string and provide fallback to prevent toLowerCase() on undefined
-            const name = String(s.materialName || "").toLowerCase();
-            const group = String(s.productGroup || "").toLowerCase();
-            return name.indexOf(q) !== -1 || group.indexOf(q) !== -1;
+            // Ultra-defensive string casting for filtering
+            const name = String(s.materialName || s.displayMaterialName || "").toLowerCase();
+            const group = String(s.productGroup || s.prodGroupProdSubGroup || "").toLowerCase();
+            return name.includes(q) || group.includes(q);
         });
     }, [marketingSamples, search, mounted]);
 
     const stats = useMemo(() => {
         let totalAllocated = 0, totalUsed = 0;
         filteredSamples.forEach(s => {
-            const name = String(s.materialName || "");
+            const name = String(s.materialName || s.displayMaterialName || "");
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsed += Number(usedQuantities[name] || 0);
         });
@@ -133,14 +133,16 @@ export default function Q4AllocationPage() {
                                         <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const distributed = Number(usedQuantities[String(sample.materialName)] || 0);
+                                            const name = String(sample.materialName || sample.displayMaterialName || "Unknown");
+                                            const group = String(sample.productGroup || sample.prodGroupProdSubGroup || "Uncategorized");
+                                            const distributed = Number(usedQuantities[name] || 0);
                                             const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-sm">{String(sample.materialName || "Unknown")}</span>
-                                                            <span className="text-[10px] font-black uppercase text-primary opacity-70">{String(sample.productGroup || "Uncategorized")}</span>
+                                                            <span className="font-bold text-sm">{name}</span>
+                                                            <span className="text-[10px] font-black uppercase text-primary opacity-70">{group}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-center font-mono">{Number(sample.allocationQuantity || 0)}</TableCell>

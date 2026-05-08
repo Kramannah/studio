@@ -24,7 +24,6 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      // Fetch from marketingSamples
       const samplesSnap = await getDocs(collection(db, "marketingSamples"));
       
       const fetchedSamples: MarketingSample[] = [];
@@ -32,7 +31,6 @@ export const useMarketingSamples = () => {
           const data = doc.data();
           if (!data) return;
 
-          // Force all fields to valid strings/numbers during retrieval to prevent downstream crashes
           const productGroup = String(data.productGroup || data.prodGroupProdSubGroup || "Uncategorized");
           const materialName = String(data.materialName || data.displayMaterialName || "Unknown Item");
           const qty = Number(data.allocationQuantity || 0);
@@ -48,7 +46,7 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => a.materialName.localeCompare(b.materialName));
       setMarketingSamples(fetchedSamples);
 
-      // Fetch usage data
+      // Fetch usage data for the current user
       const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
       const usage: Record<string, number> = {};
       
@@ -58,11 +56,11 @@ export const useMarketingSamples = () => {
           
           const process = (name?: any, qty?: any) => {
               const safeName = String(name || "").trim();
-              const safeQty = Number(qty || 0);
-              if (safeName && !isNaN(safeQty)) {
-                  // Prevent prototype pollution and ensure numeric accumulation
-                  const current = typeof usage[safeName] === 'number' ? usage[safeName] : 0;
-                  usage[safeName] = current + safeQty;
+              if (!safeName) return;
+              
+              const safeQty = Math.round(Number(qty || 0));
+              if (!isNaN(safeQty)) {
+                  usage[safeName] = (usage[safeName] || 0) + safeQty;
               }
           };
 
