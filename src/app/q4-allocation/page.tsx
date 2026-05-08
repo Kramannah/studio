@@ -34,15 +34,14 @@ export default function Q4AllocationPage() {
         try {
             if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
             
-            // Normalize search term safely using template literals
             const safeSearch = `${search ?? ""}`.toLowerCase().trim();
             
             return marketingSamples.filter(s => {
                 if (!s || typeof s !== 'object') return false;
                 
-                // Use template literals to guarantee string type before toLowerCase
-                const name = `${s.materialName ?? s.displayMaterialName ?? ""}`.toLowerCase();
-                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? ""}`.toLowerCase();
+                // ULTIMATE PROTECTION: Use template literals to guarantee string type before toLowerCase
+                const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown Item"}`.toLowerCase();
+                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? "Uncategorized"}`.toLowerCase();
                 
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });

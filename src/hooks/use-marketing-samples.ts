@@ -5,9 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, DocumentData, QuerySnapshot } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -45,31 +42,32 @@ export const useMarketingSamples = () => {
               const data = doc.data();
               if (!data) return;
               
-              // DIAGNOSTIC LOGGING: Find null/undefined fields
-              const rawName = data.displayMaterialName ?? data.materialName;
-              const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup;
+              // LOGGING: Identify missing fields for the user
+              const name = data.displayMaterialName || data.materialName;
+              const group = data.prodGroupProdSubGroup || data.productGroup;
 
-              if (rawName === null || rawName === undefined || rawGroup === null || rawGroup === undefined) {
-                  console.warn(`[DIAGNOSTIC] Found record with NULL or UNDEFINED fields. ID: ${doc.id}`, {
-                      displayMaterialName: data.displayMaterialName,
-                      materialName: data.materialName,
-                      productGroup: data.productGroup,
-                      prodGroupProdSubGroup: data.prodGroupProdSubGroup
-                  });
+              if (!name || !group || data.allocationQuantity === undefined) {
+                  console.group(`%c DATA ALERT: Malformed Record in marketingSamples `, 'background: #dc2626; color: white; font-weight: bold;');
+                  console.log(`Document ID: ${doc.id}`);
+                  console.log(`Missing Name: ${!name}`);
+                  console.log(`Missing Group: ${!group}`);
+                  console.log(`Missing Qty: ${data.allocationQuantity === undefined}`);
+                  console.log(`Raw Data:`, data);
+                  console.groupEnd();
               }
               
-              // ULTRA-SAFE CASTING
-              const name = String(rawName ?? "Unknown Item");
-              const group = String(rawGroup ?? "Uncategorized");
-              const qty = Number(data.allocationQuantity ?? 0);
+              // ULTRA-SAFE CASTING: Assign hard defaults if missing
+              const safeName = String(name ?? "Unknown Item");
+              const safeGroup = String(group ?? "Uncategorized");
+              const safeQty = Number(data.allocationQuantity ?? 0);
               
               fetchedSamples.push({ 
                   id: doc.id, 
-                  productGroup: group, 
-                  prodGroupProdSubGroup: group, // Unified
-                  materialName: name, 
-                  displayMaterialName: name,   // Unified
-                  allocationQuantity: isNaN(qty) ? 0 : qty
+                  productGroup: safeGroup, 
+                  prodGroupProdSubGroup: safeGroup,
+                  materialName: safeName, 
+                  displayMaterialName: safeName,
+                  allocationQuantity: isNaN(safeQty) ? 0 : safeQty
               });
           });
       }

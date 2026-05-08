@@ -8,10 +8,8 @@ import { collection, query, writeBatch, doc, where, limit, getDocs, DocumentData
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v9';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v10';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -57,22 +55,22 @@ export const useQ4Allocation = () => {
                 const rawName = data.displayMaterialName ?? data.materialName;
                 const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup;
 
-                // DIAGNOSTIC LOGGING
-                if (rawName === null || rawName === undefined || rawGroup === null || rawGroup === undefined) {
-                    console.warn(`[DIAGNOSTIC-Q4] Incomplete allocation data. ID: ${doc.id}`, data);
+                // DIAGNOSTIC LOGGING: Show user exactly what is missing
+                if (!rawName || !rawGroup || data.allocationQuantity === undefined) {
+                    console.warn(`[DIAGNOSTIC-Q4] Document ID: ${doc.id} is missing key fields. Found Name: ${!!rawName}, Group: ${!!rawGroup}, Qty: ${data.allocationQuantity !== undefined}`);
                 }
 
-                const name = String(rawName ?? "Unknown Item");
-                const group = String(rawGroup ?? "Uncategorized");
-                const qty = Number(data.allocationQuantity ?? 0);
+                const safeName = String(rawName ?? "Unknown Item");
+                const safeGroup = String(rawGroup ?? "Uncategorized");
+                const safeQty = Number(data.allocationQuantity ?? 0);
                 
                 return { 
                     id: doc.id, 
-                    prodGroupProdSubGroup: group,
-                    productGroup: group, // Unified
-                    displayMaterialName: name,
-                    materialName: name,   // Unified
-                    allocationQuantity: isNaN(qty) ? 0 : qty,
+                    prodGroupProdSubGroup: safeGroup,
+                    productGroup: safeGroup,
+                    displayMaterialName: safeName,
+                    materialName: safeName,
+                    allocationQuantity: isNaN(safeQty) ? 0 : safeQty,
                     quarter: String(data.quarter ?? 'Q4')
                 } as any;
             }).filter((item): item is any => item !== null);
