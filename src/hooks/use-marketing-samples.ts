@@ -11,7 +11,6 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
-  const { toast } = useToast();
   const { user } = useAuth();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
@@ -25,7 +24,6 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      // 1. Fetch official allocations with safe collection switching
       let samplesSnap: QuerySnapshot<DocumentData> | null = null;
       
       try {
@@ -34,39 +32,51 @@ export const useMarketingSamples = () => {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           }
       } catch (e) {
-          console.warn("Primary inventory access issue, attempting fallback...");
           try {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           } catch (fallbackError) {
-              console.error("All inventory collections inaccessible.");
+              console.error("Critical: Inventory source inaccessible.");
           }
       }
       
-      const fetchedSamples: MarketingSample[] = [];
+      const fetchedSamples: any[] = [];
       if (samplesSnap && !samplesSnap.empty) {
           samplesSnap.docs.forEach(doc => {
               const data = doc.data();
               if (!data) return;
               
-              // Extreme string protection for fields to prevent toLowerCase crashes in components
-              const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
-              const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
-              const qty = Number(data.allocationQuantity || 0);
+              // DIAGNOSTIC LOGGING: Find null/undefined fields
+              const rawName = data.displayMaterialName ?? data.materialName;
+              const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup;
+
+              if (rawName === null || rawName === undefined || rawGroup === null || rawGroup === undefined) {
+                  console.warn(`[DIAGNOSTIC] Found record with NULL or UNDEFINED fields. ID: ${doc.id}`, {
+                      displayMaterialName: data.displayMaterialName,
+                      materialName: data.materialName,
+                      productGroup: data.productGroup,
+                      prodGroupProdSubGroup: data.prodGroupProdSubGroup
+                  });
+              }
+              
+              // ULTRA-SAFE CASTING
+              const name = String(rawName ?? "Unknown Item");
+              const group = String(rawGroup ?? "Uncategorized");
+              const qty = Number(data.allocationQuantity ?? 0);
               
               fetchedSamples.push({ 
                   id: doc.id, 
                   productGroup: group, 
+                  prodGroupProdSubGroup: group, // Unified
                   materialName: name, 
+                  displayMaterialName: name,   // Unified
                   allocationQuantity: isNaN(qty) ? 0 : qty
               });
           });
       }
       
-      // Sort in memory with string safety
-      fetchedSamples.sort((a, b) => String(a.materialName || "").localeCompare(String(b.materialName || "")));
+      fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // 2. Fetch usage specifically for this representative
       try {
           const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
           const usage: Record<string, number> = {};
@@ -95,12 +105,10 @@ export const useMarketingSamples = () => {
               }
           });
           setUsedQuantities(usage);
-      } catch (usageError) {
-          console.warn("Personal usage data could not be computed.");
-      }
+      } catch (usageError) {}
 
     } catch (error: any) {
-        console.error("Critical error in inventory engine:", error);
+        console.error("Inventory Fetch Error:", error);
     } finally {
       setLoading(false);
     }

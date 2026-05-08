@@ -11,7 +11,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v8';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v9';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -23,9 +23,9 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = `${user.email ?? ''}`.toLowerCase();
+    const email = String(user.email ?? '').toLowerCase();
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => `${e ?? ""}`.toLowerCase() === email);
+                  ADMIN_EMAILS.some(e => String(e ?? "").toLowerCase() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
     
     return isAdmin || isManager;
@@ -42,7 +42,6 @@ export const useQ4Allocation = () => {
                 snapshot = await getDocs(collection(db, "q4Allocation"));
             }
         } catch (e) {
-            console.warn("Primary allocation fetch issue, checking fallback...");
             try {
                 snapshot = await getDocs(collection(db, "q4Allocation"));
             } catch (fallbackError) {
@@ -55,26 +54,34 @@ export const useQ4Allocation = () => {
                 const data = doc.data();
                 if (!data) return null;
                 
-                // Extremely safe field mapping with explicit string casting to prevent client crashes
-                const name = `${data.displayMaterialName ?? data.materialName ?? "Unknown Item"}`;
-                const group = `${data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized"}`;
+                const rawName = data.displayMaterialName ?? data.materialName;
+                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup;
+
+                // DIAGNOSTIC LOGGING
+                if (rawName === null || rawName === undefined || rawGroup === null || rawGroup === undefined) {
+                    console.warn(`[DIAGNOSTIC-Q4] Incomplete allocation data. ID: ${doc.id}`, data);
+                }
+
+                const name = String(rawName ?? "Unknown Item");
+                const group = String(rawGroup ?? "Uncategorized");
                 const qty = Number(data.allocationQuantity ?? 0);
                 
                 return { 
                     id: doc.id, 
                     prodGroupProdSubGroup: group,
+                    productGroup: group, // Unified
                     displayMaterialName: name,
+                    materialName: name,   // Unified
                     allocationQuantity: isNaN(qty) ? 0 : qty,
-                    quarter: `${data.quarter ?? 'Q4'}`
-                } as Q4Allocation;
-            }).filter((item): item is Q4Allocation => item !== null);
+                    quarter: String(data.quarter ?? 'Q4')
+                } as any;
+            }).filter((item): item is any => item !== null);
 
-            // Sort in memory to bypass index requirements and ensure string safety
-            fetched.sort((a, b) => `${a.displayMaterialName ?? ""}`.localeCompare(`${b.displayMaterialName ?? ""}`));
+            fetched.sort((a, b) => String(a.displayMaterialName).localeCompare(String(b.displayMaterialName)));
             setAllocations(fetched);
         }
     } catch (error: any) {
-        console.error("Critical error in allocation engine:", error);
+        console.error("Allocation Engine Error:", error);
     }
   }, [user]);
 
@@ -86,7 +93,6 @@ export const useQ4Allocation = () => {
             const cached = localStorage.getItem(USAGE_CACHE_KEY);
             if (cached) {
                 const parsed = JSON.parse(cached);
-                // Robust verification of cached data structure before property access
                 if (parsed && typeof parsed === 'object' && parsed.data && parsed.timestamp) {
                     if (Date.now() - parsed.timestamp < CACHE_DURATION) {
                         setUsedQuantities(parsed.data);
@@ -95,7 +101,6 @@ export const useQ4Allocation = () => {
                 }
             }
         } catch (e) {
-            console.warn("Usage cache reset.");
             localStorage.removeItem(USAGE_CACHE_KEY);
         }
     }
@@ -118,10 +123,9 @@ export const useQ4Allocation = () => {
             const entry = doc.data() as CoverageEntry;
             if (!entry) return;
 
-            // Defensive quantity accumulation with explicit casting
             const processSample = (name?: any, qty?: any) => {
                 if (name !== undefined && name !== null && qty) {
-                    const cleanName = `${name}`;
+                    const cleanName = String(name);
                     const cleanQty = Number(qty);
                     if (!isNaN(cleanQty)) {
                         usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
@@ -143,7 +147,7 @@ export const useQ4Allocation = () => {
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Distribution tracker calculation issue:", error);
+        console.warn("Usage Tracker Error:", error);
     }
   }, [user, isUserAdminOrManager]);
 
@@ -170,23 +174,18 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const name = `${item.displayMaterialName ?? ""}`.trim();
+        const name = String(item.displayMaterialName ?? "").trim();
         if (!name) return;
         
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const docId = `${quarter.toLowerCase()}_${cleanId}`;
+        const docId = `${String(quarter).toLowerCase()}_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
-      toast({ title: "Import Successful" });
       fetchAllocations();
       return true;
     } catch (err) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'marketingSamples',
-          operation: 'write',
-        }));
         return false;
     }
   };
@@ -199,14 +198,9 @@ export const useQ4Allocation = () => {
       });
       try {
           await batch.commit();
-          toast({ title: "Deleted Successfully" });
           fetchAllocations();
           return true;
       } catch (err) {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples',
-            operation: 'delete',
-          }));
           return false;
       }
   };
