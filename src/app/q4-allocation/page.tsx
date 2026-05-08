@@ -1,5 +1,5 @@
 
-'use client';
+"use client"
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * Standalone page for Marketing Material Oversight.
- * Implements ultra-hardened string filtering to prevent TypeError on malformed records.
+ * Implements extreme defensive patterns to prevent client-side crashes on malformed data.
  */
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
@@ -34,7 +34,7 @@ export default function Q4AllocationPage() {
         }
     }, [user, authLoading, router, mounted]);
 
-    // ULTRA-HARDENED FILTERING: Force every comparison target to a valid string.
+    // NUCLEAR DEFENSIVE FILTERING: Force every comparison target to a valid string using template literals.
     const filteredSamples = useMemo(() => {
         try {
             if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
@@ -44,14 +44,14 @@ export default function Q4AllocationPage() {
             return marketingSamples.filter(s => {
                 if (!s || typeof s !== 'object') return false;
                 
-                // GUARANTEED STRING CONVERSION: Prevents 'undefined.toLowerCase()' crash.
-                const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
-                const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
+                // ATOMIC STRING NORMALIZATION: Guaranteed string conversion for every property check.
+                const name = `${s.materialName ?? s.displayMaterialName ?? ""}`.toLowerCase();
+                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? ""}`.toLowerCase();
                 
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });
         } catch (e) {
-            console.error("Filter logic safety fallback triggered:", e);
+            console.error("Critical filter logic error caught:", e);
             return [];
         }
     }, [marketingSamples, search]);
@@ -65,7 +65,8 @@ export default function Q4AllocationPage() {
         filteredSamples.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown Item");
+            // Use String template literal for guaranteed string key
+            const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown Item"}`;
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -182,13 +183,14 @@ export default function Q4AllocationPage() {
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
-                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
-                                            const group = String(sample.productGroup ?? "Uncategorized");
+                                            const sId = String(sample.id || Math.random());
+                                            const name = `${sample.materialName ?? sample.displayMaterialName ?? "Unknown Item"}`;
+                                            const group = `${sample.productGroup ?? "Uncategorized"}`;
                                             const distributed = Math.round(Number(usedQuantities[name] ?? 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                             const balance = Math.max(0, alloc - distributed);
                                             return (
-                                                <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                     <TableCell className="pl-6 font-bold text-primary">{group}</TableCell>
                                                     <TableCell className="font-medium">{name}</TableCell>
                                                     <TableCell className="text-center font-mono">{alloc}</TableCell>

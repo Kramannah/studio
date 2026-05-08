@@ -49,7 +49,7 @@ interface Q4AllocationViewProps {
 
 /**
  * Unified component for viewing sample allocations.
- * Implements ultra-safe string filtering to prevent TypeError on null/undefined records.
+ * Implements extreme defensive patterns to prevent client-side crashes on malformed data.
  */
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
@@ -69,29 +69,30 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         setMounted(true);
     }, []);
 
-    // ULTRA-HARDENED FILTERING: Prevents crash when record fields are null/undefined in Firestore.
+    // NUCLEAR DEFENSIVE FILTERING: Prevents crash even if Firestore records are severely malformed.
     const filteredSamples = useMemo(() => {
         try {
             if (!allocations || !Array.isArray(allocations)) return [];
             
+            // Atomic normalization of search term
             const safeSearch = String(search || "").toLowerCase().trim();
             const quarterStr = String(activeQuarter || "Q4");
             
             return allocations.filter(s => {
                 if (!s || typeof s !== 'object') return false;
                 
-                // Quarter match
+                // Quarter match with safety string casting
                 const q = String(s.quarter ?? 'Q4');
                 if (q !== quarterStr) return false;
 
-                // GUARANTEED STRING CONVERSION: Prevents 'undefined.toLowerCase()' crash.
-                const name = String(s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
-                const group = String(s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
+                // ATOMIC STRING NORMALIZATION: Guarantee strings for all properties
+                const name = `${s.displayMaterialName ?? s.materialName ?? ""}`.toLowerCase();
+                const group = `${s.prodGroupProdSubGroup ?? s.productGroup ?? ""}`.toLowerCase();
                 
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });
         } catch (e) {
-            console.error("Inventory filter error protected:", e);
+            console.error("Critical error in inventory filtering caught:", e);
             return [];
         }
     }, [allocations, search, activeQuarter]);
@@ -119,7 +120,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         quarterAllocations.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.displayMaterialName ?? s.materialName ?? "Unknown Item");
+            // Use String template literal for guaranteed string key
+            const name = `${s.displayMaterialName ?? s.materialName ?? "Unknown Item"}`;
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -217,13 +219,13 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     };
 
     const handleSelectAll = (checked: boolean) => {
-        if (checked) setSelectedIds(filteredSamples.map(s => s.id));
+        if (checked) setSelectedIds(filteredSamples.map(s => String(s.id)));
         else setSelectedIds([]);
     };
 
     const handleSelectRow = (id: string, checked: boolean) => {
-        if (checked) setSelectedIds(prev => [...prev, id]);
-        else setSelectedIds(prev => prev.filter(i => i !== id));
+        if (checked) setSelectedIds(prev => [...prev, String(id)]);
+        else setSelectedIds(prev => prev.filter(i => i !== String(id)));
     };
 
     const handleDeleteSelected = async () => {
@@ -300,7 +302,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground">Delete Permanentely</AlertDialogAction>
+                                                        <AlertDialogAction onClick={handleDeleteSelected} className="bg-destructive text-destructive-foreground">Delete Permanently</AlertDialogAction>
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>
@@ -333,18 +335,19 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     if (!sample) return null;
-                                                    const name = String(sample.displayMaterialName ?? sample.materialName ?? "Unknown Item");
-                                                    const group = String(sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized");
+                                                    const sId = String(sample.id);
+                                                    const name = `${sample.displayMaterialName ?? sample.materialName ?? "Unknown Item"}`;
+                                                    const group = `${sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized"}`;
                                                     const used = Math.round(Number(usedQuantities[name] ?? 0));
                                                     const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                                     const balance = Math.max(0, alloc - used);
                                                     return (
-                                                        <TableRow key={sample.id || Math.random().toString()} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                        <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (
                                                                 <TableCell className="pl-6">
                                                                     <Checkbox 
-                                                                        checked={selectedIds.includes(sample.id)}
-                                                                        onCheckedChange={(checked) => handleSelectRow(sample.id, !!checked)}
+                                                                        checked={selectedIds.includes(sId)}
+                                                                        onCheckedChange={(checked) => handleSelectRow(sId, !!checked)}
                                                                     />
                                                                 </TableCell>
                                                             )}

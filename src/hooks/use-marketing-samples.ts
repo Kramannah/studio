@@ -27,17 +27,15 @@ export const useMarketingSamples = () => {
     try {
       let samplesSnap: QuerySnapshot<DocumentData> | null = null;
       
-      // Attempt to fetch from official marketingSamples first, fallback to q4Allocation
+      // Attempt to fetch from official marketingSamples first
       try {
           samplesSnap = await getDocs(collection(db, "marketingSamples"));
-          if (samplesSnap.empty) {
-              samplesSnap = await getDocs(collection(db, "q4Allocation"));
-          }
       } catch (e) {
+          console.warn("MarketingSamples collection access issue, checking fallback...");
           try {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           } catch (fallbackError) {
-              console.error("Critical: Inventory data source inaccessible.");
+              console.error("Critical: Both inventory data sources inaccessible.");
           }
       }
       
@@ -48,16 +46,17 @@ export const useMarketingSamples = () => {
               if (!data) return;
               
               // DEEP SANITIZATION: Force values to strings/numbers at source
+              // We check all possible field naming variations from live Firestore
               const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
               const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
-              const rawQty = data.allocationQuantity ?? 0;
+              const rawQty = data.allocationQuantity ?? data.quantity ?? 0;
 
-              const safeName = String(rawName).trim();
-              const safeGroup = String(rawGroup).trim();
+              const safeName = String(rawName || "Unknown Item").trim();
+              const safeGroup = String(rawGroup || "Uncategorized").trim();
               const safeQty = Number(rawQty);
               
               fetchedSamples.push({ 
-                  id: doc.id, 
+                  id: String(doc.id), 
                   productGroup: safeGroup, 
                   prodGroupProdSubGroup: safeGroup,
                   materialName: safeName, 
@@ -67,7 +66,7 @@ export const useMarketingSamples = () => {
           });
       }
       
-      // Safe sorting
+      // Safe sorting using string comparison
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
@@ -81,10 +80,10 @@ export const useMarketingSamples = () => {
               if (!entry) return;
               
               const addQty = (name?: any, qty?: any) => {
-                  if (name !== undefined && name !== null && qty) {
+                  if (name !== undefined && name !== null) {
                       const cleanName = String(name);
                       const cleanQty = Number(qty);
-                      if (!isNaN(cleanQty)) {
+                      if (!isNaN(cleanQty) && cleanQty > 0) {
                           usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
                       }
                   }
@@ -95,7 +94,7 @@ export const useMarketingSamples = () => {
               
               if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
                   entry.reminderProducts.forEach((p: any) => {
-                      if (p) addQty(p.sampleName, p.quantity);
+                      if (p && p.sampleName) addQty(p.sampleName, p.quantity);
                   });
               }
           });

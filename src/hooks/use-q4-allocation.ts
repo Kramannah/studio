@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v11';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v12';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -55,28 +55,30 @@ export const useQ4Allocation = () => {
                 // DEEP SANITIZATION: Assign hard defaults at retrieval point
                 const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
                 const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
-                const rawQty = data.allocationQuantity ?? 0;
+                const rawQty = data.allocationQuantity ?? data.quantity ?? 0;
                 const rawQuarter = data.quarter ?? "Q4";
 
-                const safeName = String(rawName).trim();
-                const safeGroup = String(rawGroup).trim();
+                const safeName = String(rawName || "Unknown Item").trim();
+                const safeGroup = String(rawGroup || "Uncategorized").trim();
                 const safeQty = Number(rawQty);
-                const safeQuarter = String(rawQuarter).trim();
+                const safeQuarter = String(rawQuarter || "Q4").trim();
                 
                 return { 
-                    id: doc.id, 
+                    id: String(doc.id), 
                     prodGroupProdSubGroup: safeGroup,
                     productGroup: safeGroup,
                     displayMaterialName: safeName,
                     materialName: safeName,
                     allocationQuantity: isNaN(safeQty) ? 0 : safeQty,
-                    quarter: safeQuarter
-                } as any;
-            }).filter((item): item is any => item !== null);
+                    quarter: safeQuarter as any
+                };
+            }).filter((item): item is Q4Allocation => item !== null);
 
             // Safe in-memory sorting
             fetched.sort((a, b) => String(a.displayMaterialName).localeCompare(String(b.displayMaterialName)));
             setAllocations(fetched);
+        } else {
+            setAllocations([]);
         }
     } catch (error: any) {
         console.error("Allocation Engine Error:", error);
@@ -108,7 +110,7 @@ export const useQ4Allocation = () => {
       
       let usageQuery;
       if (isUserAdminOrManager()) {
-          usageQuery = query(colRef, limit(1000)); 
+          usageQuery = query(colRef, limit(2000)); 
       } else {
           usageQuery = query(colRef, where("userId", "==", user.uid));
       }
@@ -122,10 +124,10 @@ export const useQ4Allocation = () => {
             if (!entry) return;
 
             const processSample = (name?: any, qty?: any) => {
-                if (name !== undefined && name !== null && qty) {
+                if (name !== undefined && name !== null) {
                     const cleanName = String(name);
                     const cleanQty = Number(qty);
-                    if (!isNaN(cleanQty)) {
+                    if (!isNaN(cleanQty) && cleanQty > 0) {
                         usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
                     }
                 }
@@ -136,7 +138,7 @@ export const useQ4Allocation = () => {
             
             if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
                 entry.reminderProducts.forEach(prod => {
-                    if (prod) processSample(prod.sampleName, prod.quantity);
+                    if (prod && prod.sampleName) processSample(prod.sampleName, prod.quantity);
                 });
             }
           });
