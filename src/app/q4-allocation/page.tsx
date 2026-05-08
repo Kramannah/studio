@@ -29,12 +29,12 @@ export default function Q4AllocationPage() {
 
     const filteredSamples = useMemo(() => {
         if (!mounted || !marketingSamples) return [];
-        const q = (search ?? "").toLowerCase().trim();
+        const q = String(search ?? "").toLowerCase().trim();
         
         return marketingSamples.filter(s => {
             if (!s) return false;
-            const name = (s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
-            const group = (s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
+            const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
+            const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
             return name.includes(q) || group.includes(q);
         });
     }, [marketingSamples, search, mounted]);
@@ -42,7 +42,7 @@ export default function Q4AllocationPage() {
     const stats = useMemo(() => {
         let totalAllocated = 0, totalUsedCount = 0;
         filteredSamples.forEach(s => {
-            const nameKey = (s.materialName ?? s.displayMaterialName ?? "Unknown").toLowerCase().trim();
+            const nameKey = String(s.materialName ?? s.displayMaterialName ?? "Unknown").toLowerCase().trim();
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += Number(usedQuantities[nameKey] || 0);
         });
@@ -131,9 +131,9 @@ export default function Q4AllocationPage() {
                                         <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const name = (sample.materialName ?? sample.displayMaterialName ?? "Unknown Item").toString();
-                                            const group = (sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized").toString();
-                                            const nameKey = (name ?? "").toLowerCase().trim();
+                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
+                                            const group = String(sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized");
+                                            const nameKey = String(name ?? "").toLowerCase().trim();
                                             const distributed = Number(usedQuantities[nameKey] || 0);
                                             const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (

@@ -18,11 +18,11 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = (user.email ?? "").toString().toLowerCase().trim();
+    const email = String(user.email ?? "").toLowerCase().trim();
     if (!email) return false;
     
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === email);
+                  ADMIN_EMAILS.some(e => String(e ?? "").toLowerCase().trim() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
     return isAdmin || isManager;
   }, [user]);
@@ -36,10 +36,10 @@ export const useQ4Allocation = () => {
             const data = doc.data();
             if (!data) return null;
             
-            const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
-            const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
+            const materialName = String(data.displayMaterialName ?? data.materialName ?? "Unknown Item").trim();
+            const group = String(data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").trim();
             const qty = Number(data.allocationQuantity || 0);
-            const quarter = (data.quarter ?? "Q4").toString().toUpperCase();
+            const quarter = String(data.quarter ?? "Q4").toUpperCase();
 
             return { 
                 id: doc.id, 
@@ -50,7 +50,7 @@ export const useQ4Allocation = () => {
             } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
 
-        fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().localeCompare((b.displayMaterialName ?? "").toString()));
+        fetched.sort((a, b) => String(a.displayMaterialName ?? "").localeCompare(String(b.displayMaterialName ?? "")));
         setAllocations(fetched);
     } catch (error: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -79,7 +79,7 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
-            const safeName = (name ?? "").toString().toLowerCase().trim();
+            const safeName = String(name ?? "").toLowerCase().trim();
             if (!safeName) return;
             
             const safeQty = Math.round(Number(qty || 0));
@@ -124,9 +124,9 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const name = (item.displayMaterialName ?? "").toString().trim();
+        const name = String(item.displayMaterialName ?? "").trim();
         if (!name) return;
-        const cleanId = (name ?? "").toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanId = String(name ?? "").toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `${quarter.toLowerCase()}_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });

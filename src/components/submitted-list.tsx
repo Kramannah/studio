@@ -44,11 +44,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
-        const eFirst = String(entry.firstName || "").toLowerCase().trim();
-        const eLast = String(entry.lastName || "").toLowerCase().trim();
+        const eFirst = String(entry.firstName ?? "").toLowerCase().trim();
+        const eLast = String(entry.lastName ?? "").toLowerCase().trim();
         return doctors.find(d => 
-            String(d.firstName || "").toLowerCase().trim() === eFirst && 
-            String(d.lastName || "").toLowerCase().trim() === eLast
+            String(d.firstName ?? "").toLowerCase().trim() === eFirst && 
+            String(d.lastName ?? "").toLowerCase().trim() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -283,7 +283,7 @@ export function SubmittedList({
         if (!mounted) return [];
         const monthSet = new Set<string>();
         entries.forEach(entry => {
-            const dateStr = String(entry.coverageDate || "");
+            const dateStr = String(entry.coverageDate ?? "");
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (date && isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
@@ -326,7 +326,7 @@ export function SubmittedList({
     const filteredByMonth = useMemo(() => {
         if (!mounted) return [];
         return entries.filter(e => {
-            const dateStr = String(e.coverageDate || "");
+            const dateStr = String(e.coverageDate ?? "");
             if (!dateStr) return false;
             const date = parseISO(dateStr);
             return date && isValid(date) && isWithinInterval(date, monthRange);
@@ -336,7 +336,7 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         filteredByMonth.forEach(e => {
-            const dateStr = String(e.coverageDate || "");
+            const dateStr = String(e.coverageDate ?? "");
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (date && isValid(date)) {
@@ -355,18 +355,18 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         let res = [...filteredByMonth];
-        const q = String(searchQuery || "").toLowerCase().trim();
+        const q = String(searchQuery ?? "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const first = String(e.firstName || "").toLowerCase();
-                const last = String(e.lastName || "").toLowerCase();
-                const clinic = String(e.clinic || "").toLowerCase();
+                const first = String(e.firstName ?? "").toLowerCase();
+                const last = String(e.lastName ?? "").toLowerCase();
+                const clinic = String(e.clinic ?? "").toLowerCase();
                 return first.includes(q) || last.includes(q) || clinic.includes(q);
             });
         }
         if (activeTab === 'calendar' && selectedDate) {
             res = res.filter(e => {
-                const dateStr = String(e.coverageDate || "");
+                const dateStr = String(e.coverageDate ?? "");
                 if (!dateStr) return false;
                 const d = parseISO(dateStr);
                 return d && isSameDay(d, selectedDate);
@@ -383,7 +383,7 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const dateStr = String(entry.coverageDate || "");
+            const dateStr = String(entry.coverageDate ?? "");
             const covDate = dateStr ? parseISO(dateStr) : null;
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {

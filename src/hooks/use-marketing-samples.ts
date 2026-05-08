@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,9 +6,6 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
-/**
- * Hook to fetch marketing materials and the user's distribution levels.
- */
 export const useMarketingSamples = () => {
   const { user } = useAuth();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
@@ -31,8 +27,8 @@ export const useMarketingSamples = () => {
           const data = doc.data();
           if (!data) return;
 
-          const productGroup = String(data.productGroup || data.prodGroupProdSubGroup || "Uncategorized");
-          const materialName = String(data.materialName || data.displayMaterialName || "Unknown Item");
+          const productGroup = String(data.productGroup ?? data.prodGroupProdSubGroup ?? "Uncategorized");
+          const materialName = String(data.materialName ?? data.displayMaterialName ?? "Unknown Item");
           const qty = Number(data.allocationQuantity || 0);
 
           fetchedSamples.push({ 
@@ -43,10 +39,9 @@ export const useMarketingSamples = () => {
           } as MarketingSample);
       });
       
-      fetchedSamples.sort((a, b) => a.materialName.localeCompare(b.materialName));
+      fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // Fetch usage data for the current user
       const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
       const usage: Record<string, number> = {};
       
@@ -55,7 +50,7 @@ export const useMarketingSamples = () => {
           if (!entry) return;
           
           const process = (name?: any, qty?: any) => {
-              const safeName = String(name || "").trim();
+              const safeName = String(name ?? "").toLowerCase().trim();
               if (!safeName) return;
               
               const safeQty = Math.round(Number(qty || 0));
