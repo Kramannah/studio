@@ -70,8 +70,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         const q = String(search || "").toLowerCase().trim();
         
         return allocations.filter(s => {
-            if (!s || s.quarter !== activeQuarter) return false;
-            // Extremely defensive string extraction to prevent toLowerCase() TypeError
+            if (!s || String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             return name.indexOf(q) !== -1 || group.indexOf(q) !== -1;
@@ -90,13 +89,13 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
-        const quarterAllocations = (allocations || []).filter(s => s && s.quarter === activeQuarter);
+        const quarterAllocations = (allocations || []).filter(s => s && String(s.quarter || "").toUpperCase() === activeQuarter);
         let totalAllocated = 0;
         let totalUsed = 0;
         
         quarterAllocations.forEach(s => {
             const name = String(s.displayMaterialName || s.materialName || "Unknown");
-            const used = Number(usedQuantities[name] || 0);
+            const used = Number(usedQuantities?.[name] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsed += used;
         });
@@ -260,7 +259,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     const sId = sample.id;
                                                     const name = String(sample.displayMaterialName || sample.materialName || "Unknown");
                                                     const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized");
-                                                    const used = Number(usedQuantities[name] || 0);
+                                                    const used = Number(usedQuantities?.[name] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
                                                     return (
                                                         <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">

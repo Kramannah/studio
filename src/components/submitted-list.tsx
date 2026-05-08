@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -17,7 +18,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "./ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import * as XLSX from 'xlsx';
 
@@ -43,8 +45,8 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     
     const doctor = useMemo(() => {
         return doctors.find(d => 
-            (d.firstName || "").toLowerCase() === (entry.firstName || "").toLowerCase() && 
-            (d.lastName || "").toLowerCase() === (entry.lastName || "").toLowerCase()
+            String(d.firstName || "").toLowerCase() === String(entry.firstName || "").toLowerCase() && 
+            String(d.lastName || "").toLowerCase() === String(entry.lastName || "").toLowerCase()
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -160,11 +162,11 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     const [loading, setLoading] = useState(false);
 
     const fetchHistory = useCallback(async () => {
-        if (!doctorName) return;
+        if (!doctorName || !db) return;
         setLoading(true);
         try {
             const q = query(
-                collection(db!, "coverageEntries"),
+                collection(db, "coverageEntries"),
                 where("firstName", "==", doctorName.first),
                 where("lastName", "==", doctorName.last),
                 orderBy("coverageDate", "desc")
@@ -313,12 +315,14 @@ export function SubmittedList({
 
     const filtered = useMemo(() => {
         let res = [...filteredByMonth];
-        const q = (searchQuery || "").toLowerCase().trim();
+        const q = String(searchQuery || "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const name = `${e.firstName || ""} ${e.lastName || ""}`.toLowerCase();
-                const clinic = (e.clinic || "").toLowerCase();
-                return name.includes(q) || clinic.includes(q);
+                const firstName = String(e.firstName || "").toLowerCase();
+                const lastName = String(e.lastName || "").toLowerCase();
+                const fullName = `${firstName} ${lastName}`;
+                const clinic = String(e.clinic || "").toLowerCase();
+                return fullName.includes(q) || clinic.includes(q);
             });
         }
         if (activeTab === 'calendar' && selectedDate) {
@@ -448,11 +452,13 @@ export function SubmittedList({
                         <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
                             <Table>
                                 <TableHeader><TableRow className="bg-muted/50 h-14"><TableHead className="font-bold pl-6">Provider</TableHead><TableHead className="text-right pr-6">Actions</TableHead></TableRow></TableHeader>
+                                <TableBody>
                                 {filtered.length > 0 ? (
                                     filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
                                 ) : (
-                                    <TableBody><TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity for this date.</TableCell></TableRow></TableBody>
+                                    <TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity for this date.</TableCell></TableRow>
                                 )}
+                                </TableBody>
                             </Table>
                         </Card>
                     </div>
