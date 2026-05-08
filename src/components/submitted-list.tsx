@@ -44,9 +44,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
+        const eFirst = String(entry.firstName || "").toLowerCase();
+        const eLast = String(entry.lastName || "").toLowerCase();
         return doctors.find(d => 
-            String(d.firstName || "").toLowerCase() === String(entry.firstName || "").toLowerCase() && 
-            String(d.lastName || "").toLowerCase() === String(entry.lastName || "").toLowerCase()
+            String(d.firstName || "").toLowerCase() === eFirst && 
+            String(d.lastName || "").toLowerCase() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -234,8 +236,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
 }
 
 export function SubmittedList({ 
-    entries, 
-    doctors, 
+    entries = [], 
+    doctors = [], 
     onDelete, 
     onEdit, 
     readOnly = false,
@@ -313,16 +315,27 @@ export function SubmittedList({
         }).filter((d): d is Date => d !== null);
     }, [filteredByMonth]);
 
+    const entriesCountByDate = useMemo(() => {
+        const counts: Record<string, number> = {};
+        filteredByMonth.forEach(e => {
+            const date = e.coverageDate ? parseISO(e.coverageDate) : null;
+            if (date && isValid(date)) {
+                const key = format(date, 'yyyy-MM-dd');
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [filteredByMonth]);
+
     const filtered = useMemo(() => {
         let res = [...filteredByMonth];
         const q = String(searchQuery || "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const firstName = String(e.firstName || "").toLowerCase();
-                const lastName = String(e.lastName || "").toLowerCase();
-                const fullName = `${firstName} ${lastName}`;
+                const first = String(e.firstName || "").toLowerCase();
+                const last = String(e.lastName || "").toLowerCase();
                 const clinic = String(e.clinic || "").toLowerCase();
-                return fullName.includes(q) || clinic.includes(q);
+                return first.includes(q) || last.includes(q) || clinic.includes(q);
             });
         }
         if (activeTab === 'calendar' && selectedDate) {
@@ -444,6 +457,22 @@ export function SubmittedList({
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : new Date()}
                                 modifiers={{ hasEntry: entryDates }}
                                 modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
+                                components={{
+                                    DayContent: ({ date }) => {
+                                        const dateString = format(date, 'yyyy-MM-dd');
+                                        const count = entriesCountByDate[dateString];
+                                        return (
+                                            <div className="relative flex items-center justify-center w-full h-full">
+                                                {date.getDate()}
+                                                {count && (
+                                                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-black shadow-sm">
+                                                        {count}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    },
+                                }}
                                 className="w-full p-4"
                             />
                         </Card>

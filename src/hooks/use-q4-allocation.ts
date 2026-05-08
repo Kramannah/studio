@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v14';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v15';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -48,7 +48,7 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => a.displayMaterialName.localeCompare(b.displayMaterialName));
         setAllocations(fetched);
     } catch (error: any) {
-        console.error("Allocation Fetch Error:", error);
+        console.warn("Allocation Fetch Error:", error);
     }
   }, [user]);
 
@@ -60,7 +60,7 @@ export const useQ4Allocation = () => {
         if (cached) {
             try {
                 const parsed = JSON.parse(cached);
-                if (parsed && parsed.data && Date.now() - parsed.timestamp < CACHE_DURATION) {
+                if (parsed && typeof parsed === 'object' && parsed.data && Date.now() - (parsed.timestamp || 0) < CACHE_DURATION) {
                     setUsedQuantities(parsed.data);
                     return;
                 }
