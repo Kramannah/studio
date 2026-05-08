@@ -79,6 +79,7 @@ export const useQ4Allocation = () => {
         if (!entry) return;
 
         const processItem = (name?: any, qty?: any) => {
+            // Safe string normalization to prevent Application Errors and ensure matching accuracy
             const safeName = (name ?? "").toString().toLowerCase().trim();
             if (!safeName) return;
             

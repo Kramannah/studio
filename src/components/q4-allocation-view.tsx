@@ -49,7 +49,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
     
-    const [activeQuarter, setActiveQuarter] = useState<'Q3' | 'Q4'>('Q4');
+    const [activeQuarter, setActiveQuarter] = useState<'Q3' | 'Q4' | undefined>(undefined);
     const [search, setSearch] = useState('');
     const [isUploading, setIsUploading] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -60,20 +60,22 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
+        setActiveQuarter('Q4');
         setMounted(true);
     }, []);
 
     const filteredSamples = useMemo(() => {
-        if (!mounted || !allocations) return [];
-        const q = (search ?? "").toLowerCase().trim();
+        if (!mounted || !allocations || !activeQuarter) return [];
+        // Safe string handling to prevent Application Errors
+        const q = (search ?? "").toString().toLowerCase().trim();
         
         return allocations.filter(s => {
             if (!s) return false;
             const itemQuarter = ((s.quarter ?? "")).toString().toUpperCase();
             if (itemQuarter !== activeQuarter) return false;
             
-            const name = ((s.displayMaterialName ?? s.materialName ?? "")).toLowerCase();
-            const group = ((s.prodGroupProdSubGroup ?? s.productGroup ?? "")).toLowerCase();
+            const name = ((s.displayMaterialName ?? s.materialName ?? "")).toString().toLowerCase();
+            const group = ((s.prodGroupProdSubGroup ?? s.productGroup ?? "")).toString().toLowerCase();
             
             return name.includes(q) || group.includes(q);
         });
@@ -91,14 +93,14 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
-        if (!mounted) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+        if (!mounted || !activeQuarter) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
 
         const quarterAllocations = (allocations || []).filter(s => s && ((s.quarter ?? "")).toString().toUpperCase() === activeQuarter);
         let totalAllocated = 0;
         let totalUsedCount = 0;
         
         quarterAllocations.forEach(s => {
-            const nameKey = ((s.displayMaterialName ?? s.materialName ?? "")).toLowerCase().trim();
+            const nameKey = ((s.displayMaterialName ?? s.materialName ?? "")).toString().toLowerCase().trim();
             const used = Number(usedQuantities?.[nameKey] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsedCount += used;
@@ -111,6 +113,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [allocations, usedQuantities, activeQuarter, mounted]);
 
     const handleDownloadTemplate = () => {
+        if (!activeQuarter) return;
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
         const sampleData = [{ 'ProdGroupProdSubGroup': 'Category', 'DisplayMaterialName': 'Sample Item', 'AllocationQuantity': 100 }];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
@@ -123,7 +126,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file || !activeQuarter) return;
         setIsUploading(true);
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -166,7 +169,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         reader.readAsArrayBuffer(file);
     };
 
-    if (!mounted) return (
+    if (!mounted || !activeQuarter) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Initializing Inventory...</p>
