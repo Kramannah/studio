@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useAuth } from '@/hooks/use-auth';
@@ -28,20 +29,24 @@ export default function Q4AllocationPage() {
     }, [user, authLoading, router, mounted]);
 
     const filteredSamples = useMemo(() => {
+        if (!mounted || !marketingSamples) return [];
         const q = String(search || "").toLowerCase().trim();
-        return (marketingSamples || []).filter(s => {
+        
+        return marketingSamples.filter(s => {
             if (!s) return false;
+            // Always cast to string and provide fallback to prevent toLowerCase() on undefined
             const name = String(s.materialName || "").toLowerCase();
             const group = String(s.productGroup || "").toLowerCase();
-            return name.includes(q) || group.includes(q);
+            return name.indexOf(q) !== -1 || group.indexOf(q) !== -1;
         });
-    }, [marketingSamples, search]);
+    }, [marketingSamples, search, mounted]);
 
     const stats = useMemo(() => {
         let totalAllocated = 0, totalUsed = 0;
         filteredSamples.forEach(s => {
-            totalAllocated += s.allocationQuantity || 0;
-            totalUsed += usedQuantities[s.materialName] || 0;
+            const name = String(s.materialName || "");
+            totalAllocated += Number(s.allocationQuantity || 0);
+            totalUsed += Number(usedQuantities[name] || 0);
         });
         const remaining = Math.max(0, totalAllocated - totalUsed);
         const percent = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
@@ -128,8 +133,8 @@ export default function Q4AllocationPage() {
                                         <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const distributed = usedQuantities[sample.materialName] || 0;
-                                            const balance = Math.max(0, sample.allocationQuantity - distributed);
+                                            const distributed = Number(usedQuantities[String(sample.materialName)] || 0);
+                                            const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
@@ -138,7 +143,7 @@ export default function Q4AllocationPage() {
                                                             <span className="text-[10px] font-black uppercase text-primary opacity-70">{String(sample.productGroup || "Uncategorized")}</span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                    <TableCell className="text-center font-mono">{Number(sample.allocationQuantity || 0)}</TableCell>
                                                     <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
                                                     <TableCell className="text-center pr-6">
                                                         <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center">
@@ -149,7 +154,7 @@ export default function Q4AllocationPage() {
                                             );
                                         })
                                     ) : (
-                                        <TableRow><TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic">No matching materials.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic">No matching materials found.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -65,14 +66,17 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, []);
 
     const filteredSamples = useMemo(() => {
+        if (!mounted || !allocations) return [];
         const q = String(search || "").toLowerCase().trim();
-        return (allocations || []).filter(s => {
+        
+        return allocations.filter(s => {
             if (!s || s.quarter !== activeQuarter) return false;
+            // Extremely defensive string extraction to prevent toLowerCase() TypeError
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
-            return name.includes(q) || group.includes(q);
+            return name.indexOf(q) !== -1 || group.indexOf(q) !== -1;
         });
-    }, [allocations, search, activeQuarter]);
+    }, [allocations, search, activeQuarter, mounted]);
 
     const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
     const paginatedSamples = useMemo(() => {
@@ -92,8 +96,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         
         quarterAllocations.forEach(s => {
             const name = String(s.displayMaterialName || s.materialName || "Unknown");
-            const used = usedQuantities[name] || 0;
-            totalAllocated += s.allocationQuantity || 0;
+            const used = Number(usedQuantities[name] || 0);
+            totalAllocated += Number(s.allocationQuantity || 0);
             totalUsed += used;
         });
 
@@ -128,24 +132,30 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 if (json.length < 2) throw new Error("Empty file");
                 const headerRow = json[0].map((h: any) => String(h || '').toLowerCase().trim());
                 const bodyRows = json.slice(1);
+                
+                const findCol = (keys: string[]) => headerRow.findIndex(h => keys.some(k => h.includes(k)));
+                
                 const colMap = {
-                    group: headerRow.findIndex((h: string) => h.includes('prodgroupprodsubgroup')),
-                    name: headerRow.findIndex((h: string) => h.includes('displaymaterialname')),
-                    qty: headerRow.findIndex((h: string) => h.includes('allocationquantity'))
+                    group: findCol(['prodgroup', 'group', 'category']),
+                    name: findCol(['displaymaterial', 'materialname', 'name', 'item']),
+                    qty: findCol(['allocation', 'quantity', 'qty'])
                 };
+                
                 if (colMap.name === -1 || colMap.qty === -1) throw new Error("Format mismatch");
+                
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
                     prodGroupProdSubGroup: String(row[colMap.group] || "Uncategorized").trim(),
                     displayMaterialName: String(row[colMap.name] || "").trim(),
                     allocationQuantity: parseInt(String(row[colMap.qty] || '0').replace(/[^0-9]/g, ''))
                 })).filter(s => s.displayMaterialName);
+                
                 if (samplesToAdd.length > 0) {
                     await addAllocationsBulk(samplesToAdd, activeQuarter);
                     toast({ title: "Import Successful" });
-                    refetch();
+                    await refetch();
                 }
             } catch (err) {
-                toast({ variant: "destructive", title: "Upload Failed" });
+                toast({ variant: "destructive", title: "Upload Failed", description: String(err) });
             } finally {
                 setIsUploading(false);
                 if (fileInputRef.current) fileInputRef.current.value = "";
@@ -250,8 +260,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     const sId = sample.id;
                                                     const name = String(sample.displayMaterialName || sample.materialName || "Unknown");
                                                     const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized");
-                                                    const used = usedQuantities[name] || 0;
-                                                    const balance = Math.max(0, sample.allocationQuantity - used);
+                                                    const used = Number(usedQuantities[name] || 0);
+                                                    const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
                                                     return (
                                                         <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
                                                             {!readOnly && (
@@ -268,7 +278,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                     <span className="text-[10px] uppercase font-bold text-primary opacity-70">{group}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                            <TableCell className="text-center font-mono">{Number(sample.allocationQuantity || 0)}</TableCell>
                                                             <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
                                                             <TableCell className="text-center pr-6">
                                                                 <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center">
@@ -279,7 +289,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                     );
                                                 })
                                             ) : (
-                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found.</TableCell></TableRow>
+                                                <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
                                             )}
                                         </TableBody>
                                     </Table>
@@ -292,7 +302,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <p className="text-sm text-muted-foreground">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10"><ChevronLeft className="h-4 w-4" /></Button>
-                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
+                                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10"><ChevronRight className="h-4 w-4" /></Button>
                                 </div>
                             </div>
                         )}

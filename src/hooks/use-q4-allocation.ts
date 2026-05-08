@@ -1,14 +1,15 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, limit, getDocs, DocumentData, QuerySnapshot } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, limit, getDocs } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v13';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v14';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -20,9 +21,9 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = (user.email || "").toLowerCase();
+    const email = String(user.email || "").toLowerCase();
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => e.toLowerCase() === email);
+                  ADMIN_EMAILS.some(e => String(e || "").toLowerCase() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
     return isAdmin || isManager;
   }, [user]);
@@ -34,16 +35,17 @@ export const useQ4Allocation = () => {
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
+            if (!data) return null;
             return { 
                 id: doc.id, 
-                prodGroupProdSubGroup: data.prodGroupProdSubGroup || data.productGroup || "Uncategorized",
-                displayMaterialName: data.displayMaterialName || data.materialName || "Unknown Item",
+                prodGroupProdSubGroup: String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized"),
+                displayMaterialName: String(data.displayMaterialName || data.materialName || "Unknown Item"),
                 allocationQuantity: Number(data.allocationQuantity || 0),
-                quarter: data.quarter || "Q4"
+                quarter: String(data.quarter || "Q4")
             } as Q4Allocation;
-        });
+        }).filter((item): item is Q4Allocation => item !== null);
 
-        fetched.sort((a, b) => (a.displayMaterialName || "").localeCompare(b.displayMaterialName || ""));
+        fetched.sort((a, b) => a.displayMaterialName.localeCompare(b.displayMaterialName));
         setAllocations(fetched);
     } catch (error: any) {
         console.error("Allocation Fetch Error:", error);
@@ -58,7 +60,7 @@ export const useQ4Allocation = () => {
         if (cached) {
             try {
                 const parsed = JSON.parse(cached);
-                if (parsed && Date.now() - parsed.timestamp < CACHE_DURATION) {
+                if (parsed && parsed.data && Date.now() - parsed.timestamp < CACHE_DURATION) {
                     setUsedQuantities(parsed.data);
                     return;
                 }
@@ -69,7 +71,7 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       let usageQuery = isUserAdminOrManager() 
-        ? query(colRef, limit(2000))
+        ? query(colRef, limit(3000))
         : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
@@ -79,15 +81,20 @@ export const useQ4Allocation = () => {
         const entry = doc.data();
         if (!entry) return;
 
-        const process = (name?: string, qty?: number) => {
-            if (name && qty) {
-                usage[name] = (usage[name] || 0) + Number(qty);
+        const process = (name?: any, qty?: any) => {
+            const safeName = String(name || "").trim();
+            const safeQty = Number(qty || 0);
+            if (safeName && !isNaN(safeQty)) {
+                const current = typeof usage[safeName] === 'number' ? usage[safeName] : 0;
+                usage[safeName] = current + safeQty;
             }
         };
 
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
-        entry.reminderProducts?.forEach((p: any) => process(p.sampleName, p.quantity));
+        if (Array.isArray(entry.reminderProducts)) {
+            entry.reminderProducts.forEach((p: any) => p && process(p.sampleName, p.quantity));
+        }
       });
 
       setUsedQuantities(usage);
@@ -118,7 +125,7 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const name = (item.displayMaterialName || "").trim();
+        const name = String(item.displayMaterialName || "").trim();
         if (!name) return;
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `${quarter.toLowerCase()}_${cleanId}`;
@@ -126,7 +133,7 @@ export const useQ4Allocation = () => {
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
-      fetchAllocations();
+      await fetchAllocations();
       return true;
     } catch (err) {
         return false;
@@ -136,10 +143,12 @@ export const useQ4Allocation = () => {
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => batch.delete(doc(db, "marketingSamples", id)));
+      ids.forEach(id => {
+          if (id) batch.delete(doc(db, "marketingSamples", id));
+      });
       try {
           await batch.commit();
-          fetchAllocations();
+          await fetchAllocations();
           return true;
       } catch (err) {
           return false;

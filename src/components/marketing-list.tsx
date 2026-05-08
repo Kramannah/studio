@@ -30,33 +30,34 @@ type MarketingListProps = {
 export function MarketingList({ samples, usedQuantities, readOnly = true, loading = false, onRefresh }: MarketingListProps) {
   const [filter, setFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [mounted, setMounted] = useState(false);
   const itemsPerPage = 15;
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const filteredSamples = useMemo(() => {
-    try {
-        if (!samples || !Array.isArray(samples)) return [];
+    if (!mounted || !samples || !Array.isArray(samples)) return [];
+    
+    const safeFilter = String(filter || "").toLowerCase().trim();
+    
+    return samples.filter(sample => {
+        if (!sample) return false;
         
-        const safeFilter = `${filter ?? ""}`.toLowerCase().trim();
+        // Strict string conversion and property guarding to prevent toLowerCase TypeError
+        const group = String(sample.productGroup || "").toLowerCase();
+        const name = String(sample.materialName || "").toLowerCase();
         
-        return samples.filter(sample => {
-            if (!sample || typeof sample !== 'object') return false;
-            
-            const group = `${sample.productGroup ?? ""}`.toLowerCase();
-            const name = `${sample.materialName ?? ""}`.toLowerCase();
-            
-            return group.includes(safeFilter) || name.includes(safeFilter);
-        });
-    } catch (e) {
-        console.error("Marketing list filter issue:", e);
-        return [];
-    }
-  }, [samples, filter]);
+        return group.indexOf(safeFilter) !== -1 || name.indexOf(safeFilter) !== -1;
+    });
+  }, [samples, filter, mounted]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [filter]);
 
-  const totalPages = Math.ceil(filteredSamples.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
   
   const paginatedSamples = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -65,11 +66,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
-        const name = `${sample.materialName ?? "Unknown Item"}`;
-        const used = Math.round(usedQuantities[name] ?? 0);
-        const allocated = Math.round(sample.allocationQuantity ?? 0);
+        const name = String(sample.materialName || "Unknown Item");
+        const used = Number(usedQuantities[name] || 0);
+        const allocated = Number(sample.allocationQuantity || 0);
         return {
-            "Product Group": `${sample.productGroup ?? "Uncategorized"}`,
+            "Product Group": String(sample.productGroup || "Uncategorized"),
             "Material Name": name,
             "Allocated Quantity": allocated,
             "Remaining Quantity": Math.max(0, allocated - used)
@@ -80,6 +81,8 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
     XLSX.writeFile(workbook, `marketing_samples_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="space-y-6">
@@ -141,9 +144,9 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                           paginatedSamples.map((sample) => {
                               return (
                                   <TableRow key={sample.id} className="h-16 hover:bg-muted/30 transition-colors">
-                                      <TableCell className="font-bold text-primary">{`${sample.productGroup ?? "Uncategorized"}`}</TableCell>
-                                      <TableCell className="font-medium">{`${sample.materialName ?? "Unknown Item"}`}</TableCell>
-                                      <TableCell className="text-center font-mono font-bold">{Math.round(sample.allocationQuantity ?? 0)}</TableCell>
+                                      <TableCell className="font-bold text-primary">{String(sample.productGroup || "Uncategorized")}</TableCell>
+                                      <TableCell className="font-medium">{String(sample.materialName || "Unknown Item")}</TableCell>
+                                      <TableCell className="text-center font-mono font-bold">{Number(sample.allocationQuantity || 0)}</TableCell>
                                   </TableRow>
                               );
                           })

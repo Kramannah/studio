@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, DocumentData, QuerySnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 /**
@@ -29,15 +30,22 @@ export const useMarketingSamples = () => {
       const fetchedSamples: MarketingSample[] = [];
       samplesSnap.docs.forEach(doc => {
           const data = doc.data();
+          if (!data) return;
+
+          // Force all fields to valid strings/numbers during retrieval to prevent downstream crashes
+          const productGroup = String(data.productGroup || data.prodGroupProdSubGroup || "Uncategorized");
+          const materialName = String(data.materialName || data.displayMaterialName || "Unknown Item");
+          const qty = Number(data.allocationQuantity || 0);
+
           fetchedSamples.push({ 
               id: doc.id, 
-              productGroup: data.productGroup || data.prodGroupProdSubGroup || "Uncategorized",
-              materialName: data.materialName || data.displayMaterialName || "Unknown Item",
-              allocationQuantity: Number(data.allocationQuantity || 0)
+              productGroup,
+              materialName,
+              allocationQuantity: isNaN(qty) ? 0 : qty
           } as MarketingSample);
       });
       
-      fetchedSamples.sort((a, b) => (a.materialName || "").localeCompare(b.materialName || ""));
+      fetchedSamples.sort((a, b) => a.materialName.localeCompare(b.materialName));
       setMarketingSamples(fetchedSamples);
 
       // Fetch usage data
@@ -48,18 +56,24 @@ export const useMarketingSamples = () => {
           const entry = doc.data();
           if (!entry) return;
           
-          const process = (name?: string, qty?: number) => {
-              if (name && qty) {
-                  usage[name] = (usage[name] || 0) + Number(qty);
+          const process = (name?: any, qty?: any) => {
+              const safeName = String(name || "").trim();
+              const safeQty = Number(qty || 0);
+              if (safeName && !isNaN(safeQty)) {
+                  // Prevent prototype pollution and ensure numeric accumulation
+                  const current = typeof usage[safeName] === 'number' ? usage[safeName] : 0;
+                  usage[safeName] = current + safeQty;
               }
           };
 
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
           
-          entry.reminderProducts?.forEach((p: any) => {
-              process(p.sampleName, p.quantity);
-          });
+          if (Array.isArray(entry.reminderProducts)) {
+            entry.reminderProducts.forEach((p: any) => {
+                if (p) process(p.sampleName, p.quantity);
+            });
+          }
       });
       setUsedQuantities(usage);
 
