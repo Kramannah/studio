@@ -98,7 +98,7 @@ export function PlanningCalendar({
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
         allEntries.forEach(e => {
-            const dateStr = String(e.coverageDate ?? "");
+            const dateStr = (e.coverageDate ?? "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date)) {
@@ -141,7 +141,7 @@ export function PlanningCalendar({
         return new Set(
             planningRequests
                 .filter(r => r.status === 'approved')
-                .map(r => format(parseISO(r.weekStartDate), 'yyyy-MM-dd'))
+                .map(r => format(parseISO((r.weekStartDate ?? "").toString()), 'yyyy-MM-dd'))
         );
     }, [planningRequests]);
 
@@ -155,11 +155,11 @@ export function PlanningCalendar({
         const counts: Record<string, number> = {};
         const today = new Date();
         allEntries.forEach(e => {
-            const dateStr = String(e.coverageDate ?? "");
+            const dateStr = (e.coverageDate ?? "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date) && isSameMonth(date, today)) {
-                    const nameKey = `${((e.firstName ?? "")).toLowerCase()}|${((e.lastName ?? "")).toLowerCase()}`;
+                    const nameKey = `${(e.firstName ?? "").toString().toLowerCase()}|${(e.lastName ?? "").toString().toLowerCase()}`;
                     counts[nameKey] = (counts[nameKey] || 0) + 1;
                 }
             }
@@ -177,9 +177,9 @@ export function PlanningCalendar({
         };
 
         (doctors || []).forEach(d => {
-            const freq = String(d.frequency || '1x');
+            const freq = (d.frequency || '1x').toString();
             const target = parseInt(freq.replace('x', ''), 10) || 0;
-            const nameKey = `${((d.firstName ?? "")).toLowerCase()}|${((d.lastName ?? "")).toLowerCase()}`;
+            const nameKey = `${(d.firstName ?? "").toString().toLowerCase()}|${(d.lastName ?? "").toString().toLowerCase()}`;
             const actual = visitCountsThisMonth[nameKey] || 0;
             const completed = Math.min(target, actual);
 
@@ -214,8 +214,8 @@ export function PlanningCalendar({
         
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
-                ((e.firstName ?? "")).toLowerCase() === ((p.doctorFirstName ?? "")).toLowerCase() && 
-                ((e.lastName ?? "")).toLowerCase() === ((p.doctorLastName ?? "")).toLowerCase()
+                (e.firstName ?? "").toString().toLowerCase() === (p.doctorFirstName ?? "").toString().toLowerCase() && 
+                (e.lastName ?? "").toString().toLowerCase() === (p.doctorLastName ?? "").toString().toLowerCase()
             )
         ).length;
 
@@ -231,12 +231,12 @@ export function PlanningCalendar({
     }, [selectedDayPlans]);
 
     const filteredDoctorsForSearch = useMemo(() => {
-        const q = (doctorFilter ?? "").toLowerCase().trim();
+        const q = (doctorFilter ?? "").toString().toLowerCase().trim();
         if (!q) return doctors || [];
         return (doctors || []).filter(d => 
-            `${((d.firstName ?? ""))} ${((d.lastName ?? ""))}`.toLowerCase().includes(q) ||
-            ((d.municipality ?? "")).toLowerCase().includes(q) ||
-            ((d.specialty ?? "")).toLowerCase().includes(q)
+            `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase().includes(q) ||
+            (d.municipality ?? "").toString().toLowerCase().includes(q) ||
+            (d.specialty ?? "").toString().toLowerCase().includes(q)
         );
     }, [doctors, doctorFilter]);
 
@@ -449,8 +449,8 @@ export function PlanningCalendar({
                                         const doctor = (doctors || []).find(d => d.id === plan.doctorId);
                                         const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
                                         const isCovered = (entriesByDate[dateStr] || []).some(e => 
-                                            ((e.firstName ?? "")).toLowerCase() === ((plan.doctorFirstName ?? "")).toLowerCase() && 
-                                            ((e.lastName ?? "")).toLowerCase() === ((plan.doctorLastName ?? "")).toLowerCase()
+                                            (e.firstName ?? "").toString().toLowerCase() === (plan.doctorFirstName ?? "").toString().toLowerCase() && 
+                                            (e.lastName ?? "").toString().toLowerCase() === (plan.doctorLastName ?? "").toString().toLowerCase()
                                         );
                                         return (
                                             <TableRow key={plan.id} className="h-16">
@@ -535,9 +535,9 @@ export function PlanningCalendar({
                                     <TableBody>
                                         {filteredDoctorsForSearch.length > 0 ? (
                                             filteredDoctorsForSearch.map(doctor => {
-                                                const nameKey = `${((doctor.firstName ?? "")).toLowerCase()}|${((doctor.lastName ?? "")).toLowerCase()}`;
+                                                const nameKey = `${(doctor.firstName ?? "").toString().toLowerCase()}|${(doctor.lastName ?? "").toString().toLowerCase()}`;
                                                 const actualCount = visitCountsThisMonth[nameKey] || 0;
-                                                const freq = String(doctor.frequency || '1x');
+                                                const freq = (doctor.frequency || '1x').toString();
                                                 const targetCount = parseInt(freq.replace('x', ''), 10) || 0;
                                                 const remaining = Math.max(0, targetCount - actualCount);
                                                 const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
