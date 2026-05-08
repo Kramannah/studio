@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v10';
+const USAGE_CACHE_KEY = 'hovid_usage_cache_v11';
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const useQ4Allocation = () => {
@@ -52,17 +52,16 @@ export const useQ4Allocation = () => {
                 const data = doc.data();
                 if (!data) return null;
                 
-                const rawName = data.displayMaterialName ?? data.materialName;
-                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup;
+                // DEEP SANITIZATION: Assign hard defaults at retrieval point
+                const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
+                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
+                const rawQty = data.allocationQuantity ?? 0;
+                const rawQuarter = data.quarter ?? "Q4";
 
-                // DIAGNOSTIC LOGGING: Show user exactly what is missing
-                if (!rawName || !rawGroup || data.allocationQuantity === undefined) {
-                    console.warn(`[DIAGNOSTIC-Q4] Document ID: ${doc.id} is missing key fields. Found Name: ${!!rawName}, Group: ${!!rawGroup}, Qty: ${data.allocationQuantity !== undefined}`);
-                }
-
-                const safeName = String(rawName ?? "Unknown Item");
-                const safeGroup = String(rawGroup ?? "Uncategorized");
-                const safeQty = Number(data.allocationQuantity ?? 0);
+                const safeName = String(rawName).trim();
+                const safeGroup = String(rawGroup).trim();
+                const safeQty = Number(rawQty);
+                const safeQuarter = String(rawQuarter).trim();
                 
                 return { 
                     id: doc.id, 
@@ -71,10 +70,11 @@ export const useQ4Allocation = () => {
                     displayMaterialName: safeName,
                     materialName: safeName,
                     allocationQuantity: isNaN(safeQty) ? 0 : safeQty,
-                    quarter: String(data.quarter ?? 'Q4')
+                    quarter: safeQuarter
                 } as any;
             }).filter((item): item is any => item !== null);
 
+            // Safe in-memory sorting
             fetched.sort((a, b) => String(a.displayMaterialName).localeCompare(String(b.displayMaterialName)));
             setAllocations(fetched);
         }
@@ -118,7 +118,7 @@ export const useQ4Allocation = () => {
       
       if (snapshot && snapshot.docs) {
           snapshot.docs.forEach(doc => {
-            const entry = doc.data() as CoverageEntry;
+            const entry = doc.data();
             if (!entry) return;
 
             const processSample = (name?: any, qty?: any) => {

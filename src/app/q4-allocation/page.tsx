@@ -13,6 +13,10 @@ import { ChevronLeft, Search, PackageCheck, TrendingUp, Info, RefreshCw, Filter 
 import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { cn } from '@/lib/utils';
 
+/**
+ * Standalone page for Marketing Material Oversight.
+ * Implements ultra-hardened string filtering to prevent TypeError on malformed records.
+ */
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -30,23 +34,24 @@ export default function Q4AllocationPage() {
         }
     }, [user, authLoading, router, mounted]);
 
+    // ULTRA-HARDENED FILTERING: Force every comparison target to a valid string.
     const filteredSamples = useMemo(() => {
         try {
             if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
             
-            const safeSearch = `${search ?? ""}`.toLowerCase().trim();
+            const safeSearch = String(search || "").toLowerCase().trim();
             
             return marketingSamples.filter(s => {
                 if (!s || typeof s !== 'object') return false;
                 
-                // ULTIMATE PROTECTION: Use template literals to guarantee string type before toLowerCase
-                const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown Item"}`.toLowerCase();
-                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? "Uncategorized"}`.toLowerCase();
+                // GUARANTEED STRING CONVERSION: Prevents 'undefined.toLowerCase()' crash.
+                const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
+                const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
                 
                 return name.includes(safeSearch) || group.includes(safeSearch);
             });
         } catch (e) {
-            console.error("Filter logic encountered a data issue:", e);
+            console.error("Filter logic safety fallback triggered:", e);
             return [];
         }
     }, [marketingSamples, search]);
@@ -60,7 +65,7 @@ export default function Q4AllocationPage() {
         filteredSamples.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown"}`;
+            const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown Item");
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -177,8 +182,8 @@ export default function Q4AllocationPage() {
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
-                                            const name = `${sample.materialName ?? sample.displayMaterialName ?? "Unknown Item"}`;
-                                            const group = `${sample.productGroup ?? "Uncategorized"}`;
+                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
+                                            const group = String(sample.productGroup ?? "Uncategorized");
                                             const distributed = Math.round(Number(usedQuantities[name] ?? 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                             const balance = Math.max(0, alloc - distributed);

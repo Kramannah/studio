@@ -7,6 +7,10 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, DocumentData, QuerySnapshot } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
+/**
+ * Hook to fetch marketing materials and the user's distribution levels.
+ * Scrub data at source to prevent client-side crashes on malformed Firestore records.
+ */
 export const useMarketingSamples = () => {
   const { user } = useAuth();
   const [marketingSamples, setMarketingSamples] = useState<MarketingSample[]>([]);
@@ -23,6 +27,7 @@ export const useMarketingSamples = () => {
     try {
       let samplesSnap: QuerySnapshot<DocumentData> | null = null;
       
+      // Attempt to fetch from official marketingSamples first, fallback to q4Allocation
       try {
           samplesSnap = await getDocs(collection(db, "marketingSamples"));
           if (samplesSnap.empty) {
@@ -32,7 +37,7 @@ export const useMarketingSamples = () => {
           try {
               samplesSnap = await getDocs(collection(db, "q4Allocation"));
           } catch (fallbackError) {
-              console.error("Critical: Inventory source inaccessible.");
+              console.error("Critical: Inventory data source inaccessible.");
           }
       }
       
@@ -42,24 +47,14 @@ export const useMarketingSamples = () => {
               const data = doc.data();
               if (!data) return;
               
-              // LOGGING: Identify missing fields for the user
-              const name = data.displayMaterialName || data.materialName;
-              const group = data.prodGroupProdSubGroup || data.productGroup;
+              // DEEP SANITIZATION: Force values to strings/numbers at source
+              const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
+              const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
+              const rawQty = data.allocationQuantity ?? 0;
 
-              if (!name || !group || data.allocationQuantity === undefined) {
-                  console.group(`%c DATA ALERT: Malformed Record in marketingSamples `, 'background: #dc2626; color: white; font-weight: bold;');
-                  console.log(`Document ID: ${doc.id}`);
-                  console.log(`Missing Name: ${!name}`);
-                  console.log(`Missing Group: ${!group}`);
-                  console.log(`Missing Qty: ${data.allocationQuantity === undefined}`);
-                  console.log(`Raw Data:`, data);
-                  console.groupEnd();
-              }
-              
-              // ULTRA-SAFE CASTING: Assign hard defaults if missing
-              const safeName = String(name ?? "Unknown Item");
-              const safeGroup = String(group ?? "Uncategorized");
-              const safeQty = Number(data.allocationQuantity ?? 0);
+              const safeName = String(rawName).trim();
+              const safeGroup = String(rawGroup).trim();
+              const safeQty = Number(rawQty);
               
               fetchedSamples.push({ 
                   id: doc.id, 
@@ -72,9 +67,11 @@ export const useMarketingSamples = () => {
           });
       }
       
+      // Safe sorting
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
+      // Fetch usage data for the current PMR
       try {
           const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
           const usage: Record<string, number> = {};
@@ -84,7 +81,7 @@ export const useMarketingSamples = () => {
               if (!entry) return;
               
               const addQty = (name?: any, qty?: any) => {
-                  if (name && qty) {
+                  if (name !== undefined && name !== null && qty) {
                       const cleanName = String(name);
                       const cleanQty = Number(qty);
                       if (!isNaN(cleanQty)) {
@@ -103,7 +100,9 @@ export const useMarketingSamples = () => {
               }
           });
           setUsedQuantities(usage);
-      } catch (usageError) {}
+      } catch (usageError) {
+          console.error("Usage tracker sync failed", usageError);
+      }
 
     } catch (error: any) {
         console.error("Inventory Fetch Error:", error);
