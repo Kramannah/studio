@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useAuth } from '@/hooks/use-auth';
@@ -16,7 +15,7 @@ import { cn } from '@/lib/utils';
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
-    const { marketingSamples = [], usedQuantities = {}, loading: dataLoading, refetch } = useMarketingSamples();
+    const { marketingSamples, usedQuantities, loading: dataLoading, refetch } = useMarketingSamples();
     const [search, setSearch] = useState('');
     const [mounted, setMounted] = useState(false);
 
@@ -28,44 +27,25 @@ export default function Q4AllocationPage() {
         if (!authLoading && !user && mounted) router.push('/');
     }, [user, authLoading, router, mounted]);
 
-    // ABSOLUTE STRING NORMALIZATION: Prevents any TypeError by casting all properties to strings
     const filteredSamples = useMemo(() => {
-        try {
-            if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
-            const safeSearch = String(search ?? "").toLowerCase().trim();
-            
-            return marketingSamples.filter(s => {
-                if (!s || typeof s !== 'object') return false;
-                const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
-                const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
-                return name.includes(safeSearch) || group.includes(safeSearch);
-            });
-        } catch (e) {
-            return [];
-        }
+        const q = String(search || "").toLowerCase().trim();
+        return (marketingSamples || []).filter(s => {
+            if (!s) return false;
+            const name = String(s.materialName || "").toLowerCase();
+            const group = String(s.productGroup || "").toLowerCase();
+            return name.includes(q) || group.includes(q);
+        });
     }, [marketingSamples, search]);
 
     const stats = useMemo(() => {
-        try {
-            if (!filteredSamples.length) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-            let totalAllocated = 0, totalUsed = 0, totalRemaining = 0;
-            filteredSamples.forEach(s => {
-                const alloc = Number(s.allocationQuantity ?? 0);
-                const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown");
-                const used = Number(usedQuantities[name] ?? 0);
-                totalAllocated += alloc;
-                totalUsed += used;
-                totalRemaining += Math.max(0, alloc - used);
-            });
-            return {
-                totalAllocated: Math.round(totalAllocated),
-                totalUsed: Math.round(totalUsed),
-                remaining: Math.round(totalRemaining),
-                percent: totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0
-            };
-        } catch (e) {
-            return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-        }
+        let totalAllocated = 0, totalUsed = 0;
+        filteredSamples.forEach(s => {
+            totalAllocated += s.allocationQuantity || 0;
+            totalUsed += usedQuantities[s.materialName] || 0;
+        });
+        const remaining = Math.max(0, totalAllocated - totalUsed);
+        const percent = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
+        return { totalAllocated, totalUsed, remaining, percent };
     }, [filteredSamples, usedQuantities]);
 
     if (!mounted || authLoading) return (
@@ -145,27 +125,24 @@ export default function Q4AllocationPage() {
                                 </TableHeader>
                                 <TableBody>
                                     {dataLoading ? (
-                                        <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
-                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown");
-                                            const group = String(sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized");
-                                            const distributed = Number(usedQuantities[name] ?? 0);
-                                            const alloc = Number(sample.allocationQuantity ?? 0);
-                                            const balance = Math.max(0, alloc - distributed);
+                                            const distributed = usedQuantities[sample.materialName] || 0;
+                                            const balance = Math.max(0, sample.allocationQuantity - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-sm">{name}</span>
-                                                            <span className="text-[10px] font-black uppercase text-primary opacity-70">{group}</span>
+                                                            <span className="font-bold text-sm">{String(sample.materialName || "Unknown")}</span>
+                                                            <span className="text-[10px] font-black uppercase text-primary opacity-70">{String(sample.productGroup || "Uncategorized")}</span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-center font-mono">{Math.round(alloc)}</TableCell>
-                                                    <TableCell className="text-center font-mono text-orange-500">{Math.round(distributed)}</TableCell>
+                                                    <TableCell className="text-center font-mono">{sample.allocationQuantity}</TableCell>
+                                                    <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
                                                     <TableCell className="text-center pr-6">
                                                         <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center">
-                                                            {Math.round(balance)}
+                                                            {balance}
                                                         </Badge>
                                                     </TableCell>
                                                 </TableRow>

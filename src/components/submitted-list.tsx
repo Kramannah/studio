@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -19,7 +18,6 @@ import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "./ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import * as XLSX from 'xlsx';
 
@@ -43,22 +41,17 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     
-    // ATOMIC STRING NORMALIZATION: Prevents TypeError if doctor properties are undefined
     const doctor = useMemo(() => {
-        return doctors.find(d => {
-            const dFirst = String(d.firstName ?? "").toLowerCase();
-            const dLast = String(d.lastName ?? "").toLowerCase();
-            const eFirst = String(entry.firstName ?? "").toLowerCase();
-            const eLast = String(entry.lastName ?? "").toLowerCase();
-            return dFirst === eFirst && dLast === eLast;
-        });
+        return doctors.find(d => 
+            (d.firstName || "").toLowerCase() === (entry.firstName || "").toLowerCase() && 
+            (d.lastName || "").toLowerCase() === (entry.lastName || "").toLowerCase()
+        );
     }, [doctors, entry.firstName, entry.lastName]);
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
         const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
-        if (!subDate || !isValid(subDate)) return false;
-        return isToday(subDate);
+        return subDate && isValid(subDate) && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
     const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
@@ -69,12 +62,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
             <TableRow className="h-16 hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span className="font-bold text-primary">{String(entry.firstName ?? "")} {String(entry.lastName ?? "")}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{String(entry.specialty ?? "N/A")}</span>
+                        <span className="font-bold text-primary">{entry.firstName} {entry.lastName}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{entry.specialty || "N/A"}</span>
                     </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                    <span className="text-sm font-medium">{String(entry.clinic ?? "N/A")}</span>
+                    <span className="text-sm font-medium">{entry.clinic || "N/A"}</span>
                 </TableCell>
                 <TableCell>
                     <span className="text-sm tabular-nums">
@@ -82,7 +75,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                     </span>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                    <Badge variant="secondary" className="text-[10px] font-bold">{String(doctor?.frequency ?? 'N/A')}</Badge>
+                    <Badge variant="secondary" className="text-[10px] font-bold">{doctor?.frequency || 'N/A'}</Badge>
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
@@ -96,7 +89,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                             <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><MoreHorizontal className="w-5 h-5"/></Button></DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48">
-                                    <DropdownMenuItem onClick={() => onShowHistory(String(entry.firstName ?? ''), String(entry.lastName ?? ''))} className="gap-2 py-3">
+                                    <DropdownMenuItem onClick={() => onShowHistory(entry.firstName || "", entry.lastName || "")} className="gap-2 py-3">
                                         <History className="w-4 h-4 text-primary"/> Visits History
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => onEdit(entry)} disabled={!isEditable} className="gap-2 py-3">
@@ -171,9 +164,9 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         setLoading(true);
         try {
             const q = query(
-                collection(db, "coverageEntries"),
-                where("firstName", "==", String(doctorName.first)),
-                where("lastName", "==", String(doctorName.last)),
+                collection(db!, "coverageEntries"),
+                where("firstName", "==", doctorName.first),
+                where("lastName", "==", doctorName.last),
                 orderBy("coverageDate", "desc")
             );
             const snapshot = await getDocs(q);
@@ -196,7 +189,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                 <DialogHeader className="p-6 bg-muted/20 border-b">
                     <DialogTitle className="text-2xl font-black font-headline text-primary">Visits History</DialogTitle>
                     <DialogDescription className="text-lg">
-                        Timeline for <span className="font-bold text-foreground">Dr. {String(doctorName?.first ?? "")} {String(doctorName?.last ?? "")}</span>
+                        Timeline for <span className="font-bold text-foreground">Dr. {doctorName?.first} {doctorName?.last}</span>
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex-1 overflow-hidden">
@@ -213,7 +206,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                                             <CardTitle className="text-base font-black font-headline text-primary">
                                                 {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "N/A"}
                                             </CardTitle>
-                                            <Badge variant="secondary" className="capitalize">{String(entry.coverageType ?? "N/A")}</Badge>
+                                            <Badge variant="secondary" className="capitalize">{entry.coverageType}</Badge>
                                         </CardHeader>
                                         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-3">
@@ -318,39 +311,23 @@ export function SubmittedList({
         }).filter((d): d is Date => d !== null);
     }, [filteredByMonth]);
 
-    const entryCountsByDate = useMemo(() => {
-        const counts: Record<string, number> = {};
-        filteredByMonth.forEach(e => {
-            const d = e.coverageDate ? parseISO(e.coverageDate) : null;
-            if (d && isValid(d)) {
-                const key = format(d, 'yyyy-MM-dd');
-                counts[key] = (counts[key] || 0) + 1;
-            }
-        });
-        return counts;
-    }, [filteredByMonth]);
-
     const filtered = useMemo(() => {
-        try {
-            let res = [...filteredByMonth];
-            const q = String(searchQuery ?? "").toLowerCase().trim();
-            if (q) {
-                res = res.filter(e => {
-                    const name = String(`${e.firstName ?? ""} ${e.lastName ?? ""}`).toLowerCase();
-                    const clinic = String(e.clinic ?? "").toLowerCase();
-                    return name.includes(q) || clinic.includes(q);
-                });
-            }
-            if (activeTab === 'calendar' && selectedDate) {
-                res = res.filter(e => {
-                    const d = e.coverageDate ? parseISO(e.coverageDate) : null;
-                    return d && isSameDay(d, selectedDate);
-                });
-            }
-            return res;
-        } catch (e) {
-            return [];
+        let res = [...filteredByMonth];
+        const q = (searchQuery || "").toLowerCase().trim();
+        if (q) {
+            res = res.filter(e => {
+                const name = `${e.firstName || ""} ${e.lastName || ""}`.toLowerCase();
+                const clinic = (e.clinic || "").toLowerCase();
+                return name.includes(q) || clinic.includes(q);
+            });
         }
+        if (activeTab === 'calendar' && selectedDate) {
+            res = res.filter(e => {
+                const d = e.coverageDate ? parseISO(e.coverageDate) : null;
+                return d && isSameDay(d, selectedDate);
+            });
+        }
+        return res;
     }, [filteredByMonth, searchQuery, activeTab, selectedDate]);
 
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -369,16 +346,19 @@ export function SubmittedList({
             }
             return {
                 "User": userName,
-                "Doctor": `${entry.firstName ?? ""} ${entry.lastName ?? ""}`,
-                "Specialty": entry.specialty ?? "N/A",
-                "Clinic": entry.clinic ?? "N/A",
+                "Doctor": `${entry.firstName} ${entry.lastName}`,
+                "Specialty": entry.specialty || "N/A",
+                "Clinic": entry.clinic || "N/A",
                 "Coverage Date": covDate && isValid(covDate) ? format(covDate, "yyyy-MM-dd") : "N/A",
-                "Type": entry.coverageType ?? "N/A",
-                "Product": entry.primaryProduct ?? "N/A",
-                "Qty": entry.primaryProductQty ?? 0
+                "Type": entry.coverageType,
+                "Product": entry.primaryProduct || "N/A",
+                "Qty": entry.primaryProductQty || 0
             };
         });
-        XLSX.writeFile(XLSX.utils.book_new(), `Report_${selectedMonth}.xlsx`);
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
+        XLSX.writeFile(workbook, `Report_${selectedMonth}.xlsx`);
     };
 
     if (!mounted) return null;

@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -6,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { Button } from "./ui/button";
-import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, UserCircle, Pill, Settings2 } from "lucide-react";
+import { PlusCircle, Trash2, Upload, Download, Search, Edit, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, Building2, Pill, Settings2 } from "lucide-react";
 import { Input } from "./ui/input";
 import { DoctorFormDialog } from "./doctor-form-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -164,7 +163,7 @@ function InlineSelect<T extends string>({ doctor, field, options, onUpdateDoctor
     };
 
     return (
-        <Select onValueChange={handleValueChange} value={doctor[field] as string | undefined}>
+        <Select onValueChange={handleValueChange} value={doctor[field] as string}>
             <SelectTrigger className={cn("h-8 text-xs", className)}>
                 <SelectValue placeholder={placeholder || "Select..."} />
             </SelectTrigger>
@@ -225,8 +224,8 @@ const DoctorRow = ({
                 )}
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span>{String(doctor.firstName || "")} {String(doctor.lastName || "")}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">{String(doctor.hcpCode || 'No HCP Code')}</span>
+                        <span>{doctor.firstName} {doctor.lastName}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono">{doctor.hcpCode || 'No HCP Code'}</span>
                     </div>
                 </TableCell>
                 <TableCell>
@@ -356,26 +355,12 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const filteredDoctors = useMemo(() => {
-        if (!doctors || !Array.isArray(doctors)) return [];
-        
-        // Normalize search term once for safety
-        const q = String(filter || "").toLowerCase().trim();
-        
-        return doctors.filter(doctor => {
-            if (!doctor || typeof doctor !== 'object') return false;
-            
-            // Extreme safe string casting to prevent TypeError on non-string data
-            const name = `${String(doctor.firstName || "")} ${String(doctor.lastName || "")}`.toLowerCase();
-            const specialty = String(doctor.specialty || "").toLowerCase();
-            const clinic = String(doctor.clinic || "").toLowerCase();
-            const province = String(doctor.province || "").toLowerCase();
-            const municipality = String(doctor.municipality || "").toLowerCase();
-            
-            return name.includes(q) || 
-                   specialty.includes(q) || 
-                   clinic.includes(q) || 
-                   province.includes(q) || 
-                   municipality.includes(q);
+        const q = (filter || "").toLowerCase().trim();
+        return (doctors || []).filter(d => {
+            const name = `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase();
+            const specialty = (d.specialty || "").toLowerCase();
+            const clinic = (d.clinic || "").toLowerCase();
+            return name.includes(q) || specialty.includes(q) || clinic.includes(q);
         });
     }, [doctors, filter]);
 
@@ -391,11 +376,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     }, [filteredDoctors, currentPage]);
 
     const frequencyCounts = useMemo(() => {
-        return doctors.reduce((acc, doctor) => {
-            const freq = doctor.frequency;
-            if (freq) acc[freq] = (acc[freq] || 0) + 1;
+        return doctors.reduce((acc, d) => {
+            if (d.frequency) acc[d.frequency] = (acc[d.frequency] || 0) + 1;
             return acc;
-        }, {} as Record<'1x' | '2x' | '3x' | '4x', number>);
+        }, {} as Record<string, number>);
     }, [doctors]);
 
     const handleAddClick = () => {
@@ -455,10 +439,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     lastName: findColIndex(['lastname', 'last name']),
                     hcpCode: findColIndex(['hcpcode', 'hcp code']),
                     specialty: findColIndex(['specialty']),
-                    clinic: findColIndex(['clinic', 'hospital', 'hospital/clinic']),
-                    coverageType: findColIndex(['coverage', 'coveragetype', 'coverage type']),
+                    clinic: findColIndex(['clinic', 'hospital']),
+                    coverageType: findColIndex(['coverage', 'coveragetype']),
                     province: findColIndex(['province']),
-                    municipality: findColIndex(['municipality', 'city/municipality', 'city']),
+                    municipality: findColIndex(['municipality', 'city']),
                     placeOfPractice: findColIndex(['placeofpractice', 'place of practice']),
                     frequency: findColIndex(['target', 'frequency', 'freq']),
                     hacme: findColIndex(['hacme']),
@@ -476,7 +460,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                 };
 
                 if (colMap.firstName === -1 || colMap.lastName === -1) {
-                    toast({ variant: "destructive", title: "Missing Required Columns", description: "Please ensure your file includes 'First Name' and 'Last Name' columns." });
+                    toast({ variant: "destructive", title: "Missing Columns", description: "Please ensure your file includes 'First Name' and 'Last Name'." });
                     return;
                 }
 
@@ -489,42 +473,35 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     const lastName = getVal(colMap.lastName);
                     if (!firstName || !lastName) continue;
 
-                    const frequencyValue = getVal(colMap.frequency).toLowerCase();
-                    const hacmeValue = getVal(colMap.hacme).toUpperCase();
-                    const coverageTypeValue = getVal(colMap.coverageType).toLowerCase();
-
-                    const doctorToUpload: any = {
+                    const freq = getVal(colMap.frequency).toLowerCase();
+                    const doc: any = {
                         firstName,
                         lastName,
-                        frequency: (["1x", "2x", "3x", "4x"].includes(frequencyValue) ? frequencyValue : "1x") as "1x" | "2x" | "3x" | "4x",
-                        hacme: (["YES", "NO"].includes(hacmeValue) ? hacmeValue : "NO") as "YES" | "NO",
+                        frequency: (["1x", "2x", "3x", "4x"].includes(freq) ? freq : "1x") as any,
+                        hacme: (getVal(colMap.hacme).toUpperCase() === "YES" ? "YES" : "NO") as any,
+                        specialty: getVal(colMap.specialty),
+                        clinic: getVal(colMap.clinic),
+                        hcpCode: getVal(colMap.hcpCode),
+                        province: getVal(colMap.province),
+                        municipality: getVal(colMap.municipality),
+                        placeOfPractice: getVal(colMap.placeOfPractice),
+                        coverageType: getVal(colMap.coverageType).toLowerCase() === 'outbase' ? 'outbase' : 'inbase'
                     };
 
-                    if (getVal(colMap.hcpCode)) doctorToUpload.hcpCode = getVal(colMap.hcpCode);
-                    if (getVal(colMap.specialty)) doctorToUpload.specialty = getVal(colMap.specialty);
-                    if (getVal(colMap.clinic)) doctorToUpload.clinic = getVal(colMap.clinic);
-                    if (["inbase", "outbase"].includes(coverageTypeValue)) doctorToUpload.coverageType = coverageTypeValue;
-                    if (getVal(colMap.province)) doctorToUpload.province = getVal(colMap.province);
-                    if (getVal(colMap.municipality)) doctorToUpload.municipality = getVal(colMap.municipality);
-                    if (getVal(colMap.placeOfPractice)) doctorToUpload.placeOfPractice = getVal(colMap.placeOfPractice);
-
                     productKeys.forEach(key => {
-                        const productValue = getVal(colMap[key]);
-                        if(productValue) doctorToUpload[key] = productValue;
+                        const val = getVal(colMap[key]);
+                        if(val) doc[key] = val;
                     });
 
-                    doctorsToUpload.push(doctorToUpload);
+                    doctorsToUpload.push(doc);
                 }
 
-                if (doctorsToUpload.length === 0) {
-                    toast({ variant: "destructive", title: "Upload Failed", description: "No valid doctor entries found in the file." });
-                    return;
+                if (doctorsToUpload.length > 0) {
+                    onAddDoctorsBulk(doctorsToUpload);
                 }
-
-                onAddDoctorsBulk(doctorsToUpload);
             } catch (error) {
                 console.error("Excel parse error", error);
-                toast({ variant: "destructive", title: "Upload Failed", description: "Could not process your doctor master list file." });
+                toast({ variant: "destructive", title: "Upload Failed" });
             } finally {
                 if (fileInputRef.current) fileInputRef.current.value = "";
             }
@@ -537,36 +514,12 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         const sampleData = [{ 'First Name': 'Juan', 'Last Name': 'Dela Cruz', 'HCP Code': '12345', 'Specialty': 'Cardiology', 'Clinic': 'Philippine Heart Center', 'Province': 'Metro Manila', 'Municipality': 'Quezon City', 'Place of Practice': 'Hospital', 'Frequency': '3x', 'HACME': 'YES', 'Coverage Type': 'inbase', 'Dapavid': 'Rx', 'Hofovir': '', 'Inox': '', 'Irinovid': '', 'Ondavid': '', 'Ricam Tablet': 'Sample', 'Tocovid 100mg': '', 'Tocovid 200mg': '', 'Tocovid Vitality': '', 'Virest Cream': '', 'Virest Tab': '' }];
         const worksheet = XLSX.utils.json_to_sheet(sampleData, { header: headers });
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Doctors Template');
-        XLSX.writeFile(workbook, 'doctors_masterlist_template.xlsx');
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+        XLSX.writeFile(workbook, 'doctors_template.xlsx');
     };
 
     const handleDownloadExcel = () => {
-        const dataToExport = filteredDoctors.map(doctor => ({
-            "First Name": doctor.firstName,
-            "Last Name": doctor.lastName,
-            "HCP Code": doctor.hcpCode,
-            "Specialty": doctor.specialty,
-            "Clinic": doctor.clinic,
-            "Province": doctor.province,
-            "Municipality": doctor.municipality,
-            "Place of Practice": doctor.placeOfPractice,
-            "Frequency": doctor.frequency,
-            "HACME": doctor.hacme,
-            "Coverage Type": doctor.coverageType,
-            "Dapavid": doctor.dapavid,
-            "Hofovir": doctor.hofovir,
-            "Inox": doctor.inox,
-            "Irinovid": doctor.irinovid,
-            "Ondavid": doctor.ondavid,
-            "Ricam Tablet": doctor.ricamTablet,
-            "Tocovid 100mg": doctor.tocovid100mg,
-            "Tocovid 200mg": doctor.tocovid200mg,
-            "Tocovid Vitality": doctor.tocovidVitality,
-            "Virest Cream": doctor.virestCream,
-            "Virest Tab": doctor.virestTab,
-        }));
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const worksheet = XLSX.utils.json_to_sheet(filteredDoctors);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Doctor Masterlist");
         XLSX.writeFile(workbook, `doctor_masterlist_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
@@ -582,11 +535,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
         else setSelectedIds(prev => prev.filter(i => i !== id));
     };
 
-    const handleDeleteSelected = () => {
-        onDeleteDoctorsBulk(selectedIds);
-        setSelectedIds([]);
-    }
-
     return (
         <>
             <Card>
@@ -599,12 +547,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {(Object.keys(frequencyCounts) as Array<keyof typeof frequencyCounts>).sort().map(freq => (
-                            frequencyCounts[freq] > 0 && (
+                        {Object.entries(frequencyCounts).map(([freq, count]) => (
                             <Badge key={freq} variant="secondary" className="text-[10px]">
-                                {freq}: <span className="ml-1 font-bold">{frequencyCounts[freq]}</span>
+                                {freq}: <span className="ml-1 font-bold">{count}</span>
                             </Badge>
-                            )
                         ))}
                     </div>
 
@@ -668,7 +614,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={handleDeleteSelected}>Delete</AlertDialogAction>
+                                        <AlertDialogAction onClick={() => { onDeleteDoctorsBulk(selectedIds); setSelectedIds([]); }}>Delete</AlertDialogAction>
                                     </AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
@@ -721,7 +667,7 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                     {totalPages > 1 && (
                         <div className="flex items-center justify-between mt-4 px-1">
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                                {Math.min(filteredDoctors.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredDoctors.length, currentPage * itemsPerPage)} of {filteredDoctors.length}
+                                Page {currentPage} of {totalPages}
                             </p>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -733,9 +679,6 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
                                 >
                                     <ChevronLeft className="w-4 h-4" />
                                 </Button>
-                                <span className="text-[10px] font-bold">
-                                    {currentPage} / {totalPages}
-                                </span>
                                 <Button
                                     variant="outline"
                                     size="sm"

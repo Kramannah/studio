@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,7 +8,6 @@ import { useAuth } from './use-auth';
 
 /**
  * Hook to fetch marketing materials and the user's distribution levels.
- * Scrub data at source to prevent client-side crashes on malformed Firestore records.
  */
 export const useMarketingSamples = () => {
   const { user } = useAuth();
@@ -25,83 +23,45 @@ export const useMarketingSamples = () => {
     
     setLoading(true);
     try {
-      let samplesSnap: QuerySnapshot<DocumentData> | null = null;
+      // Fetch from marketingSamples
+      const samplesSnap = await getDocs(collection(db, "marketingSamples"));
       
-      // Attempt to fetch from official marketingSamples first
-      try {
-          samplesSnap = await getDocs(collection(db, "marketingSamples"));
-      } catch (e) {
-          console.warn("MarketingSamples collection access issue, checking fallback...");
-          try {
-              samplesSnap = await getDocs(collection(db, "q4Allocation"));
-          } catch (fallbackError) {
-              console.error("Critical: Both inventory data sources inaccessible.");
-          }
-      }
+      const fetchedSamples: MarketingSample[] = [];
+      samplesSnap.docs.forEach(doc => {
+          const data = doc.data();
+          fetchedSamples.push({ 
+              id: doc.id, 
+              productGroup: data.productGroup || data.prodGroupProdSubGroup || "Uncategorized",
+              materialName: data.materialName || data.displayMaterialName || "Unknown Item",
+              allocationQuantity: Number(data.allocationQuantity || 0)
+          } as MarketingSample);
+      });
       
-      const fetchedSamples: any[] = [];
-      if (samplesSnap && !samplesSnap.empty) {
-          samplesSnap.docs.forEach(doc => {
-              const data = doc.data();
-              if (!data) return;
-              
-              // DEEP SANITIZATION: Force values to strings/numbers at source
-              // We check all possible field naming variations from live Firestore
-              const rawName = data.displayMaterialName ?? data.materialName ?? "Unknown Item";
-              const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized";
-              const rawQty = data.allocationQuantity ?? data.quantity ?? 0;
-
-              const safeName = String(rawName || "Unknown Item").trim();
-              const safeGroup = String(rawGroup || "Uncategorized").trim();
-              const safeQty = Number(rawQty);
-              
-              fetchedSamples.push({ 
-                  id: String(doc.id), 
-                  productGroup: safeGroup, 
-                  prodGroupProdSubGroup: safeGroup,
-                  materialName: safeName, 
-                  displayMaterialName: safeName,
-                  allocationQuantity: isNaN(safeQty) ? 0 : safeQty
-              });
-          });
-      }
-      
-      // Safe sorting using string comparison
-      fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
+      fetchedSamples.sort((a, b) => (a.materialName || "").localeCompare(b.materialName || ""));
       setMarketingSamples(fetchedSamples);
 
-      // Fetch usage data for the current PMR
-      try {
-          const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
-          const usage: Record<string, number> = {};
+      // Fetch usage data
+      const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
+      const usage: Record<string, number> = {};
+      
+      usageSnap.docs.forEach(doc => {
+          const entry = doc.data();
+          if (!entry) return;
           
-          usageSnap.docs.forEach(doc => {
-              const entry = doc.data();
-              if (!entry) return;
-              
-              const addQty = (name?: any, qty?: any) => {
-                  if (name !== undefined && name !== null) {
-                      const cleanName = String(name);
-                      const cleanQty = Number(qty);
-                      if (!isNaN(cleanQty) && cleanQty > 0) {
-                          usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
-                      }
-                  }
-              };
-
-              addQty(entry.primarySampleName, entry.primaryProductQty);
-              addQty(entry.secondarySampleName, entry.secondaryProductQty);
-              
-              if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
-                  entry.reminderProducts.forEach((p: any) => {
-                      if (p && p.sampleName) addQty(p.sampleName, p.quantity);
-                  });
+          const process = (name?: string, qty?: number) => {
+              if (name && qty) {
+                  usage[name] = (usage[name] || 0) + Number(qty);
               }
+          };
+
+          process(entry.primarySampleName, entry.primaryProductQty);
+          process(entry.secondarySampleName, entry.secondaryProductQty);
+          
+          entry.reminderProducts?.forEach((p: any) => {
+              process(p.sampleName, p.quantity);
           });
-          setUsedQuantities(usage);
-      } catch (usageError) {
-          console.error("Usage tracker sync failed", usageError);
-      }
+      });
+      setUsedQuantities(usage);
 
     } catch (error: any) {
         console.error("Inventory Fetch Error:", error);

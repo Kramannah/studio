@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -21,11 +20,10 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = String(user.email ?? '').toLowerCase();
+    const email = (user.email || "").toLowerCase();
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => String(e ?? "").toLowerCase() === email);
+                  ADMIN_EMAILS.some(e => e.toLowerCase() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
-    
     return isAdmin || isManager;
   }, [user]);
 
@@ -33,54 +31,22 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-        let snapshot: QuerySnapshot<DocumentData> | null = null;
-        try {
-            snapshot = await getDocs(collection(db, "marketingSamples"));
-            if (snapshot.empty) {
-                snapshot = await getDocs(collection(db, "q4Allocation"));
-            }
-        } catch (e) {
-            try {
-                snapshot = await getDocs(collection(db, "q4Allocation"));
-            } catch (fallbackError) {
-                console.error("Fatal: Inventory data source inaccessible.");
-            }
-        }
-        
-        if (snapshot && !snapshot.empty) {
-            const fetched = snapshot.docs.map(doc => {
-                const data = doc.data();
-                if (!data) return null;
-                
-                // ATOMIC SANITIZATION: Force all values to valid types immediately
-                const rawName = data.displayMaterialName ?? data.materialName ?? "";
-                const rawGroup = data.prodGroupProdSubGroup ?? data.productGroup ?? "";
-                const rawQty = data.allocationQuantity ?? data.quantity ?? 0;
-                const rawQuarter = data.quarter ?? "Q4";
+        const snapshot = await getDocs(collection(db, "marketingSamples"));
+        const fetched = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return { 
+                id: doc.id, 
+                prodGroupProdSubGroup: data.prodGroupProdSubGroup || data.productGroup || "Uncategorized",
+                displayMaterialName: data.displayMaterialName || data.materialName || "Unknown Item",
+                allocationQuantity: Number(data.allocationQuantity || 0),
+                quarter: data.quarter || "Q4"
+            } as Q4Allocation;
+        });
 
-                const safeName = String(rawName || "Unknown Item").trim();
-                const safeGroup = String(rawGroup || "Uncategorized").trim();
-                const safeQty = Number(rawQty);
-                const safeQuarter = String(rawQuarter || "Q4").trim();
-                
-                return { 
-                    id: String(doc.id), 
-                    prodGroupProdSubGroup: safeGroup,
-                    productGroup: safeGroup,
-                    displayMaterialName: safeName,
-                    materialName: safeName,
-                    allocationQuantity: isNaN(safeQty) ? 0 : safeQty,
-                    quarter: safeQuarter as any
-                };
-            }).filter((item): item is Q4Allocation => item !== null);
-
-            fetched.sort((a, b) => String(a.displayMaterialName).localeCompare(String(b.displayMaterialName)));
-            setAllocations(fetched);
-        } else {
-            setAllocations([]);
-        }
+        fetched.sort((a, b) => (a.displayMaterialName || "").localeCompare(b.displayMaterialName || ""));
+        setAllocations(fetched);
     } catch (error: any) {
-        console.error("Allocation Engine Error:", error);
+        console.error("Allocation Fetch Error:", error);
     }
   }, [user]);
 
@@ -88,59 +54,41 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     if (!force) {
-        try {
-            const cached = localStorage.getItem(USAGE_CACHE_KEY);
-            if (cached) {
+        const cached = localStorage.getItem(USAGE_CACHE_KEY);
+        if (cached) {
+            try {
                 const parsed = JSON.parse(cached);
-                if (parsed && typeof parsed === 'object' && parsed.data && parsed.timestamp) {
-                    if (Date.now() - parsed.timestamp < CACHE_DURATION) {
-                        setUsedQuantities(parsed.data);
-                        return;
-                    }
+                if (parsed && Date.now() - parsed.timestamp < CACHE_DURATION) {
+                    setUsedQuantities(parsed.data);
+                    return;
                 }
-            }
-        } catch (e) {
-            localStorage.removeItem(USAGE_CACHE_KEY);
+            } catch (e) {}
         }
     }
 
     try {
       const colRef = collection(db, "coverageEntries");
-      let usageQuery;
-      if (isUserAdminOrManager()) {
-          usageQuery = query(colRef, limit(2000)); 
-      } else {
-          usageQuery = query(colRef, where("userId", "==", user.uid));
-      }
+      let usageQuery = isUserAdminOrManager() 
+        ? query(colRef, limit(2000))
+        : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
       
-      if (snapshot && snapshot.docs) {
-          snapshot.docs.forEach(doc => {
-            const entry = doc.data();
-            if (!entry) return;
+      snapshot.docs.forEach(doc => {
+        const entry = doc.data();
+        if (!entry) return;
 
-            const processSample = (name?: any, qty?: any) => {
-                if (name !== undefined && name !== null) {
-                    const cleanName = String(name);
-                    const cleanQty = Number(qty);
-                    if (!isNaN(cleanQty) && cleanQty > 0) {
-                        usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
-                    }
-                }
-            };
-
-            processSample(entry.primarySampleName, entry.primaryProductQty);
-            processSample(entry.secondarySampleName, entry.secondaryProductQty);
-            
-            if (entry.reminderProducts && Array.isArray(entry.reminderProducts)) {
-                entry.reminderProducts.forEach(prod => {
-                    if (prod && prod.sampleName) processSample(prod.sampleName, prod.quantity);
-                });
+        const process = (name?: string, qty?: number) => {
+            if (name && qty) {
+                usage[name] = (usage[name] || 0) + Number(qty);
             }
-          });
-      }
+        };
+
+        process(entry.primarySampleName, entry.primaryProductQty);
+        process(entry.secondarySampleName, entry.secondaryProductQty);
+        entry.reminderProducts?.forEach((p: any) => process(p.sampleName, p.quantity));
+      });
 
       setUsedQuantities(usage);
       localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
@@ -150,15 +98,13 @@ export const useQ4Allocation = () => {
   }, [user, isUserAdminOrManager]);
 
   useEffect(() => {
-    let active = true;
     const init = async () => {
         if (!user) return;
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
-        if (active) setLoading(false);
+        setLoading(false);
     };
     init();
-    return () => { active = false; };
   }, [user, fetchAllocations, fetchUsage]);
 
   const refetch = useCallback(async () => {
@@ -172,10 +118,10 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const name = String(item.displayMaterialName ?? "").trim();
+        const name = (item.displayMaterialName || "").trim();
         if (!name) return;
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const docId = `${String(quarter).toLowerCase()}_${cleanId}`;
+        const docId = `${quarter.toLowerCase()}_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
@@ -190,9 +136,7 @@ export const useQ4Allocation = () => {
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => {
-          if (id) batch.delete(doc(db, "marketingSamples", String(id)));
-      });
+      ids.forEach(id => batch.delete(doc(db, "marketingSamples", id)));
       try {
           await batch.commit();
           fetchAllocations();
