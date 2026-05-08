@@ -31,22 +31,25 @@ export default function Q4AllocationPage() {
     }, [user, authLoading, router, mounted]);
 
     const filteredSamples = useMemo(() => {
-        if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
-        
-        // Defensive search term normalization
-        const rawSearch = search ?? "";
-        const safeSearch = String(rawSearch).toLowerCase().trim();
-        
-        return marketingSamples.filter(s => {
-            if (!s || typeof s !== 'object') return false;
+        try {
+            if (!marketingSamples || !Array.isArray(marketingSamples)) return [];
             
-            // Ultra-safe string conversion for all fields to prevent toLowerCase crashes
-            // Using null-coalescing ?? to catch explicit nulls which String() would turn into "null"
-            const name = String(s.materialName ?? s.displayMaterialName ?? "").toLowerCase();
-            const group = String(s.productGroup ?? s.prodGroupProdSubGroup ?? "").toLowerCase();
+            // Normalize search term safely using template literals
+            const safeSearch = `${search ?? ""}`.toLowerCase().trim();
             
-            return name.includes(safeSearch) || group.includes(safeSearch);
-        });
+            return marketingSamples.filter(s => {
+                if (!s || typeof s !== 'object') return false;
+                
+                // Use template literals to guarantee string type before toLowerCase
+                const name = `${s.materialName ?? s.displayMaterialName ?? ""}`.toLowerCase();
+                const group = `${s.productGroup ?? s.prodGroupProdSubGroup ?? ""}`.toLowerCase();
+                
+                return name.includes(safeSearch) || group.includes(safeSearch);
+            });
+        } catch (e) {
+            console.error("Filter logic encountered a data issue:", e);
+            return [];
+        }
     }, [marketingSamples, search]);
 
     const stats = useMemo(() => {
@@ -58,7 +61,7 @@ export default function Q4AllocationPage() {
         filteredSamples.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.materialName ?? s.displayMaterialName ?? "Unknown");
+            const name = `${s.materialName ?? s.displayMaterialName ?? "Unknown"}`;
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -175,8 +178,8 @@ export default function Q4AllocationPage() {
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             if (!sample) return null;
-                                            const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
-                                            const group = String(sample.productGroup ?? "Uncategorized");
+                                            const name = `${sample.materialName ?? sample.displayMaterialName ?? "Unknown Item"}`;
+                                            const group = `${sample.productGroup ?? "Uncategorized"}`;
                                             const distributed = Math.round(Number(usedQuantities[name] ?? 0));
                                             const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                             const balance = Math.max(0, alloc - distributed);

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -39,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Q4AllocationViewProps {
@@ -65,25 +66,28 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, []);
 
     const filteredSamples = useMemo(() => {
-        if (!allocations || !Array.isArray(allocations)) return [];
-        
-        // Defensive search and quarter state checks
-        const safeSearch = String(search ?? "").toLowerCase().trim();
-        const quarterStr = String(activeQuarter ?? "Q4");
-        
-        return allocations.filter(s => {
-            if (!s || typeof s !== 'object') return false;
+        try {
+            if (!allocations || !Array.isArray(allocations)) return [];
             
-            // Validate quarter strictly
-            const q = String(s.quarter ?? 'Q4');
-            if (q !== quarterStr) return false;
+            const safeSearch = `${search ?? ""}`.toLowerCase().trim();
+            const quarterStr = `${activeQuarter ?? "Q4"}`;
+            
+            return allocations.filter(s => {
+                if (!s || typeof s !== 'object') return false;
+                
+                const q = `${s.quarter ?? 'Q4'}`;
+                if (q !== quarterStr) return false;
 
-            // Ultra-safe field access with null coalescing to prevent "toLowerCase of undefined"
-            const name = String(s.displayMaterialName ?? s.materialName ?? "").toLowerCase();
-            const group = String(s.prodGroupProdSubGroup ?? s.productGroup ?? "").toLowerCase();
-            
-            return name.includes(safeSearch) || group.includes(safeSearch);
-        });
+                // Ultra-safe string construction via template literals
+                const name = `${s.displayMaterialName ?? s.materialName ?? ""}`.toLowerCase();
+                const group = `${s.prodGroupProdSubGroup ?? s.productGroup ?? ""}`.toLowerCase();
+                
+                return name.includes(safeSearch) || group.includes(safeSearch);
+            });
+        } catch (e) {
+            console.error("Critical filter failure:", e);
+            return [];
+        }
     }, [allocations, search, activeQuarter]);
 
     const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
@@ -100,8 +104,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const stats = useMemo(() => {
         if (!allocations || !Array.isArray(allocations)) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
         
-        const quarterStr = String(activeQuarter ?? 'Q4');
-        const quarterAllocations = allocations.filter(s => s && String(s.quarter ?? 'Q4') === quarterStr);
+        const quarterStr = `${activeQuarter ?? 'Q4'}`;
+        const quarterAllocations = allocations.filter(s => s && `${s.quarter ?? 'Q4'}` === quarterStr);
         let totalAllocated = 0;
         let totalUsed = 0;
         let totalRemaining = 0;
@@ -109,7 +113,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         quarterAllocations.forEach(s => {
             if (!s) return;
             const alloc = Math.round(Number(s.allocationQuantity ?? 0));
-            const name = String(s.displayMaterialName ?? s.materialName ?? "Unknown");
+            const name = `${s.displayMaterialName ?? s.materialName ?? "Unknown"}`;
             const used = Math.round(Number(usedQuantities[name] ?? 0));
             
             totalAllocated += alloc;
@@ -159,7 +163,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                     return;
                 }
 
-                const headerRow = json[0].map((h: any) => String(h ?? '').toLowerCase().trim().replace(/\s/g, ''));
+                const headerRow = json[0].map((h: any) => `${h ?? ''}`.toLowerCase().trim().replace(/\s/g, ''));
                 const bodyRows = json.slice(1);
 
                 const colMap = {
@@ -176,9 +180,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = [];
                 for (const row of bodyRows) {
-                    const name = String(row[colMap.name] ?? '').trim();
-                    const group = colMap.group > -1 ? String(row[colMap.group] ?? '').trim() : "Uncategorized";
-                    const qty = parseInt(String(row[colMap.qty] ?? '0').replace(/[^0-9]/g, ''));
+                    const name = `${row[colMap.name] ?? ''}`.trim();
+                    const group = colMap.group > -1 ? `${row[colMap.group] ?? ''}`.trim() : "Uncategorized";
+                    const qty = parseInt(`${row[colMap.qty] ?? '0'}`.replace(/[^0-9]/g, ''));
 
                     if (name && !isNaN(qty)) {
                         samplesToAdd.push({ 
@@ -323,8 +327,8 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     if (!sample) return null;
-                                                    const name = String(sample.displayMaterialName ?? sample.materialName ?? "Unknown Item");
-                                                    const group = String(sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized");
+                                                    const name = `${sample.displayMaterialName ?? sample.materialName ?? "Unknown Item"}`;
+                                                    const group = `${sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized"}`;
                                                     const used = Math.round(Number(usedQuantities[name] ?? 0));
                                                     const alloc = Math.round(Number(sample.allocationQuantity ?? 0));
                                                     const balance = Math.max(0, alloc - used);

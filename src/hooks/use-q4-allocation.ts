@@ -23,10 +23,12 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = String(user.email || '').toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || 
-           ADMIN_EMAILS.some(e => String(e || "").toLowerCase() === email) || 
-           Object.keys(MANAGER_TEAMS).includes(user.uid);
+    const email = `${user.email ?? ''}`.toLowerCase();
+    const isAdmin = ADMIN_UIDS.includes(user.uid) || 
+                  ADMIN_EMAILS.some(e => `${e ?? ""}`.toLowerCase() === email);
+    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
+    
+    return isAdmin || isManager;
   }, [user]);
 
   const fetchAllocations = useCallback(async () => {
@@ -54,21 +56,21 @@ export const useQ4Allocation = () => {
                 if (!data) return null;
                 
                 // Extremely safe field mapping with explicit string casting to prevent client crashes
-                const name = String(data.displayMaterialName || data.materialName || "Unknown Item");
-                const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized");
-                const qty = Number(data.allocationQuantity || 0);
+                const name = `${data.displayMaterialName ?? data.materialName ?? "Unknown Item"}`;
+                const group = `${data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized"}`;
+                const qty = Number(data.allocationQuantity ?? 0);
                 
                 return { 
                     id: doc.id, 
                     prodGroupProdSubGroup: group,
                     displayMaterialName: name,
                     allocationQuantity: isNaN(qty) ? 0 : qty,
-                    quarter: String(data.quarter || 'Q4')
+                    quarter: `${data.quarter ?? 'Q4'}`
                 } as Q4Allocation;
             }).filter((item): item is Q4Allocation => item !== null);
 
             // Sort in memory to bypass index requirements and ensure string safety
-            fetched.sort((a, b) => String(a.displayMaterialName || "").localeCompare(String(b.displayMaterialName || "")));
+            fetched.sort((a, b) => `${a.displayMaterialName ?? ""}`.localeCompare(`${b.displayMaterialName ?? ""}`));
             setAllocations(fetched);
         }
     } catch (error: any) {
@@ -118,8 +120,8 @@ export const useQ4Allocation = () => {
 
             // Defensive quantity accumulation with explicit casting
             const processSample = (name?: any, qty?: any) => {
-                if (name && qty) {
-                    const cleanName = String(name);
+                if (name !== undefined && name !== null && qty) {
+                    const cleanName = `${name}`;
                     const cleanQty = Number(qty);
                     if (!isNaN(cleanQty)) {
                         usage[cleanName] = (usage[cleanName] || 0) + cleanQty;
@@ -168,7 +170,7 @@ export const useQ4Allocation = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const name = String(item.displayMaterialName || "").trim();
+        const name = `${item.displayMaterialName ?? ""}`.trim();
         if (!name) return;
         
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');

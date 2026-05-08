@@ -33,18 +33,23 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
   const itemsPerPage = 15;
 
   const filteredSamples = useMemo(() => {
-    if (!samples || !Array.isArray(samples)) return [];
-    
-    const safeFilter = String(filter ?? "").toLowerCase().trim();
-    
-    return samples.filter(sample => {
-      if (!sample || typeof sample !== 'object') return false;
-      
-      const group = String(sample.productGroup ?? "").toLowerCase();
-      const name = String(sample.materialName ?? "").toLowerCase();
-      
-      return group.includes(safeFilter) || name.includes(safeFilter);
-    });
+    try {
+        if (!samples || !Array.isArray(samples)) return [];
+        
+        const safeFilter = `${filter ?? ""}`.toLowerCase().trim();
+        
+        return samples.filter(sample => {
+            if (!sample || typeof sample !== 'object') return false;
+            
+            const group = `${sample.productGroup ?? ""}`.toLowerCase();
+            const name = `${sample.materialName ?? ""}`.toLowerCase();
+            
+            return group.includes(safeFilter) || name.includes(safeFilter);
+        });
+    } catch (e) {
+        console.error("Marketing list filter issue:", e);
+        return [];
+    }
   }, [samples, filter]);
 
   useEffect(() => {
@@ -60,11 +65,11 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
 
   const handleExportExcel = () => {
     const dataToExport = filteredSamples.map(sample => {
-        const name = String(sample.materialName ?? "Unknown Item");
+        const name = `${sample.materialName ?? "Unknown Item"}`;
         const used = Math.round(usedQuantities[name] ?? 0);
         const allocated = Math.round(sample.allocationQuantity ?? 0);
         return {
-            "Product Group": String(sample.productGroup ?? "Uncategorized"),
+            "Product Group": `${sample.productGroup ?? "Uncategorized"}`,
             "Material Name": name,
             "Allocated Quantity": allocated,
             "Remaining Quantity": Math.max(0, allocated - used)
@@ -87,7 +92,7 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                   Official Material List
               </CardTitle>
               <CardDescription className="text-base">
-                  Displaying the 50 official marketing items and samples.
+                  Displaying the official marketing items and samples.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -136,8 +141,8 @@ export function MarketingList({ samples, usedQuantities, readOnly = true, loadin
                           paginatedSamples.map((sample) => {
                               return (
                                   <TableRow key={sample.id} className="h-16 hover:bg-muted/30 transition-colors">
-                                      <TableCell className="font-bold text-primary">{String(sample.productGroup ?? "Uncategorized")}</TableCell>
-                                      <TableCell className="font-medium">{String(sample.materialName ?? "Unknown Item")}</TableCell>
+                                      <TableCell className="font-bold text-primary">{`${sample.productGroup ?? "Uncategorized"}`}</TableCell>
+                                      <TableCell className="font-medium">{`${sample.materialName ?? "Unknown Item"}`}</TableCell>
                                       <TableCell className="text-center font-mono font-bold">{Math.round(sample.allocationQuantity ?? 0)}</TableCell>
                                   </TableRow>
                               );
