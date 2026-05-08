@@ -9,9 +9,6 @@ import { useToast } from './use-toast';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-const USAGE_CACHE_KEY = 'hovid_usage_cache_v16';
-const CACHE_DURATION = 60000; // 1 minute cache for performance
-
 export const useQ4Allocation = () => {
   const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
@@ -21,9 +18,11 @@ export const useQ4Allocation = () => {
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
-    const email = String(user.email || "").toLowerCase();
+    const email = String(user.email || "").toLowerCase().trim();
+    if (!email) return false;
+    
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => String(e || "").toLowerCase() === email);
+                  ADMIN_EMAILS.some(e => String(e || "").toLowerCase().trim() === email);
     const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
     return isAdmin || isManager;
   }, [user]);
@@ -36,60 +35,55 @@ export const useQ4Allocation = () => {
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
             if (!data) return null;
+            
+            // Atomic field mapping with safe fallbacks
+            const materialName = String(data.displayMaterialName || data.materialName || "Unknown Item").trim();
+            const group = String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").trim();
+            const qty = Number(data.allocationQuantity || 0);
+            const quarter = String(data.quarter || "Q4").toUpperCase();
+
             return { 
                 id: doc.id, 
-                prodGroupProdSubGroup: String(data.prodGroupProdSubGroup || data.productGroup || "Uncategorized"),
-                displayMaterialName: String(data.displayMaterialName || data.materialName || "Unknown Item"),
-                allocationQuantity: Number(data.allocationQuantity || 0),
-                quarter: String(data.quarter || "Q4")
+                prodGroupProdSubGroup: group,
+                displayMaterialName: materialName,
+                allocationQuantity: isNaN(qty) ? 0 : qty,
+                quarter: quarter as any
             } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
 
         fetched.sort((a, b) => a.displayMaterialName.localeCompare(b.displayMaterialName));
         setAllocations(fetched);
     } catch (error: any) {
-        console.warn("Allocation Fetch Error:", error);
+        console.error("Allocation Fetch Error:", error);
     }
   }, [user]);
 
-  const fetchUsage = useCallback(async (force = false) => {
+  const fetchUsage = useCallback(async () => {
     if (!db || !user) return;
     
-    if (!force) {
-        const cached = localStorage.getItem(USAGE_CACHE_KEY);
-        if (cached) {
-            try {
-                const parsed = JSON.parse(cached);
-                if (parsed && typeof parsed === 'object' && parsed.data && Date.now() - (parsed.timestamp || 0) < CACHE_DURATION) {
-                    setUsedQuantities(parsed.data);
-                    return;
-                }
-            } catch (e) {}
-        }
-    }
-
     try {
       const colRef = collection(db, "coverageEntries");
-      // If admin, we want to see global distributions for oversight
-      // If PMR, only their own
-      let usageQuery = isUserAdminOrManager() 
+      // Admin/Managers see total distribution for oversight, PMRs see personal
+      const usageQuery = isUserAdminOrManager() 
         ? query(colRef)
         : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
       
-      snapshot.docs.forEach(doc => {
-        const entry = doc.data();
+      snapshot.docs.forEach(docSnap => {
+        const entry = docSnap.data();
         if (!entry) return;
 
         const process = (name?: any, qty?: any) => {
             const safeName = String(name || "").trim();
             if (!safeName) return;
             
+            // Use case-insensitive keys for matching
+            const key = safeName.toLowerCase();
             const safeQty = Math.round(Number(qty || 0));
             if (!isNaN(safeQty) && safeQty !== 0) {
-                usage[safeName] = (usage[safeName] || 0) + safeQty;
+                usage[key] = (usage[key] || 0) + safeQty;
             }
         };
 
@@ -103,9 +97,8 @@ export const useQ4Allocation = () => {
       });
 
       setUsedQuantities(usage);
-      localStorage.setItem(USAGE_CACHE_KEY, JSON.stringify({ data: usage, timestamp: Date.now() }));
     } catch (error: any) {
-        console.warn("Usage Tracker Error:", error);
+        console.error("Usage Tracker Error:", error);
     }
   }, [user, isUserAdminOrManager]);
 
@@ -121,7 +114,7 @@ export const useQ4Allocation = () => {
 
   const refetch = useCallback(async () => {
       setLoading(true);
-      await Promise.allSettled([fetchAllocations(), fetchUsage(true)]);
+      await Promise.allSettled([fetchAllocations(), fetchUsage()]);
       setLoading(false);
   }, [fetchAllocations, fetchUsage]);
 
@@ -138,9 +131,10 @@ export const useQ4Allocation = () => {
         batch.set(docRef, { ...item, quarter }, { merge: true });
       });
       await batch.commit();
-      await fetchAllocations();
+      await refetch();
       return true;
     } catch (err) {
+        console.error("Bulk add error:", err);
         return false;
     }
   };
@@ -153,7 +147,7 @@ export const useQ4Allocation = () => {
       });
       try {
           await batch.commit();
-          await fetchAllocations();
+          await refetch();
           return true;
       } catch (err) {
           return false;

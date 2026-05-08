@@ -70,9 +70,10 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         const q = String(search || "").toLowerCase().trim();
         
         return allocations.filter(s => {
-            if (!s || String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
+            if (!s) return false;
+            if (String(s.quarter || "").toUpperCase() !== activeQuarter) return false;
             
-            // Ultra defensive string casting to prevent TypeError on live server
+            // Ultra defensive string normalization
             const name = String(s.displayMaterialName || s.materialName || "").toLowerCase();
             const group = String(s.prodGroupProdSubGroup || s.productGroup || "").toLowerCase();
             
@@ -92,13 +93,16 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     }, [search, activeQuarter]);
 
     const stats = useMemo(() => {
+        if (!mounted) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
+
         const quarterAllocations = (allocations || []).filter(s => s && String(s.quarter || "").toUpperCase() === activeQuarter);
         let totalAllocated = 0;
         let totalUsed = 0;
         
         quarterAllocations.forEach(s => {
-            const name = String(s.displayMaterialName || s.materialName || "Unknown");
-            const used = Number(usedQuantities?.[name] || 0);
+            const name = String(s.displayMaterialName || s.materialName || "Unknown").trim();
+            // Matching is case-insensitive
+            const used = Number(usedQuantities?.[name.toLowerCase()] || 0);
             totalAllocated += Number(s.allocationQuantity || 0);
             totalUsed += used;
         });
@@ -107,7 +111,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         const percent = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
 
         return { totalAllocated, totalUsed, remaining, percent };
-    }, [allocations, usedQuantities, activeQuarter]);
+    }, [allocations, usedQuantities, activeQuarter, mounted]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -143,7 +147,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                     qty: findCol(['allocation', 'quantity', 'qty'])
                 };
                 
-                if (colMap.name === -1 || colMap.qty === -1) throw new Error("Format mismatch");
+                if (colMap.name === -1 || colMap.qty === -1) throw new Error("Format mismatch. Please use the provided template.");
                 
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
                     prodGroupProdSubGroup: String(row[colMap.group] || "Uncategorized").trim(),
@@ -153,8 +157,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                 
                 if (samplesToAdd.length > 0) {
                     await addAllocationsBulk(samplesToAdd, activeQuarter);
-                    toast({ title: "Import Successful" });
-                    await refetch();
+                    toast({ title: "Import Successful", description: `${samplesToAdd.length} products updated.` });
                 }
             } catch (err) {
                 toast({ variant: "destructive", title: "Upload Failed", description: String(err) });
@@ -181,21 +184,21 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                         <Card className="border-2 shadow-sm bg-primary/5 p-3 flex items-center justify-between">
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black text-primary uppercase tracking-widest">Initial</span>
-                                <span className="text-xl font-black font-mono leading-none">{stats.totalAllocated}</span>
+                                <span className="text-xl font-black font-mono leading-none tabular-nums">{stats.totalAllocated}</span>
                             </div>
                             <PackageCheck className="w-5 h-5 text-primary opacity-30" />
                         </Card>
                         <Card className="border-2 shadow-sm bg-orange-500/5 p-3 flex items-center justify-between">
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Used</span>
-                                <span className="text-xl font-black font-mono leading-none text-orange-500">{stats.totalUsed}</span>
+                                <span className="text-xl font-black font-mono leading-none text-orange-500 tabular-nums">{stats.totalUsed}</span>
                             </div>
                             <TrendingUp className="w-5 h-5 text-orange-500 opacity-30" />
                         </Card>
                         <Card className="border-2 shadow-sm bg-green-500/5 p-3 flex items-center justify-between">
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Balance</span>
-                                <span className="text-xl font-black font-mono leading-none text-green-500">{stats.remaining}</span>
+                                <span className="text-xl font-black font-mono leading-none text-green-500 tabular-nums">{stats.remaining}</span>
                             </div>
                             <History className="w-5 h-5 text-green-500 opacity-30" />
                         </Card>
@@ -209,7 +212,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="space-y-1">
                                         <CardTitle className="text-xl font-black font-headline">Batch Oversight: {activeQuarter}</CardTitle>
-                                        <CardDescription>Live status of your sample inventory for the current period.</CardDescription>
+                                        <CardDescription>Live status of sample inventory for the current period.</CardDescription>
                                     </div>
                                     <div className="flex items-center gap-2 w-full max-sm:max-w-sm">
                                         <div className="relative flex-1">
@@ -231,6 +234,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>
                                                         <AlertDialogTitle>Delete {selectedIds.length} Products?</AlertDialogTitle>
+                                                        <AlertDialogDescription>This action will permanently remove these items from the material list.</AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
                                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -260,9 +264,10 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             ) : paginatedSamples.length > 0 ? (
                                                 paginatedSamples.map((sample) => {
                                                     const sId = sample.id;
-                                                    const name = String(sample.displayMaterialName || sample.materialName || "Unknown");
-                                                    const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized");
-                                                    const used = Number(usedQuantities?.[name] || 0);
+                                                    const name = String(sample.displayMaterialName || sample.materialName || "Unknown").trim();
+                                                    const group = String(sample.prodGroupProdSubGroup || sample.productGroup || "Uncategorized").trim();
+                                                    // Normalize for case-insensitive lookup
+                                                    const used = Number(usedQuantities?.[name.toLowerCase()] || 0);
                                                     const balance = Math.max(0, Number(sample.allocationQuantity || 0) - used);
                                                     return (
                                                         <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
@@ -280,10 +285,10 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                     <span className="text-[10px] uppercase font-bold text-primary opacity-70">{group}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="text-center font-mono">{Number(sample.allocationQuantity || 0)}</TableCell>
-                                                            <TableCell className="text-center font-mono text-orange-500">{used}</TableCell>
+                                                            <TableCell className="text-center font-mono tabular-nums">{Number(sample.allocationQuantity || 0)}</TableCell>
+                                                            <TableCell className="text-center font-mono text-orange-500 tabular-nums">{used}</TableCell>
                                                             <TableCell className="text-center pr-6">
-                                                                <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center">
+                                                                <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[50px] flex items-center justify-center tabular-nums">
                                                                     {balance}
                                                                 </Badge>
                                                             </TableCell>
@@ -327,7 +332,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                     </Button>
                                     <Alert className="bg-background/50 border-2">
                                         <AlertCircle className="h-4 w-4" />
-                                        <AlertDescription className="text-[10px] leading-tight">Ensure headers match: ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity</AlertDescription>
+                                        <AlertDescription className="text-[10px] leading-tight">Ensure headers match exactly: ProdGroupProdSubGroup, DisplayMaterialName, AllocationQuantity</AlertDescription>
                                     </Alert>
                                 </CardContent>
                             </Card>

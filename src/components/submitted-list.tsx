@@ -44,11 +44,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
-        const eFirst = String(entry.firstName || "").toLowerCase();
-        const eLast = String(entry.lastName || "").toLowerCase();
+        const eFirst = String(entry.firstName || "").toLowerCase().trim();
+        const eLast = String(entry.lastName || "").toLowerCase().trim();
         return doctors.find(d => 
-            String(d.firstName || "").toLowerCase() === eFirst && 
-            String(d.lastName || "").toLowerCase() === eLast
+            String(d.firstName || "").toLowerCase().trim() === eFirst && 
+            String(d.lastName || "").toLowerCase().trim() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -111,7 +111,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                             <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Delete this report?</AlertDialogTitle>
-                                    <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                                    <AlertDialogDescription>This action cannot be undone and will remove the record from the server.</AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -140,6 +140,16 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                                 <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
                                 <DetailItem label="Primary Product" value={entry.primaryProduct} />
                                 <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
+                                {entry.reminderProducts && entry.reminderProducts.length > 0 && (
+                                    <div>
+                                        <p className="text-xs font-semibold text-muted-foreground">Reminder Items</p>
+                                        <div className="mt-1 space-y-1">
+                                            {entry.reminderProducts.map((p, i) => (
+                                                <p key={i} className="text-xs font-medium">{p.sampleName} (x{p.quantity})</p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="space-y-4">
                                 <h4 className="flex items-center gap-2 font-bold text-primary text-xs uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
