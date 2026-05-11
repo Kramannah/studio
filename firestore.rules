@@ -11,8 +11,7 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is an admin.
-     * Uses both hardcoded UIDs and email patterns for redundancy.
-     * Includes null-safe check for token email.
+     * Uses both hardcoded UIDs and email patterns.
      */
     function isAdmin() {
       let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
@@ -26,7 +25,6 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is a manager.
-     * Managers have broad read access to oversight records.
      */
     function isManager() {
       let managerUids = [
@@ -35,7 +33,7 @@ service cloud.firestore {
         "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2",
         "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
       ];
-      return isSignedIn() && request.auth.uid in managerUids;
+      return isSignedIn() && (request.auth.uid in managerUids);
     }
 
     /**

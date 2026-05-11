@@ -49,8 +49,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
-  
-  const lastSummaryFetch = useRef<string | null>(null);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -89,7 +87,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCollection = async (collName: string, userIds: string[] | null): Promise<any[]> => {
             try {
                 let q;
-                const startDate = getQueryStartDateISO();
                 if (userIds === null) {
                     q = query(collection(db!, collName), limit(500));
                 } else if (userIds.length > 0) {
@@ -107,7 +104,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snapshot = await getDocs(q);
                 return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.error(`Fetch error for ${collName}:`, err);
+                console.error(`Admin approval fetch error for ${collName}:`, err);
                 return [];
             }
         };
@@ -139,10 +136,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
           return;
       }
 
-      // Quota Prevention: Avoid redundant heavy summary fetches
-      const fetchKey = `${managerId}_${userFilter.length}`;
-      if (lastSummaryFetch.current === fetchKey) return;
-
       setLoadingSummary(true);
       try {
         const startDate = getQueryStartDateISO();
@@ -158,12 +151,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 try {
                     let q = query(collection(db!, collName), where("userId", "in", chunk));
                     if (restrictDate && collName !== 'doctors') {
-                        // Apply date limit to reduce read volume
                         const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : 'submittedAt';
                         q = query(q, where(dateField, ">=", startDate));
                     }
                     return await getDocs(query(q, limit(300)));
                 } catch (e) {
+                    console.error(`Team summary chunk fetch failed for ${collName}:`, e);
                     return { docs: [] };
                 }
             };
@@ -213,9 +206,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             marketingSamples: [],
             usedQuantities: used
         });
-        lastSummaryFetch.current = fetchKey;
       } catch (err: any) {
-         console.error("Team summary fetch failed", err);
+         console.error("Team summary total fetch failed", err);
       } finally {
         setLoadingSummary(false);
       }
@@ -239,6 +231,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(query(q, limit(500)));
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
+                console.error(`Individual fetch failed for ${collName} (${sanitizedUserId}):`, e);
                 return [];
             }
         };
@@ -280,7 +273,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        console.error("User data fetch failed", err);
+        console.error("User data initialization failed", err);
     } finally {
         setLoadingIndividual(false);
     }

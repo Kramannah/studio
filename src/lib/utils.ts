@@ -8,17 +8,15 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Returns the ISO string for the start of the current period.
- * If forceAllWeek is true, returns 7 days ago. 
- * Default: Returns start of last month for historical context.
- * REDUCED: Window narrowed from 6 months to 2 months to prevent "Quota Exceeded" errors.
+ * Increased to 3 months to ensure data visibility for infrequent users.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Show data from the last 2 months (current month + 1 previous)
-  return subMonths(startOfMonth(now), 1).toISOString();
+  // Show data from the last 3 months
+  return subMonths(startOfMonth(now), 2).toISOString();
 }
 
 /**
