@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -104,7 +105,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snapshot = await getDocs(q);
                 return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (err) {
-                console.error(`Admin approval fetch error for ${collName}:`, err);
                 return [];
             }
         };
@@ -147,21 +147,30 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchDataForChunk = async (chunk: string[]) => {
             if (chunk.length === 0) return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
 
-            const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<QuerySnapshot<DocumentData> | { docs: [] }> => {
+            const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    let q = query(collection(db!, collName), where("userId", "in", chunk));
-                    if (restrictDate && collName !== 'doctors') {
-                        const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : 'submittedAt';
-                        q = query(q, where(dateField, ">=", startDate));
-                    }
-                    return await getDocs(query(q, limit(300)));
+                    // COMPOSITE INDEX FIX: Filter by userId only in Firestore, filter by date in memory.
+                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(500));
+                    const snap = await getDocs(q);
+                    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    
+                    if (!restrictDate || collName === 'doctors') return docs;
+
+                    const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : 'submittedAt';
+                    return docs.filter((d: any) => {
+                        const dDate = d[dateField];
+                        return dDate && dDate >= startDate;
+                    });
                 } catch (e) {
-                    console.error(`Team summary chunk fetch failed for ${collName}:`, e);
-                    return { docs: [] };
+                    errorEmitter.emit('permission-error', new FirestorePermissionError({
+                        path: collName,
+                        operation: 'list',
+                    }));
+                    return [];
                 }
             };
 
-            const snaps = await Promise.all([
+            const results = await Promise.all([
                 fetchSingle("coverageEntries"),
                 fetchSingle("timeLogs"),
                 fetchSingle("doctors", false),
@@ -170,11 +179,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             ]);
 
             return {
-                entries: snaps[0].docs.map(d => ({ id: d.id, ...d.data() }) as CoverageEntry),
-                timeLogs: snaps[1].docs.map(d => ({ id: d.id, ...d.data() }) as TimeLog),
-                doctors: snaps[2].docs.map(d => ({ id: d.id, ...d.data() }) as Doctor),
-                nonCallDays: snaps[3].docs.map(d => ({ id: d.id, ...d.data() }) as NonCallDay),
-                plans: snaps[4].docs.map(d => ({ id: d.id, ...d.data() }) as Plan),
+                entries: results[0] as CoverageEntry[],
+                timeLogs: results[1] as TimeLog[],
+                doctors: results[2] as Doctor[],
+                nonCallDays: results[3] as NonCallDay[],
+                plans: results[4] as Plan[],
             };
         };
 
@@ -223,15 +232,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const startDate = getQueryStartDateISO();
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                let q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
-                if (collName !== 'doctors') {
-                    const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : (collName === 'plans' ? 'plannedDate' : 'submittedAt');
-                    q = query(q, where(dateField, ">=", startDate));
-                }
-                const snap = await getDocs(query(q, limit(500)));
-                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                // COMPOSITE INDEX FIX: Filter by userId only, filter date in JS
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(500));
+                const snap = await getDocs(q);
+                const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                if (collName === 'doctors') return docs;
+
+                const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : (collName === 'plans' ? 'plannedDate' : 'submittedAt');
+                return docs.filter((d: any) => {
+                    const dDate = d[dateField];
+                    return dDate && dDate >= startDate;
+                });
             } catch (e) {
-                console.error(`Individual fetch failed for ${collName} (${sanitizedUserId}):`, e);
                 return [];
             }
         };

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -68,10 +69,10 @@ export const useQ4Allocation = () => {
       const colRef = collection(db, "coverageEntries");
       const startDate = getQueryStartDateISO();
       
-      // OPTIMIZATION: Reduced limit from 2000 to 500 to save read quota.
+      // COMPOSITE INDEX FIX: Filter by userId only, then filter dates in JS to avoid index requirement.
       const usageQuery = isUserAdminOrManager() 
         ? query(colRef, where("submittedAt", ">=", startDate), orderBy("submittedAt", "desc"), limit(500))
-        : query(colRef, where("userId", "==", user.uid), where("submittedAt", ">=", startDate));
+        : query(colRef, where("userId", "==", user.uid), limit(500));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -79,6 +80,11 @@ export const useQ4Allocation = () => {
       snapshot.docs.forEach(docSnap => {
         const entry = docSnap.data();
         if (!entry) return;
+
+        // Apply date filter in memory for individual users to avoid indexing errors
+        if (!isUserAdminOrManager()) {
+            if (!entry.submittedAt || entry.submittedAt < startDate) return;
+        }
 
         const processItem = (name?: any, qty?: any) => {
             const safeName = (name ?? "").toString().toLowerCase().trim();
@@ -101,11 +107,7 @@ export const useQ4Allocation = () => {
 
       setUsedQuantities(usage);
     } catch (error: any) {
-        if (error.code === 'failed-precondition' || (error.message && error.message.includes("requires an index"))) {
-            console.warn("Firestore index missing for usage query.");
-        } else {
-            console.error("Usage Tracking Error:", error);
-        }
+        console.error("Usage Tracking Error:", error);
     }
   }, [user, isUserAdminOrManager]);
 
