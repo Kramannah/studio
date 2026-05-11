@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,6 +50,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loading, setLoading] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
+
+  const fetchInProgress = useRef<string | null>(null);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -219,6 +221,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     
+    // Prevent overlapping fetches for the same user
+    if (fetchInProgress.current === sanitizedUserId) return;
+    fetchInProgress.current = sanitizedUserId;
+
     setLoadingIndividual(true);
     
     try {
@@ -227,7 +233,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                console.log(`Fetched ${fetched.length} records from ${collName} for UID: ${sanitizedUserId}`);
                 return fetched;
             } catch (e) {
                 console.error(`Individual PMR fetch failed for ${sanitizedUserId} on ${collName}:`, e);
@@ -277,6 +282,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         console.error("Individual PMR data aggregate failed", err);
     } finally {
         setLoadingIndividual(false);
+        fetchInProgress.current = null;
     }
   }, []);
 

@@ -294,33 +294,36 @@ export function SubmittedList({
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
     }, [entries, mounted]);
 
-    // Robust Month Initialization: Default to the most recent month with data
+    // Intelligent Month Selection: Auto-switch to most recent month with data
     useEffect(() => {
         if (!mounted) return;
         
+        // If data arrives and current month is empty, switch to most recent month with entries
         if (entries && entries.length > 0) {
-            for (const entry of entries) {
-                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-                if (dateStr) {
-                    const date = parseISO(dateStr);
-                    if (isValid(date)) {
-                        const latestDataMonth = format(date, 'yyyy-MM');
-                        if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
-                            setSelectedMonth(latestDataMonth);
-                            setSelectedDate(date);
-                        }
-                        return;
-                    }
+            const monthsWithData = new Set<string>();
+            entries.forEach(e => {
+                const d = parseISO(String(e.coverageDate || e.submittedAt));
+                if (isValid(d)) monthsWithData.add(format(d, 'yyyy-MM'));
+            });
+
+            const currentSelectionEmpty = !monthsWithData.has(selectedMonth);
+            
+            if (currentSelectionEmpty || !selectedMonth) {
+                const sortedMonths = Array.from(monthsWithData).sort((a, b) => b.localeCompare(a));
+                if (sortedMonths.length > 0) {
+                    setSelectedMonth(sortedMonths[0]);
+                    setSelectedDate(parse(sortedMonths[0], 'yyyy-MM', new Date()));
+                    return;
                 }
             }
         }
         
+        // Final fallback
         if (!selectedMonth) {
-            const current = format(new Date(), 'yyyy-MM');
-            setSelectedMonth(current);
+            setSelectedMonth(format(new Date(), 'yyyy-MM'));
             setSelectedDate(new Date());
         }
-    }, [entries, mounted, availableMonths, selectedMonth]);
+    }, [entries, mounted, selectedMonth]);
 
     useEffect(() => {
         if (!selectedMonth || !mounted) return;

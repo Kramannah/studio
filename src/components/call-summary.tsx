@@ -60,23 +60,24 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); 
     }, [entries, mounted]);
 
-    // Robust Month Initialization: Automatically select the most recent month with data
+    // Intelligent Month Selection: Automatically select the most recent month with data
     useEffect(() => {
         if (!mounted) return;
         
         if (entries && entries.length > 0) {
-            // Find the most recent entry with a valid date
-            for (const entry of entries) {
-                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-                if (dateStr) {
-                    const date = parseISO(dateStr);
-                    if (isValid(date)) {
-                        const latestDataMonth = format(date, 'yyyy-MM');
-                        if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
-                            setSelectedMonth(latestDataMonth);
-                        }
-                        return;
-                    }
+            const monthsWithData = new Set<string>();
+            entries.forEach(e => {
+                const d = parseISO(String(e.coverageDate || e.submittedAt));
+                if (isValid(d)) monthsWithData.add(format(d, 'yyyy-MM'));
+            });
+
+            const currentSelectionEmpty = !monthsWithData.has(selectedMonth);
+            
+            if (currentSelectionEmpty || !selectedMonth) {
+                const sortedMonths = Array.from(monthsWithData).sort((a, b) => b.localeCompare(a));
+                if (sortedMonths.length > 0) {
+                    setSelectedMonth(sortedMonths[0]);
+                    return;
                 }
             }
         }
@@ -85,7 +86,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         if (!selectedMonth) {
             setSelectedMonth(format(new Date(), 'yyyy-MM'));
         }
-    }, [entries, mounted, availableMonths, selectedMonth]);
+    }, [entries, mounted, selectedMonth]);
     
     useEffect(() => {
         if (!selectedMonth || !mounted) return;
