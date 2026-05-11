@@ -41,27 +41,8 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        const initialMonth = format(new Date(), 'yyyy-MM');
-        setSelectedMonth(initialMonth);
         setMounted(true);
     }, []);
-
-    // Automatic Month Selection: Default to the most recent month with data
-    useEffect(() => {
-        if (entries && entries.length > 0 && mounted) {
-            const mostRecentEntry = entries[0];
-            const dateStr = (mostRecentEntry.coverageDate || mostRecentEntry.submittedAt || "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (date && isValid(date)) {
-                    const monthKey = format(date, 'yyyy-MM');
-                    if (selectedMonth !== monthKey) {
-                        setSelectedMonth(monthKey);
-                    }
-                }
-            }
-        }
-    }, [entries, mounted]);
 
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
@@ -78,6 +59,33 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         monthSet.add(format(new Date(), 'yyyy-MM'));
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); 
     }, [entries, mounted]);
+
+    // Robust Month Initialization: Automatically select the most recent month with data
+    useEffect(() => {
+        if (!mounted) return;
+        
+        if (entries && entries.length > 0) {
+            // Find the most recent entry with a valid date
+            for (const entry of entries) {
+                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+                if (dateStr) {
+                    const date = parseISO(dateStr);
+                    if (isValid(date)) {
+                        const latestDataMonth = format(date, 'yyyy-MM');
+                        if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
+                            setSelectedMonth(latestDataMonth);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // Fallback to current month if no data or already selected
+        if (!selectedMonth) {
+            setSelectedMonth(format(new Date(), 'yyyy-MM'));
+        }
+    }, [entries, mounted, availableMonths, selectedMonth]);
     
     useEffect(() => {
         if (!selectedMonth || !mounted) return;
@@ -96,8 +104,10 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         const start = appliedRange.start;
         const end = appliedRange.end;
         return (entries || []).filter(e => {
-            const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
-            return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return isValid(d) && isWithinInterval(d, { start, end });
         });
     }, [entries, appliedRange, mounted]);
     
@@ -158,9 +168,10 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
-            if (!isValid(submittedDate)) return acc;
-            const day = format(submittedDate, 'yyyy-MM-dd');
+            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+            const d = dateStr ? parseISO(dateStr) : null;
+            if (!isValid(d)) return acc;
+            const day = format(d!, 'yyyy-MM-dd');
             if(!acc[day]) acc[day] = [];
             acc[day].push(entry);
             return acc;
@@ -171,12 +182,13 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
         const monthlyPerformance = (entries || []).reduce((acc, entry) => {
-            const date = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
+            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+            const date = dateStr ? parseISO(dateStr) : null;
             if (!isValid(date)) return acc;
-            const monthKey = format(date, 'MMM yyyy');
+            const monthKey = format(date!, 'MMM yyyy');
             const existing = acc.find(d => d.name === monthKey);
             if(existing) existing.calls += 1;
-            else acc.push({ name: monthKey, calls: 1, date });
+            else acc.push({ name: monthKey, calls: 1, date: date! });
             return acc;
         }, [] as {name: string, calls: number, date: Date}[]).sort((a,b) => a.date.getTime() - b.date.getTime());
 
@@ -237,8 +249,8 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
             totalWorkingDays,
-            totalInbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => format(parseISO(String(e.submittedAt)), 'yyyy-MM-dd'))).size,
-            totalOutbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => format(parseISO(String(e.submittedAt)), 'yyyy-MM-dd'))).size,
+            totalInbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => format(parseISO(String(e.submittedAt || e.coverageDate)), 'yyyy-MM-dd'))).size,
+            totalOutbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => format(parseISO(String(e.submittedAt || e.coverageDate)), 'yyyy-MM-dd'))).size,
             incentiveDays,
             monthlyPerformance: monthlyPerformance.slice(-6), 
             topProducts,
@@ -271,7 +283,13 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         </div>
     );
 
-    if (!insights) return null;
+    if (!insights) return (
+        <div className="p-12 text-center border-2 border-dashed rounded-xl">
+            <AlertTriangle className="w-10 h-10 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-xl font-headline font-black">No Insights Available</h3>
+            <p className="text-muted-foreground">Select a month or verify PMR activity exists in the database.</p>
+        </div>
+    );
     
     return (
         <div className="space-y-6" ref={summaryRef}>

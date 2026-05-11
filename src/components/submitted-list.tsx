@@ -278,30 +278,8 @@ export function SubmittedList({
 
     useEffect(() => {
         setMounted(true);
-        const now = new Date();
-        setSelectedDate(now);
-        setSelectedMonth(format(now, 'yyyy-MM'));
     }, []);
 
-    // Robust Month Selection: Automatically pick the latest month with actual data
-    useEffect(() => {
-        if (entries && entries.length > 0 && mounted) {
-            for (const entry of entries) {
-                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-                if (dateStr) {
-                    const date = parseISO(dateStr);
-                    if (isValid(date)) {
-                        const monthKey = format(date, 'yyyy-MM');
-                        if (selectedMonth !== monthKey) {
-                            setSelectedMonth(monthKey);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }, [entries, mounted]);
-    
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
         const monthSet = new Set<string>();
@@ -315,6 +293,34 @@ export function SubmittedList({
         monthSet.add(format(new Date(), 'yyyy-MM'));
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
     }, [entries, mounted]);
+
+    // Robust Month Initialization: Default to the most recent month with data
+    useEffect(() => {
+        if (!mounted) return;
+        
+        if (entries && entries.length > 0) {
+            for (const entry of entries) {
+                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+                if (dateStr) {
+                    const date = parseISO(dateStr);
+                    if (isValid(date)) {
+                        const latestDataMonth = format(date, 'yyyy-MM');
+                        if (!selectedMonth || !availableMonths.includes(selectedMonth)) {
+                            setSelectedMonth(latestDataMonth);
+                            setSelectedDate(date);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        
+        if (!selectedMonth) {
+            const current = format(new Date(), 'yyyy-MM');
+            setSelectedMonth(current);
+            setSelectedDate(new Date());
+        }
+    }, [entries, mounted, availableMonths, selectedMonth]);
 
     useEffect(() => {
         if (!selectedMonth || !mounted) return;
@@ -491,7 +497,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
                             ) : (
-                                <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

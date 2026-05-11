@@ -154,19 +154,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
                     if (!restrictDate || collName === 'doctors') return docs;
-
-                    const dateFieldMapping: Record<string, string> = {
-                        'timeLogs': 'timeIn',
-                        'nonCallDays': 'date',
-                        'plans': 'plannedDate',
-                        'planningRequests': 'requestedAt',
-                        'coverageEntries': 'submittedAt'
-                    };
-                    
-                    const dateField = dateFieldMapping[collName] || 'submittedAt';
                     return docs.filter((d: any) => {
-                        const dDate = safeToDateISO(d[dateField]);
-                        return !dDate || dDate >= startDate; // Keep if no date or within window
+                        const dDate = safeToDateISO(d.submittedAt || d.coverageDate || d.timeIn || d.date || d.plannedDate || d.requestedAt);
+                        return !dDate || dDate >= startDate;
                     });
                 } catch (e) {
                     return [];
@@ -236,14 +226,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             try {
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
-                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                console.log(`Fetched ${fetched.length} records from ${collName} for UID: ${sanitizedUserId}`);
+                return fetched;
             } catch (e) {
                 console.error(`Individual PMR fetch failed for ${sanitizedUserId} on ${collName}:`, e);
                 return [];
             }
         };
 
-        // Independent fetching with allSettled to ensure failure in one doesn't block others
         const results = await Promise.allSettled([
             fetchS("coverageEntries"),
             fetchS("doctors"),

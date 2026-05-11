@@ -1,3 +1,4 @@
+
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths } from "date-fns"
@@ -8,14 +9,14 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Returns the ISO string for the start of the current period.
- * Increased to 6 months to ensure data visibility for all active users.
+ * Standardized to 6 months to ensure complete data visibility across all reporting modules.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Show data from the last 6 months (Restored for Ramos UID visibility)
+  // Show data from the last 6 months for exhaustive district oversight
   return subMonths(startOfMonth(now), 5).toISOString();
 }
 
