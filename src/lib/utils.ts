@@ -8,15 +8,15 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Returns the ISO string for the start of the current period.
- * Increased to 3 months to ensure data visibility for infrequent users.
+ * Increased to 6 months to ensure data visibility for all active users.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Show data from the last 3 months
-  return subMonths(startOfMonth(now), 2).toISOString();
+  // Show data from the last 6 months (Restored for Ramos UID visibility)
+  return subMonths(startOfMonth(now), 5).toISOString();
 }
 
 /**

@@ -166,7 +166,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     const dateField = dateFieldMapping[collName] || 'submittedAt';
                     return docs.filter((d: any) => {
                         const dDate = safeToDateISO(d[dateField]);
-                        return dDate && dDate >= startDate;
+                        return !dDate || dDate >= startDate; // Keep if no date or within window
                     });
                 } catch (e) {
                     return [];
@@ -232,30 +232,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     
     try {
-        const startDate = getQueryStartDateISO();
+        // Individual PMR fetch now retrieves ALL data (No startDate filter)
+        // to ensure UID specific data like Ramos Ramos (Tajceo...) is never missing.
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
-                const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                if (collName === 'doctors') return docs;
-
-                const dateFieldMapping: Record<string, string> = {
-                    'timeLogs': 'timeIn',
-                    'nonCallDays': 'date',
-                    'plans': 'plannedDate',
-                    'planningRequests': 'requestedAt',
-                    'coverageEntries': 'submittedAt'
-                };
-                
-                const dateField = dateFieldMapping[collName] || 'submittedAt';
-                return docs.filter((d: any) => {
-                    const dDate = safeToDateISO(d[dateField]);
-                    return dDate && dDate >= startDate;
-                });
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
-                console.error(`Fetch failed for user ${sanitizedUserId} on ${collName}:`, e);
+                console.error(`Individual PMR fetch failed for ${sanitizedUserId} on ${collName}:`, e);
                 return [];
             }
         };
@@ -289,7 +274,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
-        setAllEntries(entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt))));
+        setAllEntries(entries.sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate))));
         setAllDoctors(doctors);
         setAllPlans(plans);
         setAllTimeLogs(logs);
@@ -297,7 +282,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        console.error("Individual PMR data fetch failed", err);
+        console.error("Individual PMR data aggregate failed", err);
     } finally {
         setLoadingIndividual(false);
     }
