@@ -51,11 +51,10 @@ export const useQ4Allocation = () => {
       const colRef = collection(db, "coverageEntries");
       const startDate = getQueryStartDateISO();
       
-      // Index Error Fix: Fetch by userId or most recent COMPANY-WIDE without filtering date in Firestore.
-      // This prevents the composite index requirement while maintaining accuracy.
+      // Safety cap: Only scan 300 recent records for global usage to save read quota
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(5000)) // Large company-wide scan
-        : query(colRef, where("userId", "==", user.uid)); // All entries for the specific PMR
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(300)) 
+        : query(colRef, where("userId", "==", user.uid)); 
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -64,7 +63,6 @@ export const useQ4Allocation = () => {
         const entry = docSnap.data();
         if (!entry) return;
 
-        // Apply 3-month date filter in memory to keep accuracy high without requiring indexes.
         if (entry.submittedAt && entry.submittedAt < startDate) return;
 
         const processItem = (name?: any, qty?: any) => {
@@ -92,7 +90,7 @@ export const useQ4Allocation = () => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        if (now - lastFetchTime.current < 5000) return;
+        if (now - lastFetchTime.current < 15000) return; // Wait 15 seconds between global usage refreshes
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
         lastFetchTime.current = now;

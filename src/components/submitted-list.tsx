@@ -298,7 +298,6 @@ export function SubmittedList({
     useEffect(() => {
         if (!mounted) return;
         
-        // If data arrives and current month is empty, switch to most recent month with entries
         if (entries && entries.length > 0) {
             const monthsWithData = new Set<string>();
             entries.forEach(e => {
@@ -318,7 +317,6 @@ export function SubmittedList({
             }
         }
         
-        // Final fallback
         if (!selectedMonth) {
             setSelectedMonth(format(new Date(), 'yyyy-MM'));
             setSelectedDate(new Date());

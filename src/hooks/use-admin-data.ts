@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -29,6 +29,10 @@ const safeToDateISO = (val: any): string => {
     if (val instanceof Date) return val.toISOString();
     return String(val);
 };
+
+// In-memory cache to prevent redundant reads within a single session
+const userDataCache: Record<string, { timestamp: number, data: any }> = {};
+const CACHE_TTL = 300000; // 5 minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user } = useAuth();
@@ -90,15 +94,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCollection = async (collName: string, userIds: string[] | null): Promise<any[]> => {
             try {
                 let q;
+                const colRef = collection(db!, collName);
                 if (userIds === null) {
-                    q = query(collection(db!, collName));
+                    q = query(colRef, limit(200));
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
+                        getDocs(query(colRef, where("userId", "in", chunk), limit(100)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -151,7 +156,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    const q = query(collection(db!, collName), where("userId", "in", chunk));
+                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(300));
                     const snap = await getDocs(q);
                     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
@@ -221,21 +226,33 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     
-    // Prevent overlapping fetches for the same user
+    // Check Cache first
+    const now = Date.now();
+    if (userDataCache[sanitizedUserId] && (now - userDataCache[sanitizedUserId].timestamp < CACHE_TTL)) {
+        const cached = userDataCache[sanitizedUserId].data;
+        setAllEntries(cached.entries);
+        setAllDoctors(cached.doctors);
+        setAllPlans(cached.plans);
+        setAllTimeLogs(cached.timeLogs);
+        setAllNonCallDaysIndividual(cached.nonCallDays);
+        setIndividualPlanningRequests(cached.requests);
+        setIndividualUsedQuantities(cached.used);
+        return;
+    }
+
     if (fetchInProgress.current === sanitizedUserId) return;
     fetchInProgress.current = sanitizedUserId;
 
     setLoadingIndividual(true);
     
     try {
+        const startDate = getQueryStartDateISO();
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(1000));
                 const snap = await getDocs(q);
-                const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                return fetched;
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
-                console.error(`Individual PMR fetch failed for ${sanitizedUserId} on ${collName}:`, e);
                 return [];
             }
         };
@@ -249,12 +266,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchS("planningRequests")
         ]);
         
-        const entries = results[0].status === 'fulfilled' ? results[0].value : [];
+        const entriesRaw = results[0].status === 'fulfilled' ? results[0].value : [];
         const doctors = results[1].status === 'fulfilled' ? results[1].value : [];
         const plans = results[2].status === 'fulfilled' ? results[2].value : [];
         const logs = results[3].status === 'fulfilled' ? results[3].value : [];
         const ncds = results[4].status === 'fulfilled' ? results[4].value : [];
         const requests = results[5].status === 'fulfilled' ? results[5].value : [];
+
+        // Apply filtering in memory to avoid composite index requirement
+        const entries = (entriesRaw as CoverageEntry[]).filter(e => {
+            const date = safeToDateISO(e.submittedAt || e.coverageDate);
+            return !date || date >= startDate;
+        }).sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate)));
 
         const used: Record<string, number> = {};
         entries.forEach((e: any) => {
@@ -271,7 +294,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         });
 
-        setAllEntries(entries.sort((a: any, b: any) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate))));
+        const dashboardData = { entries, doctors, plans, timeLogs: logs, nonCallDays: ncds, requests, used };
+        userDataCache[sanitizedUserId] = { timestamp: now, data: dashboardData };
+
+        setAllEntries(entries);
         setAllDoctors(doctors);
         setAllPlans(plans);
         setAllTimeLogs(logs);
