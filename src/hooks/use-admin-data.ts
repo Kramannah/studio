@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -89,7 +89,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             try {
                 let q;
                 if (userIds === null) {
-                    q = query(collection(db!, collName), limit(1000));
+                    q = query(collection(db!, collName));
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
@@ -149,16 +149,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    // Accuracy fix: Remove limit to ensure full district coverage reach
                     const q = query(collection(db!, collName), where("userId", "in", chunk));
                     const snap = await getDocs(q);
                     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
                     if (!restrictDate || collName === 'doctors') return docs;
 
-                    const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : 'submittedAt';
+                    const dateFieldMapping: Record<string, string> = {
+                        'timeLogs': 'timeIn',
+                        'nonCallDays': 'date',
+                        'plans': 'plannedDate',
+                        'planningRequests': 'requestedAt',
+                        'coverageEntries': 'submittedAt'
+                    };
+                    
+                    const dateField = dateFieldMapping[collName] || 'submittedAt';
                     return docs.filter((d: any) => {
-                        const dDate = d[dateField];
+                        const dDate = safeToDateISO(d[dateField]);
                         return dDate && dDate >= startDate;
                     });
                 } catch (e) {
@@ -228,19 +235,27 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const startDate = getQueryStartDateISO();
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                // Accuracy fix: Retrieve all docs for user to ensure JS filter is precise
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 if (collName === 'doctors') return docs;
 
-                const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : (collName === 'plans' ? 'plannedDate' : 'submittedAt');
+                const dateFieldMapping: Record<string, string> = {
+                    'timeLogs': 'timeIn',
+                    'nonCallDays': 'date',
+                    'plans': 'plannedDate',
+                    'planningRequests': 'requestedAt',
+                    'coverageEntries': 'submittedAt'
+                };
+                
+                const dateField = dateFieldMapping[collName] || 'submittedAt';
                 return docs.filter((d: any) => {
-                    const dDate = d[dateField];
+                    const dDate = safeToDateISO(d[dateField]);
                     return dDate && dDate >= startDate;
                 });
             } catch (e) {
+                console.error(`Fetch failed for user ${sanitizedUserId} on ${collName}:`, e);
                 return [];
             }
         };
