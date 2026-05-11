@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, FirestoreError, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, FirestoreError, QuerySnapshot, DocumentData, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -9,6 +9,7 @@ import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionReq
 import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { getQueryStartDateISO } from "@/lib/utils";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -49,6 +50,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
   
+  const lastSummaryFetch = useRef<string | null>(null);
+
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const normalizedEmail = (user.email ?? "").toString().toLowerCase().trim();
@@ -86,15 +89,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCollection = async (collName: string, userIds: string[] | null): Promise<any[]> => {
             try {
                 let q;
+                const startDate = getQueryStartDateISO();
                 if (userIds === null) {
-                    q = query(collection(db!, collName));
+                    q = query(collection(db!, collName), limit(500));
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
+                        getDocs(query(collection(db!, collName), where("userId", "in", chunk), limit(200)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -104,10 +108,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (err) {
                 console.error(`Fetch error for ${collName}:`, err);
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: collName,
-                    operation: 'list',
-                }));
                 return [];
             }
         };
@@ -139,8 +139,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
           return;
       }
 
+      // Quota Prevention: Avoid redundant heavy summary fetches
+      const fetchKey = `${managerId}_${userFilter.length}`;
+      if (lastSummaryFetch.current === fetchKey) return;
+
       setLoadingSummary(true);
       try {
+        const startDate = getQueryStartDateISO();
         const chunks: string[][] = [];
         for (let i = 0; i < userFilter.length; i += 10) {
             chunks.push(userFilter.slice(i, i + 10));
@@ -149,15 +154,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchDataForChunk = async (chunk: string[]) => {
             if (chunk.length === 0) return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
 
-            const fetchSingle = async (collName: string): Promise<QuerySnapshot<DocumentData> | { docs: [] }> => {
+            const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<QuerySnapshot<DocumentData> | { docs: [] }> => {
                 try {
-                    return await getDocs(query(collection(db!, collName), where("userId", "in", chunk)));
+                    let q = query(collection(db!, collName), where("userId", "in", chunk));
+                    if (restrictDate && collName !== 'doctors') {
+                        // Apply date limit to reduce read volume
+                        const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : 'submittedAt';
+                        q = query(q, where(dateField, ">=", startDate));
+                    }
+                    return await getDocs(query(q, limit(300)));
                 } catch (e) {
-                    console.error(`Summary fetch error for ${collName}:`, e);
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: collName,
-                        operation: 'list',
-                    }));
                     return { docs: [] };
                 }
             };
@@ -165,7 +171,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const snaps = await Promise.all([
                 fetchSingle("coverageEntries"),
                 fetchSingle("timeLogs"),
-                fetchSingle("doctors"),
+                fetchSingle("doctors", false),
                 fetchSingle("nonCallDays"),
                 fetchSingle("plans"),
             ]);
@@ -207,7 +213,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             marketingSamples: [],
             usedQuantities: used
         });
-
+        lastSummaryFetch.current = fetchKey;
       } catch (err: any) {
          console.error("Team summary fetch failed", err);
       } finally {
@@ -222,16 +228,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     
     try {
+        const startDate = getQueryStartDateISO();
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                const snap = await getDocs(query(collection(db!, collName), where("userId", "==", sanitizedUserId)));
+                let q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
+                if (collName !== 'doctors') {
+                    const dateField = collName === 'timeLogs' ? 'timeIn' : collName === 'nonCallDays' ? 'date' : (collName === 'plans' ? 'plannedDate' : 'submittedAt');
+                    q = query(q, where(dateField, ">=", startDate));
+                }
+                const snap = await getDocs(query(q, limit(500)));
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
-                console.error(`User data fetch error for ${collName}:`, e);
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: collName,
-                    operation: 'list',
-                }));
                 return [];
             }
         };

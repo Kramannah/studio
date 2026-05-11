@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
@@ -15,6 +15,7 @@ export const useQ4Allocation = () => {
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const lastFetchTime = useRef<number>(0);
 
   const isUserAdminOrManager = useCallback(() => {
     if (!user) return false;
@@ -67,8 +68,9 @@ export const useQ4Allocation = () => {
       const colRef = collection(db, "coverageEntries");
       const startDate = getQueryStartDateISO();
       
+      // OPTIMIZATION: Reduced limit from 2000 to 500 to save read quota.
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, where("submittedAt", ">=", startDate), orderBy("submittedAt", "desc"), limit(2000))
+        ? query(colRef, where("submittedAt", ">=", startDate), orderBy("submittedAt", "desc"), limit(500))
         : query(colRef, where("userId", "==", user.uid), where("submittedAt", ">=", startDate));
 
       const snapshot = await getDocs(usageQuery);
@@ -100,7 +102,7 @@ export const useQ4Allocation = () => {
       setUsedQuantities(usage);
     } catch (error: any) {
         if (error.code === 'failed-precondition' || (error.message && error.message.includes("requires an index"))) {
-            console.warn("Firestore index missing for usage query. Click the link in the error overlay or console to create it.");
+            console.warn("Firestore index missing for usage query.");
         } else {
             console.error("Usage Tracking Error:", error);
         }
@@ -110,8 +112,12 @@ export const useQ4Allocation = () => {
   useEffect(() => {
     const init = async () => {
         if (!user) return;
+        const now = Date.now();
+        if (now - lastFetchTime.current < 5000) return; // Prevent rapid re-fetches
+        
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
+        lastFetchTime.current = now;
         setLoading(false);
     };
     init();
