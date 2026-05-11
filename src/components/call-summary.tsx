@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -33,7 +34,7 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-pm': 'Half Day (PM)',
 };
 
-export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
+export function CallSummary({ entries = [], doctors = [], nonCallDays = [], timeLogs = [], isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
@@ -45,13 +46,33 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         setMounted(true);
     }, []);
 
+    // Automatic Month Selection: Default to the most recent month with data
+    useEffect(() => {
+        if (entries && entries.length > 0 && mounted) {
+            const mostRecentEntry = entries[0];
+            const dateStr = (mostRecentEntry.coverageDate || mostRecentEntry.submittedAt || "").toString();
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (date && isValid(date)) {
+                    const monthKey = format(date, 'yyyy-MM');
+                    if (selectedMonth !== monthKey) {
+                        setSelectedMonth(monthKey);
+                    }
+                }
+            }
+        }
+    }, [entries, mounted]);
+
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
         const monthSet = new Set<string>();
-        entries.forEach(entry => {
-            const submittedDate = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
-            if (isValid(submittedDate)) {
-                monthSet.add(format(submittedDate, 'yyyy-MM'));
+        (entries || []).forEach(entry => {
+            const dateStr = (entry.coverageDate ?? entry.submittedAt ?? "").toString();
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date)) {
+                    monthSet.add(format(date, 'yyyy-MM'));
+                }
             }
         });
         monthSet.add(format(new Date(), 'yyyy-MM'));
@@ -70,16 +91,11 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         } catch (e) {}
     }, [selectedMonth, mounted]);
 
-    const getUserName = (userId: string) => {
-        const user = USER_DATA_MAP[userId];
-        return user ? `${user.firstName} ${user.lastName}` : userId;
-    }
-
     const filteredEntriesForRange = useMemo(() => {
         if (!mounted || !appliedRange.start || !appliedRange.end) return [];
         const start = appliedRange.start;
         const end = appliedRange.end;
-        return entries.filter(e => {
+        return (entries || []).filter(e => {
             const submittedDate = typeof e.submittedAt === 'string' ? parseISO(e.submittedAt) : e.submittedAt;
             return isValid(submittedDate) && isWithinInterval(submittedDate, { start, end });
         });
@@ -89,7 +105,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
          if (!mounted || !appliedRange.start || !appliedRange.end) return [];
         const start = appliedRange.start;
         const end = appliedRange.end;
-        return nonCallDays.filter(day => {
+        return (nonCallDays || []).filter(day => {
             const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
             return isValid(dayDate) && isWithinInterval(dayDate, { start, end });
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -107,7 +123,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, {} as Record<string, number>);
         
-        const highFreqDoctors = doctors.filter(d => {
+        const highFreqDoctors = (doctors || []).filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
             const freq = parseInt(freqStr, 10) || 0;
             return freq >= 3;
@@ -124,7 +140,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        const totalDoctorsInList = doctors.length;
+        const totalDoctorsInList = (doctors || []).length;
         const visitedDoctorNames = new Set(filteredEntries.map(e => {
             const first = String(e.firstName || "").toLowerCase().trim();
             const last = String(e.lastName || "").toLowerCase().trim();
@@ -132,7 +148,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         }));
         
         const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
-            doctors.some(d => {
+            (doctors || []).some(d => {
                 const first = String(d.firstName || "").toLowerCase().trim();
                 const last = String(d.lastName || "").toLowerCase().trim();
                 return `${first} ${last}` === name;
@@ -154,7 +170,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
         const totalCalls = filteredEntries.length;
         const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
-        const monthlyPerformance = entries.reduce((acc, entry) => {
+        const monthlyPerformance = (entries || []).reduce((acc, entry) => {
             const date = typeof entry.submittedAt === 'string' ? parseISO(entry.submittedAt) : entry.submittedAt;
             if (!isValid(date)) return acc;
             const monthKey = format(date, 'MMM yyyy');
@@ -164,7 +180,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
             return acc;
         }, [] as {name: string, calls: number, date: Date}[]).sort((a,b) => a.date.getTime() - b.date.getTime());
 
-        const originalMonthlyTarget = doctors.reduce((acc, doc) => {
+        const originalMonthlyTarget = (doctors || []).reduce((acc, doc) => {
             const freqStr = String(doc.frequency || "1x").replace('x', '');
             return acc + (parseInt(freqStr, 10) || 0);
         }, 0);
@@ -232,7 +248,7 @@ export function CallSummary({ entries, doctors, nonCallDays, timeLogs, isAdminVi
     
     const filteredTimeLogs = useMemo(() => {
         if (!mounted || !appliedRange.start || !appliedRange.end) return [];
-        return timeLogs.filter(log => {
+        return (timeLogs || []).filter(log => {
             const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
             return isValid(timeInDate) && isWithinInterval(timeInDate, { start: appliedRange.start!, end: appliedRange.end! });
         }).sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
