@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -52,8 +51,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    const normalizedEmail = user.email?.toLowerCase() || '';
-    return ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail);
+    const normalizedEmail = (user.email ?? "").toString().toLowerCase().trim();
+    return ADMIN_UIDS.includes(user.uid) || 
+           normalizedEmail === 'mbustamante@hovidinc.com' || 
+           ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === normalizedEmail);
   }, [user]);
 
   const getManagedUserIds = useCallback((mgrId?: string) => {
@@ -87,7 +88,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 let q;
                 if (userIds === null) {
                     q = query(collection(db!, collName));
-                } else {
+                } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
@@ -96,10 +97,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                         getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                } else {
+                    return [];
                 }
                 const snapshot = await getDocs(q);
                 return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (err) {
+                console.error(`Fetch error for ${collName}:`, err);
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: collName,
                     operation: 'list',
@@ -143,10 +147,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
         
         const fetchDataForChunk = async (chunk: string[]) => {
+            if (chunk.length === 0) return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
+
             const fetchSingle = async (collName: string): Promise<QuerySnapshot<DocumentData> | { docs: [] }> => {
                 try {
                     return await getDocs(query(collection(db!, collName), where("userId", "in", chunk)));
                 } catch (e) {
+                    console.error(`Summary fetch error for ${collName}:`, e);
                     errorEmitter.emit('permission-error', new FirestorePermissionError({
                         path: collName,
                         operation: 'list',
@@ -184,9 +191,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const used: Record<string, number> = {};
         combined.entries.forEach((e: CoverageEntry) => {
-            if (e.primarySampleName && e.primaryProductQty) used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Math.round(Number(e.primaryProductQty));
-            if (e.secondarySampleName && e.secondaryProductQty) used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Math.round(Number(e.secondaryProductQty));
-            e.reminderProducts?.forEach(p => { if (p.sampleName && p.quantity) used[p.sampleName] = (used[p.sampleName] || 0) + Math.round(Number(p.quantity)); });
+            const process = (name?: any, qty?: any) => {
+                const safeName = (name ?? "").toString().toLowerCase().trim();
+                if (!safeName) return;
+                const safeQty = Math.round(Number(qty || 0));
+                if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
+            };
+            process(e.primarySampleName, e.primaryProductQty);
+            process(e.secondarySampleName, e.secondaryProductQty);
+            e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
         setTeamSummaryData({
@@ -214,6 +227,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(query(collection(db!, collName), where("userId", "==", sanitizedUserId)));
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
+                console.error(`User data fetch error for ${collName}:`, e);
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: collName,
                     operation: 'list',
@@ -240,17 +254,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
-            if (e.primarySampleName && e.primaryProductQty) {
-                used[e.primarySampleName] = (used[e.primarySampleName] || 0) + Math.round(Number(e.primaryProductQty));
-            }
-            if (e.secondarySampleName && e.secondaryProductQty) {
-                used[e.secondarySampleName] = (used[e.secondarySampleName] || 0) + Math.round(Number(e.secondaryProductQty));
-            }
-            e.reminderProducts?.forEach(p => {
-                if (p.sampleName && p.quantity) {
-                    used[p.sampleName] = (used[p.sampleName] || 0) + Math.round(Number(p.quantity));
-                }
-            });
+            const process = (name?: any, qty?: any) => {
+                const safeName = (name ?? "").toString().toLowerCase().trim();
+                if (!safeName) return;
+                const safeQty = Math.round(Number(qty || 0));
+                if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
+            };
+            process(e.primarySampleName, e.primaryProductQty);
+            process(e.secondarySampleName, e.secondaryProductQty);
+            e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
         setAllEntries(entries);

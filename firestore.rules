@@ -11,86 +11,97 @@ service cloud.firestore {
 
     /** 
      * Checks if the user is an admin.
+     * Uses both hardcoded UIDs and email patterns for redundancy.
+     * Includes null-safe check for token email.
      */
     function isAdmin() {
+      let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+      let email = request.auth.token.get('email', '').lower();
       return isSignedIn() && (
-        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == "mbustamante@hovidinc.com")
+        request.auth.uid in adminUids ||
+        email == "mbustamante@hovidinc.com" ||
+        email == "admin@hovidinc.com"
       );
     }
 
     /** 
      * Checks if the user is a manager.
+     * Managers have broad read access to oversight records.
      */
     function isManager() {
-      return isSignedIn() && request.auth.uid in [
+      let managerUids = [
         "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
         "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
         "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2",
         "r19lVIqk4xTtzxvbs4W0kprHSvD2", "lDprIWp1acWrMElyzk2uTjQ4q4m1"
       ];
+      return isSignedIn() && request.auth.uid in managerUids;
     }
 
     /**
      * Common ownership check.
      */
-    function isOwner(data) {
-      return isSignedIn() && data.userId == request.auth.uid;
-    }
-
-    // --- Broad Access for Oversight Roles ---
-    match /{document=**} {
-      allow read: if isAdmin() || isManager();
+    function isOwner(userId) {
+      return isSignedIn() && userId == request.auth.uid;
     }
 
     // --- Specific Collection Rules ---
 
+    // Coverage Entries
     match /coverageEntries/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager(); 
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Doctors Masterlist
     match /doctors/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager();
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Call Plans
     match /plans/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager();
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Non-Call Days / Leave
     match /nonCallDays/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager();
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Attendance / Time Logs
     match /timeLogs/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager();
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Planning Permission Requests
     match /planningRequests/{id} {
-      allow read: if isOwner(resource.data) || isAdmin() || isManager();
-      allow create: if isOwner(request.resource.data);
-      allow update, delete: if isAdmin() || isOwner(resource.data);
+      allow read: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
+    // Inventory Allocations
     match /q4Allocation/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
+    // Marketing Samples
     match /marketingSamples/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
     
+    // User Profiles
     match /userProfiles/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin() || isManager() || (isSignedIn() && request.auth.uid == id);
