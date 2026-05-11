@@ -232,21 +232,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     
     try {
-        // Individual PMR fetch now retrieves ALL data from the collection
-        // without ANY date filtering at the database level to ensure 100% visibility.
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
-                const results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                return results;
+                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
                 console.error(`Individual PMR fetch failed for ${sanitizedUserId} on ${collName}:`, e);
                 return [];
             }
         };
 
-        const results = await Promise.all([
+        // Independent fetching with allSettled to ensure failure in one doesn't block others
+        const results = await Promise.allSettled([
             fetchS("coverageEntries"),
             fetchS("doctors"),
             fetchS("plans"),
@@ -255,15 +253,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchS("planningRequests")
         ]);
         
-        const entries = results[0] as CoverageEntry[];
-        const doctors = results[1] as Doctor[];
-        const plans = results[2] as Plan[];
-        const logs = results[3] as TimeLog[];
-        const ncds = results[4] as NonCallDay[];
-        const requests = results[5] as PlanningPermissionRequest[];
+        const entries = results[0].status === 'fulfilled' ? results[0].value : [];
+        const doctors = results[1].status === 'fulfilled' ? results[1].value : [];
+        const plans = results[2].status === 'fulfilled' ? results[2].value : [];
+        const logs = results[3].status === 'fulfilled' ? results[3].value : [];
+        const ncds = results[4].status === 'fulfilled' ? results[4].value : [];
+        const requests = results[5].status === 'fulfilled' ? results[5].value : [];
 
         const used: Record<string, number> = {};
-        entries.forEach((e: CoverageEntry) => {
+        entries.forEach((e: any) => {
             const process = (name?: any, qty?: any) => {
                 const safeName = (name ?? "").toString().toLowerCase().trim();
                 if (!safeName) return;
@@ -272,11 +270,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
-            e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
+            if (Array.isArray(e.reminderProducts)) {
+                e.reminderProducts.forEach((p: any) => process(p?.sampleName, p?.quantity));
+            }
         });
 
-        // Ensure records are sorted by newest first for immediate visibility
-        setAllEntries(entries.sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate))));
+        setAllEntries(entries.sort((a: any, b: any) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate))));
         setAllDoctors(doctors);
         setAllPlans(plans);
         setAllTimeLogs(logs);

@@ -58,7 +58,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
         return subDate && isValid(subDate) && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
-    const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+    const displayDate = entry.coverageDate ? parseISO(entry.coverageDate) : (entry.submittedAt ? parseISO(entry.submittedAt) : null);
 
     return (
         <React.Fragment>
@@ -74,7 +74,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                     <span className="text-sm tabular-nums">
-                        {subDate && isValid(subDate) ? format(subDate, "MMM d") : 'N/A'}
+                        {displayDate && isValid(displayDate) ? format(displayDate, "MMM d") : 'N/A'}
                     </span>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-center">
@@ -277,24 +277,25 @@ export function SubmittedList({
     const itemsPerPage = 10;
 
     useEffect(() => {
+        setMounted(true);
         const now = new Date();
         setSelectedDate(now);
         setSelectedMonth(format(now, 'yyyy-MM'));
-        setMounted(true);
     }, []);
 
-    // Automatic Month Selection: If a PMR is selected and they have data, 
-    // default the view to the month containing their most recent activity.
+    // Robust Month Selection: Automatically pick the latest month with actual data
     useEffect(() => {
         if (entries && entries.length > 0 && mounted) {
-            const mostRecentEntry = entries[0];
-            const dateStr = (mostRecentEntry.coverageDate || mostRecentEntry.submittedAt || "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (date && isValid(date)) {
-                    const monthKey = format(date, 'yyyy-MM');
-                    if (selectedMonth !== monthKey) {
-                        setSelectedMonth(monthKey);
+            for (const entry of entries) {
+                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+                if (dateStr) {
+                    const date = parseISO(dateStr);
+                    if (isValid(date)) {
+                        const monthKey = format(date, 'yyyy-MM');
+                        if (selectedMonth !== monthKey) {
+                            setSelectedMonth(monthKey);
+                        }
+                        break;
                     }
                 }
             }
@@ -305,10 +306,10 @@ export function SubmittedList({
         if (!mounted) return [];
         const monthSet = new Set<string>();
         (entries || []).forEach(entry => {
-            const dateStr = (entry.coverageDate ?? "").toString();
+            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
-                if (date && isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
+                if (isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
             }
         });
         monthSet.add(format(new Date(), 'yyyy-MM'));
@@ -348,7 +349,7 @@ export function SubmittedList({
     const filteredByMonth = useMemo(() => {
         if (!mounted) return [];
         return (entries || []).filter(e => {
-            const dateStr = (e.coverageDate ?? e.submittedAt ?? "").toString();
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const date = parseISO(dateStr);
             return date && isValid(date) && isWithinInterval(date, monthRange);
@@ -358,7 +359,7 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         filteredByMonth.forEach(e => {
-            const dateStr = (e.coverageDate ?? e.submittedAt ?? "").toString();
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (date && isValid(date)) {
@@ -388,7 +389,7 @@ export function SubmittedList({
         }
         if (activeTab === 'calendar' && selectedDate) {
             res = res.filter(e => {
-                const dateStr = (e.coverageDate ?? e.submittedAt ?? "").toString();
+                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
                 if (!dateStr) return false;
                 const d = parseISO(dateStr);
                 return d && isSameDay(d, selectedDate);
@@ -405,7 +406,7 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const dateStr = (entry.coverageDate ?? entry.submittedAt ?? "").toString();
+            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
             const covDate = dateStr ? parseISO(dateStr) : null;
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {
