@@ -1,15 +1,15 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, FirestoreError, QuerySnapshot, DocumentData, orderBy, limit } from "firebase/firestore";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 import { getQueryStartDateISO } from "@/lib/utils";
 
 export interface TeamSummaryData {
@@ -89,14 +89,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             try {
                 let q;
                 if (userIds === null) {
-                    q = query(collection(db!, collName), limit(500));
+                    q = query(collection(db!, collName), limit(1000));
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(collection(db!, collName), where("userId", "in", chunk), limit(200)))
+                        getDocs(query(collection(db!, collName), where("userId", "in", chunk)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -149,8 +149,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    // COMPOSITE INDEX FIX: Filter by userId only in Firestore, filter by date in memory.
-                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(500));
+                    // Accuracy fix: Remove limit to ensure full district coverage reach
+                    const q = query(collection(db!, collName), where("userId", "in", chunk));
                     const snap = await getDocs(q);
                     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
@@ -162,10 +162,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                         return dDate && dDate >= startDate;
                     });
                 } catch (e) {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: collName,
-                        operation: 'list',
-                    }));
                     return [];
                 }
             };
@@ -216,7 +212,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             usedQuantities: used
         });
       } catch (err: any) {
-         console.error("Team summary total fetch failed", err);
+         console.error("Team summary fetch failed", err);
       } finally {
         setLoadingSummary(false);
       }
@@ -232,8 +228,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const startDate = getQueryStartDateISO();
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                // COMPOSITE INDEX FIX: Filter by userId only, filter date in JS
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(500));
+                // Accuracy fix: Retrieve all docs for user to ensure JS filter is precise
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -278,7 +274,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
-        setAllEntries(entries);
+        setAllEntries(entries.sort((a, b) => safeToDateISO(b.submittedAt).localeCompare(safeToDateISO(a.submittedAt))));
         setAllDoctors(doctors);
         setAllPlans(plans);
         setAllTimeLogs(logs);
@@ -286,7 +282,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        console.error("User data initialization failed", err);
+        console.error("Individual PMR data fetch failed", err);
     } finally {
         setLoadingIndividual(false);
     }

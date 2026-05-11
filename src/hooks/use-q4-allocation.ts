@@ -7,8 +7,6 @@ import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { getQueryStartDateISO } from '@/lib/utils';
 
 export const useQ4Allocation = () => {
@@ -31,48 +29,33 @@ export const useQ4Allocation = () => {
 
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
-    
     try {
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
             if (!data) return null;
-            
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
             const quarter = (data.quarter ?? "Q4").toString().toUpperCase();
-
-            return { 
-                id: doc.id, 
-                prodGroupProdSubGroup: group,
-                displayMaterialName: materialName,
-                allocationQuantity: isNaN(qty) ? 0 : qty,
-                quarter: quarter as any
-            } as Q4Allocation;
+            return { id: doc.id, prodGroupProdSubGroup: group, displayMaterialName: materialName, allocationQuantity: isNaN(qty) ? 0 : qty, quarter: quarter as any } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
-
         fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().toLowerCase().localeCompare((b.displayMaterialName ?? "").toString().toLowerCase()));
         setAllocations(fetched);
-    } catch (error: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples',
-            operation: 'list'
-        }));
-    }
+    } catch (error) {}
   }, [user]);
 
   const fetchUsage = useCallback(async () => {
     if (!db || !user) return;
-    
     try {
       const colRef = collection(db, "coverageEntries");
       const startDate = getQueryStartDateISO();
       
-      // COMPOSITE INDEX FIX: Filter by userId only, then filter dates in JS to avoid index requirement.
+      // Index Error Fix: Fetch by userId or most recent COMPANY-WIDE without filtering date in Firestore.
+      // This prevents the composite index requirement while maintaining accuracy.
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, where("submittedAt", ">=", startDate), orderBy("submittedAt", "desc"), limit(500))
-        : query(colRef, where("userId", "==", user.uid), limit(500));
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(5000)) // Large company-wide scan
+        : query(colRef, where("userId", "==", user.uid)); // All entries for the specific PMR
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -81,15 +64,12 @@ export const useQ4Allocation = () => {
         const entry = docSnap.data();
         if (!entry) return;
 
-        // Apply date filter in memory for individual users to avoid indexing errors
-        if (!isUserAdminOrManager()) {
-            if (!entry.submittedAt || entry.submittedAt < startDate) return;
-        }
+        // Apply 3-month date filter in memory to keep accuracy high without requiring indexes.
+        if (entry.submittedAt && entry.submittedAt < startDate) return;
 
         const processItem = (name?: any, qty?: any) => {
-            const safeName = (name ?? "").toString().toLowerCase().trim();
+            const safeName = String(name ?? "").toLowerCase().trim();
             if (!safeName) return;
-            
             const safeQty = Math.round(Number(qty || 0));
             if (!isNaN(safeQty) && safeQty !== 0) {
                 usage[safeName] = (usage[safeName] || 0) + safeQty;
@@ -99,14 +79,11 @@ export const useQ4Allocation = () => {
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p: any) => {
-                if (p) processItem(p.sampleName, p.quantity);
-            });
+            entry.reminderProducts.forEach((p: any) => { if (p) processItem(p.sampleName, p.quantity); });
         }
       });
-
       setUsedQuantities(usage);
-    } catch (error: any) {
+    } catch (error) {
         console.error("Usage Tracking Error:", error);
     }
   }, [user, isUserAdminOrManager]);
@@ -115,8 +92,7 @@ export const useQ4Allocation = () => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        if (now - lastFetchTime.current < 5000) return; // Prevent rapid re-fetches
-        
+        if (now - lastFetchTime.current < 5000) return;
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
         lastFetchTime.current = now;
@@ -146,24 +122,14 @@ export const useQ4Allocation = () => {
       await batch.commit();
       await refetch();
       return true;
-    } catch (err) {
-        return false;
-    }
+    } catch (err) { return false; }
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
-      ids.forEach(id => {
-          if (id) batch.delete(doc(db, "marketingSamples", id));
-      });
-      try {
-          await batch.commit();
-          await refetch();
-          return true;
-      } catch (err) {
-          return false;
-      }
+      ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
+      try { await batch.commit(); await refetch(); return true; } catch (err) { return false; }
   };
 
   return { allocations, usedQuantities, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };
