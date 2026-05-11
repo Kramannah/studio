@@ -44,7 +44,7 @@ export const useOfflineSync = (userId?: string) => {
       return;
     }
     try {
-      const startDate = getQueryStartDateISO();
+      // Remove automatic date filtering for individual users to ensure full record history is visible
       const q = query(
         collection(db, "coverageEntries"), 
         where("userId", "==", userId)
@@ -55,9 +55,7 @@ export const useOfflineSync = (userId?: string) => {
       
       querySnapshot.forEach(doc => {
         const data = doc.data() as CoverageEntry;
-        if (data.submittedAt && data.submittedAt >= startDate) {
-            entries.push({ id: doc.id, ...data });
-        }
+        entries.push({ id: doc.id, ...data });
       });
       
       entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));

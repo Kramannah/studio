@@ -9,15 +9,15 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Returns the ISO string for the start of the current period.
- * Reduced to 3 months to optimize Firestore read quotas.
+ * Expanded to 6 months to ensure historical visibility for PMRs like Ramos.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Show data from the last 3 months to balance oversight and performance
-  return subMonths(startOfMonth(now), 2).toISOString();
+  // Set back to 6 months for complete historical oversight in dashboards
+  return subMonths(startOfMonth(now), 5).toISOString();
 }
 
 /**
