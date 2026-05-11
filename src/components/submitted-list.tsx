@@ -353,7 +353,7 @@ export function SubmittedList({
     }, [filteredByMonth]);
 
     const entryDates = useMemo(() => {
-        return Object.keys(counts).map(d => parseISO(d));
+        return Object.keys(entriesCountByDate).map(d => parseISO(d));
     }, [entriesCountByDate]);
 
     const filtered = useMemo(() => {
@@ -496,7 +496,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
-                                modifiers={{ hasEntry: Object.keys(entriesCountByDate).map(d => parseISO(d)) }}
+                                modifiers={{ hasEntry: entryDates }}
                                 modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
                                 components={{
                                     DayContent: ({ date }) => {

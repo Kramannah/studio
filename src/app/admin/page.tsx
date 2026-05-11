@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -82,18 +83,22 @@ export default function AdminPage() {
         deleteDoctor
     } = useAdminData(selectedManagerId, profiles);
 
-    const allAccounts = useMemo(() => {
-        const mergedMap = { ...USER_DATA_MAP };
+    // Merge static map with live dynamic profiles for accuracy
+    const mergedUserMap = useMemo(() => {
+        const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
         Object.entries(profiles).forEach(([uid, p]) => {
-            mergedMap[uid] = {
-                code: mergedMap[uid]?.code || p.code || "USER",
-                firstName: p.firstName || mergedMap[uid]?.firstName || "Unknown",
-                lastName: p.lastName || mergedMap[uid]?.lastName || "User",
-                email: p.email || mergedMap[uid]?.email || "N/A"
+            map[uid] = {
+                code: p.code || map[uid]?.code || "USER",
+                firstName: p.firstName || map[uid]?.firstName || "Unknown",
+                lastName: p.lastName || map[uid]?.lastName || "",
+                email: p.email || map[uid]?.email || ""
             };
         });
+        return map;
+    }, [profiles]);
 
-        const all = Object.entries(mergedMap).map(([uid, data]) => {
+    const allAccounts = useMemo(() => {
+        const all = Object.entries(mergedUserMap).map(([uid, data]) => {
             const isAdmin = ADMIN_UIDS.includes(uid);
             const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
             let role = 'PMR';
@@ -106,7 +111,7 @@ export default function AdminPage() {
             
             if (role === 'PMR') {
                 if (managerUid) {
-                    const mData = mergedMap[managerUid];
+                    const mData = mergedUserMap[managerUid];
                     district = mData ? `${mData.firstName} ${mData.lastName}` : 'DSM Assigned';
                 } else {
                     district = 'Unassigned / HQ';
@@ -131,7 +136,7 @@ export default function AdminPage() {
                    (a.district ?? "").toLowerCase().includes(q) ||
                    (a.email ?? "").toLowerCase().includes(q);
         }).sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
-    }, [accountSearch, profiles]);
+    }, [accountSearch, profiles, mergedUserMap]);
 
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
@@ -145,11 +150,11 @@ export default function AdminPage() {
     const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
         managedUserIds.forEach((id) => {
-            const u = profiles[id] || USER_DATA_MAP[id];
-            map.set(id, u ? `${(u as any).code || 'PMR'}_${u.lastName}, ${u.firstName}` : `User ${id}`);
+            const u = mergedUserMap[id];
+            map.set(id, u ? `${u.code || 'PMR'}_${u.lastName}, ${u.firstName}` : `User ${id}`);
         });
         return new Map([...map.entries()].sort((a, b) => a[1].localeCompare(b[1])));
-    }, [managedUserIds, profiles]);
+    }, [managedUserIds, mergedUserMap]);
 
     useEffect(() => {
         if (mounted && !authLoading && !hasAdminAccess) router.push('/');
@@ -260,7 +265,7 @@ export default function AdminPage() {
                                 individualPlanningRequests={individualPlanningRequests}
                                 onDeleteEntry={deleteEntry}
                                 usedQuantities={individualUsedQuantities}
-                                userMap={USER_DATA_MAP}
+                                userMap={mergedUserMap}
                                 isAdminView={true}
                                 onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
                                 onUpdateDoctor={updateDoctor}
@@ -282,12 +287,12 @@ export default function AdminPage() {
                         <NonCallDayApprovals 
                             nonCallDays={allNonCallDays} 
                             onUpdateStatus={updateNonCallDayStatus}
-                            userMap={USER_DATA_MAP}
+                            userMap={mergedUserMap}
                         />
                         <PlanningRequestApprovals 
                             requests={allPlanningRequests}
                             onUpdateStatus={updatePlanningRequestStatus}
-                            userMap={USER_DATA_MAP}
+                            userMap={mergedUserMap}
                         />
                     </TabsContent>
 
