@@ -1,33 +1,33 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, FileSpreadsheet } from "lucide-react";
-import { Button } from "./ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
-import { Badge } from "./ui/badge";
-import { Input } from "./ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ScrollArea } from "./ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
     if (!value && typeof value !== 'number') return null;
     return (
-        <div>
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{label}</p>
+        <div className="space-y-0.5">
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">{label}</p>
             <p className="text-sm font-medium text-foreground">{value}</p>
         </div>
     )
@@ -61,30 +61,29 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
     const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
 
     return (
-         <Collapsible asChild open={isOpen} onOpenChange={setIsOpen}>
-            <TableBody>
-            <TableRow className="h-16 hover:bg-muted/30 transition-colors">
-                <TableCell className="font-medium">
+        <React.Fragment>
+            <TableRow className={cn("h-16 transition-colors border-b", isOpen ? "bg-muted/40" : "hover:bg-muted/20")}>
+                <TableCell className="font-medium min-w-[150px]">
                     <div className="flex flex-col">
-                        <span className="font-bold text-primary">{entry.firstName} {entry.lastName}</span>
+                        <span className="font-bold text-primary truncate max-w-[200px]">{entry.firstName} {entry.lastName}</span>
                         <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{entry.specialty || "N/A"}</span>
                     </div>
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
-                    <span className="text-sm font-medium">{entry.clinic || "N/A"}</span>
+                <TableCell className="hidden md:table-cell max-w-[200px]">
+                    <span className="text-sm font-medium truncate block">{entry.clinic || "N/A"}</span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                     <span className="text-sm tabular-nums">
                         {subDate && isValid(subDate) ? format(subDate, "MMM d") : 'N/A'}
                     </span>
                 </TableCell>
-                <TableCell className="hidden sm:table-cell">
+                <TableCell className="hidden sm:table-cell text-center">
                     <Badge variant="secondary" className="text-[10px] font-bold">{doctor?.frequency || 'N/A'}</Badge>
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
-                        {entry.photos?.[0] && <Image src={entry.photos[0]} alt="proof" width={32} height={32} className="rounded-md object-cover border-2 border-primary/20" />}
-                        {entry.signature && <div className="p-1 bg-white border rounded shadow-sm"><Image src={entry.signature} alt="sig" width={32} height={16} /></div>}
+                        {entry.photos?.[0] && <div className="h-8 w-8 rounded-md overflow-hidden border-2 border-primary/20"><Image src={entry.photos[0]} alt="proof" width={32} height={32} className="object-cover h-full w-full" /></div>}
+                        {entry.signature && <div className="p-1 bg-white border rounded shadow-sm flex items-center justify-center h-6 w-10"><Image src={entry.signature} alt="sig" width={32} height={16} className="object-contain" /></div>}
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
@@ -119,49 +118,54 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                        <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                                {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </Button>
-                        </CollapsibleTrigger>
+                        <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => setIsOpen(!isOpen)}>
+                            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </Button>
                     </div>
                 </TableCell>
             </TableRow>
-            <CollapsibleContent asChild>
-                <TableRow className="bg-muted/10">
-                    <TableCell colSpan={6} className="p-0 border-b">
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-2 duration-200">
-                            <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><List className="w-3 h-3" /> Call Details</h4>
-                                <DetailItem label="Objective" value={entry.callObjective} />
-                                <DetailItem label="Coverage Type" value={entry.coverageType} />
+            {isOpen && (
+                <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
+                    <TableCell colSpan={6} className="p-0">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8 animate-in slide-in-from-top-2 duration-200">
+                            <div className="space-y-6">
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><List className="w-3 h-3" /> Call Details</h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <DetailItem label="Objective" value={entry.callObjective} />
+                                    <DetailItem label="Coverage Type" value={entry.coverageType} />
+                                </div>
                             </div>
-                            <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><CircleAlert className="w-3 h-3" /> Sampling</h4>
-                                <DetailItem label="Primary Product" value={entry.primaryProduct} />
-                                <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
-                                {entry.reminderProducts && entry.reminderProducts.length > 0 && (
-                                    <div>
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Reminder Items</p>
-                                        <div className="mt-1 space-y-1">
-                                            {entry.reminderProducts.map((p, i) => (
-                                                <p key={i} className="text-xs font-medium">{p.sampleName} (x{p.quantity})</p>
-                                            ))}
+                            <div className="space-y-6">
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><CircleAlert className="w-3 h-3" /> Sampling</h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <DetailItem label="Primary Product" value={entry.primaryProduct} />
+                                    <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
+                                    {entry.reminderProducts && entry.reminderProducts.length > 0 && (
+                                        <div className="pt-2">
+                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Reminder Items</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {entry.reminderProducts.map((p, i) => (
+                                                    <Badge key={i} variant="outline" className="text-[10px] font-bold bg-background">
+                                                        {p.sampleName} (x{p.quantity})
+                                                    </Badge>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
-                            <div className="space-y-4">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest"><History className="w-3 h-3" /> Post-Call Analysis</h4>
-                                <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
-                                <DetailItem label="Next Steps" value={entry.planOfAction} />
+                            <div className="space-y-6">
+                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><History className="w-3 h-3" /> Post-Call Analysis</h4>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
+                                    <DetailItem label="Next Steps" value={entry.planOfAction} />
+                                </div>
                             </div>
                         </div>
                     </TableCell>
                 </TableRow>
-            </CollapsibleContent>
-            </TableBody>
-         </Collapsible>
+            )}
+        </React.Fragment>
     )
 }
 
@@ -349,7 +353,7 @@ export function SubmittedList({
     }, [filteredByMonth]);
 
     const entryDates = useMemo(() => {
-        return Object.keys(entriesCountByDate).map(d => parseISO(d));
+        return Object.keys(counts).map(d => parseISO(d));
     }, [entriesCountByDate]);
 
     const filtered = useMemo(() => {
@@ -446,7 +450,7 @@ export function SubmittedList({
                         className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
-                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:auto overflow-hidden">
+                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
                     <TabsTrigger value="list" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><List className="w-7 h-7" /></TabsTrigger>
                     <TabsTrigger value="calendar" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><CalendarIcon className="w-7 h-7" /></TabsTrigger>
                 </TabsList>
@@ -464,11 +468,13 @@ export function SubmittedList({
                                 <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
-                        {paginatedEntries.length > 0 ? (
-                            paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
-                        ) : (
-                            <TableBody><TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found.</TableCell></TableRow></TableBody>
-                        )}
+                        <TableBody>
+                            {paginatedEntries.length > 0 ? (
+                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                            ) : (
+                                <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found.</TableCell></TableRow>
+                            )}
+                        </TableBody>
                     </Table>
                 </Card>
                 {totalPages > 1 && (
@@ -490,7 +496,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
-                                modifiers={{ hasEntry: entryDates }}
+                                modifiers={{ hasEntry: Object.keys(entriesCountByDate).map(d => parseISO(d)) }}
                                 modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
                                 components={{
                                     DayContent: ({ date }) => {
