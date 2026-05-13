@@ -9,16 +9,24 @@ import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { startOfYear } from 'date-fns';
 
+// GLOBAL CACHE: Lives outside the hook to persist across tab switches and component mounts
+let globalAllocationsCache: Q4Allocation[] | null = null;
+let globalUsedQuantitiesCache: Record<string, number> | null = null;
+let lastFetchTime: number = 0;
+let isFetchingGlobal: boolean = false;
+const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes Cache
+
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
  * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY.
+ * Uses global caching to prevent Quota Exceeded errors.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
+  const [loading, setLoading] = useState(!globalAllocationsCache);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -35,12 +43,25 @@ export const useQ4Allocation = () => {
            profile?.role === 'Manager';
   }, [user, profile]);
 
-  const performFetch = useCallback(async () => {
+  const performFetch = useCallback(async (forceRefresh = false) => {
     if (!db || !user) {
         setLoading(false);
         return;
     }
 
+    // Return cached data if available and not expired (unless forced)
+    const now = Date.now();
+    if (!forceRefresh && globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime < CACHE_DURATION)) {
+        setAllocations(globalAllocationsCache);
+        setUsedQuantities(globalUsedQuantitiesCache);
+        setLoading(false);
+        return;
+    }
+
+    // Prevent multiple simultaneous global fetches
+    if (isFetchingGlobal && !forceRefresh) return;
+    
+    isFetchingGlobal = true;
     setLoading(true);
 
     try {
@@ -60,7 +81,6 @@ export const useQ4Allocation = () => {
         });
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
-        setAllocations(fetchedAllocations);
 
         // 2. Fetch Usage (Current Year Only)
         const currentYearStart = startOfYear(new Date()).toISOString();
@@ -72,43 +92,23 @@ export const useQ4Allocation = () => {
         while (hasMore) {
             let baseQuery;
             
-            // To avoid "Index Required" errors, we only combine multiple filters if they are equalities.
-            // For range filters on time, we either use it alone (Admin) or filter in memory (User).
+            // To avoid "Index Required" errors for users, we filter by userId only and date-filter in memory.
+            // Admins can filter by date directly as a single-field range query doesn't require a composite index.
             if (isUserAdmin) {
-                // Admin: Range query on date only (Does not require composite index)
-                if (lastVisible) {
-                    baseQuery = query(
-                        entriesCol, 
-                        where("submittedAt", ">=", currentYearStart),
-                        orderBy("submittedAt"), 
-                        startAfter(lastVisible), 
-                        limit(1000)
-                    );
-                } else {
-                    baseQuery = query(
-                        entriesCol, 
-                        where("submittedAt", ">=", currentYearStart),
-                        orderBy("submittedAt"), 
-                        limit(1000)
-                    );
-                }
+                baseQuery = query(
+                    entriesCol, 
+                    where("submittedAt", ">=", currentYearStart),
+                    orderBy("submittedAt"), 
+                    ...(lastVisible ? [startAfter(lastVisible)] : []),
+                    limit(1000)
+                );
             } else {
-                // User: Fetch by User ID only (Does not require composite index)
-                // We will filter by the Current Year in memory below
-                if (lastVisible) {
-                    baseQuery = query(
-                        entriesCol, 
-                        where("userId", "==", user.uid), 
-                        startAfter(lastVisible), 
-                        limit(1000)
-                    );
-                } else {
-                    baseQuery = query(
-                        entriesCol, 
-                        where("userId", "==", user.uid), 
-                        limit(1000)
-                    );
-                }
+                baseQuery = query(
+                    entriesCol, 
+                    where("userId", "==", user.uid), 
+                    ...(lastVisible ? [startAfter(lastVisible)] : []),
+                    limit(1000)
+                );
             }
             
             const snap = await getDocs(baseQuery);
@@ -144,11 +144,18 @@ export const useQ4Allocation = () => {
             }
         }
 
+        // Update Global Cache
+        globalAllocationsCache = fetchedAllocations;
+        globalUsedQuantitiesCache = usage;
+        lastFetchTime = Date.now();
+
+        setAllocations(fetchedAllocations);
         setUsedQuantities(usage);
     } catch (error) {
-        console.error("2026 Inventory Aggregation Error:", error);
+        console.error("Critical Inventory fetch failed:", error);
     } finally {
         setLoading(false);
+        isFetchingGlobal = false;
     }
   }, [user, isUserAdmin]);
 
@@ -160,7 +167,7 @@ export const useQ4Allocation = () => {
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: performFetch,
+    refetch: () => performFetch(true),
     addAllocationsBulk: async (data: Omit<Q4Allocation, 'id'>[]) => {
         if (!db) return false;
         try {
@@ -173,7 +180,7 @@ export const useQ4Allocation = () => {
             batch.set(docRef, { ...item }, { merge: true });
           });
           await batch.commit();
-          await performFetch();
+          await performFetch(true);
           return true;
         } catch (err) { return false; }
     },
@@ -183,7 +190,7 @@ export const useQ4Allocation = () => {
         ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
         try { 
             await batch.commit(); 
-            await performFetch(); 
+            await performFetch(true); 
             return true; 
         } catch (err) { return false; }
     }

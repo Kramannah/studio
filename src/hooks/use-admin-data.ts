@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy, startAfter } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +19,10 @@ export interface TeamSummaryData {
     marketingSamples: MarketingSample[];
     usedQuantities: Record<string, number>;
 }
+
+// Global cache for team summaries to prevent redundant large-scale scans
+const teamSummaryCache: Record<string, { data: TeamSummaryData, timestamp: number }> = {};
+const CACHE_LIMIT = 5 * 60 * 1000; // 5 Minutes
 
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
@@ -94,8 +98,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
 
-  const fetchTeamSummary = useCallback(async () => {
+  const fetchTeamSummary = useCallback(async (forceRefresh = false) => {
     if (!managerId || !db) return;
+
+    if (!forceRefresh && teamSummaryCache[managerId] && (Date.now() - teamSummaryCache[managerId].timestamp < CACHE_LIMIT)) {
+        setTeamSummaryData(teamSummaryCache[managerId].data);
+        return;
+    }
 
     setLoadingSummary(true);
     try {
@@ -114,8 +123,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const results = await Promise.all(chunks.map(async (c) => {
                 const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c));
                 
-                // Fetching without the date filter in query to avoid Index Requirement
-                // Date filtering is done in mapping below
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(baseQuery("coverageEntries")),
                     getDocs(baseQuery("timeLogs")),
@@ -161,7 +168,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(e.secondarySampleName, e.secondaryProductQty);
         });
 
-        setTeamSummaryData({ 
+        const finalData = { 
             entries: combined.entries, 
             timeLogs: combined.logs, 
             doctors: combined.doctors, 
@@ -169,7 +176,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             plans: combined.plans, 
             usedQuantities: used, 
             marketingSamples: [] 
-        } as any);
+        } as any;
+
+        teamSummaryCache[managerId] = { data: finalData, timestamp: Date.now() };
+        setTeamSummaryData(finalData);
     } catch (e) {
         console.warn("Team summary aggregation error:", e);
     } finally {
@@ -221,7 +231,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
     individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
     teamSummaryData, loading, loadingSummary, loadingIndividual, 
-    fetchUserData, fetchTeamSummary,
+    fetchUserData, fetchTeamSummary: (force = false) => fetchTeamSummary(force),
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
         const ref = doc(db!, 'nonCallDays', id);
         await updateDoc(ref, { status });
