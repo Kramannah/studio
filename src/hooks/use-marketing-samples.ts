@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -43,8 +43,7 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // ACCURACY: Scan ALL historical entries for this user to ensure "Used" quantities are 100% exact
-      // We explicitly aggregate primaryProductQty and secondaryProductQty from every report
+      // ACCURACY: Scan exhaustive history to aggregate primaryProductQty and secondaryProductQty
       const usageSnap = await getDocs(
         query(
           collection(db, "coverageEntries"), 
@@ -68,16 +67,9 @@ export const useMarketingSamples = () => {
               }
           };
 
-          // ACCURACY: Primary and Secondary quantities are the main distribution points
+          // ACCURACY: Used samples are based strictly from the primary and secondary fields
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
-          
-          // Also include any units from reminder products for a complete audit
-          if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p) => {
-                if (p) process(p.sampleName, p.quantity);
-            });
-          }
       });
       setUsedQuantities(usage);
 

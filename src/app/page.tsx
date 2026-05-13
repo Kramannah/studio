@@ -139,23 +139,18 @@ export default function Home() {
     const quantities = { ...globalUsedQuantities };
     
     offlineEntries.forEach(entry => {
-        if (entry.primarySampleName && entry.primaryProductQty) {
-            const qty = Math.round(Number(entry.primaryProductQty));
-            const key = (entry.primarySampleName ?? "").toLowerCase().trim();
-            quantities[key] = (quantities[key] || 0) + qty;
-        }
-        if (entry.secondarySampleName && entry.secondaryProductQty) {
-            const qty = Math.round(Number(entry.secondaryProductQty));
-            const key = (entry.secondarySampleName ?? "").toLowerCase().trim();
-            quantities[key] = (quantities[key] || 0) + qty;
-        }
-        entry.reminderProducts?.forEach(prod => {
-            if (prod.sampleName && prod.quantity) {
-                const qty = Math.round(Number(prod.quantity));
-                const key = (prod.sampleName ?? "").toLowerCase().trim();
-                quantities[key] = (quantities[key] || 0) + qty;
+        const process = (name?: string, qty?: number) => {
+            const safeName = (name ?? "").toLowerCase().trim();
+            if (!safeName) return;
+            const safeQty = Math.round(Number(qty || 0));
+            if (!isNaN(safeQty) && safeQty !== 0) {
+                quantities[safeName] = (quantities[safeName] || 0) + safeQty;
             }
-        });
+        };
+
+        // ACCURACY: Include offline data strictly for primary and secondary fields
+        process(entry.primarySampleName, entry.primaryProductQty);
+        process(entry.secondarySampleName, entry.secondaryProductQty);
     });
     return quantities;
   }, [globalUsedQuantities, offlineEntries]);

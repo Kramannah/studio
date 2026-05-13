@@ -10,7 +10,6 @@ import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionReq
 import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { getQueryStartDateISO } from "@/lib/utils";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -211,10 +210,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Pulling from primaryProductQty and secondaryProductQty exhaustive history
+            // ACCURACY: Used samples are strictly derived from primary and secondary qty fields
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
-            e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
         const finalData = {
@@ -292,12 +290,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Pulling from primaryProductQty and secondaryProductQty
+            // ACCURACY: Focused strictly on primaryProductQty and secondaryProductQty
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
-            if (Array.isArray(e.reminderProducts)) {
-                e.reminderProducts.forEach((p: any) => process(p?.sampleName, p?.quantity));
-            }
         });
 
         const dashboardData = { entries, doctors, plans, timeLogs: logs, nonCallDays: ncds, requests, used };
@@ -331,7 +326,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   };
   
   const updatePlanningRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
-      const docRef = doc(db!, 'planningRequests', id);
+      const docRef = db ? doc(db, 'planningRequests', id) : null;
+      if (!docRef) return;
       updateDoc(docRef, { status })
         .then(() => {
             setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
@@ -343,7 +339,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   };
 
   const deleteEntry = async (id: string) => {
-    const docRef = doc(db!, "coverageEntries", id);
+    const docRef = db ? doc(db, "coverageEntries", id) : null;
+    if (!docRef) return;
     deleteDoc(docRef)
       .then(() => {
         setAllEntries(prev => prev.filter(e => e.id !== id));
@@ -355,7 +352,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   };
   
   const addDoctor = async (data: Omit<Doctor, 'id'>) => {
-    const colRef = collection(db!, "doctors");
+    if (!db) return;
+    const colRef = collection(db, "doctors");
     addDoc(colRef, data)
       .then((dr) => {
         const newDoc = { id: dr.id, ...data } as Doctor;
@@ -368,8 +366,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   };
 
   const updateDoctor = async (data: Doctor) => {
+    if (!db) return;
     const { id, userId, ...update } = data;
-    const docRef = doc(db!, "doctors", id);
+    const docRef = doc(db, "doctors", id);
     updateDoc(docRef, update)
       .then(() => {
         setAllDoctors(prev => prev.map(d => d.id === id ? data : d));
@@ -381,7 +380,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   };
   
   const deleteDoctor = async (id: string) => {
-    const docRef = doc(db!, "doctors", id);
+    if (!db) return;
+    const docRef = doc(db, "doctors", id);
     deleteDoc(docRef)
       .then(() => {
         setAllDoctors(prev => prev.filter(d => d.id !== id));
@@ -415,13 +415,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     updateDoctor,
     deleteDoctor,
     deleteDoctorsBulk: async (ids: string[]) => {
-        const batch = writeBatch(db!);
+        if (!db) return;
+        const batch = writeBatch(db);
         ids.forEach(id => batch.delete(doc(db!, "doctors", id)));
         await batch.commit();
         setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
     },
     addDoctorsBulk: async (data: Omit<Doctor, 'id'>[]) => {
-        const batch = writeBatch(db!);
+        if (!db) return;
+        const batch = writeBatch(db);
         data.forEach(d => batch.set(doc(collection(db!, "doctors")), d));
         await batch.commit();
     }

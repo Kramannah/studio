@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs, limit } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
@@ -70,9 +70,9 @@ export const useQ4Allocation = () => {
       const colRef = collection(db, "coverageEntries");
       
       // ACCURACY: We perform an exhaustive scan of historical entries
-      // We removed limits to ensure every primary and secondary unit is counted
+      // We explicitly aggregate from primaryProductQty and secondaryProductQty
       const usageQuery = isAdminOrManager
-        ? query(colRef) 
+        ? query(colRef, limit(2000)) 
         : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
@@ -91,16 +91,9 @@ export const useQ4Allocation = () => {
             }
         };
 
-        // ACCURACY: Explicitly aggregate from primaryProductQty and secondaryProductQty
+        // ACCURACY: Used samples are strictly based on primaryProductQty and secondaryProductQty
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
-        
-        // Include reminder products for a complete distribution audit
-        if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p) => { 
-                if (p) processItem(p.sampleName, p.quantity); 
-            });
-        }
       });
       
       globalUsedQuantitiesCache = usage;
