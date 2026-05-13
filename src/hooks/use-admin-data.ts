@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
@@ -33,7 +33,7 @@ const safeToDateISO = (val: any): string => {
 // In-memory cache to prevent redundant reads within a single session
 const userDataCache: Record<string, { timestamp: number, data: any }> = {};
 const teamSummaryCache: Record<string, { timestamp: number, data: any }> = {};
-const CACHE_TTL = 300000; // 5 minutes (increased to save quota)
+const CACHE_TTL = 300000; // 5 minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user, profile } = useAuth();
@@ -99,7 +99,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 let q;
                 const colRef = collection(db!, collName);
                 if (userIds === null) {
-                    q = query(colRef, limit(200)); // Lowered limit to save quota
+                    q = query(colRef, limit(200)); 
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
@@ -158,7 +158,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
       setLoadingSummary(true);
       try {
-        const startDate = getQueryStartDateISO();
         const chunks: string[][] = [];
         for (let i = 0; i < userFilter.length; i += 10) {
             chunks.push(userFilter.slice(i, i + 10));
@@ -167,13 +166,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchDataForChunk = async (chunk: string[]) => {
             if (chunk.length === 0) return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
 
-            const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
+            const fetchSingle = async (collName: string): Promise<any[]> => {
                 try {
-                    // Using a reasonable limit per PMR chunk to prevent quota exhaustion
-                    const q = restrictDate && collName !== 'doctors' 
-                        ? query(collection(db!, collName), where("userId", "in", chunk), where("submittedAt", ">=", startDate), limit(300))
-                        : query(collection(db!, collName), where("userId", "in", chunk), limit(300));
-                    
+                    // For team summary, we fetch targeted data
+                    const q = query(collection(db!, collName), where("userId", "in", chunk));
                     const snap = await getDocs(q);
                     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 } catch (e) {
@@ -184,7 +180,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const results = await Promise.all([
                 fetchSingle("coverageEntries"),
                 fetchSingle("timeLogs"),
-                fetchSingle("doctors", false),
+                fetchSingle("doctors"),
                 fetchSingle("nonCallDays"),
                 fetchSingle("plans"),
             ]);
@@ -216,6 +212,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
+            // ACCURACY: Pulling from primary and secondary qty
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
             e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
@@ -241,7 +238,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!userId || !db) return;
     const sanitizedUserId = userId.trim();
     
-    // Check Cache first
     const now = Date.now();
     if (userDataCache[sanitizedUserId] && (now - userDataCache[sanitizedUserId].timestamp < CACHE_TTL)) {
         const cached = userDataCache[sanitizedUserId].data;
@@ -260,20 +256,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     
-    // Clear previous results while loading to avoid stale UI
-    setAllEntries([]);
-    setAllDoctors([]);
-    setAllPlans([]);
-    setAllTimeLogs([]);
-    setAllNonCallDaysIndividual([]);
-    setIndividualPlanningRequests([]);
-    setIndividualUsedQuantities({});
-
     try {
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                // Fetch targeted data for the specific user
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(1000));
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
@@ -307,6 +293,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
+            // ACCURACY: Pulling from primary and secondary qty
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
             if (Array.isArray(e.reminderProducts)) {

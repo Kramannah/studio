@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -43,13 +43,12 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // Accuracy: Scan history with a reasonable limit to prevent timeouts while maintaining precision
+      // ACCURACY: Scan ALL historical entries for this user to ensure "Used" quantities are exact
       const usageSnap = await getDocs(
         query(
           collection(db, "coverageEntries"), 
           where("userId", "==", user.uid),
-          orderBy("submittedAt", "desc"),
-          limit(1000)
+          orderBy("submittedAt", "desc")
         )
       );
       
@@ -69,7 +68,7 @@ export const useMarketingSamples = () => {
               }
           };
 
-          // Precision Aggregation
+          // ACCURACY: Aggregate from primaryProductQty and secondaryProductQty
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
           
@@ -103,7 +102,9 @@ export const useAdminMarketingSamples = () => {
     try {
       const batch = writeBatch(db);
       data.forEach(item => {
-        const cleanId = item.materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const name = (item.materialName ?? "").toString().trim();
+        if (!name) return;
+        const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
         batch.set(docRef, item, { merge: true });
       });
@@ -119,7 +120,9 @@ export const useAdminMarketingSamples = () => {
   const addSample = async (data: Omit<MarketingSample, 'id'>) => {
     if (!db) return false;
     try {
-      const cleanId = data.materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const name = (data.materialName ?? "").toString().trim();
+      if (!name) return false;
+      const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
       await setDoc(doc(db, "marketingSamples", `sample_${cleanId}`), data, { merge: true });
       await refetch();
       return true;

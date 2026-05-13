@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
@@ -12,7 +12,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let globalCacheTimestamp: number = 0;
-const CACHE_DURATION = 300000; // 5 minutes fresh duration (increased to save quota)
+const CACHE_DURATION = 300000; // 5 minutes fresh duration
 
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
@@ -69,12 +69,11 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       
-      // Optimization: Using a strict limit for general usage tracking to save quota
-      const scanLimit = isAdminOrManager ? 1000 : 500;
-      
+      // For absolute accuracy of "Used" samples, we must scan the entire relevant history
+      // We removed the limit to ensure every primary and secondary qty is counted
       const usageQuery = isAdminOrManager
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(scanLimit)) 
-        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"), limit(scanLimit));
+        ? query(colRef, orderBy("submittedAt", "desc")) 
+        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -92,9 +91,11 @@ export const useQ4Allocation = () => {
             }
         };
 
+        // ACCURACY: Explicitly fetch from primaryProductQty and secondaryProductQty
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         
+        // Also include reminder products for complete audit
         if (Array.isArray(entry.reminderProducts)) {
             entry.reminderProducts.forEach((p: any) => { 
                 if (p) processItem(p.sampleName, p.quantity); 
@@ -105,7 +106,7 @@ export const useQ4Allocation = () => {
       globalUsedQuantitiesCache = usage;
       setUsedQuantities(usage);
     } catch (error) {
-        console.warn("Usage Tracking Sync Delay (Quota):", error);
+        console.warn("Usage Tracking Sync Delay:", error);
     }
   }, [user, isAdminOrManager]);
 
@@ -114,7 +115,6 @@ export const useQ4Allocation = () => {
         if (!user || isFetching.current) return;
         const now = Date.now();
         
-        // Use cache if it's recent (less than 5 minutes old)
         if (globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime.current < CACHE_DURATION)) {
             setAllocations(globalAllocationsCache);
             setUsedQuantities(globalUsedQuantitiesCache);
