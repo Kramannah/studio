@@ -318,12 +318,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Ignacio",
         email: "jignacio@hovidinc.com"
     },
-    "lDprIWp1acWrMElyzk2uTjQ4q4m1": {
-        code: "DSM",
-        firstName: "Ramonalyn Jake",
-        lastName: "Garcia",
-        email: "rjgarcia@hovidinc.com"
-    },
     "nBNzGCEnXuMKXOCeZGG3P6k6Spm1": {
         code: "VIS-NEW",
         firstName: "fgcosta",
