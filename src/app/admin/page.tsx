@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -238,7 +237,7 @@ export default function AdminPage() {
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                         <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
                         <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
-                        <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline">Allocations</TabsTrigger>
+                        <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="district-reports">

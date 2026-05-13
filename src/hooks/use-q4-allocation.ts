@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -37,8 +36,7 @@ export const useQ4Allocation = () => {
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
-            const quarter = (data.quarter ?? "Q4").toString().toUpperCase();
-            return { id: doc.id, prodGroupProdSubGroup: group, displayMaterialName: materialName, allocationQuantity: isNaN(qty) ? 0 : qty, quarter: quarter as any } as Q4Allocation;
+            return { id: doc.id, prodGroupProdSubGroup: group, displayMaterialName: materialName, allocationQuantity: isNaN(qty) ? 0 : qty } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
         fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().toLowerCase().localeCompare((b.displayMaterialName ?? "").toString().toLowerCase()));
         setAllocations(fetched);
@@ -51,9 +49,8 @@ export const useQ4Allocation = () => {
       const colRef = collection(db, "coverageEntries");
       const startDate = getQueryStartDateISO();
       
-      // Safety cap: Only scan 300 recent records for global usage to save read quota
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(300)) 
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(500)) 
         : query(colRef, where("userId", "==", user.uid)); 
 
       const snapshot = await getDocs(usageQuery);
@@ -90,7 +87,7 @@ export const useQ4Allocation = () => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        if (now - lastFetchTime.current < 15000) return; // Wait 15 seconds between global usage refreshes
+        if (now - lastFetchTime.current < 15000) return; 
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
         lastFetchTime.current = now;
@@ -105,7 +102,7 @@ export const useQ4Allocation = () => {
       setLoading(false);
   }, [fetchAllocations, fetchUsage]);
 
-  const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[], quarter: 'Q3' | 'Q4') => {
+  const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     try {
       const batch = writeBatch(db);
@@ -113,9 +110,9 @@ export const useQ4Allocation = () => {
         const name = (item.displayMaterialName ?? "").toString().trim();
         if (!name) return;
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const docId = `${quarter.toLowerCase()}_${cleanId}`;
+        const docId = `sample_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
-        batch.set(docRef, { ...item, quarter }, { merge: true });
+        batch.set(docRef, { ...item }, { merge: true });
       });
       await batch.commit();
       await refetch();

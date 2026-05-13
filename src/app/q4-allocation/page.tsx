@@ -64,7 +64,7 @@ export default function Q4AllocationPage() {
                     <div className="flex items-center gap-4">
                         <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft className="w-6 h-6" /></Button>
                         <div>
-                            <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Marketing Material Oversight</h1>
+                            <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Marketing Samples</h1>
                             <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory Analytics</p>
                         </div>
                     </div>
@@ -104,7 +104,7 @@ export default function Q4AllocationPage() {
                     <CardHeader className="bg-muted/30 border-b">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <CardTitle className="text-xl font-black font-headline">Distribution List</CardTitle>
-                            <div className="relative max-w-md w-full">
+                            <div className="relative max-md:w-full max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input 
                                     placeholder="Search products..." 
