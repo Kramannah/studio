@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -425,7 +424,7 @@ export default function AdminPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {allAccounts.map((acc) => (
-                                                <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
+                                                <TableRow className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
                                                         <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
                                                             {acc.code}
