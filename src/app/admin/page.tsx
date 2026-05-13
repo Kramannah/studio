@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -24,6 +24,10 @@ import { useUserProfiles } from '@/hooks/use-user-profiles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { firebaseConfig } from '@/firebase/config';
+import { useToast } from '@/hooks/use-toast';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -39,6 +43,7 @@ const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view')
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
+    const { toast } = useToast();
     const { profiles, updateProfile, addProfile, deleteProfile, loading: profilesLoading } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
@@ -47,9 +52,10 @@ export default function AdminPage() {
     
     const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
     const [isAddRecordOpen, setIsAddRecordOpen] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
     
     const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' } | null>(null);
-    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
+    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', password: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -197,20 +203,57 @@ export default function AdminPage() {
     };
 
     const handleCreateAccount = async () => {
-        if (!newAccount.uid || !newAccount.firstName) return;
-        const success = await addProfile({
-            userId: newAccount.uid,
-            firstName: newAccount.firstName,
-            lastName: newAccount.lastName,
-            code: newAccount.code,
-            email: newAccount.email,
-            managerId: newAccount.managerId,
-            role: newAccount.role
-        });
-        if (success) {
-            setIsCreateAccountOpen(false);
-            setIsAddRecordOpen(false);
-            setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' });
+        if (!newAccount.firstName || !newAccount.email) {
+            toast({ variant: "destructive", title: "Missing Fields", description: "First Name and Email are required." });
+            return;
+        }
+
+        setIsProcessing(true);
+        let finalUid = newAccount.uid;
+
+        try {
+            // Workflow 1: Create brand new Authentication account
+            if (isCreateAccountOpen) {
+                if (!newAccount.password || newAccount.password.length < 6) {
+                    toast({ variant: "destructive", title: "Weak Password", description: "Password must be at least 6 characters." });
+                    setIsProcessing(false);
+                    return;
+                }
+
+                // Initialize a temporary Firebase app to create the user without logging out the current admin
+                const tempAppName = `registration-${Date.now()}`;
+                const tempApp = initializeApp(firebaseConfig, tempAppName);
+                const tempAuth = getAuth(tempApp);
+
+                const userCred = await createUserWithEmailAndPassword(tempAuth, newAccount.email, newAccount.password);
+                finalUid = userCred.user.uid;
+                
+                // Clear the temporary session
+                await signOut(tempAuth);
+            }
+
+            // Workflow 2 & Finalization: Create the Firestore Profile
+            const success = await addProfile({
+                userId: finalUid,
+                firstName: newAccount.firstName,
+                lastName: newAccount.lastName,
+                code: newAccount.code,
+                email: newAccount.email,
+                managerId: newAccount.managerId,
+                role: newAccount.role
+            });
+
+            if (success) {
+                setIsCreateAccountOpen(false);
+                setIsAddRecordOpen(false);
+                setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', password: '', managerId: '', role: 'PMR' });
+                toast({ title: isCreateAccountOpen ? "Account Registered" : "Record Added", description: "The system has been updated successfully." });
+            }
+        } catch (error: any) {
+            console.error("Account Creation Error:", error);
+            toast({ variant: "destructive", title: "Action Failed", description: error.message || "An unexpected error occurred." });
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -263,14 +306,7 @@ export default function AdminPage() {
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                      <div className="space-y-3">
                                         <CardTitle className="font-headline text-xl">District Manager</CardTitle>
-                                        <Select onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin}>
-                                            <SelectTrigger className="w-full border-2 h-11 font-headline">
-                                                <SelectValue placeholder="Select a DSM..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
+                                        <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin} />
                                     </div>
                                     <div className={cn("space-y-3", !selectedManagerId && "opacity-50 pointer-events-none")}>
                                         <CardTitle className="font-headline text-xl">Representative</CardTitle>
@@ -448,59 +484,83 @@ export default function AdminPage() {
                 </Tabs>
             </main>
 
-            {/* Create Account Dialog - General Profile Creation */}
-            <Dialog open={isCreateAccountOpen} onOpenChange={setIsCreateAccountOpen}>
-                <DialogContent className="sm:max-w-md">
+            {/* Create Account Dialog - Brand New Identity */}
+            <Dialog open={isCreateAccountOpen} onOpenChange={(open) => !isProcessing && setIsCreateAccountOpen(open)}>
+                <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle className="font-headline">Create System Account</DialogTitle>
-                        <DialogDescription>Define a new user profile and assign their system role.</DialogDescription>
+                        <DialogTitle className="font-headline text-xl">Create System Account</DialogTitle>
+                        <DialogDescription>Register a new user in Authentication and define their profile.</DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label>Account Role</Label>
-                            <Select value={newAccount.role} onValueChange={(v: any) => setNewAccount({...newAccount, role: v})}>
-                                <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="PMR">Representative (PMR)</SelectItem>
-                                    <SelectItem value="Manager">District Manager (DSM)</SelectItem>
-                                    <SelectItem value="Admin">Administrator (Admin)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>User Identifier (UID)</Label>
-                            <Input value={newAccount.uid} onChange={(e) => setNewAccount({...newAccount, uid: e.target.value})} placeholder="Firestore Auth UID" />
-                        </div>
+                    <div className="grid gap-6 py-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label>First Name</Label>
-                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} />
+                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} placeholder="e.g. John" disabled={isProcessing} />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Last Name</Label>
-                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} />
+                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} placeholder="e.g. Doe" disabled={isProcessing} />
+                            </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Email Address (Username)</Label>
+                            <Input value={newAccount.email} onChange={(e) => setNewAccount({...newAccount, email: e.target.value})} placeholder="user@hovidinc.com" disabled={isProcessing} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Temporary Password</Label>
+                            <div className="relative">
+                                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input 
+                                    type="password" 
+                                    value={newAccount.password} 
+                                    onChange={(e) => setNewAccount({...newAccount, password: e.target.value})} 
+                                    className="pl-10"
+                                    placeholder="Min. 6 characters"
+                                    disabled={isProcessing}
+                                />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label>Employee Code</Label>
-                                <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" />
+                                <Label>System Role</Label>
+                                <Select value={newAccount.role} onValueChange={(v: any) => setNewAccount({...newAccount, role: v})} disabled={isProcessing}>
+                                    <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="PMR">Representative (PMR)</SelectItem>
+                                        <SelectItem value="Manager">District Manager (DSM)</SelectItem>
+                                        <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="grid gap-2">
-                                <Label>Email</Label>
-                                <Input value={newAccount.email} onChange={(e) => setNewAccount({...newAccount, email: e.target.value})} />
+                                <Label>Employee Code</Label>
+                                <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. NL-10" disabled={isProcessing} />
                             </div>
                         </div>
+                        {newAccount.role === 'PMR' && (
+                            <div className="grid gap-2">
+                                <Label>Reporting To (DSM)</Label>
+                                <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})} disabled={isProcessing}>
+                                    <SelectTrigger><SelectValue placeholder="Select District..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Unassigned / National</SelectItem>
+                                        {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
-                        <Button variant="ghost" onClick={() => setIsCreateAccountOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.firstName}>Create Profile</Button>
+                        <Button variant="ghost" onClick={() => setIsCreateAccountOpen(false)} disabled={isProcessing}>Cancel</Button>
+                        <Button onClick={handleCreateAccount} disabled={isProcessing}>
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Registering...</> : "Register & Create Profile"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             {/* Add Record Dialog - Assign Existing UID to DSM */}
-            <Dialog open={isAddRecordOpen} onOpenChange={setIsAddRecordOpen}>
+            <Dialog open={isAddRecordOpen} onOpenChange={(open) => !isProcessing && setIsAddRecordOpen(open)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="font-headline">Add District Record</DialogTitle>
@@ -513,21 +573,22 @@ export default function AdminPage() {
                                 value={newAccount.uid} 
                                 onChange={(e) => setNewAccount({...newAccount, uid: e.target.value, role: 'PMR'})} 
                                 placeholder="Enter Existing Authentication UID" 
+                                disabled={isProcessing}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label>First Name</Label>
-                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} />
+                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} disabled={isProcessing} />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Last Name</Label>
-                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} />
+                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} disabled={isProcessing} />
                             </div>
                         </div>
                         <div className="grid gap-2">
                             <Label>Reporting To (District Manager)</Label>
-                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
+                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})} disabled={isProcessing}>
                                 <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">National / Unassigned</SelectItem>
@@ -537,12 +598,14 @@ export default function AdminPage() {
                         </div>
                         <div className="grid gap-2">
                             <Label>Employee Code</Label>
-                            <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" />
+                            <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" disabled={isProcessing} />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="ghost" onClick={() => setIsAddRecordOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.managerId || newAccount.managerId === 'none'}>Assign to District</Button>
+                        <Button variant="ghost" onClick={() => setIsAddRecordOpen(false)} disabled={isProcessing}>Cancel</Button>
+                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.managerId || newAccount.managerId === 'none' || isProcessing}>
+                            {isProcessing ? <Loader2 className="animate-spin" /> : "Assign to District"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -624,5 +687,18 @@ export default function AdminPage() {
                 </DialogContent>
             </Dialog>
         </div>
+    );
+}
+
+function OpenSelector({ onValueChange, value, disabled }: { onValueChange: (v: string) => void, value?: string, disabled?: boolean }) {
+    return (
+        <Select onValueChange={onValueChange} value={value} disabled={disabled}>
+            <SelectTrigger className="w-full border-2 h-11 font-headline">
+                <SelectValue placeholder="Select a DSM..." />
+            </SelectTrigger>
+            <SelectContent>
+                {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+            </SelectContent>
+        </Select>
     );
 }
