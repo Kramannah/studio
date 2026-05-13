@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -24,6 +24,7 @@ import { PlanningRequestApprovals } from '@/components/planning-request-approval
 import { useUserProfiles } from '@/hooks/use-user-profiles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const DynamicSkeleton = () => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -39,12 +40,14 @@ const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view')
 export default function AdminPage() {
     const { user, loading: authLoading, logout } = useAuth();
     const router = useRouter();
-    const { profiles, updateProfile, loading: profilesLoading } = useUserProfiles();
+    const { profiles, updateProfile, addProfile, deleteProfile, loading: profilesLoading } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [accountSearch, setAccountSearch] = useState('');
-    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string } | null>(null);
+    const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
+    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string } | null>(null);
+    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '' });
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -83,7 +86,6 @@ export default function AdminPage() {
         deleteDoctor
     } = useAdminData(selectedManagerId, profiles);
 
-    // Merge static map with live dynamic profiles for accuracy
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
         Object.entries(profiles).forEach(([uid, p]) => {
@@ -178,6 +180,26 @@ export default function AdminPage() {
             editingAccount.email
         );
         if (success) setEditingAccount(null);
+    };
+
+    const handleCreateAccount = async () => {
+        if (!newAccount.uid || !newAccount.firstName) return;
+        const success = await addProfile({
+            userId: newAccount.uid,
+            firstName: newAccount.firstName,
+            lastName: newAccount.lastName,
+            code: newAccount.code,
+            email: newAccount.email,
+            managerId: newAccount.managerId
+        });
+        if (success) {
+            setIsAddAccountOpen(false);
+            setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '' });
+        }
+    };
+
+    const handleDeleteAccount = async (uid: string) => {
+        await deleteProfile(uid);
     };
 
     if (!mounted || authLoading) {
@@ -306,14 +328,20 @@ export default function AdminPage() {
                                         </CardTitle>
                                         <CardDescription>Master mapping of all authorized personnel in the system.</CardDescription>
                                     </div>
-                                    <div className="relative max-w-md w-full">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                        <Input 
-                                            placeholder="Search by name, code, or identifier..." 
-                                            className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
-                                            value={accountSearch}
-                                            onChange={(e) => setAccountSearch(e.target.value)}
-                                        />
+                                    <div className="flex items-center gap-3 w-full max-w-lg">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                            <Input 
+                                                placeholder="Search personnel..." 
+                                                className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                                value={accountSearch}
+                                                onChange={(e) => setAccountSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <Button onClick={() => setIsAddAccountOpen(true)} className="h-11 rounded-xl font-headline">
+                                            <UserPlus className="mr-2 h-4 w-4" />
+                                            Add Record
+                                        </Button>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -324,10 +352,10 @@ export default function AdminPage() {
                                             <TableRow className="h-12 hover:bg-transparent">
                                                 <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
                                                 <TableHead className="font-bold text-foreground">Employee Name</TableHead>
-                                                <TableHead className="font-bold text-foreground">Identifier</TableHead>
+                                                <TableHead className="font-bold text-foreground">Identifier (UID)</TableHead>
                                                 <TableHead className="font-bold text-foreground">System Role</TableHead>
-                                                <TableHead className="font-bold text-foreground">District / Assignment</TableHead>
-                                                <TableHead className="text-right pr-6">Edit</TableHead>
+                                                <TableHead className="font-bold text-foreground">Assignment</TableHead>
+                                                <TableHead className="text-right pr-6">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -344,7 +372,7 @@ export default function AdminPage() {
                                                     <TableCell>
                                                         <div className="flex items-center gap-2 text-sm">
                                                             <Fingerprint className="h-3 v-3 text-muted-foreground" />
-                                                            <span className="font-medium text-xs font-mono">{acc.email}</span>
+                                                            <span className="font-medium text-[10px] font-mono opacity-60">{acc.uid}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
@@ -356,13 +384,32 @@ export default function AdminPage() {
                                                         {acc.district}
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
-                                                            onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email })}
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code })}
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button variant="ghost" size="icon" className="text-destructive">
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Remove employee record?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>This will delete the profile override for {acc.firstName} {acc.lastName}. This action cannot be undone.</AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleDeleteAccount(acc.uid)} className="bg-destructive text-destructive-foreground">Remove Record</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -379,6 +426,55 @@ export default function AdminPage() {
                 </Tabs>
             </main>
 
+            <Dialog open={isAddAccountOpen} onOpenChange={setIsAddAccountOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline">Create New Personnel Record</DialogTitle>
+                        <DialogDescription>Assign a UID and employee details to register a new PMR or Manager.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label>User Identifier (UID)</Label>
+                            <Input value={newAccount.uid} onChange={(e) => setNewAccount({...newAccount, uid: e.target.value})} placeholder="Firestore Auth UID" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label>First Name</Label>
+                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Last Name</Label>
+                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label>Employee Code</Label>
+                                <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Email</Label>
+                                <Input value={newAccount.email} onChange={(e) => setNewAccount({...newAccount, email: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Reporting To (District Manager)</Label>
+                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
+                                <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">National / Unassigned</SelectItem>
+                                    {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsAddAccountOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.firstName}>Register Personnel</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -387,21 +483,23 @@ export default function AdminPage() {
                     </DialogHeader>
                     {editingAccount && (
                         <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="firstName">First Name</Label>
-                                <Input 
-                                    id="firstName" 
-                                    value={editingAccount.firstName} 
-                                    onChange={(e) => setEditingAccount({ ...editingAccount, firstName: e.target.value })}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="lastName">Last Name</Label>
-                                <Input 
-                                    id="lastName" 
-                                    value={editingAccount.lastName} 
-                                    onChange={(e) => setEditingAccount({ ...editingAccount, lastName: e.target.value })}
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="firstName">First Name</Label>
+                                    <Input 
+                                        id="firstName" 
+                                        value={editingAccount.firstName} 
+                                        onChange={(e) => setEditingAccount({ ...editingAccount, firstName: e.target.value })}
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="lastName">Last Name</Label>
+                                    <Input 
+                                        id="lastName" 
+                                        value={editingAccount.lastName} 
+                                        onChange={(e) => setEditingAccount({ ...editingAccount, lastName: e.target.value })}
+                                    />
+                                </div>
                             </div>
                              <div className="grid gap-2">
                                 <Label htmlFor="email">Technical Identifier (Email)</Label>
@@ -414,7 +512,7 @@ export default function AdminPage() {
                             <div className="grid gap-2">
                                 <Label htmlFor="manager">District DSM</Label>
                                 <Select 
-                                    value={editingAccount.managerId || ''} 
+                                    value={editingAccount.managerId || 'none'} 
                                     onValueChange={(v) => setEditingAccount({ ...editingAccount, managerId: v })}
                                 >
                                     <SelectTrigger>

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, FileSpreadsheet } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, FileSpreadsheet, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -33,13 +33,14 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number |
     )
 }
 
-const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }: { 
+const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, onPreview }: { 
     entry: CoverageEntry, 
     doctors: Doctor[], 
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
-    onShowHistory: (firstName: string, lastName: string) => void
+    onShowHistory: (firstName: string, lastName: string) => void,
+    onPreview: (src: string, title: string) => void
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     
@@ -82,8 +83,28 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory }:
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
-                        {entry.photos?.[0] && <div className="h-8 w-8 rounded-md overflow-hidden border-2 border-primary/20"><Image src={entry.photos[0]} alt="proof" width={32} height={32} className="object-cover h-full w-full" /></div>}
-                        {entry.signature && <div className="p-1 bg-white border rounded shadow-sm flex items-center justify-center h-6 w-10"><Image src={entry.signature} alt="sig" width={32} height={16} className="object-contain" /></div>}
+                        {entry.photos?.[0] && (
+                            <div 
+                                className="h-8 w-8 rounded-md overflow-hidden border-2 border-primary/20 cursor-pointer hover:scale-110 transition-transform relative group"
+                                onClick={() => onPreview(entry.photos![0], `Proof Photo: ${entry.firstName} ${entry.lastName}`)}
+                            >
+                                <Image src={entry.photos[0]} alt="proof" width={32} height={32} className="object-cover h-full w-full" />
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Maximize2 className="w-3 h-3 text-white" />
+                                </div>
+                            </div>
+                        )}
+                        {entry.signature && (
+                            <div 
+                                className="p-1 bg-white border rounded shadow-sm flex items-center justify-center h-6 w-10 cursor-pointer hover:scale-110 transition-transform relative group"
+                                onClick={() => onPreview(entry.signature!, `Signature: ${entry.firstName} ${entry.lastName}`)}
+                            >
+                                <Image src={entry.signature} alt="sig" width={32} height={16} className="object-contain" />
+                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Maximize2 className="w-3 h-3 text-white" />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
@@ -274,6 +295,7 @@ export function SubmittedList({
     const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [mounted, setMounted] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
     const itemsPerPage = 10;
 
     useEffect(() => {
@@ -294,7 +316,6 @@ export function SubmittedList({
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
     }, [entries, mounted]);
 
-    // Intelligent Month Selection: Auto-switch to most recent month with data
     useEffect(() => {
         if (!mounted) return;
         
@@ -341,6 +362,10 @@ export function SubmittedList({
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
         setIsHistoryOpen(true);
+    };
+
+    const handlePreview = (src: string, title: string) => {
+        setPreviewData({ src, title });
     };
 
     const monthRange = useMemo(() => {
@@ -496,7 +521,7 @@ export function SubmittedList({
                         </TableHeader>
                         <TableBody>
                             {paginatedEntries.length > 0 ? (
-                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
                             ) : (
                                 <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
@@ -550,7 +575,7 @@ export function SubmittedList({
                                 <TableHeader><TableRow className="bg-muted/50 h-14"><TableHead className="font-bold pl-6">Provider</TableHead><TableHead className="text-right pr-6">Actions</TableHead></TableRow></TableHeader>
                                 <TableBody>
                                 {filtered.length > 0 ? (
-                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} />)
+                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
                                 ) : (
                                     <TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity for this date.</TableCell></TableRow>
                                 )}
@@ -562,6 +587,33 @@ export function SubmittedList({
             </TabsContent>
         </Tabs>
         <DoctorHistoryDialog doctorName={historyDoctor} isOpen={isHistoryOpen} onOpenChange={setIsHistoryOpen} />
+        
+        <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
+            <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90">
+                <DialogHeader className="p-4 bg-background border-b sr-only">
+                    <DialogTitle>{previewData?.title}</DialogTitle>
+                </DialogHeader>
+                <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
+                    {previewData?.src && (
+                        <Image 
+                            src={previewData.src} 
+                            alt="Proof Preview" 
+                            width={1200} 
+                            height={800} 
+                            className={cn(
+                                "max-w-full max-h-full object-contain rounded-md shadow-2xl transition-all duration-300",
+                                previewData.title.includes("Signature") ? "bg-white p-8" : ""
+                            )} 
+                        />
+                    )}
+                </div>
+                <div className="absolute top-4 left-4 pointer-events-none">
+                    <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg">
+                        {previewData?.title}
+                    </Badge>
+                </div>
+            </DialogContent>
+        </Dialog>
       </div>
     );
 }
