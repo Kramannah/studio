@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -44,7 +44,10 @@ export default function AdminPage() {
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [accountSearch, setAccountSearch] = useState('');
-    const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
+    
+    const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+    const [isAddRecordOpen, setIsAddRecordOpen] = useState(false);
+    
     const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' } | null>(null);
     const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
     const [mounted, setMounted] = useState(false);
@@ -205,7 +208,8 @@ export default function AdminPage() {
             role: newAccount.role
         });
         if (success) {
-            setIsAddAccountOpen(false);
+            setIsCreateAccountOpen(false);
+            setIsAddRecordOpen(false);
             setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' });
         }
     };
@@ -250,7 +254,7 @@ export default function AdminPage() {
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                         <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
                         <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
-                        <TabsTrigger value="sample-allocation" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>
+                        <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="district-reports">
@@ -340,8 +344,8 @@ export default function AdminPage() {
                                         </CardTitle>
                                         <CardDescription>Master mapping of all authorized personnel in the system.</CardDescription>
                                     </div>
-                                    <div className="flex items-center gap-3 w-full max-w-lg">
-                                        <div className="relative flex-1">
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-2xl">
+                                        <div className="relative flex-1 w-full">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                             <Input 
                                                 placeholder="Search personnel..." 
@@ -350,10 +354,16 @@ export default function AdminPage() {
                                                 onChange={(e) => setAccountSearch(e.target.value)}
                                             />
                                         </div>
-                                        <Button onClick={() => setIsAddAccountOpen(true)} className="h-11 rounded-xl font-headline">
-                                            <UserPlus className="mr-2 h-4 w-4" />
-                                            Add Record
-                                        </Button>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button variant="outline" onClick={() => setIsCreateAccountOpen(true)} className="h-11 rounded-xl font-headline">
+                                                <UserPlus className="mr-2 h-4 w-4" />
+                                                Create Account
+                                            </Button>
+                                            <Button onClick={() => setIsAddRecordOpen(true)} className="h-11 rounded-xl font-headline">
+                                                <MapPin className="mr-2 h-4 w-4" />
+                                                Add Record
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -432,17 +442,18 @@ export default function AdminPage() {
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="sample-allocation">
+                    <TabsContent value="marketing-samples">
                         <Q4AllocationView readOnly={false} />
                     </TabsContent>
                 </Tabs>
             </main>
 
-            <Dialog open={isAddAccountOpen} onOpenChange={setIsAddAccountOpen}>
+            {/* Create Account Dialog - General Profile Creation */}
+            <Dialog open={isCreateAccountOpen} onOpenChange={setIsCreateAccountOpen}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="font-headline">Create New Personnel Record</DialogTitle>
-                        <DialogDescription>Assign a UID and employee details to register a new account.</DialogDescription>
+                        <DialogTitle className="font-headline">Create System Account</DialogTitle>
+                        <DialogDescription>Define a new user profile and assign their system role.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
@@ -480,26 +491,63 @@ export default function AdminPage() {
                                 <Input value={newAccount.email} onChange={(e) => setNewAccount({...newAccount, email: e.target.value})} />
                             </div>
                         </div>
-                        {newAccount.role === 'PMR' && (
-                            <div className="grid gap-2">
-                                <Label>Reporting To (District Manager)</Label>
-                                <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">National / Unassigned</SelectItem>
-                                        {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
                     </div>
                     <DialogFooter>
-                        <Button variant="ghost" onClick={() => setIsAddAccountOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.firstName}>Register Personnel</Button>
+                        <Button variant="ghost" onClick={() => setIsCreateAccountOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.firstName}>Create Profile</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
+            {/* Add Record Dialog - Assign Existing UID to DSM */}
+            <Dialog open={isAddRecordOpen} onOpenChange={setIsAddRecordOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline">Add District Record</DialogTitle>
+                        <DialogDescription>Assign an existing authenticated user to a District Sales Manager.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label>Existing User UID</Label>
+                            <Input 
+                                value={newAccount.uid} 
+                                onChange={(e) => setNewAccount({...newAccount, uid: e.target.value, role: 'PMR'})} 
+                                placeholder="Enter Existing Authentication UID" 
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label>First Name</Label>
+                                <Input value={newAccount.firstName} onChange={(e) => setNewAccount({...newAccount, firstName: e.target.value})} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Last Name</Label>
+                                <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Reporting To (District Manager)</Label>
+                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
+                                <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">National / Unassigned</SelectItem>
+                                    {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Employee Code</Label>
+                            <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsAddRecordOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.managerId || newAccount.managerId === 'none'}>Assign to District</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Profile Dialog */}
             <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
