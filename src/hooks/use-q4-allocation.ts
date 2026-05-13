@@ -4,10 +4,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs, limit } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
+/**
+ * Hook for managing inventory/allocations.
+ * Strictly fetches from 'marketingSamples' collection.
+ * Usage is calculated by scanning ALL historical 'coverageEntries'.
+ */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
@@ -39,11 +44,12 @@ export const useQ4Allocation = () => {
     setLoading(true);
     try {
         // 1. Fetch Master Inventory from marketingSamples collection
+        // No caching - direct live fetch
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
             if (!data) return null;
-            // Map either field name variations to the consistent internal type
+            // Map variations of naming to a consistent internal type
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
@@ -58,6 +64,7 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
         
         // 2. Fetch Exhaustive Usage from coverageEntries
+        // This scans ALL records to ensure 100% accuracy of history
         const colRef = collection(db, "coverageEntries");
         const usageQuery = isAdminOrManager
             ? query(colRef) // Org-wide audit for Admin/Manager
@@ -79,7 +86,7 @@ export const useQ4Allocation = () => {
                 }
             };
 
-            // ACCURACY: Strictly take from primaryProductQty and secondaryProductQty from ALL entries
+            // ACCURACY: Sum only primaryProductQty and secondaryProductQty as requested
             processItem(entry.primarySampleName, entry.primaryProductQty);
             processItem(entry.secondarySampleName, entry.secondaryProductQty);
         });
@@ -87,7 +94,7 @@ export const useQ4Allocation = () => {
         setAllocations(fetched);
         setUsedQuantities(usage);
     } catch (error) {
-        console.warn("Inventory fetch failed:", error);
+        console.error("Critical Inventory fetch failed:", error);
     } finally {
         setLoading(false);
     }

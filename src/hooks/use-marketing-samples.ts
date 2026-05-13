@@ -38,7 +38,6 @@ export const useAdminMarketingSamples = () => {
     }, 
     deleteSample: async (id: string) => deleteAllocationsBulk([id]), 
     updateSample: async (id: string, data: any) => {
-        // Implemented via bulk logic for consistency
         return addAllocationsBulk([{
             prodGroupProdSubGroup: data.productGroup,
             displayMaterialName: data.materialName,
