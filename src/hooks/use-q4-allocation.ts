@@ -4,16 +4,17 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, getDocs, limit, startAfter, orderBy } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, getDocs, limit, startAfter, orderBy, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
+import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
- * Calculates global usage by scanning ALL historical 'coverageEntries' from ALL PMRs.
+ * Calculates usage from 'coverageEntries' (Personal for PMRs, Global for Admins).
  */
 export const useQ4Allocation = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -22,6 +23,16 @@ export const useQ4Allocation = () => {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    const email = (user.email ?? "").toLowerCase();
+    return ADMIN_UIDS.includes(user.uid) || 
+           email === 'mbustamante@hovidinc.com' || 
+           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
+           profile?.role === 'Admin' ||
+           profile?.role === 'Manager';
+  }, [user, profile]);
 
   const performFetch = useCallback(async () => {
     if (!db || !user) {
@@ -50,20 +61,25 @@ export const useQ4Allocation = () => {
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
         setAllocations(fetchedAllocations);
 
-        // 2. Fetch Global Usage from ALL PMRs (Exhaustive Scan)
-        // We use chunked fetching (1,000 at a time) to prevent timeouts and handle large datasets
+        // 2. Fetch Usage (Personal for PMR, Global for Admin)
         const usage: Record<string, number> = {};
         const entriesCol = collection(db, "coverageEntries");
         let lastVisible = null;
         let hasMore = true;
 
         while (hasMore) {
-            let q = query(entriesCol, orderBy("__name__"), limit(1000));
-            if (lastVisible) {
-                q = query(entriesCol, orderBy("__name__"), startAfter(lastVisible), limit(1000));
+            // Permission Safe Query: Standard PMRs only fetch their own entries.
+            // Admins/Managers fetch everything.
+            let baseQuery;
+            if (isUserAdmin) {
+                baseQuery = query(entriesCol, orderBy("__name__"), limit(1000));
+                if (lastVisible) baseQuery = query(entriesCol, orderBy("__name__"), startAfter(lastVisible), limit(1000));
+            } else {
+                baseQuery = query(entriesCol, where("userId", "==", user.uid), orderBy("__name__"), limit(1000));
+                if (lastVisible) baseQuery = query(entriesCol, where("userId", "==", user.uid), orderBy("__name__"), startAfter(lastVisible), limit(1000));
             }
             
-            const snap = await getDocs(q);
+            const snap = await getDocs(baseQuery);
             
             if (snap.empty) {
                 hasMore = false;
@@ -72,7 +88,7 @@ export const useQ4Allocation = () => {
                     const entry = docSnap.data() as CoverageEntry;
                     if (!entry) return;
 
-                    // ACCURACY: Aggregate quantities ONLY from primary and secondary fields as requested
+                    // Accuracy: Only aggregate quantities from primary and secondary fields
                     const processItem = (name?: string, qty?: number) => {
                         const safeName = String(name ?? "").toLowerCase().trim();
                         if (!safeName) return;
@@ -93,11 +109,11 @@ export const useQ4Allocation = () => {
 
         setUsedQuantities(usage);
     } catch (error) {
-        console.error("Exhaustive Inventory fetch failed:", error);
+        console.error("Inventory fetch failed:", error);
     } finally {
         setLoading(false);
     }
-  }, [user]);
+  }, [user, isUserAdmin]);
 
   useEffect(() => {
     if (mounted) performFetch();
@@ -115,7 +131,6 @@ export const useQ4Allocation = () => {
           data.forEach(item => {
             const name = (item.displayMaterialName ?? "").toString().trim();
             if (!name) return;
-            // Create predictable IDs based on material name for easy updates/upserts
             const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
             const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
             batch.set(docRef, { ...item }, { merge: true });
