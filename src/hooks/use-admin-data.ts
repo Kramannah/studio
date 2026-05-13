@@ -245,11 +245,20 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     
+    // Clear previous results while loading to avoid stale UI
+    setAllEntries([]);
+    setAllDoctors([]);
+    setAllPlans([]);
+    setAllTimeLogs([]);
+    setAllNonCallDaysIndividual([]);
+    setIndividualPlanningRequests([]);
+    setIndividualUsedQuantities({});
+
     try {
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                // Fetch ALL data for the user without date filtering to ensure Tajceo3bwwcH9ac9Mw4tEtj2Z952 reflects correctly
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(1000));
+                // Fetch ALL data for the user without date filtering to ensure exhaustive coverage visibility
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
@@ -273,7 +282,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const ncds = results[4].status === 'fulfilled' ? results[4].value : [];
         const requests = results[5].status === 'fulfilled' ? results[5].value : [];
 
-        // No memory filtering by date for individual view to ensure maximum historical accuracy as requested
         const entries = (entriesRaw as CoverageEntry[]).sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate)));
 
         const used: Record<string, number> = {};
