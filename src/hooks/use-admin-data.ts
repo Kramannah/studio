@@ -114,21 +114,29 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const results = await Promise.all(chunks.map(async (c) => {
                 const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c));
                 
+                // Fetching without the date filter in query to avoid Index Requirement
+                // Date filtering is done in mapping below
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(baseQuery("coverageEntries"), where("submittedAt", ">=", startDate))),
-                    getDocs(query(baseQuery("timeLogs"), where("timeIn", ">=", startDate))),
+                    getDocs(baseQuery("coverageEntries")),
+                    getDocs(baseQuery("timeLogs")),
                     getDocs(baseQuery("doctors")),
-                    getDocs(query(baseQuery("nonCallDays"), where("date", ">=", startDate))),
-                    getDocs(query(baseQuery("plans"), where("plannedDate", ">=", startDate)))
+                    getDocs(baseQuery("nonCallDays")),
+                    getDocs(baseQuery("plans"))
                 ]);
 
-                const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
+                const mapDocs = (s: any, dateField?: string) => s.docs.map((d: any) => ({id: d.id, ...d.data()}))
+                    .filter((item: any) => {
+                        if (!dateField || !startDate) return true;
+                        const val = item[dateField];
+                        return val && val >= startDate;
+                    });
+
                 return { 
-                    entries: mapDocs(e), 
-                    logs: mapDocs(l), 
+                    entries: mapDocs(e, 'submittedAt'), 
+                    logs: mapDocs(l, 'timeIn'), 
                     doctors: mapDocs(d), 
-                    ncds: mapDocs(ncd), 
-                    plans: mapDocs(p) 
+                    ncds: mapDocs(ncd, 'date'), 
+                    plans: mapDocs(p, 'plannedDate') 
                 };
             }));
 
@@ -143,7 +151,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const combined = await fetchAllForUsers(userFilter);
         
-        // ACCURACY: Used quantities for the district summary focus on all records
         const used: Record<string, number> = {};
         combined.entries.forEach((e: CoverageEntry) => {
             const process = (n?: string, q?: number) => {
@@ -164,7 +171,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             marketingSamples: [] 
         } as any);
     } catch (e) {
-        console.warn("Team summary error:", e);
+        console.warn("Team summary aggregation error:", e);
     } finally {
         setLoadingSummary(false);
     }

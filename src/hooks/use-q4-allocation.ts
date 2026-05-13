@@ -12,7 +12,7 @@ import { startOfYear } from 'date-fns';
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
- * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY for performance and accuracy.
+ * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
@@ -44,7 +44,7 @@ export const useQ4Allocation = () => {
     setLoading(true);
 
     try {
-        // 1. Fetch Master Inventory List from 'marketingSamples'
+        // 1. Fetch Master Inventory List
         const samplesSnapshot = await getDocs(collection(db, "marketingSamples"));
         const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
@@ -62,8 +62,7 @@ export const useQ4Allocation = () => {
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
         setAllocations(fetchedAllocations);
 
-        // 2. Fetch Usage (Personal for PMR, Global for Admin)
-        // Optimization: Only scan reports from the START OF THE CURRENT YEAR
+        // 2. Fetch Usage (Current Year Only)
         const currentYearStart = startOfYear(new Date()).toISOString();
         const usage: Record<string, number> = {};
         const entriesCol = collection(db, "coverageEntries");
@@ -73,9 +72,10 @@ export const useQ4Allocation = () => {
         while (hasMore) {
             let baseQuery;
             
-            // Build the query with Year Filter and ordering for performance
+            // To avoid "Index Required" errors, we only combine multiple filters if they are equalities.
+            // For range filters on time, we either use it alone (Admin) or filter in memory (User).
             if (isUserAdmin) {
-                // Admin scans ALL entries for the current year
+                // Admin: Range query on date only (Does not require composite index)
                 if (lastVisible) {
                     baseQuery = query(
                         entriesCol, 
@@ -93,13 +93,12 @@ export const useQ4Allocation = () => {
                     );
                 }
             } else {
-                // PMR scans only OWN entries for the current year
+                // User: Fetch by User ID only (Does not require composite index)
+                // We will filter by the Current Year in memory below
                 if (lastVisible) {
                     baseQuery = query(
                         entriesCol, 
                         where("userId", "==", user.uid), 
-                        where("submittedAt", ">=", currentYearStart),
-                        orderBy("submittedAt"), 
                         startAfter(lastVisible), 
                         limit(1000)
                     );
@@ -107,8 +106,6 @@ export const useQ4Allocation = () => {
                     baseQuery = query(
                         entriesCol, 
                         where("userId", "==", user.uid), 
-                        where("submittedAt", ">=", currentYearStart),
-                        orderBy("submittedAt"), 
                         limit(1000)
                     );
                 }
@@ -123,7 +120,12 @@ export const useQ4Allocation = () => {
                     const entry = docSnap.data() as CoverageEntry;
                     if (!entry) return;
 
-                    // Accuracy: Strictly aggregate quantities from primary and secondary fields
+                    // Memory Filtering for Users to bypass Index Requirement
+                    if (!isUserAdmin) {
+                        const subAt = entry.submittedAt || entry.coverageDate || "";
+                        if (subAt < currentYearStart) return;
+                    }
+
                     const processItem = (name?: string, qty?: number) => {
                         const safeName = String(name ?? "").toLowerCase().trim();
                         if (!safeName) return;
@@ -144,7 +146,7 @@ export const useQ4Allocation = () => {
 
         setUsedQuantities(usage);
     } catch (error) {
-        console.error("Annual Inventory fetch failed:", error);
+        console.error("2026 Inventory Aggregation Error:", error);
     } finally {
         setLoading(false);
     }
