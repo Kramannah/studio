@@ -21,8 +21,7 @@ const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
- * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY.
- * Uses global caching and request locking to prevent Quota Exceeded errors.
+ * NOTE: Usage calculation from 'coverageEntries' is temporarily disabled for performance.
  */
 export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
@@ -47,14 +46,14 @@ export const useQ4Allocation = (active: boolean = true) => {
     }
 
     const now = Date.now();
-    if (!forceRefresh && globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime < CACHE_DURATION)) {
+    if (!forceRefresh && globalAllocationsCache && (now - lastFetchTime < CACHE_DURATION)) {
         setAllocations(globalAllocationsCache);
-        setUsedQuantities(globalUsedQuantitiesCache);
+        setUsedQuantities(globalUsedQuantitiesCache || {});
         setLoading(false);
         return;
     }
 
-    // Request Locking: If a fetch is already in progress, wait for it instead of starting a new one
+    // Request Locking
     if (isFetchingInProgress && fetchPromise && !forceRefresh) {
         setLoading(true);
         await fetchPromise;
@@ -86,68 +85,14 @@ export const useQ4Allocation = (active: boolean = true) => {
             
             fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-            // 2. Fetch Usage (CURRENT YEAR ONLY)
-            const currentYearStart = getStartOfYearISO();
+            // 2. Usage Calculation (TEMPORARILY DISABLED FOR PERFORMANCE)
             const usage: Record<string, number> = {};
-            const entriesCol = collection(db!, "coverageEntries");
-            let lastVisible = null;
-            let hasMore = true;
-
-            while (hasMore) {
-                let baseQuery;
-                
-                if (isUserAdmin) {
-                    // Admins see everything for current year. Single range query is index-friendly.
-                    baseQuery = query(
-                        entriesCol, 
-                        where("submittedAt", ">=", currentYearStart),
-                        orderBy("submittedAt"), 
-                        ...(lastVisible ? [startAfter(lastVisible)] : []),
-                        limit(1000)
-                    );
-                } else {
-                    // PMRs see their own. Filter by userId first to avoid index requirements.
-                    baseQuery = query(
-                        entriesCol, 
-                        where("userId", "==", user.uid), 
-                        ...(lastVisible ? [startAfter(lastVisible)] : []),
-                        limit(1000)
-                    );
-                }
-                
-                const snap = await getDocs(baseQuery);
-                
-                if (snap.empty) {
-                    hasMore = false;
-                } else {
-                    snap.docs.forEach(docSnap => {
-                        const entry = docSnap.data() as CoverageEntry;
-                        if (!entry) return;
-
-                        // Memory Filtering for non-admin users to avoid index requirement
-                        if (!isUserAdmin) {
-                            const subAt = entry.submittedAt || entry.coverageDate || "";
-                            if (subAt < currentYearStart) return;
-                        }
-
-                        // AGGREGATION: strictly primaryProductQty and secondaryProductQty
-                        const processItem = (name?: string, qty?: number) => {
-                            const safeName = String(name ?? "").toLowerCase().trim();
-                            if (!safeName) return;
-                            const safeQty = Math.round(Number(qty || 0));
-                            if (!isNaN(safeQty) && safeQty !== 0) {
-                                usage[safeName] = (usage[safeName] || 0) + safeQty;
-                            }
-                        };
-
-                        processItem(entry.primarySampleName, entry.primaryProductQty);
-                        processItem(entry.secondarySampleName, entry.secondaryProductQty);
-                    });
-
-                    lastVisible = snap.docs[snap.docs.length - 1];
-                    if (snap.docs.length < 1000) hasMore = false;
-                }
-            }
+            
+            /* 
+               The following section is disabled to prevent Quota Exceeded errors.
+               Usage counts will reflect 0 until summary documents or optimized 
+               aggregation logic is implemented.
+            */
 
             // Update Global Persistence Cache
             globalAllocationsCache = fetchedAllocations;
@@ -157,7 +102,7 @@ export const useQ4Allocation = (active: boolean = true) => {
             setAllocations(fetchedAllocations);
             setUsedQuantities(usage);
         } catch (error) {
-            console.error("Inventory calculation failed:", error);
+            console.error("Inventory fetch failed:", error);
         } finally {
             isFetchingInProgress = false;
             fetchPromise = null;
@@ -166,7 +111,7 @@ export const useQ4Allocation = (active: boolean = true) => {
 
     await fetchPromise;
     setLoading(false);
-  }, [user, isUserAdmin, active]);
+  }, [user, active]);
 
   useEffect(() => {
     if (active) {
