@@ -28,6 +28,7 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "wHns6CCKRde4YMf8VZhxLJfAa6H3",
         "IedPtMmuniSwpkYZ5YAXOSREoxl2",
         "vvLt9N5IzIYs6SHEWaR1Gfw611V2",
+        "2Bjo0AEdTbWb14C4knsPvX0Ub8r1"
     ],
     "tb73WEIzndUrPEaD1q4H0VQfQaD3": [
         "8QiLTKzhovh43RX2arJ4xNAgoRj2",
@@ -62,7 +63,6 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "Hnr2ehdTK0O8PfSj7Vn2zQksqz63",
         "h2q00DOa3EM870V5RDu2NABcb213",
         "BjsmUvmlFdUMDKg123iibi5AxZA2",
-        "2Bjo0AEdTbWb14C4knsPvX0Ub8r1",
         "MkQwPWR0wyXrDRzIekEFMzQSu7Y2"
     ],  
     "r19lVIqk4xTtzxvbs4W0kprHSvD2": [

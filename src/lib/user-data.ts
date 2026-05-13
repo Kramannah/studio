@@ -193,13 +193,13 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         email: "ctojon@hovidinc.com"
     },
     "2Bjo0AEdTbWb14C4knsPvX0Ub8r1": {
-        code: "GMAS-01",
-        firstName: "Iries",
-        lastName: "Rombaiz",
-        email: "irombaiz@hovidinc.com"
+        code: "GMAS-08",
+        firstName: "Aileen",
+        lastName: "Nañas",
+        email: "ananas@hovidinc.com"
     },
     "MkQwPWR0wyXrDRzIekEFMzQSu7Y2": {
-        code: "GMAS-06",
+        code: "MQ-07",
         firstName: "Gwyne Joseph F.",
         lastName: "Lestor",
         email: "gjlestor@hovidinc.com"
@@ -337,9 +337,9 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         email: "almazan@hovidinc.com"
     },
     "vvLt9N5IzIYs6SHEWaR1Gfw611V2": {
-        code: "GMAS-08",
-        firstName: "Aileen",
-        lastName: "Nañas",
-        email: "ananas@hovidinc.com"
+        code: "GMAS-01",
+        firstName: "Iries",
+        lastName: "Rombaiz",
+        email: "irombaiz@hovidinc.com"
     }
 };
