@@ -12,18 +12,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Tagao",
         email: "jtagao@hovidinc.com"
     },
-    "mZJZjTMVinNRegZFQG9FZzRjpiA2": {
-        code: "CL-02",
-        firstName: "Marlhan Lloyd P.",
-        lastName: "De Guia",
-        email: "mldeguia@hovidinc.com"
-    },
-    "n7J3AJy6KIXQYMEil0TyQQcAxs93": {
-        code: "CL-03",
-        firstName: "Odessa",
-        lastName: "Singian",
-        email: "osingian@hovidinc.com"
-    },
     "xNTJrZ5xXwRIiGvpCVXaxDwDpI32": {
         code: "CL-04",
         firstName: "Arnel Jr",
@@ -36,29 +24,11 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Ponce",
         email: "jmgponce@hovidinc.com"
     },
-    "mUP19b2ISPc4Qnl1e0MHbCkAAKH3": {
-        code: "MQ-04",
-        firstName: "Cynthia May",
-        lastName: "Cain",
-        email: "cmcain@hovidinc.com"
-    },
-    "e4U1TKIhzURRt3YdqKWQgkDQApv2": {
-        code: "MQ-05",
-        firstName: "Julius",
-        lastName: "Jalandoni",
-        email: "jjalandoni@hovidinc.com"
-    },
     "cm4yqA8NfBadUBtffEzcEJRV9873": {
         code: "GMAS-04",
         firstName: "Mikka Amielle",
         lastName: "Clement",
         email: "maclement@hovidinc.com"
-    },
-    "pvzNDFxH4tf7JejE7YxMK4Rq3hj2": {
-        code: "GMAS-02",
-        firstName: "Lylle",
-        lastName: "Caguimbal",
-        email: "lcaguimbal@hovidinc.com"
     },
     "l5GMEE0OxpMOObd5qguyJtrVUi42": {
         code: "GMAS-03",
@@ -71,30 +41,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Ellen",
         lastName: "Baluyot",
         email: "ebaluyot@hovidinc.com"
-    },
-    "sN4SztOibRSTg1H7SEeAwiEpDgm1": {
-        code: "GMAS-07",
-        firstName: "Michael V",
-        lastName: "Cruz",
-        email: "mvcruz@hovidinc.com"
-    },
-    "uDhb49uS55XJm8cp6bqL2adjfwh2": {
-        code: "MQ-06",
-        firstName: "Jesus Alain",
-        lastName: "Manalo",
-        email: "jamanalo@hovidinc.com"
-    },
-    "AhkYw50sBueJFvRO8glPlpE4QWt2": {
-        code: "MIN-01",
-        firstName: "Ian Cris",
-        lastName: "Natinga",
-        email: "icnatinga@hovidinc.com"
-    },
-    "wHns6CCKRde4YMf8VZhxLJfAa6H3": {
-        code: "MIN-02",
-        firstName: "Emelyn Grace D",
-        lastName: "Dolores",
-        email: "egdolores@hovidinc.com"
     },
     "BjsmUvmlFdUMDKg123iibi5AxZA2": {
         code: "LSL-06",
@@ -168,12 +114,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Rivera",
         email: "lrivera@hovidinc.com"
     },
-    "sRqr0SXKIUZBCn5g9V6VQRh24SS2": {
-        code: "LSL-01",
-        firstName: "Joida",
-        lastName: "Meniosa",
-        email: "jmeniosa@hovidinc.com"
-    },
     "xOQdg23cnOgLQD5IonJtFgAELa13": {
         code: "LSL-03",
         firstName: "Marylyn",
@@ -192,12 +132,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Tojon",
         email: "ctojon@hovidinc.com"
     },
-    "2Bjo0AEdTbWb14C4knsPvX0Ub8r1": {
-        code: "GMAS-08",
-        firstName: "Aileen",
-        lastName: "Nañas",
-        email: "ananas@hovidinc.com"
-    },
     "MkQwPWR0wyXrDRzIekEFMzQSu7Y2": {
         code: "MQ-07",
         firstName: "Gwyne Joseph F.",
@@ -215,12 +149,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Anne",
         lastName: "Alberto",
         email: "aalberto@hovidinc.com"
-    },
-    "5JJythHRfYT8PllnH7kcWoHDSIO2": {
-        code: "VIS-04",
-        firstName: "Alvin",
-        lastName: "Masana",
-        email: "amasana@hovidinc.com"
     },
     "CrwnET2Cohhqf4lsYiI8AYPtlPo1": {
         code: "VIS-05",
@@ -245,12 +173,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Edcel B",
         lastName: "Babas",
         email: "ebabas@hovidinc.com"
-    },
-    "t8WMcGOCaQdB159ZeNBmHZvEtR13": {
-        code: "VIS-07",
-        firstName: "Charles V.",
-        lastName: "Salomeo",
-        email: "cvsalomeo@hovidinc.com"
     },
     "x8u4kvWvieZIVc9NdgiWmG01nts2": {
         code: "DSM_MIN",
@@ -281,12 +203,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Liezel",
         lastName: "Lacap",
         email: "llacap@hovidinc.com"
-    },
-    "bu35X2zJWmckJXGLt0yU3G6G54E3": {
-        code: "MIN-07",
-        firstName: "Rosemarie",
-        lastName: "Espiritu",
-        email: "respiritu@hovidinc.com"
     },
     "w90JOQlrOJOf2FVq0iU2krdMQzI3": {
         code: "MIN-08",
@@ -329,12 +245,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Canlas",
         lastName: "",
         email: "canlas@hovidinc.com"
-    },
-    "Uv9m8nch": {
-        code: "MQ-04",
-        firstName: "",
-        lastName: "Almazan",
-        email: "almazan@hovidinc.com"
     },
     "vvLt9N5IzlYs6SHEWaR1Gfw611V2": {
         code: "GMAS-01",

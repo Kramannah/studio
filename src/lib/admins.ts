@@ -20,30 +20,18 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "NOYZ3h8yIaNINBVBgFYJzhKdisY2",
     ],
     "UmyUP0VwccRKLfrej67idFukFz42": [
-        "pvzNDFxH4tf7JejE7YxMK4Rq3hj2",
         "l5GMEE0OxpMOObd5qguyJtrVUi42",
-        "sN4SztOibRSTg1H7SEeAwiEpDgm1",
-        "uDhb49uS55XJm8cp6bqL2adjfwh2",
-        "AhkYw50sBueJFvRO8glPlpE4QWt2",
-        "wHns6CCKRde4YMf8VZhxLJfAa6H3",
         "IedPtMmuniSwpkYZ5YAXOSREoxl2",
-        "2Bjo0AEdTbWb14C4knsPvX0Ub8r1"
     ],
     "tb73WEIzndUrPEaD1q4H0VQfQaD3": [
         "8QiLTKzhovh43RX2arJ4xNAgoRj2",
-        "mUP19b2ISPc4Qnl1e0MHbCkAAKH3",
-        "e4U1TKIhzURRt3YdqKWQgkDQApv2",
         "cm4yqA8NfBadUBtffEzcEJRV9873",
         "qsFiDEpOgOcTFSbiX2RJMrCKBHG3",
         "H5NGDRDneWdH9ADuZDCFNHIovK83",
-        "t8WMcGOCaQdB159ZeNBmHZvEtR13",
-        "Uv9m8nch",
     ],
     "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1": [
         "JvBQZydSDxNkZRP2vNofGXMGbGk1",
         "JvY6C2uEdPeEqoWLuqB4eYfbZqj2",
-        "mZJZjTMVinNRegZFQG9FZzRjpiA2",
-        "n7J3AJy6KIXQYMEil0TyQQcAxs93",
         "xNTJrZ5xXwRIiGvpCVXaxDwDpI32",
         "HmxNU3owvAPLnprYQHfjTHF0zUA3"
     ],
@@ -52,12 +40,10 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "XSQqh3BUr7Nex40R9PgjLjWfVVF2",
         "iBzfeR7QujgmyUT2ogY0cN3KrLC3",
         "8qS5baPi4YRwX1sa4g2m1ZMEDfX2",
-        "bu35X2zJWmckJXGLt0yU3G6G54E3",
         "w90JOQlrOJOf2FVq0iU2krdMQzI3",
         "SuPo0lvdIZPAgZb6zYrnlfPNchl1"
     ],
     "MlE49ceLEDbzvKAsisKnW07fGfW2": [
-        "sRqr0SXKIUZBCn5g9V6VQRh24SS2",
         "xOQdg23cnOgLQD5IonJtFgAELa13",
         "Hnr2ehdTK0O8PfSj7Vn2zQksqz63",
         "h2q00DOa3EM870V5RDu2NABcb213",
@@ -68,7 +54,6 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
     "r19lVIqk4xTtzxvbs4W0kprHSvD2": [
         "hM21Pxjwfma3m75pefiM7j23F4f1",
         "px4HMkypSRMTuQFrY21bFEJoYA73",
-        "5JJythHRfYT8PllnH7kcWoHDSIO2",
         "CrwnET2Cohhqf4lsYiI8AYPtlPo1",
         "mxcI6Z9EjKWYmvNisUCIzSPi4573",
         "nBNzGCEnXuMKXOCeZGG3P6k6Spm1",
