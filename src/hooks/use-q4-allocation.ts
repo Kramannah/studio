@@ -7,11 +7,12 @@ import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, getDocs, limit, startAfter, orderBy, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
+import { startOfYear } from 'date-fns';
 
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
- * Calculates usage from 'coverageEntries' (Personal for PMRs, Global for Admins).
+ * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY for performance and accuracy.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
@@ -62,21 +63,55 @@ export const useQ4Allocation = () => {
         setAllocations(fetchedAllocations);
 
         // 2. Fetch Usage (Personal for PMR, Global for Admin)
+        // Optimization: Only scan reports from the START OF THE CURRENT YEAR
+        const currentYearStart = startOfYear(new Date()).toISOString();
         const usage: Record<string, number> = {};
         const entriesCol = collection(db, "coverageEntries");
         let lastVisible = null;
         let hasMore = true;
 
         while (hasMore) {
-            // Permission Safe Query: Standard PMRs only fetch their own entries.
-            // Admins/Managers fetch everything.
             let baseQuery;
+            
+            // Build the query with Year Filter and ordering for performance
             if (isUserAdmin) {
-                baseQuery = query(entriesCol, orderBy("__name__"), limit(1000));
-                if (lastVisible) baseQuery = query(entriesCol, orderBy("__name__"), startAfter(lastVisible), limit(1000));
+                // Admin scans ALL entries for the current year
+                if (lastVisible) {
+                    baseQuery = query(
+                        entriesCol, 
+                        where("submittedAt", ">=", currentYearStart),
+                        orderBy("submittedAt"), 
+                        startAfter(lastVisible), 
+                        limit(1000)
+                    );
+                } else {
+                    baseQuery = query(
+                        entriesCol, 
+                        where("submittedAt", ">=", currentYearStart),
+                        orderBy("submittedAt"), 
+                        limit(1000)
+                    );
+                }
             } else {
-                baseQuery = query(entriesCol, where("userId", "==", user.uid), orderBy("__name__"), limit(1000));
-                if (lastVisible) baseQuery = query(entriesCol, where("userId", "==", user.uid), orderBy("__name__"), startAfter(lastVisible), limit(1000));
+                // PMR scans only OWN entries for the current year
+                if (lastVisible) {
+                    baseQuery = query(
+                        entriesCol, 
+                        where("userId", "==", user.uid), 
+                        where("submittedAt", ">=", currentYearStart),
+                        orderBy("submittedAt"), 
+                        startAfter(lastVisible), 
+                        limit(1000)
+                    );
+                } else {
+                    baseQuery = query(
+                        entriesCol, 
+                        where("userId", "==", user.uid), 
+                        where("submittedAt", ">=", currentYearStart),
+                        orderBy("submittedAt"), 
+                        limit(1000)
+                    );
+                }
             }
             
             const snap = await getDocs(baseQuery);
@@ -88,7 +123,7 @@ export const useQ4Allocation = () => {
                     const entry = docSnap.data() as CoverageEntry;
                     if (!entry) return;
 
-                    // Accuracy: Only aggregate quantities from primary and secondary fields
+                    // Accuracy: Strictly aggregate quantities from primary and secondary fields
                     const processItem = (name?: string, qty?: number) => {
                         const safeName = String(name ?? "").toLowerCase().trim();
                         if (!safeName) return;
@@ -109,7 +144,7 @@ export const useQ4Allocation = () => {
 
         setUsedQuantities(usage);
     } catch (error) {
-        console.error("Inventory fetch failed:", error);
+        console.error("Annual Inventory fetch failed:", error);
     } finally {
         setLoading(false);
     }
