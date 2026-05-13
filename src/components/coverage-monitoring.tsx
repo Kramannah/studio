@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -10,7 +9,8 @@ import {
     eachDayOfInterval, 
     parseISO, 
     addMonths,
-    subMonths
+    subMonths,
+    isWeekend
 } from "date-fns";
 import { 
     ChevronLeft, 
@@ -69,7 +69,9 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
         try {
             const startStr = startOfMonth(selectedDate).toISOString();
             const endStr = endOfMonth(selectedDate).toISOString();
-            const days = eachDayOfInterval({ start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) });
+            // Filter out weekends from the days interval
+            const allDays = eachDayOfInterval({ start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) });
+            const businessDays = allDays.filter(day => !isWeekend(day));
 
             // 1. Fetch relevant data
             const entriesQuery = query(
@@ -130,14 +132,14 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
             // 4. Compile Excel Rows
             const excelRows = pmrList.map(pmr => {
                 const row: any = {
-                    "DISTRICT": getDistrictLabel(pmr),
+                    "District": getDistrictLabel(pmr),
                     "CODE": pmr.code || "PMR",
                     "NAME": `${pmr.lastName}, ${pmr.firstName}`
                 };
 
-                days.forEach(day => {
+                businessDays.forEach(day => {
                     const dateKey = format(day, 'yyyy-MM-dd');
-                    const dayCol = format(day, 'd');
+                    const dayCol = format(day, 'd-MMM');
                     const cell = matrix.get(pmr.userId)?.get(dateKey);
 
                     if (cell) {
@@ -146,10 +148,10 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                         } else if (cell.calls > 0) {
                             row[dayCol] = cell.calls;
                         } else {
-                            row[dayCol] = "-";
+                            row[dayCol] = "";
                         }
                     } else {
-                        row[dayCol] = "-";
+                        row[dayCol] = "";
                     }
                 });
 
@@ -158,6 +160,16 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
 
             // 5. Trigger Download
             const worksheet = XLSX.utils.json_to_sheet(excelRows);
+            
+            // Set some column widths for better visual look immediately on open
+            const wscols = [
+                { wch: 10 }, // District
+                { wch: 10 }, // CODE
+                { wch: 25 }, // NAME
+            ];
+            businessDays.forEach(() => wscols.push({ wch: 8 }));
+            worksheet['!cols'] = wscols;
+
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Coverage Audit");
             
@@ -166,7 +178,7 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
 
             toast({
                 title: "Report Generated",
-                description: `${pmrList.length} PMR records compiled successfully.`
+                description: `${pmrList.length} PMR records compiled for business days.`
             });
 
         } catch (error) {
@@ -194,7 +206,7 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                         Coverage Audit Compiler
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                        Generate a comprehensive monthly coverage report for all territories.
+                        Generate a comprehensive monthly coverage report (excluding weekends).
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-8">
@@ -239,7 +251,7 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Aggregating coverage entries and approved leaves..." : "Ready to process entire organization history"}
+                            {loading ? "Aggregating coverage entries and approved leaves..." : "Ready to process business days for the entire organization"}
                         </p>
                     </div>
                 </CardContent>
@@ -252,7 +264,7 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Audit Logic</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                The export includes daily report counts and approved Non-Call reasons (VL, SL, Meetings) cross-referenced from leave requests.
+                                The export includes daily report counts and approved Non-Call reasons. Weekends (Sat/Sun) are automatically excluded.
                             </p>
                         </div>
                     </CardContent>
@@ -263,7 +275,7 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Compliance</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Monthly reports are generated according to standard field cycle monitoring requirements for all PMR levels.
+                                Columns are formatted as "d-MMM" (e.g., 1-Apr) to match field monitoring standards.
                             </p>
                         </div>
                     </CardContent>
