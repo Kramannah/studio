@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, BarChart3, Activity } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -40,6 +40,7 @@ const DynamicSkeleton = () => (
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
 const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton /> });
 const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton /> });
+const CoverageMonitoring = dynamic(() => import('@/components/coverage-monitoring').then(mod => mod.CoverageMonitoring), { loading: () => <DynamicSkeleton /> });
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -289,13 +290,22 @@ export default function AdminPage() {
             </header>
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
-                <Tabs defaultValue="district-reports" className="w-full">
-                    <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8">
+                <Tabs defaultValue={isUserAdmin ? "monitoring" : "district-reports"} className="w-full">
+                    <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8 overflow-x-auto overflow-y-hidden">
+                        {isUserAdmin && (
+                            <TabsTrigger value="monitoring" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                <BarChart3 className="h-4 w-4" /> Monitoring
+                            </TabsTrigger>
+                        )}
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                         <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
                         <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
                         <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>
                     </TabsList>
+
+                    <TabsContent value="monitoring">
+                         <CoverageMonitoring userProfiles={profiles} userMap={mergedUserMap} />
+                    </TabsContent>
 
                     <TabsContent value="district-reports">
                          <Card className="mb-8 border-2 shadow-sm">
