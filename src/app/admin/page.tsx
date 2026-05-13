@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -41,7 +42,7 @@ const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod =
 const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton /> });
 
 export default function AdminPage() {
-    const { user, loading: authLoading, logout } = useAuth();
+    const { user, profile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
     const { profiles, updateProfile, addProfile, deleteProfile, loading: profilesLoading } = useUserProfiles();
@@ -64,19 +65,17 @@ export default function AdminPage() {
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
-        const profile = profiles[user.uid];
         const email = (user.email ?? "").toLowerCase();
         return ADMIN_UIDS.includes(user.uid) || 
                email === 'mbustamante@hovidinc.com' || 
                ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
                profile?.role === 'Admin';
-    }, [user, profiles]);
+    }, [user, profile]);
 
     const isUserManager = useMemo(() => {
         if (!user) return false;
-        const profile = profiles[user.uid];
         return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
-    }, [user, profiles]);
+    }, [user, profile]);
 
     const hasAdminAccess = isUserAdmin || isUserManager;
 
@@ -220,7 +219,6 @@ export default function AdminPage() {
                     return;
                 }
 
-                // Initialize a temporary Firebase app to create the user without logging out the current admin
                 const tempAppName = `registration-${Date.now()}`;
                 const tempApp = initializeApp(firebaseConfig, tempAppName);
                 const tempAuth = getAuth(tempApp);
@@ -228,7 +226,6 @@ export default function AdminPage() {
                 const userCred = await createUserWithEmailAndPassword(tempAuth, newAccount.email, newAccount.password);
                 finalUid = userCred.user.uid;
                 
-                // Clear the temporary session
                 await signOut(tempAuth);
             }
 

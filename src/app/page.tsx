@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -43,7 +44,7 @@ const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
 
 export default function Home() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, profile, loading: authLoading, logout } = useAuth();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   
@@ -54,10 +55,17 @@ export default function Home() {
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
-  }, [user]);
+    return ADMIN_UIDS.includes(user.uid) || 
+           email === 'mbustamante@hovidinc.com' || 
+           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
+           profile?.role === 'Admin';
+  }, [user, profile]);
 
-  const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+  const isUserManager = useMemo(() => {
+    if (!user) return false;
+    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
+  }, [user, profile]);
+
   const hasAdminAccess = isUserAdmin || isUserManager;
 
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);

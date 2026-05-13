@@ -23,14 +23,18 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 
 export const useDoctors = () => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    return ADMIN_UIDS.includes(user.uid) || (user.email && ADMIN_EMAILS.includes(user.email));
-  }, [user]);
+    const normalizedEmail = (user.email ?? "").toLowerCase();
+    return ADMIN_UIDS.includes(user.uid) || 
+           normalizedEmail === 'mbustamante@hovidinc.com' ||
+           ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) ||
+           profile?.role === 'Admin';
+  }, [user, profile]);
 
   const fetchDoctors = useCallback(async () => {
     if (!user || !db) {

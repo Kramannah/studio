@@ -1,29 +1,34 @@
+
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './use-toast';
+import type { UserProfile } from '@/lib/types';
 
 interface AuthContextType {
   user: User | null;
+  profile: UserProfile | null;
   loading: boolean;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  profile: null,
   loading: true,
   logout: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Safety fallback: ensure loading is never stuck indefinitely
     const timer = setTimeout(() => {
       setLoading(false);
     }, 8000);
@@ -34,14 +39,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false);
-      clearTimeout(timer);
+      
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
+      if (firebaseUser && db) {
+        const profileRef = doc(db, "userProfiles", firebaseUser.uid);
+        unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+          } else {
+            setProfile(null);
+          }
+          setLoading(false);
+          clearTimeout(timer);
+        }, (err) => {
+          console.error("Profile sync error:", err);
+          setLoading(false);
+          clearTimeout(timer);
+        });
+      } else {
+        setProfile(null);
+        setLoading(false);
+        clearTimeout(timer);
+      }
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
       clearTimeout(timer);
     };
   }, []);
@@ -58,9 +90,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const contextValue = useMemo(() => ({
     user,
+    profile,
     loading,
     logout
-  }), [user, loading]);
+  }), [user, profile, loading]);
 
   return (
     <AuthContext.Provider value={contextValue}>

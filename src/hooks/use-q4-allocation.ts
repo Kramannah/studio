@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -9,7 +10,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { getQueryStartDateISO } from '@/lib/utils';
 
 export const useQ4Allocation = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -21,10 +22,11 @@ export const useQ4Allocation = () => {
     if (!email) return false;
     
     const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === email);
-    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid);
+                  ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === email) ||
+                  profile?.role === 'Admin';
+    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
     return isAdmin || isManager;
-  }, [user]);
+  }, [user, profile]);
 
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
@@ -38,7 +40,7 @@ export const useQ4Allocation = () => {
             const qty = Number(data.allocationQuantity || 0);
             return { id: doc.id, prodGroupProdSubGroup: group, displayMaterialName: materialName, allocationQuantity: isNaN(qty) ? 0 : qty } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
-        fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().toLowerCase().localeCompare((b.displayMaterialName ?? "").toString().toLowerCase()));
+        fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().toLowerCase().compare((b.displayMaterialName ?? "").toString().toLowerCase()));
         setAllocations(fetched);
     } catch (error) {}
   }, [user]);

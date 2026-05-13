@@ -35,7 +35,7 @@ const userDataCache: Record<string, { timestamp: number, data: any }> = {};
 const CACHE_TTL = 300000; // 5 minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
@@ -62,8 +62,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const normalizedEmail = (user.email ?? "").toString().toLowerCase().trim();
     return ADMIN_UIDS.includes(user.uid) || 
            normalizedEmail === 'mbustamante@hovidinc.com' || 
-           ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === normalizedEmail);
-  }, [user]);
+           ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === normalizedEmail) ||
+           profile?.role === 'Admin';
+  }, [user, profile]);
 
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
