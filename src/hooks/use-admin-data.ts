@@ -97,14 +97,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 let q;
                 const colRef = collection(db!, collName);
                 if (userIds === null) {
-                    q = query(colRef, limit(200));
+                    q = query(colRef, limit(500));
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(colRef, where("userId", "in", chunk), limit(100)))
+                        getDocs(query(colRef, where("userId", "in", chunk), limit(200)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -157,7 +157,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(300));
+                    // Increased limit to 500 per chunk for better coverage oversight
+                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(500));
                     const snap = await getDocs(q);
                     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     
@@ -259,6 +260,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
                 // Fetch ALL data for the user without date filtering to ensure exhaustive coverage visibility
+                // Explicitly targeting sanitizedUserId which for Pangan is mdLCjhNVnYas96aW4IkrPWip7RS2
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
