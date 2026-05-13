@@ -8,18 +8,11 @@ import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/fir
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
-// Singleton session-level cache to survive component unmounts and protect quota
-let globalAllocationsCache: Q4Allocation[] | null = null;
-let globalUsedQuantitiesCache: Record<string, number> | null = null;
-let globalCacheTimestamp: number = 0;
-const CACHE_DURATION = 1800000; // 30 minutes for exhaustive historical aggregations
-let globalFetchPromise: Promise<void> | null = null;
-
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
-  const [loading, setLoading] = useState(!globalAllocationsCache);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -38,8 +31,12 @@ export const useQ4Allocation = () => {
   }, [user, profile]);
 
   const performFetch = useCallback(async () => {
-    if (!db || !user) return;
+    if (!db || !user) {
+        setLoading(false);
+        return;
+    }
     
+    setLoading(true);
     try {
         // 1. Fetch Master Inventory from marketingSamples collection
         const snapshot = await getDocs(collection(db, "marketingSamples"));
@@ -61,7 +58,6 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
         
         // 2. Fetch Exhaustive Usage from coverageEntries
-        // No limit() here to ensure 100% accuracy of all historical units
         const colRef = collection(db, "coverageEntries");
         const usageQuery = isAdminOrManager
             ? query(colRef) // Org-wide audit for Admin/Manager
@@ -83,58 +79,29 @@ export const useQ4Allocation = () => {
                 }
             };
 
-            // ACCURACY: Strictly take from primaryProductQty and secondaryProductQty as requested
+            // ACCURACY: Strictly take from primaryProductQty and secondaryProductQty from ALL entries
             processItem(entry.primarySampleName, entry.primaryProductQty);
             processItem(entry.secondarySampleName, entry.secondaryProductQty);
         });
         
-        // Update Singleton Cache
-        globalAllocationsCache = fetched;
-        globalUsedQuantitiesCache = usage;
-        globalCacheTimestamp = Date.now();
-        
         setAllocations(fetched);
         setUsedQuantities(usage);
     } catch (error) {
-        console.warn("Inventory fetch failed or limited:", error);
+        console.warn("Inventory fetch failed:", error);
+    } finally {
+        setLoading(false);
     }
   }, [user, isAdminOrManager]);
 
-  const initData = useCallback(async (force = false) => {
-    if (!user) return;
-    
-    const now = Date.now();
-    const isCacheFresh = (now - globalCacheTimestamp < CACHE_DURATION);
-
-    if (!force && isCacheFresh && globalAllocationsCache) {
-        setAllocations(globalAllocationsCache);
-        setUsedQuantities(globalUsedQuantitiesCache || {});
-        setLoading(false);
-        return;
-    }
-
-    if (globalFetchPromise && !force) return globalFetchPromise;
-
-    setLoading(true);
-    globalFetchPromise = performFetch();
-    
-    try {
-        await globalFetchPromise;
-    } finally {
-        globalFetchPromise = null;
-        setLoading(false);
-    }
-  }, [user, performFetch]);
-
   useEffect(() => {
-    if (mounted) initData();
-  }, [mounted, initData]);
+    if (mounted) performFetch();
+  }, [mounted, performFetch]);
 
   return { 
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: () => initData(true),
+    refetch: performFetch,
     addAllocationsBulk: async (data: Omit<Q4Allocation, 'id'>[]) => {
         if (!db) return false;
         try {
@@ -142,13 +109,12 @@ export const useQ4Allocation = () => {
           data.forEach(item => {
             const name = (item.displayMaterialName ?? "").toString().trim();
             if (!name) return;
-            // Generate deterministic ID from name to prevent duplicates
             const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
             const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
             batch.set(docRef, { ...item }, { merge: true });
           });
           await batch.commit();
-          await initData(true);
+          await performFetch();
           return true;
         } catch (err) { return false; }
     },
@@ -158,7 +124,7 @@ export const useQ4Allocation = () => {
         ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
         try { 
             await batch.commit(); 
-            await initData(true); 
+            await performFetch(); 
             return true; 
         } catch (err) { return false; }
     }

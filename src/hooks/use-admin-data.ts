@@ -19,11 +19,6 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-// Global persistent cache for the entire session
-const userDataCache: Record<string, { timestamp: number, data: any }> = {};
-const teamSummaryCache: Record<string, { timestamp: number, data: any }> = {};
-const CACHE_TTL = 1800000; // 30 minutes to save quota
-
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
     if (typeof val === 'string') return val;
@@ -53,8 +48,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
-  const activeFetches = useRef<Set<string>>(new Set());
-
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
     const hardcoded = MANAGER_TEAMS[mgrId] || [];
@@ -65,7 +58,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || activeFetches.current.has('approvals')) return;
+    if (!user || !db) return;
     
     let userFilter: string[] | null = null;
     if (managerId) {
@@ -73,7 +66,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
       if (userFilter.length === 0) return;
     }
 
-    activeFetches.current.add('approvals');
     setLoading(true);
     try {
         const fetchCol = async (name: string, filter: string[] | null) => {
@@ -87,13 +79,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
-        setAllNonCallDays(ncd.sort((a,b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
-        setAllPlanningRequests(pr.sort((a,b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
+        setAllNonCallDays(ncd.sort((a,b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))) as any);
+        setAllPlanningRequests(pr.sort((a,b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))) as any);
     } catch (e) {
-        console.warn("Approvals fetch skipped:", e);
+        console.warn("Approvals fetch error:", e);
     } finally {
         setLoading(false);
-        activeFetches.current.delete('approvals');
     }
   }, [user, managerId, getManagedUserIds]);
 
@@ -102,15 +93,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [fetchTeamApprovals]);
 
   const fetchTeamSummary = useCallback(async () => {
-    if (!managerId || !db || activeFetches.current.has(`team_${managerId}`)) return;
+    if (!managerId || !db) return;
 
-    const now = Date.now();
-    if (teamSummaryCache[managerId] && (now - teamSummaryCache[managerId].timestamp < CACHE_TTL)) {
-        setTeamSummaryData(teamSummaryCache[managerId].data);
-        return;
-    }
-
-    activeFetches.current.add(`team_${managerId}`);
     setLoadingSummary(true);
     try {
         const userFilter = getManagedUserIds(managerId);
@@ -145,35 +129,31 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const key = String(n ?? "").toLowerCase().trim();
                 if (key) used[key] = (used[key] || 0) + Math.round(Number(q || 0));
             };
-            // ACCURACY: Sum primary and secondary fields strictly
+            // ACCURACY: Only use primary/secondary for inventory totals
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
         });
 
-        const finalData = { ...combined, timeLogs: combined.logs, nonCallDays: combined.ncds, usedQuantities: used, marketingSamples: [] };
-        teamSummaryCache[managerId] = { timestamp: now, data: finalData };
-        setTeamSummaryData(finalData);
+        const finalData = { 
+            entries: combined.entries, 
+            timeLogs: combined.logs, 
+            doctors: combined.doctors, 
+            nonCallDays: combined.ncds, 
+            plans: combined.plans, 
+            usedQuantities: used, 
+            marketingSamples: [] 
+        };
+        setTeamSummaryData(finalData as any);
     } catch (e) {
-        console.warn("Team summary quota warning:", e);
+        console.warn("Team summary error:", e);
     } finally {
         setLoadingSummary(false);
-        activeFetches.current.delete(`team_${managerId}`);
     }
   }, [managerId, getManagedUserIds]);
 
   const fetchUserData = useCallback(async (uid: string) => {
-    if (!uid || !db || activeFetches.current.has(`user_${uid}`)) return;
+    if (!uid || !db) return;
     
-    const now = Date.now();
-    if (userDataCache[uid] && (now - userDataCache[uid].timestamp < CACHE_TTL)) {
-        const c = userDataCache[uid].data;
-        setAllEntries(c.entries); setAllDoctors(c.doctors); setAllPlans(c.plans);
-        setAllTimeLogs(c.timeLogs); setAllNonCallDaysIndividual(c.nonCallDays);
-        setIndividualPlanningRequests(c.requests); setIndividualUsedQuantities(c.used);
-        return;
-    }
-
-    activeFetches.current.add(`user_${uid}`);
     setLoadingIndividual(true);
     try {
         const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid)))).docs.map(d => ({id: d.id, ...d.data()}));
@@ -189,17 +169,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(item.secondarySampleName, item.secondaryProductQty);
         });
 
-        const dashboardData = { entries: e, doctors: d, plans: p, timeLogs: l, nonCallDays: ncd, requests: r, used };
-        userDataCache[uid] = { timestamp: now, data: dashboardData };
-        
-        setAllEntries(e as any); setAllDoctors(d as any); setAllPlans(p as any);
-        setAllTimeLogs(l as any); setAllNonCallDaysIndividual(ncd as any);
-        setIndividualPlanningRequests(r as any); setIndividualUsedQuantities(used);
+        setAllEntries(e as any); 
+        setAllDoctors(d as any); 
+        setAllPlans(p as any);
+        setAllTimeLogs(l as any); 
+        setAllNonCallDaysIndividual(ncd as any);
+        setIndividualPlanningRequests(r as any); 
+        setIndividualUsedQuantities(used);
     } catch (e) {
-        console.warn("User data fetch quota warning:", e);
+        console.warn("User data fetch error:", e);
     } finally {
         setLoadingIndividual(false);
-        activeFetches.current.delete(`user_${uid}`);
     }
   }, []);
 
