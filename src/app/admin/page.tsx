@@ -49,6 +49,7 @@ export default function AdminPage() {
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [accountSearch, setAccountSearch] = useState('');
+    const [activeTab, setActiveTab] = useState('district-reports');
     
     const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
     const [isAddRecordOpen, setIsAddRecordOpen] = useState(false);
@@ -212,7 +213,6 @@ export default function AdminPage() {
         let finalUid = newAccount.uid;
 
         try {
-            // Workflow 1: Create brand new Authentication account
             if (isCreateAccountOpen) {
                 if (!newAccount.password || newAccount.password.length < 6) {
                     toast({ variant: "destructive", title: "Weak Password", description: "Password must be at least 6 characters." });
@@ -230,7 +230,6 @@ export default function AdminPage() {
                 await signOut(tempAuth);
             }
 
-            // Workflow 2 & Finalization: Create the Firestore Profile
             const success = await addProfile({
                 userId: finalUid,
                 firstName: newAccount.firstName,
@@ -290,7 +289,7 @@ export default function AdminPage() {
             </header>
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
-                <Tabs defaultValue="district-reports" className="w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8 overflow-x-auto overflow-y-hidden">
                         <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                         <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
@@ -356,16 +355,20 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="approvals" className="space-y-8">
-                        <NonCallDayApprovals 
-                            nonCallDays={allNonCallDays} 
-                            onUpdateStatus={updateNonCallDayStatus}
-                            userMap={mergedUserMap}
-                        />
-                        <PlanningRequestApprovals 
-                            requests={allPlanningRequests}
-                            onUpdateStatus={updatePlanningRequestStatus}
-                            userMap={mergedUserMap}
-                        />
+                        {activeTab === 'approvals' && (
+                            <>
+                                <NonCallDayApprovals 
+                                    nonCallDays={allNonCallDays} 
+                                    onUpdateStatus={updateNonCallDayStatus}
+                                    userMap={mergedUserMap}
+                                />
+                                <PlanningRequestApprovals 
+                                    requests={allPlanningRequests}
+                                    onUpdateStatus={updatePlanningRequestStatus}
+                                    userMap={mergedUserMap}
+                                />
+                            </>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="accounts">
@@ -477,12 +480,12 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="marketing-samples">
-                        <Q4AllocationView readOnly={false} />
+                        {activeTab === 'marketing-samples' && <Q4AllocationView readOnly={false} />}
                     </TabsContent>
                 </Tabs>
             </main>
 
-            {/* Create Account Dialog - Brand New Identity */}
+            {/* Create Account Dialog */}
             <Dialog open={isCreateAccountOpen} onOpenChange={(open) => !isProcessing && setIsCreateAccountOpen(open)}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
@@ -557,7 +560,7 @@ export default function AdminPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Add Record Dialog - Assign Existing UID to DSM */}
+            {/* Add Record Dialog */}
             <Dialog open={isAddRecordOpen} onOpenChange={(open) => !isProcessing && setIsAddRecordOpen(open)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>

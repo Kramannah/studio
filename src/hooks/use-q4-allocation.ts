@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -6,14 +5,20 @@ import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
+
+// Session-level global cache to prevent redundant heavy aggregations
+let globalAllocationsCache: Q4Allocation[] | null = null;
+let globalUsedQuantitiesCache: Record<string, number> | null = null;
+let globalCacheTimestamp: number = 0;
+const CACHE_DURATION = 60000; // 1 minute fresh duration
 
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const lastFetchTime = useRef<number>(0);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
+  const [loading, setLoading] = useState(!globalAllocationsCache);
+  const lastFetchTime = useRef<number>(globalCacheTimestamp);
 
   const isAdminOrManager = useMemo(() => {
     if (!user) return false;
@@ -50,6 +55,7 @@ export const useQ4Allocation = () => {
             return nameA.localeCompare(nameB);
         });
         
+        globalAllocationsCache = fetched;
         setAllocations(fetched);
     } catch (error) {
         console.warn("Inventory Catalog Fetch Warning:", error);
@@ -61,10 +67,12 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       
-      // Optimization: Use a high limit to maintain accuracy while preventing datastore timeouts on large collections
+      // Optimization: For Admins, we use a slightly higher limit but for general PMRs we keep it tight to speed up form loading
+      const scanLimit = isAdminOrManager ? 1500 : 800;
+      
       const usageQuery = isAdminOrManager
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(1500)) // Admin sees aggregate volume
-        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"), limit(1000)); // User sees their history
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(scanLimit)) 
+        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"), limit(scanLimit));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -82,7 +90,6 @@ export const useQ4Allocation = () => {
             }
         };
 
-        // Precision Logic: aggregate primary, secondary, and reminder quantities
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         
@@ -92,9 +99,10 @@ export const useQ4Allocation = () => {
             });
         }
       });
+      
+      globalUsedQuantitiesCache = usage;
       setUsedQuantities(usage);
     } catch (error) {
-        // Use warn to prevent unhandled runtime error overlay in some environments
         console.warn("Usage Tracking Sync Delay:", error);
     }
   }, [user, isAdminOrManager]);
@@ -103,9 +111,18 @@ export const useQ4Allocation = () => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        if (now - lastFetchTime.current < 5000) return; 
+        
+        // Use cache if it's recent (less than 1 minute old)
+        if (globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime.current < CACHE_DURATION)) {
+            setAllocations(globalAllocationsCache);
+            setUsedQuantities(globalUsedQuantitiesCache);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
+        globalCacheTimestamp = now;
         lastFetchTime.current = now;
         setLoading(false);
     };
@@ -115,6 +132,8 @@ export const useQ4Allocation = () => {
   const refetch = useCallback(async () => {
       setLoading(true);
       await Promise.allSettled([fetchAllocations(), fetchUsage()]);
+      globalCacheTimestamp = Date.now();
+      lastFetchTime.current = globalCacheTimestamp;
       setLoading(false);
   }, [fetchAllocations, fetchUsage]);
 
