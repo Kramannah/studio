@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs, limit, startAfter, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
@@ -12,6 +12,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
  * Hook for managing inventory/allocations.
  * Strictly fetches from 'marketingSamples' collection.
  * Usage is calculated by scanning ALL historical 'coverageEntries'.
+ * Optimized with chunking to prevent Firestore timeouts on large datasets.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
@@ -44,7 +45,6 @@ export const useQ4Allocation = () => {
     setLoading(true);
     try {
         // 1. Fetch Master Inventory from marketingSamples collection
-        // No caching - direct live fetch
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -64,32 +64,55 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
         
         // 2. Fetch Exhaustive Usage from coverageEntries
-        // This scans ALL records to ensure 100% accuracy of history
+        // Optimized chunked fetch to prevent Firestore timeouts
         const colRef = collection(db, "coverageEntries");
-        const usageQuery = isAdminOrManager
-            ? query(colRef) // Org-wide audit for Admin/Manager
-            : query(colRef, where("userId", "==", user.uid)); // Personal ledger for PMR
-
-        const usageSnap = await getDocs(usageQuery);
         const usage: Record<string, number> = {};
         
-        usageSnap.docs.forEach(docSnap => {
-            const entry = docSnap.data() as CoverageEntry;
-            if (!entry) return;
+        const processDocs = (docs: any[]) => {
+            docs.forEach(docSnap => {
+                const entry = docSnap.data() as CoverageEntry;
+                if (!entry) return;
 
-            const processItem = (name?: string, qty?: number) => {
-                const safeName = String(name ?? "").toLowerCase().trim();
-                if (!safeName) return;
-                const safeQty = Math.round(Number(qty || 0));
-                if (!isNaN(safeQty) && safeQty !== 0) {
-                    usage[safeName] = (usage[safeName] || 0) + safeQty;
+                const processItem = (name?: string, qty?: number) => {
+                    const safeName = String(name ?? "").toLowerCase().trim();
+                    if (!safeName) return;
+                    const safeQty = Math.round(Number(qty || 0));
+                    if (!isNaN(safeQty) && safeQty !== 0) {
+                        usage[safeName] = (usage[safeName] || 0) + safeQty;
+                    }
+                };
+
+                // ACCURACY: Sum only primaryProductQty and secondaryProductQty as requested
+                processItem(entry.primarySampleName, entry.primaryProductQty);
+                processItem(entry.secondarySampleName, entry.secondaryProductQty);
+            });
+        };
+
+        if (isAdminOrManager) {
+            // Chunked fetch for global audit
+            let lastVisible = null;
+            let hasMore = true;
+            
+            while (hasMore) {
+                let q = query(colRef, orderBy("__name__"), limit(1000));
+                if (lastVisible) {
+                    q = query(colRef, orderBy("__name__"), startAfter(lastVisible), limit(1000));
                 }
-            };
-
-            // ACCURACY: Sum only primaryProductQty and secondaryProductQty as requested
-            processItem(entry.primarySampleName, entry.primaryProductQty);
-            processItem(entry.secondarySampleName, entry.secondaryProductQty);
-        });
+                
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                    hasMore = false;
+                } else {
+                    processDocs(snap.docs);
+                    lastVisible = snap.docs[snap.docs.length - 1];
+                    if (snap.docs.length < 1000) hasMore = false;
+                }
+            }
+        } else {
+            // Individual PMR fetch
+            const snap = await getDocs(query(colRef, where("userId", "==", user.uid)));
+            processDocs(snap.docs);
+        }
         
         setAllocations(fetched);
         setUsedQuantities(usage);
