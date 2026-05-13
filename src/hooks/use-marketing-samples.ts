@@ -43,6 +43,7 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
+      // Accuracy: Scan all historical entries for this user to get total accurate usage
       const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
       const usage: Record<string, number> = {};
       
@@ -60,6 +61,7 @@ export const useMarketingSamples = () => {
               }
           };
 
+          // Precision Aggregation
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
           

@@ -1,13 +1,12 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs, limit, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { getQueryStartDateISO } from '@/lib/utils';
 
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
@@ -16,22 +15,20 @@ export const useQ4Allocation = () => {
   const [loading, setLoading] = useState(true);
   const lastFetchTime = useRef<number>(0);
 
-  const isUserAdminOrManager = useCallback(() => {
+  const isAdminOrManager = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toString().toLowerCase().trim();
     if (!email) return false;
     
-    const isAdmin = ADMIN_UIDS.includes(user.uid) || 
-                  ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === email) ||
-                  profile?.role === 'Admin';
-    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
-    return isAdmin || isManager;
+    return ADMIN_UIDS.includes(user.uid) || 
+           ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === email) ||
+           profile?.role === 'Admin' ||
+           profile?.role === 'Manager';
   }, [user, profile]);
 
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
     try {
-        // Fetching specifically from marketingSamples collection
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -47,7 +44,6 @@ export const useQ4Allocation = () => {
             } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
         
-        // Fix for sorting error
         fetched.sort((a, b) => {
             const nameA = (a.displayMaterialName || "").toLowerCase();
             const nameB = (b.displayMaterialName || "").toLowerCase();
@@ -64,11 +60,11 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     try {
       const colRef = collection(db, "coverageEntries");
-      const startDate = getQueryStartDateISO();
       
-      const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(1000)) 
-        : query(colRef, where("userId", "==", user.uid)); 
+      // Accuracy Improvement: Fetch historical usage without date restrictions
+      const usageQuery = isAdminOrManager
+        ? colRef // Admin sees total aggregate usage
+        : query(colRef, where("userId", "==", user.uid)); // User sees their specific usage
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -76,9 +72,6 @@ export const useQ4Allocation = () => {
       snapshot.docs.forEach(docSnap => {
         const entry = docSnap.data();
         if (!entry) return;
-
-        // Skip entries older than our tracking window
-        if (entry.submittedAt && entry.submittedAt < startDate) return;
 
         const processItem = (name?: any, qty?: any) => {
             const safeName = String(name ?? "").toLowerCase().trim();
@@ -89,8 +82,10 @@ export const useQ4Allocation = () => {
             }
         };
 
+        // Precision Logic: explicitly aggregate primary and secondary product quantities
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
+        
         if (Array.isArray(entry.reminderProducts)) {
             entry.reminderProducts.forEach((p: any) => { 
                 if (p) processItem(p.sampleName, p.quantity); 
@@ -101,13 +96,12 @@ export const useQ4Allocation = () => {
     } catch (error) {
         console.error("Usage Tracking Error:", error);
     }
-  }, [user, isUserAdminOrManager]);
+  }, [user, isAdminOrManager]);
 
   useEffect(() => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        // Debounce fetching to prevent rapid re-renders
         if (now - lastFetchTime.current < 5000) return; 
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
@@ -130,7 +124,6 @@ export const useQ4Allocation = () => {
       data.forEach(item => {
         const name = (item.displayMaterialName ?? "").toString().trim();
         if (!name) return;
-        // Generate a stable ID based on material name
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `sample_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
