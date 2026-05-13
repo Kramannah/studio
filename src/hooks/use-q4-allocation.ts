@@ -1,18 +1,18 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
-// Singleton session-level cache to survive component unmounts
+// Singleton session-level cache to survive component unmounts and protect quota
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let globalCacheTimestamp: number = 0;
-const CACHE_DURATION = 1800000; // 30 minutes for heavy aggregations
+const CACHE_DURATION = 1800000; // 30 minutes for exhaustive historical aggregations
 let globalFetchPromise: Promise<void> | null = null;
 
 export const useQ4Allocation = () => {
@@ -41,11 +41,12 @@ export const useQ4Allocation = () => {
     if (!db || !user) return;
     
     try {
-        // 1. Fetch Master Inventory
+        // 1. Fetch Master Inventory from marketingSamples collection
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
             if (!data) return null;
+            // Map either field name variations to the consistent internal type
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
@@ -59,11 +60,12 @@ export const useQ4Allocation = () => {
         
         fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
         
-        // 2. Fetch Exhaustive Usage
+        // 2. Fetch Exhaustive Usage from coverageEntries
+        // No limit() here to ensure 100% accuracy of all historical units
         const colRef = collection(db, "coverageEntries");
         const usageQuery = isAdminOrManager
-            ? query(colRef) // Full org scan for Admin/Manager
-            : query(colRef, where("userId", "==", user.uid)); // Personal scan for PMR
+            ? query(colRef) // Org-wide audit for Admin/Manager
+            : query(colRef, where("userId", "==", user.uid)); // Personal ledger for PMR
 
         const usageSnap = await getDocs(usageQuery);
         const usage: Record<string, number> = {};
@@ -81,6 +83,7 @@ export const useQ4Allocation = () => {
                 }
             };
 
+            // ACCURACY: Strictly take from primaryProductQty and secondaryProductQty as requested
             processItem(entry.primarySampleName, entry.primaryProductQty);
             processItem(entry.secondarySampleName, entry.secondaryProductQty);
         });
@@ -93,7 +96,7 @@ export const useQ4Allocation = () => {
         setAllocations(fetched);
         setUsedQuantities(usage);
     } catch (error) {
-        console.warn("Inventory fetch limited due to quota or network:", error);
+        console.warn("Inventory fetch failed or limited:", error);
     }
   }, [user, isAdminOrManager]);
 
@@ -139,6 +142,7 @@ export const useQ4Allocation = () => {
           data.forEach(item => {
             const name = (item.displayMaterialName ?? "").toString().trim();
             if (!name) return;
+            // Generate deterministic ID from name to prevent duplicates
             const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
             const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
             batch.set(docRef, { ...item }, { merge: true });

@@ -3,12 +3,14 @@
 
 import { useQ4Allocation } from './use-q4-allocation';
 
-// This hook is now a lightweight proxy to useQ4Allocation to share the singleton cache
+/**
+ * Hook for managing Marketing Samples / Inventory.
+ * Strictly uses the 'marketingSamples' collection and aggregates usage from 'coverageEntries'.
+ */
 export const useMarketingSamples = () => {
   const { allocations, usedQuantities, loading, refetch } = useQ4Allocation();
   
-  // Map Q4Allocation back to MarketingSample format if needed, 
-  // though they are identical in this app's implementation
+  // Maps the shared Q4Allocation data to the MarketingSample format
   return { 
     marketingSamples: allocations.map(a => ({
         id: a.id,
@@ -28,16 +30,20 @@ export const useAdminMarketingSamples = () => {
   return { 
     addMarketingSamplesBulk: async (data: any[]) => {
         const mapped = data.map(d => ({
-            prodGroupProdSubGroup: d.productGroup,
-            displayMaterialName: d.materialName,
-            allocationQuantity: d.allocationQuantity
+            prodGroupProdSubGroup: d.productGroup || d.ProdGroupProdSubGroup || "Uncategorized",
+            displayMaterialName: d.materialName || d.DisplayMaterialName || "Unknown Item",
+            allocationQuantity: Number(d.allocationQuantity || d.AllocationQuantity || 0)
         }));
         return addAllocationsBulk(mapped);
     }, 
     deleteSample: async (id: string) => deleteAllocationsBulk([id]), 
     updateSample: async (id: string, data: any) => {
-        // Implement single update if needed, or use bulk with one item
-        return false; 
+        // Implemented via bulk logic for consistency
+        return addAllocationsBulk([{
+            prodGroupProdSubGroup: data.productGroup,
+            displayMaterialName: data.materialName,
+            allocationQuantity: data.allocationQuantity
+        }]);
     },
     addSample: async (data: any) => {
         return addAllocationsBulk([{

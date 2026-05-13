@@ -1,15 +1,13 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
+import { MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -35,7 +33,7 @@ const safeToDateISO = (val: any): string => {
 };
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
@@ -147,6 +145,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const key = String(n ?? "").toLowerCase().trim();
                 if (key) used[key] = (used[key] || 0) + Math.round(Number(q || 0));
             };
+            // ACCURACY: Sum primary and secondary fields strictly
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
         });
