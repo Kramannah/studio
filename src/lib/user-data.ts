@@ -336,7 +336,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Almazan",
         email: "almazan@hovidinc.com"
     },
-    "vvLt9N5IzIYs6SHEWaR1Gfw611V2": {
+    "vvLt9N5IzlYs6SHEWaR1Gfw611V2": {
         code: "GMAS-01",
         firstName: "Iries",
         lastName: "Rombaiz",
