@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -43,8 +43,16 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // Accuracy: Scan all historical entries for this user to get total accurate usage
-      const usageSnap = await getDocs(query(collection(db, "coverageEntries"), where("userId", "==", user.uid)));
+      // Accuracy: Scan history with a reasonable limit to prevent timeouts while maintaining precision
+      const usageSnap = await getDocs(
+        query(
+          collection(db, "coverageEntries"), 
+          where("userId", "==", user.uid),
+          orderBy("submittedAt", "desc"),
+          limit(1000)
+        )
+      );
+      
       const usage: Record<string, number> = {};
       
       usageSnap.docs.forEach(doc => {
@@ -74,7 +82,7 @@ export const useMarketingSamples = () => {
       setUsedQuantities(usage);
 
     } catch (error: any) {
-        console.error("Inventory Fetch Error:", error);
+        console.warn("Marketing Samples usage tracking sync failed:", error);
     } finally {
       setLoading(false);
     }

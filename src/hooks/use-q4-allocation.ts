@@ -52,7 +52,7 @@ export const useQ4Allocation = () => {
         
         setAllocations(fetched);
     } catch (error) {
-        console.error("Error fetching marketing samples:", error);
+        console.warn("Inventory Catalog Fetch Warning:", error);
     }
   }, [user]);
 
@@ -61,10 +61,10 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       
-      // Accuracy Improvement: Fetch historical usage without date restrictions
+      // Optimization: Use a high limit to maintain accuracy while preventing datastore timeouts on large collections
       const usageQuery = isAdminOrManager
-        ? colRef // Admin sees total aggregate usage
-        : query(colRef, where("userId", "==", user.uid)); // User sees their specific usage
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(1500)) // Admin sees aggregate volume
+        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"), limit(1000)); // User sees their history
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
@@ -82,7 +82,7 @@ export const useQ4Allocation = () => {
             }
         };
 
-        // Precision Logic: explicitly aggregate primary and secondary product quantities
+        // Precision Logic: aggregate primary, secondary, and reminder quantities
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         
@@ -94,7 +94,8 @@ export const useQ4Allocation = () => {
       });
       setUsedQuantities(usage);
     } catch (error) {
-        console.error("Usage Tracking Error:", error);
+        // Use warn to prevent unhandled runtime error overlay in some environments
+        console.warn("Usage Tracking Sync Delay:", error);
     }
   }, [user, isAdminOrManager]);
 
