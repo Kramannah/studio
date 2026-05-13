@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, writeBatch, doc, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
@@ -69,10 +69,10 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       
-      // ACCURACY: We perform an exhaustive scan of historical entries
-      // We explicitly aggregate from primaryProductQty and secondaryProductQty
+      // ACCURACY: We perform an exhaustive scan of ALL historical entries for perfect accuracy
+      // No limits or date filters are applied to ensure every sample unit is reflected
       const usageQuery = isAdminOrManager
-        ? query(colRef, limit(2000)) 
+        ? query(colRef) 
         : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
@@ -91,7 +91,7 @@ export const useQ4Allocation = () => {
             }
         };
 
-        // ACCURACY: Used samples are strictly based on primaryProductQty and secondaryProductQty
+        // ACCURACY: Used samples are strictly based on primaryProductQty and secondaryProductQty from all reports
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
       });

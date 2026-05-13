@@ -210,7 +210,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Used samples are strictly derived from primary and secondary qty fields
+            // ACCURACY: Reflect all used samples from all coverage entries submitted by the district team
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
         });
@@ -256,6 +256,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
+                // ACCURACY: Scan ALL entries for the Representative (PMR) to reflect complete history
                 const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -285,12 +286,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const used: Record<string, number> = {};
         entries.forEach((e: CoverageEntry) => {
             const process = (name?: string, qty?: number) => {
-                const safeName = (name ?? "").toString().toLowerCase().trim();
+                const safeName = String(name ?? "").toLowerCase().trim();
                 if (!safeName) return;
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Focused strictly on primaryProductQty and secondaryProductQty
+            // ACCURACY: Reflect all issued samples from all historical coverage entries of this PMR
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
         });

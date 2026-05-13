@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -43,7 +43,8 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // ACCURACY: Scan exhaustive history to aggregate primaryProductQty and secondaryProductQty
+      // ACCURACY: Scan ALL coverage entries of the PMR to reflect complete usage history
+      // No limits applied to ensure total historical issued quantities are accounted for
       const usageSnap = await getDocs(
         query(
           collection(db, "coverageEntries"), 
@@ -67,7 +68,7 @@ export const useMarketingSamples = () => {
               }
           };
 
-          // ACCURACY: Used samples are based strictly from the primary and secondary fields
+          // ACCURACY: Reflect all used samples from all coverage entries submitted by this PMR
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
       });
