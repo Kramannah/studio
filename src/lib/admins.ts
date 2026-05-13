@@ -16,8 +16,8 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "mdLCjhNVnYas96aW4IkrPWip7RS2",
         "ePVOaPvZYTa9CGj0MpReVnmKhD62",
         "Tajceo3bwwcH9ac9Mw4tEtj2Z952",
-        "nZZHI6JVZzZCVBIDcwiAv0RDmGv2",
-        "NOYZ3h8ylaNINBVBgFYJzhKdisY2",
+        "nZZHI6JVZzZCVBlDcwiAv0RDmGv2",
+        "NOYZ3h8yIaNINBVBgFYJzhKdisY2",
     ],
     "UmyUP0VwccRKLfrej67idFukFz42": [
         "pvzNDFxH4tf7JejE7YxMK4Rq3hj2",
@@ -34,7 +34,7 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "e4U1TKIhzURRt3YdqKWQgkDQApv2",
         "cm4yqA8NfBadUBtffEzcEJRV9873",
         "qsFiDEpOgOcTFSbiX2RJMrCKBHG3",
-        "H5NGDRDneWdH9ADuZDCFNHlovK83",
+        "H5NGDRDneWdH9ADuZDCFNHIovK83",
         "t8WMcGOCaQdB159ZeNBmHZvEtR13",
         "Uv9m8nch",
     ],
@@ -43,7 +43,7 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "JvY6C2uEdPeEqoWLuqB4eYfbZqj2",
         "mZJZjTMVinNRegZFQG9FZzRjpiA2",
         "n7J3AJy6KIXQYMEil0TyQQcAxs93",
-        "xNTJrZ5xXwRliGvpCVXaxDwDpl32",
+        "xNTJrZ5xXwRIiGvpCVXaxDwDpI32",
         "HmxNU3owvAPLnprYQHfjTHF0zUA3"
     ],
     "x8u4kvWvieZIVc9NdgiWmG01nts2": [
@@ -57,7 +57,7 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
     ],
     "MlE49ceLEDbzvKAsisKnW07fGfW2": [
         "sRqr0SXKIUZBCn5g9V6VQRh24SS2",
-        "xOQdg23cnOgLQD5lonJtFgAELa13",
+        "xOQdg23cnOgLQD5IonJtFgAELa13",
         "Hnr2ehdTK0O8PfSj7Vn2zQksqz63",
         "h2q00DOa3EM870V5RDu2NABcb213",
         "BjsmUvmlFdUMDKg123iibi5AxZA2",

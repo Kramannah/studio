@@ -24,7 +24,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Singian",
         email: "osingian@hovidinc.com"
     },
-    "xNTJrZ5xXwRliGvpCVXaxDwDpl32": {
+    "xNTJrZ5xXwRIiGvpCVXaxDwDpI32": {
         code: "CL-04",
         firstName: "Arnel Jr",
         lastName: "Bongala",
@@ -156,13 +156,13 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Ramos",
         email: "pjramos@hovidinc.com"
     },
-    "nZZHI6JVZzZCVBIDcwiAv0RDmGv2": {
+    "nZZHI6JVZzZCVBlDcwiAv0RDmGv2": {
         code: "CL-05",
         firstName: "Carmina",
         lastName: "Dimaala",
         email: "cdimaala@hovidinc.com"
     },
-    "NOYZ3h8ylaNINBVBgFYJzhKdisY2": {
+    "NOYZ3h8yIaNINBVBgFYJzhKdisY2": {
         code: "MQ-01",
         firstName: "Luzviminda",
         lastName: "Rivera",
@@ -174,7 +174,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Meniosa",
         email: "jmeniosa@hovidinc.com"
     },
-    "xOQdg23cnOgLQD5lonJtFgAELa13": {
+    "xOQdg23cnOgLQD5IonJtFgAELa13": {
         code: "LSL-03",
         firstName: "Marylyn",
         lastName: "Baldoz",
@@ -203,12 +203,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Gwyne Joseph F.",
         lastName: "Lestor",
         email: "gjlestor@hovidinc.com"
-    },
-    "WZkgG4Ot9jRssWT3E09XIwe6VFc2": {
-        code: "ONCO",
-        firstName: "Aileen",
-        lastName: "Nañas",
-        email: "ananas@hovidinc.com"
     },
     "hM21Pxjwfma3m75pefiM7j23F4f1": {
         code: "VIS-01",
@@ -246,7 +240,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Capilos",
         email: "macapilos@hovidinc.com"
     },
-    "H5NGDRDneWdH9ADuZDCFNHlovK83": {
+    "H5NGDRDneWdH9ADuZDCFNHIovK83": {
         code: "VIS-06",
         firstName: "Edcel B",
         lastName: "Babas",
