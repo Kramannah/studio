@@ -5,17 +5,21 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, deleteDoc, doc } from 'firebase/firestore';
 
+// CRITICAL: This hook is restricted to prevent massive quota-killing scans.
+// It is intended for limited admin oversight only.
 export const useAllCoverageEntries = () => {
   const { toast } = useToast();
   const [entries, setEntries] = useState<CoverageEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchEntries = useCallback(async () => {
+    if (!db) return;
     setLoading(true);
     try {
-      const q = query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"));
+      // Enforce a strict limit to prevent Quota Exceeded errors
+      const q = query(collection(db, "coverageEntries"), orderBy("submittedAt", "desc"), limit(200));
       const querySnapshot = await getDocs(q);
       const fetchedEntries: CoverageEntry[] = [];
       querySnapshot.forEach((doc) => {
@@ -23,12 +27,11 @@ export const useAllCoverageEntries = () => {
       });
       setEntries(fetchedEntries);
     } catch (error) {
-      console.error("Error fetching all coverage entries:", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not fetch coverage reports. Check Firestore rules." });
+      console.warn("Global entries fetch limited for quota:", error);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchEntries();
@@ -36,18 +39,13 @@ export const useAllCoverageEntries = () => {
 
   const deleteEntry = useCallback(async (id: string) => {
     try {
-        const entryToDelete = entries.find(e => e.id === id);
-        await deleteDoc(doc(db, "coverageEntries", id));
+        await deleteDoc(doc(db!, "coverageEntries", id));
         setEntries(prev => prev.filter(e => e.id !== id));
-        if(entryToDelete) {
-            toast({ variant: 'destructive', title: "Entry Deleted", description: `Coverage for ${entryToDelete.firstName} ${entryToDelete.lastName} has been removed.` });
-        }
+        toast({ variant: 'destructive', title: "Entry Deleted" });
     } catch (error) {
-        toast({ variant: 'destructive', title: "Delete Failed", description: "Could not delete entry from server." });
+        toast({ variant: 'destructive', title: "Delete Failed" });
     }
-  }, [entries, toast]);
+  }, [toast]);
 
   return { entries, loading, fetchEntries, deleteEntry };
 };
-
-    

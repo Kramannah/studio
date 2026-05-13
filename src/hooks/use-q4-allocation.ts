@@ -8,19 +8,23 @@ import { collection, query, writeBatch, doc, where, getDocs } from 'firebase/fir
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
-// Session-level global cache to prevent redundant heavy aggregations
+// Singleton session-level cache to survive component unmounts
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let globalCacheTimestamp: number = 0;
-const CACHE_DURATION = 300000; // 5 minutes fresh duration
+const CACHE_DURATION = 1800000; // 30 minutes for heavy aggregations
+let globalFetchPromise: Promise<void> | null = null;
 
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
   const [loading, setLoading] = useState(!globalAllocationsCache);
-  const lastFetchTime = useRef<number>(globalCacheTimestamp);
-  const isFetching = useRef<boolean>(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isAdminOrManager = useMemo(() => {
     if (!user) return false;
@@ -33,9 +37,11 @@ export const useQ4Allocation = () => {
            profile?.role === 'Manager';
   }, [user, profile]);
 
-  const fetchAllocations = useCallback(async () => {
+  const performFetch = useCallback(async () => {
     if (!db || !user) return;
+    
     try {
+        // 1. Fetch Master Inventory
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -51,126 +57,106 @@ export const useQ4Allocation = () => {
             } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
         
-        fetched.sort((a, b) => {
-            const nameA = (a.displayMaterialName || "").toLowerCase();
-            const nameB = (b.displayMaterialName || "").toLowerCase();
-            return nameA.localeCompare(nameB);
+        fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
+        
+        // 2. Fetch Exhaustive Usage
+        const colRef = collection(db, "coverageEntries");
+        const usageQuery = isAdminOrManager
+            ? query(colRef) // Full org scan for Admin/Manager
+            : query(colRef, where("userId", "==", user.uid)); // Personal scan for PMR
+
+        const usageSnap = await getDocs(usageQuery);
+        const usage: Record<string, number> = {};
+        
+        usageSnap.docs.forEach(docSnap => {
+            const entry = docSnap.data() as CoverageEntry;
+            if (!entry) return;
+
+            const processItem = (name?: string, qty?: number) => {
+                const safeName = String(name ?? "").toLowerCase().trim();
+                if (!safeName) return;
+                const safeQty = Math.round(Number(qty || 0));
+                if (!isNaN(safeQty) && safeQty !== 0) {
+                    usage[safeName] = (usage[safeName] || 0) + safeQty;
+                }
+            };
+
+            processItem(entry.primarySampleName, entry.primaryProductQty);
+            processItem(entry.secondarySampleName, entry.secondaryProductQty);
         });
         
+        // Update Singleton Cache
         globalAllocationsCache = fetched;
+        globalUsedQuantitiesCache = usage;
+        globalCacheTimestamp = Date.now();
+        
         setAllocations(fetched);
+        setUsedQuantities(usage);
     } catch (error) {
-        console.warn("Inventory Catalog Fetch Warning:", error);
-    }
-  }, [user]);
-
-  const fetchUsage = useCallback(async () => {
-    if (!db || !user) return;
-    try {
-      const colRef = collection(db, "coverageEntries");
-      
-      // ACCURACY: We perform an exhaustive scan of ALL historical entries for perfect accuracy
-      // No limits or date filters are applied to ensure every sample unit is reflected
-      const usageQuery = isAdminOrManager
-        ? query(colRef) 
-        : query(colRef, where("userId", "==", user.uid));
-
-      const snapshot = await getDocs(usageQuery);
-      const usage: Record<string, number> = {};
-      
-      snapshot.docs.forEach(docSnap => {
-        const entry = docSnap.data() as CoverageEntry;
-        if (!entry) return;
-
-        const processItem = (name?: string, qty?: number) => {
-            const safeName = String(name ?? "").toLowerCase().trim();
-            if (!safeName) return;
-            const safeQty = Math.round(Number(qty || 0));
-            if (!isNaN(safeQty) && safeQty !== 0) {
-                usage[safeName] = (usage[safeName] || 0) + safeQty;
-            }
-        };
-
-        // ACCURACY: Used samples are strictly based on primaryProductQty and secondaryProductQty from all reports
-        processItem(entry.primarySampleName, entry.primaryProductQty);
-        processItem(entry.secondarySampleName, entry.secondaryProductQty);
-      });
-      
-      globalUsedQuantitiesCache = usage;
-      setUsedQuantities(usage);
-    } catch (error) {
-        console.warn("Usage Tracking Sync Delay:", error);
+        console.warn("Inventory fetch limited due to quota or network:", error);
     }
   }, [user, isAdminOrManager]);
 
-  useEffect(() => {
-    const init = async () => {
-        if (!user || isFetching.current) return;
-        const now = Date.now();
-        
-        if (globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime.current < CACHE_DURATION)) {
-            setAllocations(globalAllocationsCache);
-            setUsedQuantities(globalUsedQuantitiesCache);
-            setLoading(false);
-            return;
-        }
+  const initData = useCallback(async (force = false) => {
+    if (!user) return;
+    
+    const now = Date.now();
+    const isCacheFresh = (now - globalCacheTimestamp < CACHE_DURATION);
 
-        setLoading(true);
-        isFetching.current = true;
-        await Promise.allSettled([fetchAllocations(), fetchUsage()]);
-        globalCacheTimestamp = Date.now();
-        lastFetchTime.current = globalCacheTimestamp;
+    if (!force && isCacheFresh && globalAllocationsCache) {
+        setAllocations(globalAllocationsCache);
+        setUsedQuantities(globalUsedQuantitiesCache || {});
         setLoading(false);
-        isFetching.current = false;
-    };
-    init();
-  }, [user, fetchAllocations, fetchUsage]);
+        return;
+    }
 
-  const refetch = useCallback(async () => {
-      if (isFetching.current) return;
-      setLoading(true);
-      isFetching.current = true;
-      await Promise.allSettled([fetchAllocations(), fetchUsage()]);
-      globalCacheTimestamp = Date.now();
-      lastFetchTime.current = globalCacheTimestamp;
-      setLoading(false);
-      isFetching.current = false;
-  }, [fetchAllocations, fetchUsage]);
+    if (globalFetchPromise && !force) return globalFetchPromise;
 
-  const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
-    if (!db) return false;
+    setLoading(true);
+    globalFetchPromise = performFetch();
+    
     try {
-      const batch = writeBatch(db);
-      data.forEach(item => {
-        const name = (item.displayMaterialName ?? "").toString().trim();
-        if (!name) return;
-        const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const docId = `sample_${cleanId}`;
-        const docRef = doc(db, "marketingSamples", docId);
-        batch.set(docRef, { ...item }, { merge: true });
-      });
-      await batch.commit();
-      await refetch();
-      return true;
-    } catch (err) { 
-        console.error("Bulk add error:", err);
-        return false; 
+        await globalFetchPromise;
+    } finally {
+        globalFetchPromise = null;
+        setLoading(false);
+    }
+  }, [user, performFetch]);
+
+  useEffect(() => {
+    if (mounted) initData();
+  }, [mounted, initData]);
+
+  return { 
+    allocations, 
+    usedQuantities, 
+    loading, 
+    refetch: () => initData(true),
+    addAllocationsBulk: async (data: Omit<Q4Allocation, 'id'>[]) => {
+        if (!db) return false;
+        try {
+          const batch = writeBatch(db);
+          data.forEach(item => {
+            const name = (item.displayMaterialName ?? "").toString().trim();
+            if (!name) return;
+            const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
+            batch.set(docRef, { ...item }, { merge: true });
+          });
+          await batch.commit();
+          await initData(true);
+          return true;
+        } catch (err) { return false; }
+    },
+    deleteAllocationsBulk: async (ids: string[]) => {
+        if (!db) return false;
+        const batch = writeBatch(db);
+        ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
+        try { 
+            await batch.commit(); 
+            await initData(true); 
+            return true; 
+        } catch (err) { return false; }
     }
   };
-
-  const deleteAllocationsBulk = async (ids: string[]) => {
-      if (!db) return false;
-      const batch = writeBatch(db);
-      ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
-      try { 
-          await batch.commit(); 
-          await refetch(); 
-          return true; 
-      } catch (err) { 
-          console.error("Bulk delete error:", err);
-          return false; 
-      }
-  };
-
-  return { allocations, usedQuantities, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };
 };

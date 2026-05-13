@@ -21,6 +21,11 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
+// Global persistent cache for the entire session
+const userDataCache: Record<string, { timestamp: number, data: any }> = {};
+const teamSummaryCache: Record<string, { timestamp: number, data: any }> = {};
+const CACHE_TTL = 1800000; // 30 minutes to save quota
+
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
     if (typeof val === 'string') return val;
@@ -28,11 +33,6 @@ const safeToDateISO = (val: any): string => {
     if (val instanceof Date) return val.toISOString();
     return String(val);
 };
-
-// In-memory cache to prevent redundant reads within a single session
-const userDataCache: Record<string, { timestamp: number, data: any }> = {};
-const teamSummaryCache: Record<string, { timestamp: number, data: any }> = {};
-const CACHE_TTL = 300000; // 5 minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user, profile } = useAuth();
@@ -55,17 +55,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
-  const fetchInProgress = useRef<string | null>(null);
-  const teamFetchInProgress = useRef<string | null>(null);
-
-  const isUserAdmin = useMemo(() => {
-    if (!user) return false;
-    const normalizedEmail = (user.email ?? "").toString().toLowerCase().trim();
-    return ADMIN_UIDS.includes(user.uid) || 
-           normalizedEmail === 'mbustamante@hovidinc.com' || 
-           ADMIN_EMAILS.some(e => (e ?? "").toString().toLowerCase().trim() === normalizedEmail) ||
-           profile?.role === 'Admin';
-  }, [user, profile]);
+  const activeFetches = useRef<Set<string>>(new Set());
 
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
@@ -77,354 +67,186 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db) return;
-
+    if (!user || !db || activeFetches.current.has('approvals')) return;
+    
     let userFilter: string[] | null = null;
     if (managerId) {
       userFilter = getManagedUserIds(managerId);
-      if (userFilter.length === 0) {
-          setAllNonCallDays([]);
-          setAllPlanningRequests([]);
-          return;
-      }
-    } else if (!isUserAdmin) {
-      return;
+      if (userFilter.length === 0) return;
     }
 
+    activeFetches.current.add('approvals');
     setLoading(true);
     try {
-        const fetchCollection = async (collName: string, userIds: string[] | null): Promise<any[]> => {
-            try {
-                let q;
-                const colRef = collection(db!, collName);
-                if (userIds === null) {
-                    q = query(colRef, limit(500)); 
-                } else if (userIds.length > 0) {
-                    const chunks: string[][] = [];
-                    for (let i = 0; i < userIds.length; i += 10) {
-                        chunks.push(userIds.slice(i, i + 10));
-                    }
-                    const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(colRef, where("userId", "in", chunk), limit(200)))
-                    ));
-                    return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                } else {
-                    return [];
-                }
-                const snapshot = await getDocs(q);
-                return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            } catch (err) {
-                return [];
-            }
+        const fetchCol = async (name: string, filter: string[] | null) => {
+            const colRef = collection(db!, name);
+            if (!filter) return (await getDocs(query(colRef, limit(200)))).docs.map(d => ({id: d.id, ...d.data()}));
+            
+            const chunks = [];
+            for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c)))));
+            return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
-      
-      const [ncdRes, prRes] = await Promise.all([
-          fetchCollection("nonCallDays", userFilter),
-          fetchCollection("planningRequests", userFilter)
-      ]);
-      
-      setAllNonCallDays(ncdRes.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
-      setAllPlanningRequests(prRes.sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
-    } catch (err: any) {
-        console.warn("Team approvals fetch skipped or failed", err);
+
+        const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
+        setAllNonCallDays(ncd.sort((a,b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
+        setAllPlanningRequests(pr.sort((a,b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
+    } catch (e) {
+        console.warn("Approvals fetch skipped:", e);
     } finally {
-      setLoading(false);
+        setLoading(false);
+        activeFetches.current.delete('approvals');
     }
-  }, [user, managerId, isUserAdmin, getManagedUserIds]);
+  }, [user, managerId, getManagedUserIds]);
 
   useEffect(() => {
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
 
   const fetchTeamSummary = useCallback(async () => {
-      if (!managerId || !db) return;
-      
-      const now = Date.now();
-      if (teamSummaryCache[managerId] && (now - teamSummaryCache[managerId].timestamp < CACHE_TTL)) {
-          setTeamSummaryData(teamSummaryCache[managerId].data);
-          return;
-      }
+    if (!managerId || !db || activeFetches.current.has(`team_${managerId}`)) return;
 
-      if (teamFetchInProgress.current === managerId) return;
-      teamFetchInProgress.current = managerId;
-
-      const userFilter = getManagedUserIds(managerId);
-      if (userFilter.length === 0) {
-          setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
-          teamFetchInProgress.current = null;
-          return;
-      }
-
-      setLoadingSummary(true);
-      try {
-        const chunks: string[][] = [];
-        for (let i = 0; i < userFilter.length; i += 10) {
-            chunks.push(userFilter.slice(i, i + 10));
-        }
-        
-        const fetchDataForChunk = async (chunk: string[]) => {
-            if (chunk.length === 0) return { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] };
-
-            const fetchSingle = async (collName: string): Promise<any[]> => {
-                try {
-                    const q = query(collection(db!, collName), where("userId", "in", chunk));
-                    const snap = await getDocs(q);
-                    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                } catch (e) {
-                    return [];
-                }
-            };
-
-            const results = await Promise.all([
-                fetchSingle("coverageEntries"),
-                fetchSingle("timeLogs"),
-                fetchSingle("doctors"),
-                fetchSingle("nonCallDays"),
-                fetchSingle("plans"),
-            ]);
-
-            return {
-                entries: results[0] as CoverageEntry[],
-                timeLogs: results[1] as TimeLog[],
-                doctors: results[2] as Doctor[],
-                nonCallDays: results[3] as NonCallDay[],
-                plans: results[4] as Plan[],
-            };
-        };
-
-        const chunkResults = await Promise.all(chunks.map(fetchDataForChunk));
-        
-        const combined = chunkResults.reduce((acc, curr) => ({
-            entries: [...acc.entries, ...curr.entries],
-            timeLogs: [...acc.timeLogs, ...curr.timeLogs],
-            doctors: [...acc.doctors, ...curr.doctors],
-            nonCallDays: [...acc.nonCallDays, ...curr.nonCallDays],
-            plans: [...acc.plans, ...curr.plans],
-        }), { entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [] } as any);
-
-        const used: Record<string, number> = {};
-        combined.entries.forEach((e: CoverageEntry) => {
-            const process = (name?: string, qty?: number) => {
-                const safeName = (name ?? "").toString().toLowerCase().trim();
-                if (!safeName) return;
-                const safeQty = Math.round(Number(qty || 0));
-                if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
-            };
-            // ACCURACY: Reflect all used samples from all coverage entries submitted by the district team
-            process(e.primarySampleName, e.primaryProductQty);
-            process(e.secondarySampleName, e.secondaryProductQty);
-        });
-
-        const finalData = {
-            ...combined,
-            marketingSamples: [],
-            usedQuantities: used
-        };
-
-        teamSummaryCache[managerId] = { timestamp: now, data: finalData };
-        setTeamSummaryData(finalData);
-      } catch (err: any) {
-         console.warn("Team summary fetch warning:", err);
-      } finally {
-        setLoadingSummary(false);
-        teamFetchInProgress.current = null;
-      }
-  }, [managerId, getManagedUserIds]);
-  
-  const fetchUserData = useCallback(async (userId: string) => {
-    if (!userId || !db) return;
-    const sanitizedUserId = userId.trim();
-    
     const now = Date.now();
-    if (userDataCache[sanitizedUserId] && (now - userDataCache[sanitizedUserId].timestamp < CACHE_TTL)) {
-        const cached = userDataCache[sanitizedUserId].data;
-        setAllEntries(cached.entries);
-        setAllDoctors(cached.doctors);
-        setAllPlans(cached.plans);
-        setAllTimeLogs(cached.timeLogs);
-        setAllNonCallDaysIndividual(cached.nonCallDays);
-        setIndividualPlanningRequests(cached.requests);
-        setIndividualUsedQuantities(cached.used);
+    if (teamSummaryCache[managerId] && (now - teamSummaryCache[managerId].timestamp < CACHE_TTL)) {
+        setTeamSummaryData(teamSummaryCache[managerId].data);
         return;
     }
 
-    if (fetchInProgress.current === sanitizedUserId) return;
-    fetchInProgress.current = sanitizedUserId;
-
-    setLoadingIndividual(true);
-    
+    activeFetches.current.add(`team_${managerId}`);
+    setLoadingSummary(true);
     try {
-        const fetchS = async (collName: string): Promise<any[]> => {
-            try {
-                // ACCURACY: Scan ALL entries for the Representative (PMR) to reflect complete history
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
-                const snap = await getDocs(q);
-                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            } catch (e) {
-                return [];
-            }
+        const userFilter = getManagedUserIds(managerId);
+        if (userFilter.length === 0) {
+            setTeamSummaryData(null);
+            return;
+        }
+
+        const fetchAllForUsers = async (ids: string[]) => {
+            const chunks = [];
+            for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
+            
+            const results = await Promise.all(chunks.map(async (c) => {
+                const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "in", c)))).docs.map(d => ({id: d.id, ...d.data()}));
+                const [e, l, d, ncd, p] = await Promise.all([f("coverageEntries"), f("timeLogs"), f("doctors"), f("nonCallDays"), f("plans")]);
+                return { entries: e, logs: l, doctors: d, ncds: ncd, plans: p };
+            }));
+
+            return results.reduce((acc, curr) => ({
+                entries: [...acc.entries, ...curr.entries],
+                logs: [...acc.logs, ...curr.logs],
+                doctors: [...acc.doctors, ...curr.doctors],
+                ncds: [...acc.ncds, ...curr.ncds],
+                plans: [...acc.plans, ...curr.plans],
+            }), { entries: [], logs: [], doctors: [], ncds: [], plans: [] } as any);
         };
 
-        const results = await Promise.allSettled([
-            fetchS("coverageEntries"),
-            fetchS("doctors"),
-            fetchS("plans"),
-            fetchS("timeLogs"),
-            fetchS("nonCallDays"),
-            fetchS("planningRequests")
-        ]);
-        
-        const entriesRaw = results[0].status === 'fulfilled' ? results[0].value : [];
-        const doctors = results[1].status === 'fulfilled' ? results[1].value : [];
-        const plans = results[2].status === 'fulfilled' ? results[2].value : [];
-        const logs = results[3].status === 'fulfilled' ? results[3].value : [];
-        const ncds = results[4].status === 'fulfilled' ? results[4].value : [];
-        const requests = results[5].status === 'fulfilled' ? results[5].value : [];
-
-        const entries = (entriesRaw as CoverageEntry[]).sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate)));
-
+        const combined = await fetchAllForUsers(userFilter);
         const used: Record<string, number> = {};
-        entries.forEach((e: CoverageEntry) => {
-            const process = (name?: string, qty?: number) => {
-                const safeName = String(name ?? "").toLowerCase().trim();
-                if (!safeName) return;
-                const safeQty = Math.round(Number(qty || 0));
-                if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
+        combined.entries.forEach((e: CoverageEntry) => {
+            const process = (n?: string, q?: number) => {
+                const key = String(n ?? "").toLowerCase().trim();
+                if (key) used[key] = (used[key] || 0) + Math.round(Number(q || 0));
             };
-            // ACCURACY: Reflect all issued samples from all historical coverage entries of this PMR
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
         });
 
-        const dashboardData = { entries, doctors, plans, timeLogs: logs, nonCallDays: ncds, requests, used };
-        userDataCache[sanitizedUserId] = { timestamp: now, data: dashboardData };
+        const finalData = { ...combined, timeLogs: combined.logs, nonCallDays: combined.ncds, usedQuantities: used, marketingSamples: [] };
+        teamSummaryCache[managerId] = { timestamp: now, data: finalData };
+        setTeamSummaryData(finalData);
+    } catch (e) {
+        console.warn("Team summary quota warning:", e);
+    } finally {
+        setLoadingSummary(false);
+        activeFetches.current.delete(`team_${managerId}`);
+    }
+  }, [managerId, getManagedUserIds]);
 
-        setAllEntries(entries);
-        setAllDoctors(doctors);
-        setAllPlans(plans);
-        setAllTimeLogs(logs);
-        setAllNonCallDaysIndividual(ncds);
-        setIndividualPlanningRequests(requests);
-        setIndividualUsedQuantities(used);
-    } catch (err: any) {
-        console.warn("Individual PMR data fetch warning:", err);
+  const fetchUserData = useCallback(async (uid: string) => {
+    if (!uid || !db || activeFetches.current.has(`user_${uid}`)) return;
+    
+    const now = Date.now();
+    if (userDataCache[uid] && (now - userDataCache[uid].timestamp < CACHE_TTL)) {
+        const c = userDataCache[uid].data;
+        setAllEntries(c.entries); setAllDoctors(c.doctors); setAllPlans(c.plans);
+        setAllTimeLogs(c.timeLogs); setAllNonCallDaysIndividual(c.nonCallDays);
+        setIndividualPlanningRequests(c.requests); setIndividualUsedQuantities(c.used);
+        return;
+    }
+
+    activeFetches.current.add(`user_${uid}`);
+    setLoadingIndividual(true);
+    try {
+        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid)))).docs.map(d => ({id: d.id, ...d.data()}));
+        const [e, d, p, l, ncd, r] = await Promise.all([f("coverageEntries"), f("doctors"), f("plans"), f("timeLogs"), f("nonCallDays"), f("planningRequests")]);
+        
+        const used: Record<string, number> = {};
+        (e as CoverageEntry[]).forEach(item => {
+            const process = (n?: string, q?: number) => {
+                const key = String(n ?? "").toLowerCase().trim();
+                if (key) used[key] = (used[key] || 0) + Math.round(Number(q || 0));
+            };
+            process(item.primarySampleName, item.primaryProductQty);
+            process(item.secondarySampleName, item.secondaryProductQty);
+        });
+
+        const dashboardData = { entries: e, doctors: d, plans: p, timeLogs: l, nonCallDays: ncd, requests: r, used };
+        userDataCache[uid] = { timestamp: now, data: dashboardData };
+        
+        setAllEntries(e as any); setAllDoctors(d as any); setAllPlans(p as any);
+        setAllTimeLogs(l as any); setAllNonCallDaysIndividual(ncd as any);
+        setIndividualPlanningRequests(r as any); setIndividualUsedQuantities(used);
+    } catch (e) {
+        console.warn("User data fetch quota warning:", e);
     } finally {
         setLoadingIndividual(false);
-        fetchInProgress.current = null;
+        activeFetches.current.delete(`user_${uid}`);
     }
   }, []);
 
-  const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
-      const docRef = doc(db!, 'nonCallDays', id);
-      updateDoc(docRef, { status })
-        .then(() => {
-            setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
-            toast({ title: 'Success', description: `Request ${status}.`});
-        })
-        .catch(async (e) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: { status } }));
-        });
-  };
-  
-  const updatePlanningRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
-      const docRef = db ? doc(db, 'planningRequests', id) : null;
-      if (!docRef) return;
-      updateDoc(docRef, { status })
-        .then(() => {
-            setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
-            toast({ title: 'Success', description: `Request ${status}.` });
-        })
-        .catch(async (e) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: { status } }));
-        });
-  };
-
-  const deleteEntry = async (id: string) => {
-    const docRef = db ? doc(db, "coverageEntries", id) : null;
-    if (!docRef) return;
-    deleteDoc(docRef)
-      .then(() => {
-        setAllEntries(prev => prev.filter(e => e.id !== id));
-        toast({ variant: 'destructive', title: "Entry Deleted" });
-      })
-      .catch(async () => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
-      });
-  };
-  
-  const addDoctor = async (data: Omit<Doctor, 'id'>) => {
-    if (!db) return;
-    const colRef = collection(db, "doctors");
-    addDoc(colRef, data)
-      .then((dr) => {
-        const newDoc = { id: dr.id, ...data } as Doctor;
-        setAllDoctors(prev => [...prev, newDoc]);
-        toast({ title: "Doctor Added" });
-      })
-      .catch(async () => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: colRef.path, operation: 'create', requestResourceData: data }));
-      });
-  };
-
-  const updateDoctor = async (data: Doctor) => {
-    if (!db) return;
-    const { id, userId, ...update } = data;
-    const docRef = doc(db, "doctors", id);
-    updateDoc(docRef, update)
-      .then(() => {
-        setAllDoctors(prev => prev.map(d => d.id === id ? data : d));
-        toast({ title: "Doctor Updated" });
-      })
-      .catch(async (e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'update', requestResourceData: update }));
-      });
-  };
-  
-  const deleteDoctor = async (id: string) => {
-    if (!db) return;
-    const docRef = doc(db, "doctors", id);
-    deleteDoc(docRef)
-      .then(() => {
-        setAllDoctors(prev => prev.filter(d => d.id !== id));
-        toast({ variant: "destructive", title: "Doctor Deleted" });
-      })
-      .catch(async () => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'delete' }));
-      });
-  };
-
   return { 
-    allEntries,
-    allDoctors,
-    allPlans,
-    allTimeLogs,
-    allNonCallDaysIndividual,
-    individualPlanningRequests,
-    individualUsedQuantities,
-    allNonCallDays, 
-    allPlanningRequests,
-    teamSummaryData,
-    loading,
-    loadingSummary,
-    loadingIndividual,
-    fetchUserData,
-    fetchTeamSummary,
-    updateNonCallDayStatus, 
-    updatePlanningRequestStatus, 
-    deleteEntry,
-    addDoctor,
-    updateDoctor,
-    deleteDoctor,
+    allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
+    individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
+    teamSummaryData, loading, loadingSummary, loadingIndividual, 
+    fetchUserData, fetchTeamSummary,
+    updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
+        const ref = doc(db!, 'nonCallDays', id);
+        await updateDoc(ref, { status });
+        setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
+        toast({ title: `Request ${status}` });
+    },
+    updatePlanningRequestStatus: async (id: string, status: 'approved' | 'rejected') => {
+        const ref = doc(db!, 'planningRequests', id);
+        await updateDoc(ref, { status });
+        setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
+        toast({ title: `Request ${status}` });
+    },
+    deleteEntry: async (id: string) => {
+        await deleteDoc(doc(db!, "coverageEntries", id));
+        setAllEntries(prev => prev.filter(e => e.id !== id));
+        toast({ variant: 'destructive', title: "Deleted" });
+    },
+    addDoctor: async (data: any) => {
+        const dr = await addDoc(collection(db!, "doctors"), data);
+        setAllDoctors(prev => [...prev, { id: dr.id, ...data }]);
+    },
+    updateDoctor: async (data: any) => {
+        const { id, userId, ...upd } = data;
+        await updateDoc(doc(db!, "doctors", id), upd);
+        setAllDoctors(prev => prev.map(d => d.id === id ? data : d));
+    },
+    deleteDoctor: async (id: string) => {
+        await deleteDoc(doc(db!, "doctors", id));
+        setAllDoctors(prev => prev.filter(d => d.id !== id));
+    },
     deleteDoctorsBulk: async (ids: string[]) => {
-        if (!db) return;
-        const batch = writeBatch(db);
+        const batch = writeBatch(db!);
         ids.forEach(id => batch.delete(doc(db!, "doctors", id)));
         await batch.commit();
         setAllDoctors(prev => prev.filter(d => !ids.includes(d.id)));
     },
-    addDoctorsBulk: async (data: Omit<Doctor, 'id'>[]) => {
-        if (!db) return;
-        const batch = writeBatch(db);
+    addDoctorsBulk: async (data: any[]) => {
+        const batch = writeBatch(db!);
         data.forEach(d => batch.set(doc(collection(db!, "doctors")), d));
         await batch.commit();
     }
