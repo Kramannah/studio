@@ -32,7 +32,8 @@ const safeToDateISO = (val: any): string => {
 
 // In-memory cache to prevent redundant reads within a single session
 const userDataCache: Record<string, { timestamp: number, data: any }> = {};
-const CACHE_TTL = 300000; // 5 minutes
+const teamSummaryCache: Record<string, { timestamp: number, data: any }> = {};
+const CACHE_TTL = 300000; // 5 minutes (increased to save quota)
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user, profile } = useAuth();
@@ -56,6 +57,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
   const fetchInProgress = useRef<string | null>(null);
+  const teamFetchInProgress = useRef<string | null>(null);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -97,14 +99,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 let q;
                 const colRef = collection(db!, collName);
                 if (userIds === null) {
-                    q = query(colRef, limit(500));
+                    q = query(colRef, limit(200)); // Lowered limit to save quota
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(colRef, where("userId", "in", chunk), limit(200)))
+                        getDocs(query(colRef, where("userId", "in", chunk), limit(100)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -125,7 +127,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
       setAllNonCallDays(ncdRes.sort((a, b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
       setAllPlanningRequests(prRes.sort((a, b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
     } catch (err: any) {
-        console.error("Team approvals fetch failed", err);
+        console.warn("Team approvals fetch skipped or failed", err);
     } finally {
       setLoading(false);
     }
@@ -138,9 +140,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchTeamSummary = useCallback(async () => {
       if (!managerId || !db) return;
       
+      const now = Date.now();
+      if (teamSummaryCache[managerId] && (now - teamSummaryCache[managerId].timestamp < CACHE_TTL)) {
+          setTeamSummaryData(teamSummaryCache[managerId].data);
+          return;
+      }
+
+      if (teamFetchInProgress.current === managerId) return;
+      teamFetchInProgress.current = managerId;
+
       const userFilter = getManagedUserIds(managerId);
       if (userFilter.length === 0) {
           setTeamSummaryData({ entries: [], timeLogs: [], doctors: [], nonCallDays: [], plans: [], marketingSamples: [], usedQuantities: {} });
+          teamFetchInProgress.current = null;
           return;
       }
 
@@ -157,16 +169,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string, restrictDate: boolean = true): Promise<any[]> => {
                 try {
-                    // Increased limit to 500 per chunk for better coverage oversight
-                    const q = query(collection(db!, collName), where("userId", "in", chunk), limit(500));
-                    const snap = await getDocs(q);
-                    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    // Using a reasonable limit per PMR chunk to prevent quota exhaustion
+                    const q = restrictDate && collName !== 'doctors' 
+                        ? query(collection(db!, collName), where("userId", "in", chunk), where("submittedAt", ">=", startDate), limit(300))
+                        : query(collection(db!, collName), where("userId", "in", chunk), limit(300));
                     
-                    if (!restrictDate || collName === 'doctors') return docs;
-                    return docs.filter((d: any) => {
-                        const dDate = safeToDateISO(d.submittedAt || d.coverageDate || d.timeIn || d.date || d.plannedDate || d.requestedAt);
-                        return !dDate || dDate >= startDate;
-                    });
+                    const snap = await getDocs(q);
+                    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 } catch (e) {
                     return [];
                 }
@@ -212,15 +221,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
         });
 
-        setTeamSummaryData({
+        const finalData = {
             ...combined,
             marketingSamples: [],
             usedQuantities: used
-        });
+        };
+
+        teamSummaryCache[managerId] = { timestamp: now, data: finalData };
+        setTeamSummaryData(finalData);
       } catch (err: any) {
-         console.error("Team summary fetch failed", err);
+         console.warn("Team summary fetch warning:", err);
       } finally {
         setLoadingSummary(false);
+        teamFetchInProgress.current = null;
       }
   }, [managerId, getManagedUserIds]);
   
@@ -259,9 +272,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchS = async (collName: string): Promise<any[]> => {
             try {
-                // Fetch ALL data for the user without date filtering to ensure exhaustive coverage visibility
-                // Explicitly targeting sanitizedUserId which for Pangan is mdLCjhNVnYas96aW4IkrPWip7RS2
-                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId));
+                // Fetch targeted data for the specific user
+                const q = query(collection(db!, collName), where("userId", "==", sanitizedUserId), limit(1000));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             } catch (e) {
@@ -313,7 +325,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(requests);
         setIndividualUsedQuantities(used);
     } catch (err: any) {
-        console.error("Individual PMR data aggregate failed", err);
+        console.warn("Individual PMR data fetch warning:", err);
     } finally {
         setLoadingIndividual(false);
         fetchInProgress.current = null;
