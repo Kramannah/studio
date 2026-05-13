@@ -20,13 +20,13 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-export const useOfflineSync = (userId?: string) => {
+export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
 
@@ -43,7 +43,7 @@ export const useOfflineSync = (userId?: string) => {
   }, []);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !isOnline || !db) {
+    if (!userId || !isOnline || !db || (!active && !force)) {
       setLoading(false);
       return;
     }
@@ -54,8 +54,8 @@ export const useOfflineSync = (userId?: string) => {
         return;
     }
 
+    setLoading(true);
     try {
-      // CURRENT YEAR 2026 ONLY: drastically reduces read volume
       const currentYearStart = getStartOfYearISO();
       const q = query(
         collection(db!, "coverageEntries"), 
@@ -67,7 +67,7 @@ export const useOfflineSync = (userId?: string) => {
       
       querySnapshot.forEach(doc => {
         const data = doc.data() as CoverageEntry;
-        // Memory filter to avoid composite index requirement
+        // Memory filter for current year
         if ((data.submittedAt || data.coverageDate || "") >= currentYearStart) {
             allEntries.push({ id: doc.id, ...data });
         }
@@ -87,7 +87,7 @@ export const useOfflineSync = (userId?: string) => {
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline]);
+  }, [userId, isOnline, active]);
   
   useEffect(() => {
     if (userId) {
@@ -96,14 +96,15 @@ export const useOfflineSync = (userId?: string) => {
             if (localData) setOfflineEntries(JSON.parse(localData));
         } catch (error) {}
         
-        setLoading(true);
-        fetchMasterEntries();
+        if (active) {
+            fetchMasterEntries();
+        }
     } else {
       setOfflineEntries([]);
       setMasterEntries([]);
       setLoading(false);
     }
-  }, [userId, getOfflineKey, fetchMasterEntries]);
+  }, [userId, getOfflineKey, fetchMasterEntries, active]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);

@@ -24,11 +24,11 @@ const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
  * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY.
  * Uses global caching and request locking to prevent Quota Exceeded errors.
  */
-export const useQ4Allocation = () => {
+export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
-  const [loading, setLoading] = useState(!globalAllocationsCache);
+  const [loading, setLoading] = useState(!globalAllocationsCache && active);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -41,7 +41,7 @@ export const useQ4Allocation = () => {
   }, [user, profile]);
 
   const performFetch = useCallback(async (forceRefresh = false) => {
-    if (!db || !user) {
+    if (!db || !user || (!active && !forceRefresh)) {
         setLoading(false);
         return;
     }
@@ -86,7 +86,7 @@ export const useQ4Allocation = () => {
             
             fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-            // 2. Fetch Usage (CURRENT YEAR 2026 ONLY)
+            // 2. Fetch Usage (CURRENT YEAR ONLY)
             const currentYearStart = getStartOfYearISO();
             const usage: Record<string, number> = {};
             const entriesCol = collection(db!, "coverageEntries");
@@ -97,7 +97,7 @@ export const useQ4Allocation = () => {
                 let baseQuery;
                 
                 if (isUserAdmin) {
-                    // Admins see everything for 2026. Single range query is index-friendly.
+                    // Admins see everything for current year. Single range query is index-friendly.
                     baseQuery = query(
                         entriesCol, 
                         where("submittedAt", ">=", currentYearStart),
@@ -106,7 +106,7 @@ export const useQ4Allocation = () => {
                         limit(1000)
                     );
                 } else {
-                    // PMRs see their own for 2026. Filter by userId first.
+                    // PMRs see their own. Filter by userId first to avoid index requirements.
                     baseQuery = query(
                         entriesCol, 
                         where("userId", "==", user.uid), 
@@ -166,11 +166,13 @@ export const useQ4Allocation = () => {
 
     await fetchPromise;
     setLoading(false);
-  }, [user, isUserAdmin]);
+  }, [user, isUserAdmin, active]);
 
   useEffect(() => {
-    performFetch();
-  }, [performFetch]);
+    if (active) {
+        performFetch();
+    }
+  }, [performFetch, active]);
 
   return { 
     allocations, 

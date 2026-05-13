@@ -12,18 +12,16 @@ import { getQueryStartDateISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-export const useTimeLogs = () => {
+export const useTimeLogs = (active: boolean = true) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
   const fetchTimeLogs = useCallback(async () => {
-    if (!user || !db) {
-      setTimeLogs([]);
-      setTodaysTimeIn(null);
-      setLoading(false);
+    if (!user || !db || !active) {
+      if (!active) setLoading(false);
       return;
     }
     setLoading(true);
@@ -57,11 +55,13 @@ export const useTimeLogs = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, active]);
 
   useEffect(() => {
-    fetchTimeLogs();
-  }, [fetchTimeLogs]);
+    if (active) {
+        fetchTimeLogs();
+    }
+  }, [fetchTimeLogs, active]);
 
   const addTimeIn = async (photo: string, loc: 'inbase' | 'outbase') => {
     if (!user || !db) return;

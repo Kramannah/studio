@@ -32,7 +32,7 @@ const safeToDateISO = (val: any): string => {
     return String(val);
 };
 
-export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
+export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -63,7 +63,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db) return;
+    if (!user || !db || !active) return;
     
     let userFilter: string[] | null = null;
     if (managerId) {
@@ -92,11 +92,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally {
         setLoading(false);
     }
-  }, [user, managerId, getManagedUserIds]);
+  }, [user, managerId, getManagedUserIds, active]);
 
   useEffect(() => {
-    fetchTeamApprovals();
-  }, [fetchTeamApprovals]);
+    if (active) {
+        fetchTeamApprovals();
+    }
+  }, [fetchTeamApprovals, active]);
 
   const fetchTeamSummary = useCallback(async (forceRefresh = false) => {
     if (!managerId || !db) return;
@@ -204,7 +206,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             f("planningRequests")
         ]);
         
-        // Memory filter for current year to avoid index requirements for PMR drill-down
+        // Memory filter for current year to avoid index requirements
         const filterYear = (list: any[], field: string) => list.filter(item => (item[field] || "") >= currentYearStart);
 
         const filteredEntries = filterYear(e, 'submittedAt');

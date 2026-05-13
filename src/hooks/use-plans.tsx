@@ -14,13 +14,13 @@ import { isToday } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
-export const usePlans = () => {
+export const usePlans = (active: boolean = true) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [offlinePlans, setOfflinePlans] = useState<Plan[]>([]);
   const [masterPlans, setMasterPlans] = useState<Plan[]>([]);
   const [planningRequests, setPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_PLANS_KEY}_${user?.uid}`, [user]);
@@ -38,7 +38,7 @@ export const usePlans = () => {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user || !active) return;
     setLoading(true);
 
     if (isOnline && db) {
@@ -89,11 +89,13 @@ export const usePlans = () => {
     } catch (error) {}
     
     setLoading(false);
-  }, [user, isOnline, getOfflineKey]);
+  }, [user, isOnline, getOfflineKey, active]);
   
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (active) {
+        fetchData();
+    }
+  }, [fetchData, active]);
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;

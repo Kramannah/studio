@@ -21,11 +21,11 @@ import {
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-export const useDoctors = () => {
+export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -37,9 +37,8 @@ export const useDoctors = () => {
   }, [user, profile]);
 
   const fetchDoctors = useCallback(async () => {
-    if (!user || !db) {
-      setDoctors([]);
-      setLoading(false);
+    if (!user || !db || !active) {
+      if (!active) setLoading(false);
       return;
     }
 
@@ -68,11 +67,13 @@ export const useDoctors = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin]);
+  }, [user, isUserAdmin, active]);
 
   useEffect(() => {
-    fetchDoctors();
-  }, [fetchDoctors]);
+    if (active) {
+        fetchDoctors();
+    }
+  }, [fetchDoctors, active]);
 
   const addDoctor = useCallback(
     async (doctorData: Omit<Doctor, "id">) => {

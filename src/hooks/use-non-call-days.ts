@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,16 +10,15 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
 
-export const useNonCallDays = () => {
+export const useNonCallDays = (active: boolean = true) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [nonCallDays, setNonCallDays] = useState<NonCallDay[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const fetchNonCallDays = useCallback(async () => {
-    if (!user || !db) {
-      setNonCallDays([]);
-      setLoading(false);
+    if (!user || !db || !active) {
+      if (!active) setLoading(false);
       return;
     };
     setLoading(true);
@@ -43,11 +43,13 @@ export const useNonCallDays = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, active]);
 
   useEffect(() => {
-    fetchNonCallDays();
-  }, [fetchNonCallDays]);
+    if (active) {
+        fetchNonCallDays();
+    }
+  }, [fetchNonCallDays, active]);
 
   const addNonCallDay = async (entry: any) => {
     if (!user || !db) return;

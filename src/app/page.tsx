@@ -47,6 +47,7 @@ export default function Home() {
   const { user, profile, loading: authLoading, logout } = useAuth();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
+  const [activeView, setActiveView] = useState<View>('planning');
   
   useEffect(() => {
     setMounted(true);
@@ -68,14 +69,14 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager;
 
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid);
-  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors();
-  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans();
-  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays();
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs();
-  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation();
+  // CONDITIONAL HOOKS: Data only fetches if the current view requires it
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid, activeView === 'offline' || activeView === 'submitted' || activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
+  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary');
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
+  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation');
   
-  const [activeView, setActiveView] = useState<View>('planning');
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
@@ -148,7 +149,6 @@ export default function Home() {
             }
         };
 
-        // ACCURACY: Include offline data strictly for primary and secondary fields
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
     });
