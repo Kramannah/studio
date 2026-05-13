@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy } from "firebase/firestore";
+import { useEffect, useState, useCallback } from "react";
+import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy, startAfter } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -27,9 +27,6 @@ const safeToDateISO = (val: any): string => {
     if (val instanceof Date) return val.toISOString();
     return String(val);
 };
-
-// GLOBAL SESSION CACHE FOR ADMIN DATA
-let globalAdminCache: Record<string, { data: any; timestamp: number }> = {};
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}) {
   const { user } = useAuth();
@@ -70,14 +67,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
       if (userFilter.length === 0) return;
     }
 
-    const cacheKey = `approvals_${managerId || 'all'}`;
-    const cached = globalAdminCache[cacheKey];
-    if (cached && (Date.now() - cached.timestamp < 300000)) {
-        setAllNonCallDays(cached.data.ncd);
-        setAllPlanningRequests(cached.data.pr);
-        return;
-    }
-
     setLoading(true);
     try {
         const fetchCol = async (name: string, filter: string[] | null) => {
@@ -91,13 +80,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
-        const ncdSorted = (ncd.sort((a,b) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))) as any);
-        const prSorted = (pr.sort((a,b) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))) as any);
         
-        setAllNonCallDays(ncdSorted);
-        setAllPlanningRequests(prSorted);
-        
-        globalAdminCache[cacheKey] = { data: { ncd: ncdSorted, pr: prSorted }, timestamp: Date.now() };
+        setAllNonCallDays((ncd as any).sort((a: any, b: any) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
+        setAllPlanningRequests((pr as any).sort((a: any, b: any) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
     } catch (e) {
         console.warn("Approvals fetch error:", e);
     } finally {
@@ -109,15 +94,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     fetchTeamApprovals();
   }, [fetchTeamApprovals]);
 
-  const fetchTeamSummary = useCallback(async (force = false) => {
+  const fetchTeamSummary = useCallback(async () => {
     if (!managerId || !db) return;
-
-    const cacheKey = `summary_${managerId}`;
-    const cached = globalAdminCache[cacheKey];
-    if (!force && cached && (Date.now() - cached.timestamp < 300000)) {
-        setTeamSummaryData(cached.data);
-        return;
-    }
 
     setLoadingSummary(true);
     try {
@@ -127,7 +105,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return;
         }
 
-        // QUOTA PROTECTION: Implement date filtering for team-wide summaries
         const startDate = getQueryStartDateISO();
 
         const fetchAllForUsers = async (ids: string[]) => {
@@ -137,7 +114,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const results = await Promise.all(chunks.map(async (c) => {
                 const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c));
                 
-                // Use date filtering for heavy summary queries to protect quota
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(query(baseQuery("coverageEntries"), where("submittedAt", ">=", startDate))),
                     getDocs(query(baseQuery("timeLogs"), where("timeIn", ">=", startDate))),
@@ -166,6 +142,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const combined = await fetchAllForUsers(userFilter);
+        
+        // ACCURACY: Used quantities for the district summary focus on all records
         const used: Record<string, number> = {};
         combined.entries.forEach((e: CoverageEntry) => {
             const process = (n?: string, q?: number) => {
@@ -176,7 +154,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(e.secondarySampleName, e.secondaryProductQty);
         });
 
-        const finalData = { 
+        setTeamSummaryData({ 
             entries: combined.entries, 
             timeLogs: combined.logs, 
             doctors: combined.doctors, 
@@ -184,10 +162,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             plans: combined.plans, 
             usedQuantities: used, 
             marketingSamples: [] 
-        };
-        
-        setTeamSummaryData(finalData as any);
-        globalAdminCache[cacheKey] = { data: finalData, timestamp: Date.now() };
+        } as any);
     } catch (e) {
         console.warn("Team summary error:", e);
     } finally {
@@ -201,8 +176,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid)))).docs.map(d => ({id: d.id, ...d.data()}));
-        // For individual PMRs, we keep the scan exhaustive as requested
-        const [e, d, p, l, ncd, r] = await Promise.all([f("coverageEntries"), f("doctors"), f("plans"), f("timeLogs"), f("nonCallDays"), f("planningRequests")]);
+        
+        const [e, d, p, l, ncd, r] = await Promise.all([
+            f("coverageEntries"), 
+            f("doctors"), 
+            f("plans"), 
+            f("timeLogs"), 
+            f("nonCallDays"), 
+            f("planningRequests")
+        ]);
         
         const used: Record<string, number> = {};
         (e as CoverageEntry[]).forEach(item => {
@@ -232,7 +214,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
     individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
     teamSummaryData, loading, loadingSummary, loadingIndividual, 
-    fetchUserData, fetchTeamSummary: () => fetchTeamSummary(true),
+    fetchUserData, fetchTeamSummary,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
         const ref = doc(db!, 'nonCallDays', id);
         await updateDoc(ref, { status });
