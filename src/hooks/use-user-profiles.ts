@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
@@ -8,13 +9,26 @@ import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
+// SINGLETON CACHE: Prevents re-reading the entire user list on every tab switch
+let cachedProfiles: Record<string, UserProfile> | null = null;
+let lastFetch: number = 0;
+const PROFILES_CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
+
 export function useUserProfiles() {
-    const [profiles, setProfiles] = useState<Record<string, UserProfile>>({});
-    const [loading, setLoading] = useState(true);
+    const [profiles, setProfiles] = useState<Record<string, UserProfile>>(cachedProfiles || {});
+    const [loading, setLoading] = useState(!cachedProfiles);
     const { toast } = useToast();
 
-    const fetchProfiles = useCallback(async () => {
+    const fetchProfiles = useCallback(async (force = false) => {
         if (!db) return;
+        
+        const now = Date.now();
+        if (!force && cachedProfiles && (now - lastFetch < PROFILES_CACHE_TTL)) {
+            setProfiles(cachedProfiles);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
             const snapshot = await getDocs(query(collection(db, "userProfiles")))
@@ -25,14 +39,18 @@ export function useUserProfiles() {
                   }));
                   throw e;
               });
+              
             const data: Record<string, UserProfile> = {};
             snapshot.forEach(d => {
                 const p = { id: d.id, ...d.data() } as UserProfile;
                 data[p.userId] = p;
             });
+
+            cachedProfiles = data;
+            lastFetch = now;
             setProfiles(data);
         } catch (error) {
-            // Handled via errorEmitter
+            console.error("Profiles fetch error:", error);
         } finally {
             setLoading(false);
         }
@@ -51,10 +69,11 @@ export function useUserProfiles() {
         };
         try {
             await setDoc(docRef, payload, { merge: true });
-            setProfiles(prev => ({
-                ...prev,
-                [data.userId]: { id: data.userId, ...payload } as UserProfile
-            }));
+            const newProfile = { id: data.userId, ...payload } as UserProfile;
+            
+            if (cachedProfiles) cachedProfiles[data.userId] = newProfile;
+            setProfiles(prev => ({ ...prev, [data.userId]: newProfile }));
+            
             toast({ title: "Account Created", description: "Successfully added new personnel record." });
             return true;
         } catch (serverError: any) {
@@ -70,8 +89,7 @@ export function useUserProfiles() {
     const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string, email?: string, role?: 'Admin' | 'Manager' | 'PMR') => {
         if (!db) return false;
         
-        const docId = userId; 
-        const docRef = doc(db, "userProfiles", docId);
+        const docRef = doc(db, "userProfiles", userId);
         const payload: any = {
             userId,
             firstName,
@@ -85,20 +103,16 @@ export function useUserProfiles() {
             payload.managerId = null;
         }
 
-        if (email) {
-            payload.email = email;
-        }
-
-        if (role) {
-            payload.role = role;
-        }
+        if (email) payload.email = email;
+        if (role) payload.role = role;
 
         try {
             await setDoc(docRef, payload, { merge: true });
-            setProfiles(prev => ({
-                ...prev,
-                [userId]: { id: docId, ...payload } as UserProfile
-            }));
+            const updatedProfile = { id: userId, ...payload } as UserProfile;
+            
+            if (cachedProfiles) cachedProfiles[userId] = updatedProfile;
+            setProfiles(prev => ({ ...prev, [userId]: updatedProfile }));
+            
             toast({ title: "Account Updated", description: "The employee record has been successfully modified." });
             return true;
         } catch (serverError: any) {
@@ -116,11 +130,14 @@ export function useUserProfiles() {
         const docRef = doc(db, "userProfiles", userId);
         try {
             await deleteDoc(docRef);
+            
+            if (cachedProfiles) delete cachedProfiles[userId];
             setProfiles(prev => {
                 const next = { ...prev };
                 delete next[userId];
                 return next;
             });
+            
             toast({ variant: 'destructive', title: "Account Removed", description: "Personnel record has been deleted." });
             return true;
         } catch (serverError: any) {
@@ -132,5 +149,5 @@ export function useUserProfiles() {
         }
     };
 
-    return { profiles, loading, addProfile, updateProfile, deleteProfile, refetch: fetchProfiles };
+    return { profiles, loading, addProfile, updateProfile, deleteProfile, refetch: () => fetchProfiles(true) };
 }

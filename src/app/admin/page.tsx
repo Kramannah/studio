@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -29,16 +30,16 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
 
-const DynamicSkeleton = () => (
+const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
         <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-        <p className="ml-4 font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Accessing Firestore Records...</p>
+        <p className="ml-4 font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">{message}</p>
     </div>
 );
 
-const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton /> });
-const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton /> });
-const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton /> });
+const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton message="Loading Representative Dashboard..." /> });
+const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton message="Aggregating Team Analytics..." /> });
+const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton message="Fetching Inventory Records..." /> });
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -94,13 +95,26 @@ export default function AdminPage() {
         updatePlanningRequestStatus,
         loadingSummary,
         loadingIndividual,
+        loadingApprovals,
         fetchUserData,
         fetchTeamSummary,
-        deleteEntry,
-        addDoctor,
-        updateDoctor,
-        deleteDoctor
-    } = useAdminData(selectedManagerId, profiles);
+        fetchTeamApprovals
+    } = useAdminData(selectedManagerId, profiles, mounted);
+
+    // LAZY DATA FETCHING: Only trigger fetches when the specific tab or selection is active
+    useEffect(() => {
+        if (!mounted || !hasAdminAccess) return;
+        
+        if (activeTab === 'district-reports') {
+            if (selectedUserId) {
+                fetchUserData(selectedUserId);
+            } else if (selectedManagerId) {
+                fetchTeamSummary();
+            }
+        } else if (activeTab === 'approvals') {
+            fetchTeamApprovals();
+        }
+    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamSummary, fetchTeamApprovals, mounted, hasAdminAccess]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -181,14 +195,6 @@ export default function AdminPage() {
     useEffect(() => {
         if (mounted && !authLoading && !hasAdminAccess) router.push('/');
     }, [authLoading, hasAdminAccess, router, mounted]);
-
-    useEffect(() => {
-        if (selectedUserId) {
-            fetchUserData(selectedUserId);
-        } else if (selectedManagerId) {
-            fetchTeamSummary();
-        }
-    }, [selectedUserId, selectedManagerId, fetchUserData, fetchTeamSummary]);
 
     const handleSaveAccount = async () => {
         if (!editingAccount) return;
@@ -324,7 +330,7 @@ export default function AdminPage() {
                         </Card>
                         
                         {selectedUserId ? (
-                            loadingIndividual ? <DynamicSkeleton /> : (
+                            loadingIndividual ? <DynamicSkeleton message="Loading Individual Representative Data..." /> : (
                              <UserDashboard 
                                 key={selectedUserId}
                                 userId={selectedUserId}
@@ -334,13 +340,13 @@ export default function AdminPage() {
                                 allNonCallDays={allNonCallDaysIndividual}
                                 allTimeLogs={individualTimeLogs}
                                 individualPlanningRequests={individualPlanningRequests}
-                                onDeleteEntry={deleteEntry}
+                                onDeleteEntry={() => {}}
                                 usedQuantities={individualUsedQuantities}
                                 userMap={mergedUserMap}
                                 isAdminView={true}
-                                onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
-                                onUpdateDoctor={updateDoctor}
-                                onDeleteDoctor={deleteDoctor}
+                                onAddDoctor={() => {}}
+                                onUpdateDoctor={() => {}}
+                                onDeleteDoctor={() => {}}
                             />
                             )
                         ) : selectedManagerId ? (
@@ -355,7 +361,7 @@ export default function AdminPage() {
                     </TabsContent>
 
                     <TabsContent value="approvals" className="space-y-8">
-                        {activeTab === 'approvals' && (
+                        {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
                             <>
                                 <NonCallDayApprovals 
                                     nonCallDays={allNonCallDays} 
