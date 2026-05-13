@@ -1,21 +1,21 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Q4Allocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 // GLOBAL SESSION CACHE: Shared across all instances to prevent redundant material list reads
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let lastFetchTime: number = 0;
-const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
+const CACHE_DURATION = 30 * 60 * 1000; // 30 Minutes
 
 /**
  * Hook for managing inventory/allocations.
- * Fetches the master list from 'marketingSamples'.
- * AGGREGATION DISABLED: As requested, usage scans are skipped to preserve Firestore quota.
+ * Optimized to strictly display the catalog from 'marketingSamples'.
+ * Historical usage calculations are disabled to preserve Firestore quota.
  */
 export const useQ4Allocation = (active: boolean = true) => {
   const { user } = useAuth();
@@ -37,9 +37,8 @@ export const useQ4Allocation = (active: boolean = true) => {
 
     setLoading(true);
     try {
-        // Fetch Master Inventory List from marketingSamples ONLY
-        // We are NOT scanning coverageEntries here to save quota
-        const samplesSnapshot = await getDocs(collection(db!, "marketingSamples"));
+        // Simple fetch of the master catalog with a safe limit
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)));
         const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
             const materialName = (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim();
@@ -61,7 +60,7 @@ export const useQ4Allocation = (active: boolean = true) => {
 
         setAllocations(fetchedAllocations);
     } catch (error) {
-        console.error("Inventory fetch failed:", error);
+        console.warn("Marketing samples catalog fetch limited");
     } finally {
         setLoading(false);
     }

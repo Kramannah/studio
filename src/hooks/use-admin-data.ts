@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -19,9 +19,19 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-// PERSISTENCE CACHE: Shared across Admin Dashboard tabs to prevent redundant reads
-const teamSummaryCache: Record<string, { data: TeamSummaryData, timestamp: number }> = {};
-const CACHE_LIMIT = 5 * 60 * 1000; // 5 Minutes
+// GLOBAL CACHE: Persists across navigation to save Quota
+const adminDataCache: {
+    summary: Record<string, { data: TeamSummaryData, timestamp: number }>,
+    individual: Record<string, { data: any, timestamp: number }>,
+    approvals: Record<string, { data: any, timestamp: number }>
+} = {
+    summary: {},
+    individual: {},
+    approvals: {}
+};
+
+const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
+const FETCH_LOCKS: Record<string, boolean> = {};
 
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
@@ -62,45 +72,60 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active) return;
+    if (!user || !db || !active || FETCH_LOCKS['approvals']) return;
     
-    let userFilter: string[] | null = null;
-    if (managerId) {
-      userFilter = getManagedUserIds(managerId);
-      if (userFilter.length === 0) return;
+    const cacheKey = managerId || 'global';
+    if (adminDataCache.approvals[cacheKey] && (Date.now() - adminDataCache.approvals[cacheKey].timestamp < CACHE_TTL)) {
+        const cached = adminDataCache.approvals[cacheKey].data;
+        setAllNonCallDays(cached.ncd);
+        setAllPlanningRequests(cached.pr);
+        return;
     }
 
+    FETCH_LOCKS['approvals'] = true;
     setLoadingApprovals(true);
     try {
+        let userFilter: string[] | null = null;
+        if (managerId) {
+            userFilter = getManagedUserIds(managerId);
+            if (userFilter.length === 0) return;
+        }
+
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) return (await getDocs(query(colRef, limit(200)))).docs.map(d => ({id: d.id, ...d.data()}));
+            if (!filter) return (await getDocs(query(colRef, limit(100)))).docs.map(d => ({id: d.id, ...d.data()}));
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(100)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(50)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
         
-        setAllNonCallDays((ncd as any).sort((a: any, b: any) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date))));
-        setAllPlanningRequests((pr as any).sort((a: any, b: any) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt))));
+        const sortedNcd = (ncd as any).sort((a: any, b: any) => safeToDateISO(b.date).localeCompare(safeToDateISO(a.date)));
+        const sortedPr = (pr as any).sort((a: any, b: any) => safeToDateISO(b.requestedAt).localeCompare(safeToDateISO(a.requestedAt)));
+        
+        setAllNonCallDays(sortedNcd);
+        setAllPlanningRequests(sortedPr);
+        adminDataCache.approvals[cacheKey] = { data: { ncd: sortedNcd, pr: sortedPr }, timestamp: Date.now() };
     } catch (e) {
-        console.warn("Approvals load failed", e);
+        console.warn("Approvals load limited to save quota");
     } finally {
         setLoadingApprovals(false);
+        FETCH_LOCKS['approvals'] = false;
     }
   }, [user, managerId, getManagedUserIds, active]);
 
   const fetchTeamSummary = useCallback(async (forceRefresh = false) => {
-    if (!managerId || !db || !active) return;
+    if (!managerId || !db || !active || FETCH_LOCKS[`summary_${managerId}`]) return;
 
-    if (!forceRefresh && teamSummaryCache[managerId] && (Date.now() - teamSummaryCache[managerId].timestamp < CACHE_LIMIT)) {
-        setTeamSummaryData(teamSummaryCache[managerId].data);
+    if (!forceRefresh && adminDataCache.summary[managerId] && (Date.now() - adminDataCache.summary[managerId].timestamp < CACHE_TTL)) {
+        setTeamSummaryData(adminDataCache.summary[managerId].data);
         return;
     }
 
+    FETCH_LOCKS[`summary_${managerId}`] = true;
     setLoadingSummary(true);
     try {
         const userFilter = getManagedUserIds(managerId);
@@ -116,8 +141,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                // Increased limit to 3000 per 10 users to ensure completeness for the year 2026
-                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(3000));
+                // Tiered approach: Summaries only read 500 docs per group to save quota
+                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(500));
                 
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(baseQuery("coverageEntries")),
@@ -173,23 +198,40 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             usedQuantities: used
         } as TeamSummaryData;
 
-        teamSummaryCache[managerId] = { data: finalData, timestamp: Date.now() };
+        adminDataCache.summary[managerId] = { data: finalData, timestamp: Date.now() };
         setTeamSummaryData(finalData);
-    } catch (e) {
-        console.warn("District summary load failed", e);
+    } catch (e: any) {
+        if (e.code === 'resource-exhausted') {
+            toast({ variant: "destructive", title: "Quota Limit Reached", description: "The system is paused to prevent overuse. Please try again later." });
+        }
     } finally {
         setLoadingSummary(false);
+        FETCH_LOCKS[`summary_${managerId}`] = false;
     }
-  }, [managerId, getManagedUserIds, active]);
+  }, [managerId, getManagedUserIds, active, toast]);
 
   const fetchUserData = useCallback(async (uid: string) => {
-    if (!uid || !db || !active) return;
+    if (!uid || !db || !active || FETCH_LOCKS[`individual_${uid}`]) return;
     
+    if (adminDataCache.individual[uid] && (Date.now() - adminDataCache.individual[uid].timestamp < CACHE_TTL)) {
+        const cached = adminDataCache.individual[uid].data;
+        setAllEntries(cached.entries);
+        setAllDoctors(cached.doctors);
+        setAllPlans(cached.plans);
+        setAllTimeLogs(cached.logs);
+        setAllNonCallDaysIndividual(cached.ncds);
+        setIndividualPlanningRequests(cached.requests);
+        setIndividualUsedQuantities(cached.used);
+        return;
+    }
+
+    FETCH_LOCKS[`individual_${uid}`] = true;
     setLoadingIndividual(true);
     try {
         const currentYearStart = getStartOfYearISO();
-        // Increased limit to 2500 per individual PMR to ensure 2026 completeness
-        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2500)))).docs.map(d => ({id: d.id, ...d.data()}));
+        
+        // Tiered Detail: Fetching 2,000 ensures completeness for 2026 individually
+        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2000)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
             f("coverageEntries"), 
@@ -214,17 +256,30 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(item.secondarySampleName, item.secondaryProductQty);
         });
 
-        setAllEntries(filteredEntries); 
-        setAllDoctors(d as any); 
-        setAllPlans(filterYear(p, 'plannedDate'));
-        setAllTimeLogs(filterYear(l, 'timeIn')); 
-        setAllNonCallDaysIndividual(filterYear(ncd, 'date'));
-        setIndividualPlanningRequests(r as any); 
-        setIndividualUsedQuantities(used);
+        const packet = {
+            entries: filteredEntries,
+            doctors: d as any,
+            plans: filterYear(p, 'plannedDate'),
+            logs: filterYear(l, 'timeIn'),
+            ncds: filterYear(ncd, 'date'),
+            requests: r as any,
+            used
+        };
+
+        setAllEntries(packet.entries); 
+        setAllDoctors(packet.doctors); 
+        setAllPlans(packet.plans);
+        setAllTimeLogs(packet.logs); 
+        setAllNonCallDaysIndividual(packet.ncds);
+        setIndividualPlanningRequests(packet.requests); 
+        setIndividualUsedQuantities(packet.used);
+
+        adminDataCache.individual[uid] = { data: packet, timestamp: Date.now() };
     } catch (e) {
-        console.warn("Individual drill-down failed", e);
+        console.warn("Individual fetch limited");
     } finally {
         setLoadingIndividual(false);
+        FETCH_LOCKS[`individual_${uid}`] = false;
     }
   }, [active]);
 
