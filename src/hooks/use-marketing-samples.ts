@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
-import type { MarketingSample } from '@/lib/types';
+import type { MarketingSample, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
@@ -43,37 +43,38 @@ export const useMarketingSamples = () => {
       fetchedSamples.sort((a, b) => String(a.materialName).localeCompare(String(b.materialName)));
       setMarketingSamples(fetchedSamples);
 
-      // ACCURACY: Scan ALL historical entries for this user to ensure "Used" quantities are exact
+      // ACCURACY: Scan ALL historical entries for this user to ensure "Used" quantities are 100% exact
+      // We explicitly aggregate primaryProductQty and secondaryProductQty from every report
       const usageSnap = await getDocs(
         query(
           collection(db, "coverageEntries"), 
-          where("userId", "==", user.uid),
-          orderBy("submittedAt", "desc")
+          where("userId", "==", user.uid)
         )
       );
       
       const usage: Record<string, number> = {};
       
-      usageSnap.docs.forEach(doc => {
-          const entry = doc.data();
+      usageSnap.docs.forEach(docSnap => {
+          const entry = docSnap.data() as CoverageEntry;
           if (!entry) return;
           
-          const process = (name?: any, qty?: any) => {
+          const process = (name?: string, qty?: number) => {
               const safeName = String(name ?? "").toLowerCase().trim();
               if (!safeName) return;
               
               const safeQty = Math.round(Number(qty || 0));
-              if (!isNaN(safeQty)) {
+              if (!isNaN(safeQty) && safeQty !== 0) {
                   usage[safeName] = (usage[safeName] || 0) + safeQty;
               }
           };
 
-          // ACCURACY: Aggregate from primaryProductQty and secondaryProductQty
+          // ACCURACY: Primary and Secondary quantities are the main distribution points
           process(entry.primarySampleName, entry.primaryProductQty);
           process(entry.secondarySampleName, entry.secondaryProductQty);
           
+          // Also include any units from reminder products for a complete audit
           if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p: any) => {
+            entry.reminderProducts.forEach((p) => {
                 if (p) process(p.sampleName, p.quantity);
             });
           }

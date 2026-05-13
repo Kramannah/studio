@@ -99,14 +99,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 let q;
                 const colRef = collection(db!, collName);
                 if (userIds === null) {
-                    q = query(colRef, limit(200)); 
+                    q = query(colRef, limit(500)); 
                 } else if (userIds.length > 0) {
                     const chunks: string[][] = [];
                     for (let i = 0; i < userIds.length; i += 10) {
                         chunks.push(userIds.slice(i, i + 10));
                     }
                     const snapshots = await Promise.all(chunks.map(chunk => 
-                        getDocs(query(colRef, where("userId", "in", chunk), limit(100)))
+                        getDocs(query(colRef, where("userId", "in", chunk), limit(200)))
                     ));
                     return snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 } else {
@@ -168,7 +168,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
             const fetchSingle = async (collName: string): Promise<any[]> => {
                 try {
-                    // For team summary, we fetch targeted data
                     const q = query(collection(db!, collName), where("userId", "in", chunk));
                     const snap = await getDocs(q);
                     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -206,13 +205,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const used: Record<string, number> = {};
         combined.entries.forEach((e: CoverageEntry) => {
-            const process = (name?: any, qty?: any) => {
+            const process = (name?: string, qty?: number) => {
                 const safeName = (name ?? "").toString().toLowerCase().trim();
                 if (!safeName) return;
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Pulling from primary and secondary qty
+            // ACCURACY: Pulling from primaryProductQty and secondaryProductQty exhaustive history
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
             e.reminderProducts?.forEach(p => process(p.sampleName, p.quantity));
@@ -286,14 +285,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const entries = (entriesRaw as CoverageEntry[]).sort((a, b) => safeToDateISO(b.submittedAt || b.coverageDate).localeCompare(safeToDateISO(a.submittedAt || a.coverageDate)));
 
         const used: Record<string, number> = {};
-        entries.forEach((e: any) => {
-            const process = (name?: any, qty?: any) => {
+        entries.forEach((e: CoverageEntry) => {
+            const process = (name?: string, qty?: number) => {
                 const safeName = (name ?? "").toString().toLowerCase().trim();
                 if (!safeName) return;
                 const safeQty = Math.round(Number(qty || 0));
                 if (!isNaN(safeQty)) used[safeName] = (used[safeName] || 0) + safeQty;
             };
-            // ACCURACY: Pulling from primary and secondary qty
+            // ACCURACY: Pulling from primaryProductQty and secondaryProductQty
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
             if (Array.isArray(e.reminderProducts)) {

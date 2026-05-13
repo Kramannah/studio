@@ -69,20 +69,20 @@ export const useQ4Allocation = () => {
     try {
       const colRef = collection(db, "coverageEntries");
       
-      // For absolute accuracy of "Used" samples, we must scan the entire relevant history
-      // We removed the limit to ensure every primary and secondary qty is counted
+      // ACCURACY: We perform an exhaustive scan of historical entries
+      // We removed limits to ensure every primary and secondary unit is counted
       const usageQuery = isAdminOrManager
-        ? query(colRef, orderBy("submittedAt", "desc")) 
-        : query(colRef, where("userId", "==", user.uid), orderBy("submittedAt", "desc"));
+        ? query(colRef) 
+        : query(colRef, where("userId", "==", user.uid));
 
       const snapshot = await getDocs(usageQuery);
       const usage: Record<string, number> = {};
       
       snapshot.docs.forEach(docSnap => {
-        const entry = docSnap.data();
+        const entry = docSnap.data() as CoverageEntry;
         if (!entry) return;
 
-        const processItem = (name?: any, qty?: any) => {
+        const processItem = (name?: string, qty?: number) => {
             const safeName = String(name ?? "").toLowerCase().trim();
             if (!safeName) return;
             const safeQty = Math.round(Number(qty || 0));
@@ -91,13 +91,13 @@ export const useQ4Allocation = () => {
             }
         };
 
-        // ACCURACY: Explicitly fetch from primaryProductQty and secondaryProductQty
+        // ACCURACY: Explicitly aggregate from primaryProductQty and secondaryProductQty
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         
-        // Also include reminder products for complete audit
+        // Include reminder products for a complete distribution audit
         if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p: any) => { 
+            entry.reminderProducts.forEach((p) => { 
                 if (p) processItem(p.sampleName, p.quantity); 
             });
         }
