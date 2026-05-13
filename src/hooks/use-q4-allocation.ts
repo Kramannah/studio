@@ -31,6 +31,7 @@ export const useQ4Allocation = () => {
   const fetchAllocations = useCallback(async () => {
     if (!db || !user) return;
     try {
+        // Fetching specifically from marketingSamples collection
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -38,11 +39,25 @@ export const useQ4Allocation = () => {
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
-            return { id: doc.id, prodGroupProdSubGroup: group, displayMaterialName: materialName, allocationQuantity: isNaN(qty) ? 0 : qty } as Q4Allocation;
+            return { 
+                id: doc.id, 
+                prodGroupProdSubGroup: group, 
+                displayMaterialName: materialName, 
+                allocationQuantity: isNaN(qty) ? 0 : qty 
+            } as Q4Allocation;
         }).filter((item): item is Q4Allocation => item !== null);
-        fetched.sort((a, b) => (a.displayMaterialName ?? "").toString().toLowerCase().compare((b.displayMaterialName ?? "").toString().toLowerCase()));
+        
+        // Fix for sorting error
+        fetched.sort((a, b) => {
+            const nameA = (a.displayMaterialName || "").toLowerCase();
+            const nameB = (b.displayMaterialName || "").toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+        
         setAllocations(fetched);
-    } catch (error) {}
+    } catch (error) {
+        console.error("Error fetching marketing samples:", error);
+    }
   }, [user]);
 
   const fetchUsage = useCallback(async () => {
@@ -52,7 +67,7 @@ export const useQ4Allocation = () => {
       const startDate = getQueryStartDateISO();
       
       const usageQuery = isUserAdminOrManager() 
-        ? query(colRef, orderBy("submittedAt", "desc"), limit(500)) 
+        ? query(colRef, orderBy("submittedAt", "desc"), limit(1000)) 
         : query(colRef, where("userId", "==", user.uid)); 
 
       const snapshot = await getDocs(usageQuery);
@@ -62,6 +77,7 @@ export const useQ4Allocation = () => {
         const entry = docSnap.data();
         if (!entry) return;
 
+        // Skip entries older than our tracking window
         if (entry.submittedAt && entry.submittedAt < startDate) return;
 
         const processItem = (name?: any, qty?: any) => {
@@ -76,7 +92,9 @@ export const useQ4Allocation = () => {
         processItem(entry.primarySampleName, entry.primaryProductQty);
         processItem(entry.secondarySampleName, entry.secondaryProductQty);
         if (Array.isArray(entry.reminderProducts)) {
-            entry.reminderProducts.forEach((p: any) => { if (p) processItem(p.sampleName, p.quantity); });
+            entry.reminderProducts.forEach((p: any) => { 
+                if (p) processItem(p.sampleName, p.quantity); 
+            });
         }
       });
       setUsedQuantities(usage);
@@ -89,7 +107,8 @@ export const useQ4Allocation = () => {
     const init = async () => {
         if (!user) return;
         const now = Date.now();
-        if (now - lastFetchTime.current < 15000) return; 
+        // Debounce fetching to prevent rapid re-renders
+        if (now - lastFetchTime.current < 5000) return; 
         setLoading(true);
         await Promise.allSettled([fetchAllocations(), fetchUsage()]);
         lastFetchTime.current = now;
@@ -111,6 +130,7 @@ export const useQ4Allocation = () => {
       data.forEach(item => {
         const name = (item.displayMaterialName ?? "").toString().trim();
         if (!name) return;
+        // Generate a stable ID based on material name
         const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const docId = `sample_${cleanId}`;
         const docRef = doc(db, "marketingSamples", docId);
@@ -119,14 +139,24 @@ export const useQ4Allocation = () => {
       await batch.commit();
       await refetch();
       return true;
-    } catch (err) { return false; }
+    } catch (err) { 
+        console.error("Bulk add error:", err);
+        return false; 
+    }
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
       if (!db) return false;
       const batch = writeBatch(db);
       ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
-      try { await batch.commit(); await refetch(); return true; } catch (err) { return false; }
+      try { 
+          await batch.commit(); 
+          await refetch(); 
+          return true; 
+      } catch (err) { 
+          console.error("Bulk delete error:", err);
+          return false; 
+      }
   };
 
   return { allocations, usedQuantities, loading, refetch, addAllocationsBulk, deleteAllocationsBulk };

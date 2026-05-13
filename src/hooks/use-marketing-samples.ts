@@ -1,9 +1,10 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { MarketingSample } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 
 export const useMarketingSamples = () => {
@@ -85,11 +86,64 @@ export const useMarketingSamples = () => {
 };
 
 export const useAdminMarketingSamples = () => {
+  const { refetch } = useMarketingSamples();
+
+  const addMarketingSamplesBulk = async (data: Omit<MarketingSample, 'id'>[]) => {
+    if (!db) return false;
+    try {
+      const batch = writeBatch(db);
+      data.forEach(item => {
+        const cleanId = item.materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
+        batch.set(docRef, item, { merge: true });
+      });
+      await batch.commit();
+      await refetch();
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
+  const addSample = async (data: Omit<MarketingSample, 'id'>) => {
+    if (!db) return false;
+    try {
+      const cleanId = data.materialName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      await setDoc(doc(db, "marketingSamples", `sample_${cleanId}`), data, { merge: true });
+      await refetch();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const updateSample = async (id: string, data: Partial<MarketingSample>) => {
+    if (!db) return false;
+    try {
+      await setDoc(doc(db, "marketingSamples", id), data, { merge: true });
+      await refetch();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const deleteSample = async (id: string) => {
+    if (!db) return false;
+    try {
+      await deleteDoc(doc(db, "marketingSamples", id));
+      await refetch();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
   return { 
-    addMarketingSamplesBulk: async (data: any) => true, 
-    populateOfficialList: async () => true, 
-    deleteSample: async (id: string) => true, 
-    updateSample: async (id: string, data: any) => true, 
-    addSample: async (data: any) => true 
+    addMarketingSamplesBulk, 
+    deleteSample, 
+    updateSample, 
+    addSample 
   };
 };
