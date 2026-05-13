@@ -242,9 +242,9 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
     },
     "HmxNU3owvAPLnprYQHfjTHF0zUA3": {
         code: "CL-03",
-        firstName: "Canlas",
-        lastName: "",
-        email: "canlas@hovidinc.com"
+        firstName: "Kristel",
+        lastName: "Canlas",
+        email: "kcanlas@hovidinc.com"
     },
     "vvLt9N5IzlYs6SHEWaR1Gfw611V2": {
         code: "GMAS-01",
