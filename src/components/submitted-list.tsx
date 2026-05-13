@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, CircleAlert, History, Loader2, List, Calendar as CalendarIcon, FileSpreadsheet, Maximize2 } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -23,12 +23,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
-const DetailItem = ({ label, value }: { label: string, value?: string | number | null }) => {
-    if (!value && typeof value !== 'number') return null;
+const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => {
     return (
-        <div className="space-y-0.5">
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">{label}</p>
-            <p className="text-sm font-medium text-foreground">{value}</p>
+        <div className="space-y-1">
+            <p className="text-[11px] font-bold text-muted-foreground leading-none">{label}</p>
+            <p className="text-sm font-medium text-foreground leading-tight">{value || "—"}</p>
         </div>
     )
 }
@@ -64,44 +63,45 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
     return (
         <React.Fragment>
             <TableRow className={cn("h-16 transition-colors border-b", isOpen ? "bg-muted/40" : "hover:bg-muted/20")}>
-                <TableCell className="font-medium min-w-[150px]">
+                <TableCell className="font-medium min-w-[200px]">
                     <div className="flex flex-col">
-                        <span className="font-bold text-primary truncate max-w-[200px]">{entry.firstName} {entry.lastName}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{entry.specialty || "N/A"}</span>
+                        <span className="font-bold text-base leading-tight">{entry.firstName} {entry.lastName}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{entry.specialty || "PROVIDER"}</span>
                     </div>
                 </TableCell>
-                <TableCell className="hidden md:table-cell max-w-[200px]">
-                    <span className="text-sm font-medium truncate block">{entry.clinic || "N/A"}</span>
+                <TableCell className="hidden md:table-cell max-w-[250px]">
+                    <span className="text-sm font-bold uppercase tracking-tight truncate block">{entry.clinic || "No Clinic Data"}</span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                    <span className="text-sm tabular-nums">
-                        {displayDate && isValid(displayDate) ? format(displayDate, "MMM d") : 'N/A'}
-                    </span>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "MMM do,") : 'N/A'}</span>
+                        <span className="text-[10px] text-muted-foreground font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "yyyy") : ''}</span>
+                    </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-center">
-                    <Badge variant="secondary" className="text-[10px] font-bold">{doctor?.frequency || 'N/A'}</Badge>
+                    {doctor?.frequency && <Badge variant="outline" className="font-black border-2 h-7 w-10 flex items-center justify-center rounded-full text-xs">{doctor.frequency}</Badge>}
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
                         {entry.photos?.[0] && (
                             <div 
-                                className="h-8 w-8 rounded-md overflow-hidden border-2 border-primary/20 cursor-pointer hover:scale-110 transition-transform relative group"
-                                onClick={() => onPreview(entry.photos![0], `Proof Photo: ${entry.firstName} ${entry.lastName}`)}
+                                className="h-9 w-12 rounded-md overflow-hidden border-2 border-primary/20 cursor-pointer hover:scale-105 transition-transform relative group bg-muted"
+                                onClick={() => onPreview(entry.photos![0], `Proof: ${entry.firstName}`)}
                             >
-                                <Image src={entry.photos[0]} alt="proof" width={32} height={32} className="object-cover h-full w-full" />
+                                <Image src={entry.photos[0]} alt="proof" fill className="object-cover" />
                                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Maximize2 className="w-3 h-3 text-white" />
+                                    <Maximize2 className="w-4 h-4 text-white" />
                                 </div>
                             </div>
                         )}
                         {entry.signature && (
                             <div 
-                                className="p-1 bg-white border rounded shadow-sm flex items-center justify-center h-6 w-10 cursor-pointer hover:scale-110 transition-transform relative group"
-                                onClick={() => onPreview(entry.signature!, `Signature: ${entry.firstName} ${entry.lastName}`)}
+                                className="p-1 bg-white border-2 rounded-md shadow-sm flex items-center justify-center h-9 w-16 cursor-pointer hover:scale-105 transition-transform relative group"
+                                onClick={() => onPreview(entry.signature!, `Signature: ${entry.firstName}`)}
                             >
-                                <Image src={entry.signature} alt="sig" width={32} height={16} className="object-contain" />
-                                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Maximize2 className="w-3 h-3 text-white" />
+                                <Image src={entry.signature} alt="sig" width={50} height={25} className="object-contain" />
+                                <div className="absolute inset-0 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Maximize2 className="w-4 h-4 text-primary" />
                                 </div>
                             </div>
                         )}
@@ -148,25 +148,36 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
             {isOpen && (
                 <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
                     <TableCell colSpan={6} className="p-0">
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8 animate-in slide-in-from-top-2 duration-200">
+                        <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-6">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><List className="w-3 h-3" /> Call Details</h4>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <DetailItem label="Objective" value={entry.callObjective} />
-                                    <DetailItem label="Coverage Type" value={entry.coverageType} />
+                                <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Pre-call Plan</h4>
+                                <div className="space-y-4">
+                                    <DetailField label="Target Frequency" value={doctor?.frequency} />
+                                    <DetailField label="Call Type" value={entry.callType} />
+                                    <DetailField label="Coverage Type" value={entry.coverageType} />
+                                    <DetailField label="HACME" value={entry.hacme || doctor?.hacme} />
+                                    <DetailField label="Call Objective" value={entry.callObjective} />
                                 </div>
                             </div>
                             <div className="space-y-6">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><CircleAlert className="w-3 h-3" /> Sampling</h4>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <DetailItem label="Primary Product" value={entry.primaryProduct} />
-                                    <DetailItem label="Quantity Issued" value={entry.primaryProductQty} />
+                                <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Samples & Products</h4>
+                                <div className="space-y-5">
+                                    <div className="space-y-3">
+                                        <DetailField label="Primary Product" value={entry.primaryProduct} />
+                                        <DetailField label="Primary Sample" value={entry.primarySampleName} />
+                                        <DetailField label="Primary Quantity" value={entry.primaryProductQty} />
+                                    </div>
+                                    <div className="pt-4 space-y-3 border-t border-primary/10">
+                                        <DetailField label="Secondary Product" value={entry.secondaryProduct} />
+                                        <DetailField label="Secondary Sample" value={entry.secondarySampleName} />
+                                        <DetailField label="Secondary Quantity" value={entry.secondaryProductQty} />
+                                    </div>
                                     {entry.reminderProducts && entry.reminderProducts.length > 0 && (
-                                        <div className="pt-2">
-                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Reminder Items</p>
+                                        <div className="pt-4 border-t border-primary/10">
+                                            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Reminder Items</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {entry.reminderProducts.map((p, i) => (
-                                                    <Badge key={i} variant="outline" className="text-[10px] font-bold bg-background">
+                                                    <Badge key={i} variant="secondary" className="text-[10px] font-black h-6 bg-primary/10 text-primary border-none">
                                                         {p.sampleName} (x{p.quantity})
                                                     </Badge>
                                                 ))}
@@ -176,10 +187,13 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                                 </div>
                             </div>
                             <div className="space-y-6">
-                                <h4 className="flex items-center gap-2 font-black text-primary text-[10px] uppercase tracking-widest border-b pb-1"><History className="w-3 h-3" /> Post-Call Analysis</h4>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <DetailItem label="Issues Encountered" value={entry.doctorsIssue} />
-                                    <DetailItem label="Next Steps" value={entry.planOfAction} />
+                                <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Post-call Analysis</h4>
+                                <div className="space-y-4">
+                                    <DetailField label="Topics Discussed" value={entry.topicsDiscussed} />
+                                    <DetailField label="Doctor's Issue/Concern" value={entry.doctorsIssue} />
+                                    <DetailField label="Plan of Action" value={entry.planOfAction} />
+                                    <DetailField label="Reflection: What Went Well" value={entry.whatWentWell} />
+                                    <DetailField label="Reflection: Improvement" value={entry.areasForImprovement} />
                                 </div>
                             </div>
                         </div>
@@ -249,12 +263,12 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                                         </CardHeader>
                                         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-3">
-                                                <DetailItem label="Objective" value={entry.callObjective} />
-                                                <DetailItem label="Product" value={entry.primaryProduct} />
+                                                <DetailField label="Objective" value={entry.callObjective} />
+                                                <DetailField label="Product" value={entry.primaryProduct} />
                                             </div>
                                             <div className="space-y-3">
-                                                <DetailItem label="Issues" value={entry.doctorsIssue} />
-                                                <DetailItem label="Plan" value={entry.planOfAction} />
+                                                <DetailField label="Issues" value={entry.doctorsIssue} />
+                                                <DetailField label="Plan" value={entry.planOfAction} />
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -501,10 +515,6 @@ export function SubmittedList({
                         className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
                     />
                 </div>
-                <TabsList className="grid grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl border-2 shadow-sm shrink-0 w-full sm:w-auto overflow-hidden">
-                    <TabsTrigger value="list" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><List className="w-7 h-7" /></TabsTrigger>
-                    <TabsTrigger value="calendar" className="rounded-lg h-full px-5 flex items-center justify-center transition-all duration-200"><CalendarIcon className="w-7 h-7" /></TabsTrigger>
-                </TabsList>
             </div>
             <TabsContent value="list" className="mt-0 w-full">
                 <Card className="shadow-lg border-2 rounded-xl overflow-hidden w-full">
