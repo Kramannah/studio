@@ -19,9 +19,9 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-// PERSISTENCE CACHE: Shared across Admin Dashboard tabs
+// PERSISTENCE CACHE: Shared across Admin Dashboard tabs to prevent redundant reads
 const teamSummaryCache: Record<string, { data: TeamSummaryData, timestamp: number }> = {};
-const CACHE_LIMIT = 10 * 60 * 1000; // 10 Minutes
+const CACHE_LIMIT = 5 * 60 * 1000; // 5 Minutes
 
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
@@ -74,12 +74,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            // Limit approval scans to prevent quota exhaustion
-            if (!filter) return (await getDocs(query(colRef, limit(100)))).docs.map(d => ({id: d.id, ...d.data()}));
+            if (!filter) return (await getDocs(query(colRef, limit(200)))).docs.map(d => ({id: d.id, ...d.data()}));
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(50)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(100)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -117,7 +116,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(200));
+                // Increased limit to 3000 per 10 users to ensure completeness for the year 2026
+                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(3000));
                 
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(baseQuery("coverageEntries")),
@@ -155,7 +155,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const combined = await fetchAllForUsers(userFilter);
         
         const used: Record<string, number> = {};
-        // Usage logic preserved but gated by smaller fetch limits above
         combined.entries.forEach((e: CoverageEntry) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
@@ -189,7 +188,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const currentYearStart = getStartOfYearISO();
-        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(300)))).docs.map(d => ({id: d.id, ...d.data()}));
+        // Increased limit to 2500 per individual PMR to ensure 2026 completeness
+        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2500)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
             f("coverageEntries"), 
