@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2 } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -491,31 +491,44 @@ export function SubmittedList({
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
             </Button>
         </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full mb-8">
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-[220px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline text-base">
-                        <SelectValue placeholder="Select month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {availableMonths.map(month => {
-                            try {
-                                const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
-                                return <SelectItem key={month} value={month}>{label}</SelectItem>
-                            } catch (e) { return null; }
-                        })}
-                    </SelectContent>
-                </Select>
-                <div className="relative w-full">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input 
-                        placeholder="Search by name or clinic..." 
-                        value={searchQuery} 
-                        onChange={(e) => setSearchQuery(e.target.value)} 
-                        className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
-                    />
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[320px] h-12">
+                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-center gap-2">
+                        <ListIcon size={16} /> List
+                    </TabsTrigger>
+                    <TabsTrigger value="calendar" className="rounded-lg font-headline flex items-center gap-2">
+                        <CalendarIcon size={16} /> Calendar
+                    </TabsTrigger>
+                </TabsList>
+                
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto flex-1">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-full sm:w-[220px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline text-base">
+                            <SelectValue placeholder="Select month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableMonths.map(month => {
+                                try {
+                                    const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
+                                    return <SelectItem key={month} value={month}>{label}</SelectItem>
+                                } catch (e) { return null; }
+                            })}
+                        </SelectContent>
+                    </Select>
+                    <div className="relative w-full max-w-md">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input 
+                            placeholder="Search by name or clinic..." 
+                            value={searchQuery} 
+                            onChange={(e) => setSearchQuery(e.target.value)} 
+                            className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
+                        />
+                    </div>
                 </div>
             </div>
+
             <TabsContent value="list" className="mt-0 w-full">
                 <Card className="shadow-lg border-2 rounded-xl overflow-hidden w-full">
                     <Table>
@@ -548,6 +561,7 @@ export function SubmittedList({
                     </div>
                 )}
             </TabsContent>
+
             <TabsContent value="calendar" className="mt-0 w-full">
                 <div className="flex flex-col xl:flex-row gap-8 items-start w-full">
                     <div className="w-full xl:w-[420px] shrink-0">
@@ -582,12 +596,17 @@ export function SubmittedList({
                     <div className="flex-1 w-full space-y-6">
                         <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
                             <Table>
-                                <TableHeader><TableRow className="bg-muted/50 h-14"><TableHead className="font-bold pl-6">Provider</TableHead><TableHead className="text-right pr-6">Actions</TableHead></TableRow></TableHeader>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50 h-14">
+                                        <TableHead className="font-bold pl-6">Provider Activity for {selectedDate ? format(selectedDate, "MMM d") : ""}</TableHead>
+                                        <TableHead className="text-right pr-6">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
                                 <TableBody>
                                 {filtered.length > 0 ? (
                                     filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
                                 ) : (
-                                    <TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity for this date.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity recorded for this date.</TableCell></TableRow>
                                 )}
                                 </TableBody>
                             </Table>
@@ -596,6 +615,7 @@ export function SubmittedList({
                 </div>
             </TabsContent>
         </Tabs>
+        
         <DoctorHistoryDialog doctorName={historyDoctor} isOpen={isHistoryOpen} onOpenChange={setIsHistoryOpen} />
         
         <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
