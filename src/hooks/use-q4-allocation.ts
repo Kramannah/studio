@@ -8,17 +8,25 @@ import { collection, query, writeBatch, doc, where, getDocs, limit, startAfter, 
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
+// GLOBAL SESSION CACHE (Survives tab switching and component remounts)
+let globalInventoryCache: {
+    allocations: Q4Allocation[];
+    usedQuantities: Record<string, number>;
+    lastFetch: number;
+} | null = null;
+
+let isGlobalFetching = false;
+
 /**
  * Hook for managing inventory/allocations.
  * Strictly fetches from 'marketingSamples' collection.
  * Usage is calculated by scanning ALL historical 'coverageEntries'.
- * Optimized with chunking to prevent Firestore timeouts on large datasets.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>(globalInventoryCache?.allocations || []);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalInventoryCache?.usedQuantities || {});
+  const [loading, setLoading] = useState(!globalInventoryCache);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -36,20 +44,31 @@ export const useQ4Allocation = () => {
            profile?.role === 'Manager';
   }, [user, profile]);
 
-  const performFetch = useCallback(async () => {
+  const performFetch = useCallback(async (force = false) => {
     if (!db || !user) {
         setLoading(false);
         return;
     }
-    
+
+    // Return cached data if it's fresh (within 5 minutes) and not forced
+    const now = Date.now();
+    if (!force && globalInventoryCache && (now - globalInventoryCache.lastFetch < 300000)) {
+        setAllocations(globalInventoryCache.allocations);
+        setUsedQuantities(globalInventoryCache.usedQuantities);
+        setLoading(false);
+        return;
+    }
+
+    if (isGlobalFetching) return;
+    isGlobalFetching = true;
     setLoading(true);
+
     try {
-        // 1. Fetch Master Inventory from marketingSamples collection
+        // 1. Fetch Master Inventory
         const snapshot = await getDocs(collection(db, "marketingSamples"));
         const fetched = snapshot.docs.map(doc => {
             const data = doc.data();
             if (!data) return null;
-            // Map variations of naming to a consistent internal type
             const materialName = (data.displayMaterialName ?? data.materialName ?? "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup ?? data.productGroup ?? "Uncategorized").toString().trim();
             const qty = Number(data.allocationQuantity || 0);
@@ -64,7 +83,6 @@ export const useQ4Allocation = () => {
         fetched.sort((a, b) => (a.displayMaterialName || "").toLowerCase().localeCompare((b.displayMaterialName || "").toLowerCase()));
         
         // 2. Fetch Exhaustive Usage from coverageEntries
-        // Optimized chunked fetch to prevent Firestore timeouts
         const colRef = collection(db, "coverageEntries");
         const usage: Record<string, number> = {};
         
@@ -82,14 +100,14 @@ export const useQ4Allocation = () => {
                     }
                 };
 
-                // ACCURACY: Sum only primaryProductQty and secondaryProductQty as requested
+                // ACCURACY: Aggregating from primary and secondary fields as requested
                 processItem(entry.primarySampleName, entry.primaryProductQty);
                 processItem(entry.secondarySampleName, entry.secondaryProductQty);
             });
         };
 
         if (isAdminOrManager) {
-            // Chunked fetch for global audit
+            // QUOTA PROTECTION: Chunked fetch for massive audits
             let lastVisible = null;
             let hasMore = true;
             
@@ -109,17 +127,28 @@ export const useQ4Allocation = () => {
                 }
             }
         } else {
-            // Individual PMR fetch
+            // Individual PMR fetch (Exhaustive)
             const snap = await getDocs(query(colRef, where("userId", "==", user.uid)));
             processDocs(snap.docs);
         }
         
-        setAllocations(fetched);
-        setUsedQuantities(usage);
+        // Update state and global cache
+        const finalAllocations = fetched;
+        const finalUsage = usage;
+
+        globalInventoryCache = {
+            allocations: finalAllocations,
+            usedQuantities: finalUsage,
+            lastFetch: Date.now()
+        };
+
+        setAllocations(finalAllocations);
+        setUsedQuantities(finalUsage);
     } catch (error) {
         console.error("Critical Inventory fetch failed:", error);
     } finally {
         setLoading(false);
+        isGlobalFetching = false;
     }
   }, [user, isAdminOrManager]);
 
@@ -131,7 +160,7 @@ export const useQ4Allocation = () => {
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: performFetch,
+    refetch: () => performFetch(true),
     addAllocationsBulk: async (data: Omit<Q4Allocation, 'id'>[]) => {
         if (!db) return false;
         try {
@@ -144,7 +173,7 @@ export const useQ4Allocation = () => {
             batch.set(docRef, { ...item }, { merge: true });
           });
           await batch.commit();
-          await performFetch();
+          await performFetch(true);
           return true;
         } catch (err) { return false; }
     },
@@ -154,7 +183,7 @@ export const useQ4Allocation = () => {
         ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
         try { 
             await batch.commit(); 
-            await performFetch(); 
+            await performFetch(true); 
             return true; 
         } catch (err) { return false; }
     }
