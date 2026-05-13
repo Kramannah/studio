@@ -7,31 +7,28 @@ import { db } from '@/lib/firebase';
 import { collection, query, writeBatch, doc, getDocs, limit, startAfter, orderBy, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
-import { startOfYear } from 'date-fns';
+import { getStartOfYearISO } from '@/lib/utils';
 
-// GLOBAL CACHE: Lives outside the hook to persist across tab switches and component mounts
+// GLOBAL SESSION CACHE: Shared across all components and instances of the hook
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let lastFetchTime: number = 0;
-let isFetchingGlobal: boolean = false;
-const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes Cache
+let isFetchingInProgress: boolean = false;
+let fetchPromise: Promise<void> | null = null;
+
+const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 
 /**
  * Hook for managing inventory/allocations.
  * Fetches the master list from 'marketingSamples'.
  * Calculates usage from 'coverageEntries' for the CURRENT YEAR ONLY.
- * Uses global caching to prevent Quota Exceeded errors.
+ * Uses global caching and request locking to prevent Quota Exceeded errors.
  */
 export const useQ4Allocation = () => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
   const [loading, setLoading] = useState(!globalAllocationsCache);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -49,7 +46,6 @@ export const useQ4Allocation = () => {
         return;
     }
 
-    // Return cached data if available and not expired (unless forced)
     const now = Date.now();
     if (!forceRefresh && globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime < CACHE_DURATION)) {
         setAllocations(globalAllocationsCache);
@@ -58,110 +54,123 @@ export const useQ4Allocation = () => {
         return;
     }
 
-    // Prevent multiple simultaneous global fetches
-    if (isFetchingGlobal && !forceRefresh) return;
-    
-    isFetchingGlobal = true;
+    // Request Locking: If a fetch is already in progress, wait for it instead of starting a new one
+    if (isFetchingInProgress && fetchPromise && !forceRefresh) {
+        setLoading(true);
+        await fetchPromise;
+        setAllocations(globalAllocationsCache || []);
+        setUsedQuantities(globalUsedQuantitiesCache || {});
+        setLoading(false);
+        return;
+    }
+
+    isFetchingInProgress = true;
     setLoading(true);
 
-    try {
-        // 1. Fetch Master Inventory List
-        const samplesSnapshot = await getDocs(collection(db, "marketingSamples"));
-        const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
-            const data = docSnap.data();
-            const materialName = (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim();
-            const group = (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim();
-            const qty = Number(data.allocationQuantity || 0);
-            return { 
-                id: docSnap.id, 
-                prodGroupProdSubGroup: group, 
-                displayMaterialName: materialName, 
-                allocationQuantity: isNaN(qty) ? 0 : qty 
-            } as Q4Allocation;
-        });
-        
-        fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
-
-        // 2. Fetch Usage (Current Year Only)
-        const currentYearStart = startOfYear(new Date()).toISOString();
-        const usage: Record<string, number> = {};
-        const entriesCol = collection(db, "coverageEntries");
-        let lastVisible = null;
-        let hasMore = true;
-
-        while (hasMore) {
-            let baseQuery;
+    fetchPromise = (async () => {
+        try {
+            // 1. Fetch Master Inventory List
+            const samplesSnapshot = await getDocs(collection(db!, "marketingSamples"));
+            const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
+                const data = docSnap.data();
+                const materialName = (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim();
+                const group = (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim();
+                const qty = Number(data.allocationQuantity || 0);
+                return { 
+                    id: docSnap.id, 
+                    prodGroupProdSubGroup: group, 
+                    displayMaterialName: materialName, 
+                    allocationQuantity: isNaN(qty) ? 0 : qty 
+                } as Q4Allocation;
+            });
             
-            // To avoid "Index Required" errors for users, we filter by userId only and date-filter in memory.
-            // Admins can filter by date directly as a single-field range query doesn't require a composite index.
-            if (isUserAdmin) {
-                baseQuery = query(
-                    entriesCol, 
-                    where("submittedAt", ">=", currentYearStart),
-                    orderBy("submittedAt"), 
-                    ...(lastVisible ? [startAfter(lastVisible)] : []),
-                    limit(1000)
-                );
-            } else {
-                baseQuery = query(
-                    entriesCol, 
-                    where("userId", "==", user.uid), 
-                    ...(lastVisible ? [startAfter(lastVisible)] : []),
-                    limit(1000)
-                );
-            }
-            
-            const snap = await getDocs(baseQuery);
-            
-            if (snap.empty) {
-                hasMore = false;
-            } else {
-                snap.docs.forEach(docSnap => {
-                    const entry = docSnap.data() as CoverageEntry;
-                    if (!entry) return;
+            fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-                    // Memory Filtering for Users to bypass Index Requirement
-                    if (!isUserAdmin) {
-                        const subAt = entry.submittedAt || entry.coverageDate || "";
-                        if (subAt < currentYearStart) return;
-                    }
+            // 2. Fetch Usage (CURRENT YEAR 2026 ONLY)
+            const currentYearStart = getStartOfYearISO();
+            const usage: Record<string, number> = {};
+            const entriesCol = collection(db!, "coverageEntries");
+            let lastVisible = null;
+            let hasMore = true;
 
-                    const processItem = (name?: string, qty?: number) => {
-                        const safeName = String(name ?? "").toLowerCase().trim();
-                        if (!safeName) return;
-                        const safeQty = Math.round(Number(qty || 0));
-                        if (!isNaN(safeQty) && safeQty !== 0) {
-                            usage[safeName] = (usage[safeName] || 0) + safeQty;
+            while (hasMore) {
+                let baseQuery;
+                
+                if (isUserAdmin) {
+                    // Admins see everything for 2026. Single range query is index-friendly.
+                    baseQuery = query(
+                        entriesCol, 
+                        where("submittedAt", ">=", currentYearStart),
+                        orderBy("submittedAt"), 
+                        ...(lastVisible ? [startAfter(lastVisible)] : []),
+                        limit(1000)
+                    );
+                } else {
+                    // PMRs see their own for 2026. Filter by userId first.
+                    baseQuery = query(
+                        entriesCol, 
+                        where("userId", "==", user.uid), 
+                        ...(lastVisible ? [startAfter(lastVisible)] : []),
+                        limit(1000)
+                    );
+                }
+                
+                const snap = await getDocs(baseQuery);
+                
+                if (snap.empty) {
+                    hasMore = false;
+                } else {
+                    snap.docs.forEach(docSnap => {
+                        const entry = docSnap.data() as CoverageEntry;
+                        if (!entry) return;
+
+                        // Memory Filtering for non-admin users to avoid index requirement
+                        if (!isUserAdmin) {
+                            const subAt = entry.submittedAt || entry.coverageDate || "";
+                            if (subAt < currentYearStart) return;
                         }
-                    };
 
-                    processItem(entry.primarySampleName, entry.primaryProductQty);
-                    processItem(entry.secondarySampleName, entry.secondaryProductQty);
-                });
+                        // AGGREGATION: strictly primaryProductQty and secondaryProductQty
+                        const processItem = (name?: string, qty?: number) => {
+                            const safeName = String(name ?? "").toLowerCase().trim();
+                            if (!safeName) return;
+                            const safeQty = Math.round(Number(qty || 0));
+                            if (!isNaN(safeQty) && safeQty !== 0) {
+                                usage[safeName] = (usage[safeName] || 0) + safeQty;
+                            }
+                        };
 
-                lastVisible = snap.docs[snap.docs.length - 1];
-                if (snap.docs.length < 1000) hasMore = false;
+                        processItem(entry.primarySampleName, entry.primaryProductQty);
+                        processItem(entry.secondarySampleName, entry.secondaryProductQty);
+                    });
+
+                    lastVisible = snap.docs[snap.docs.length - 1];
+                    if (snap.docs.length < 1000) hasMore = false;
+                }
             }
+
+            // Update Global Persistence Cache
+            globalAllocationsCache = fetchedAllocations;
+            globalUsedQuantitiesCache = usage;
+            lastFetchTime = Date.now();
+
+            setAllocations(fetchedAllocations);
+            setUsedQuantities(usage);
+        } catch (error) {
+            console.error("Inventory calculation failed:", error);
+        } finally {
+            isFetchingInProgress = false;
+            fetchPromise = null;
         }
+    })();
 
-        // Update Global Cache
-        globalAllocationsCache = fetchedAllocations;
-        globalUsedQuantitiesCache = usage;
-        lastFetchTime = Date.now();
-
-        setAllocations(fetchedAllocations);
-        setUsedQuantities(usage);
-    } catch (error) {
-        console.error("Critical Inventory fetch failed:", error);
-    } finally {
-        setLoading(false);
-        isFetchingGlobal = false;
-    }
+    await fetchPromise;
+    setLoading(false);
   }, [user, isUserAdmin]);
 
   useEffect(() => {
-    if (mounted) performFetch();
-  }, [mounted, performFetch]);
+    performFetch();
+  }, [performFetch]);
 
   return { 
     allocations, 
@@ -176,7 +185,7 @@ export const useQ4Allocation = () => {
             const name = (item.displayMaterialName ?? "").toString().trim();
             if (!name) return;
             const cleanId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const docRef = doc(db, "marketingSamples", `sample_${cleanId}`);
+            const docRef = doc(db!, "marketingSamples", `sample_${cleanId}`);
             batch.set(docRef, { ...item }, { merge: true });
           });
           await batch.commit();
@@ -187,7 +196,7 @@ export const useQ4Allocation = () => {
     deleteAllocationsBulk: async (ids: string[]) => {
         if (!db) return false;
         const batch = writeBatch(db);
-        ids.forEach(id => { if (id) batch.delete(doc(db, "marketingSamples", id)); });
+        ids.forEach(id => { if (id) batch.delete(doc(db!, "marketingSamples", id)); });
         try { 
             await batch.commit(); 
             await performFetch(true); 

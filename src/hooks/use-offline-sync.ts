@@ -6,11 +6,15 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
-import { getQueryStartDateISO } from '@/lib/utils';
+import { getStartOfYearISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
+
+// SESSION CACHE: Shared across Sidebar, Dashboard, and Reporting to save reads
+let userEntriesCache: Record<string, { data: CoverageEntry[], timestamp: number }> = {};
+const CACHE_TIME = 10 * 60 * 1000; // 10 Minutes
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -38,28 +42,42 @@ export const useOfflineSync = (userId?: string) => {
     };
   }, []);
 
-  const fetchMasterEntries = useCallback(async () => {
+  const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !isOnline || !db) {
       setLoading(false);
       return;
     }
+
+    if (!force && userEntriesCache[userId] && (Date.now() - userEntriesCache[userId].timestamp < CACHE_TIME)) {
+        setMasterEntries(userEntriesCache[userId].data);
+        setLoading(false);
+        return;
+    }
+
     try {
-      // Remove automatic date filtering for individual users to ensure full record history is visible
+      // CURRENT YEAR 2026 ONLY: drastically reduces read volume
+      const currentYearStart = getStartOfYearISO();
       const q = query(
-        collection(db, "coverageEntries"), 
+        collection(db!, "coverageEntries"), 
         where("userId", "==", userId)
       );
       
       const querySnapshot = await getDocs(q);
-      const entries: CoverageEntry[] = [];
+      const allEntries: CoverageEntry[] = [];
       
       querySnapshot.forEach(doc => {
         const data = doc.data() as CoverageEntry;
-        entries.push({ id: doc.id, ...data });
+        // Memory filter to avoid composite index requirement
+        if ((data.submittedAt || data.coverageDate || "") >= currentYearStart) {
+            allEntries.push({ id: doc.id, ...data });
+        }
       });
       
-      entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
-      setMasterEntries(entries);
+      allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      
+      // Update Cache
+      userEntriesCache[userId] = { data: allEntries, timestamp: Date.now() };
+      setMasterEntries(allEntries);
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
@@ -104,7 +122,7 @@ export const useOfflineSync = (userId?: string) => {
     };
 
     if (isOnline) {
-        const docRef = doc(db, "coverageEntries", entryId);
+        const docRef = doc(db!, "coverageEntries", entryId);
         setDoc(docRef, newEntryPayload)
           .then(() => {
             setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
@@ -140,18 +158,18 @@ export const useOfflineSync = (userId?: string) => {
     setIsSyncing(true);
 
     const entriesToSync = [...offlineEntries];
-    const batch = writeBatch(db);
+    const batch = writeBatch(db!);
 
     for (const entry of entriesToSync) {
         const { id, isOffline, ...dataToSync } = entry;
-        const docRef = doc(collection(db, "coverageEntries")); 
+        const docRef = doc(collection(db!, "coverageEntries")); 
         batch.set(docRef, { ...dataToSync, submittedAt: new Date().toISOString() });
     }
 
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        await fetchMasterEntries();
+        await fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
@@ -174,7 +192,7 @@ export const useOfflineSync = (userId?: string) => {
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    const docRef = doc(db, "coverageEntries", id);
+    const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
         setMasterEntries(prev => prev.filter(e => e.id !== id));
@@ -190,7 +208,7 @@ export const useOfflineSync = (userId?: string) => {
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
-    const docRef = doc(db, "coverageEntries", e.id);
+    const docRef = doc(db!, "coverageEntries", e.id);
     updateDoc(docRef, e)
       .then(() => {
         setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));

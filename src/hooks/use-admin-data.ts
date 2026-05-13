@@ -1,14 +1,14 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, addDoc, writeBatch, limit, orderBy, startAfter } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingSample, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { getQueryStartDateISO } from "@/lib/utils";
+import { getStartOfYearISO } from "@/lib/utils";
 
 export interface TeamSummaryData {
     entries: CoverageEntry[];
@@ -20,9 +20,9 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-// Global cache for team summaries to prevent redundant large-scale scans
+// PERSISTENCE CACHE: Lives outside the hook to save Firestore reads
 const teamSummaryCache: Record<string, { data: TeamSummaryData, timestamp: number }> = {};
-const CACHE_LIMIT = 5 * 60 * 1000; // 5 Minutes
+const CACHE_LIMIT = 15 * 60 * 1000; // 15 Minutes
 
 const safeToDateISO = (val: any): string => {
     if (!val) return '';
@@ -114,7 +114,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return;
         }
 
-        const startDate = getQueryStartDateISO();
+        const currentYearStart = getStartOfYearISO();
 
         const fetchAllForUsers = async (ids: string[]) => {
             const chunks = [];
@@ -133,9 +133,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
                 const mapDocs = (s: any, dateField?: string) => s.docs.map((d: any) => ({id: d.id, ...d.data()}))
                     .filter((item: any) => {
-                        if (!dateField || !startDate) return true;
+                        if (!dateField) return true;
                         const val = item[dateField];
-                        return val && val >= startDate;
+                        return val && val >= currentYearStart;
                     });
 
                 return { 
@@ -181,7 +181,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         teamSummaryCache[managerId] = { data: finalData, timestamp: Date.now() };
         setTeamSummaryData(finalData);
     } catch (e) {
-        console.warn("Team summary aggregation error:", e);
+        console.warn("District aggregation error:", e);
     } finally {
         setLoadingSummary(false);
     }
@@ -192,6 +192,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     setLoadingIndividual(true);
     try {
+        const currentYearStart = getStartOfYearISO();
         const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
@@ -203,8 +204,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             f("planningRequests")
         ]);
         
+        // Memory filter for current year to avoid index requirements for PMR drill-down
+        const filterYear = (list: any[], field: string) => list.filter(item => (item[field] || "") >= currentYearStart);
+
+        const filteredEntries = filterYear(e, 'submittedAt');
+        
         const used: Record<string, number> = {};
-        (e as CoverageEntry[]).forEach(item => {
+        filteredEntries.forEach((item: CoverageEntry) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
                 if (key) used[key] = (used[key] || 0) + Math.round(Number(q || 0));
@@ -213,15 +219,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(item.secondarySampleName, item.secondaryProductQty);
         });
 
-        setAllEntries(e as any); 
+        setAllEntries(filteredEntries); 
         setAllDoctors(d as any); 
-        setAllPlans(p as any);
-        setAllTimeLogs(l as any); 
-        setAllNonCallDaysIndividual(ncd as any);
+        setAllPlans(filterYear(p, 'plannedDate'));
+        setAllTimeLogs(filterYear(l, 'timeIn')); 
+        setAllNonCallDaysIndividual(filterYear(ncd, 'date'));
         setIndividualPlanningRequests(r as any); 
         setIndividualUsedQuantities(used);
     } catch (e) {
-        console.warn("User data fetch error:", e);
+        console.warn("Individual PMR drill-down error:", e);
     } finally {
         setLoadingIndividual(false);
     }

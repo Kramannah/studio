@@ -8,15 +8,23 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Returns the ISO string for the start of the current calendar year.
+ * Used for high-performance inventory and summary scans.
+ */
+export function getStartOfYearISO(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), 0, 1).toISOString();
+}
+
+/**
  * Returns the ISO string for the start of the current period.
- * Expanded to 6 months to ensure historical visibility for PMRs like Ramos.
+ * Defaulting to 6 months for general visibility.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Set back to 6 months for complete historical oversight in dashboards
   return subMonths(startOfMonth(now), 5).toISOString();
 }
 
