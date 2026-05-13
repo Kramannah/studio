@@ -45,8 +45,8 @@ export default function AdminPage() {
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [accountSearch, setAccountSearch] = useState('');
     const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
-    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string } | null>(null);
-    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '' });
+    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' } | null>(null);
+    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -55,11 +55,20 @@ export default function AdminPage() {
 
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
+        const profile = profiles[user.uid];
         const email = (user.email ?? "").toLowerCase();
-        return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
-    }, [user]);
+        return ADMIN_UIDS.includes(user.uid) || 
+               email === 'mbustamante@hovidinc.com' || 
+               ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
+               profile?.role === 'Admin';
+    }, [user, profiles]);
 
-    const isUserManager = useMemo(() => user && Object.keys(MANAGER_TEAMS).includes(user.uid), [user]);
+    const isUserManager = useMemo(() => {
+        if (!user) return false;
+        const profile = profiles[user.uid];
+        return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
+    }, [user, profiles]);
+
     const hasAdminAccess = isUserAdmin || isUserManager;
 
     const { 
@@ -100,14 +109,16 @@ export default function AdminPage() {
 
     const allAccounts = useMemo(() => {
         const all = Object.entries(mergedUserMap).map(([uid, data]) => {
-            const isAdmin = ADMIN_UIDS.includes(uid);
-            const isManager = Object.keys(MANAGER_TEAMS).includes(uid);
-            let role = 'PMR';
+            const profile = profiles[uid];
+            const isAdmin = ADMIN_UIDS.includes(uid) || profile?.role === 'Admin';
+            const isManager = Object.keys(MANAGER_TEAMS).includes(uid) || profile?.role === 'Manager';
+            
+            let role: 'Admin' | 'Manager' | 'PMR' = 'PMR';
             if (isAdmin) role = 'Admin';
             else if (isManager) role = 'Manager';
+            else if (profile?.role === 'PMR') role = 'PMR';
 
             let district = 'N/A';
-            const profile = profiles[uid];
             const managerUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
             
             if (role === 'PMR') {
@@ -176,7 +187,8 @@ export default function AdminPage() {
             editingAccount.firstName, 
             editingAccount.lastName, 
             editingAccount.managerId,
-            editingAccount.email
+            editingAccount.email,
+            editingAccount.role
         );
         if (success) setEditingAccount(null);
     };
@@ -189,11 +201,12 @@ export default function AdminPage() {
             lastName: newAccount.lastName,
             code: newAccount.code,
             email: newAccount.email,
-            managerId: newAccount.managerId
+            managerId: newAccount.managerId,
+            role: newAccount.role
         });
         if (success) {
             setIsAddAccountOpen(false);
-            setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '' });
+            setNewAccount({ uid: '', firstName: '', lastName: '', code: '', email: '', managerId: '', role: 'PMR' });
         }
     };
 
@@ -387,7 +400,7 @@ export default function AdminPage() {
                                                             <Button 
                                                                 variant="ghost" 
                                                                 size="icon" 
-                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code })}
+                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code, role: acc.role as any })}
                                                             >
                                                                 <Pencil className="h-4 w-4" />
                                                             </Button>
@@ -429,9 +442,20 @@ export default function AdminPage() {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="font-headline">Create New Personnel Record</DialogTitle>
-                        <DialogDescription>Assign a UID and employee details to register a new PMR or Manager.</DialogDescription>
+                        <DialogDescription>Assign a UID and employee details to register a new account.</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label>Account Role</Label>
+                            <Select value={newAccount.role} onValueChange={(v: any) => setNewAccount({...newAccount, role: v})}>
+                                <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="PMR">Representative (PMR)</SelectItem>
+                                    <SelectItem value="Manager">District Manager (DSM)</SelectItem>
+                                    <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="grid gap-2">
                             <Label>User Identifier (UID)</Label>
                             <Input value={newAccount.uid} onChange={(e) => setNewAccount({...newAccount, uid: e.target.value})} placeholder="Firestore Auth UID" />
@@ -456,16 +480,18 @@ export default function AdminPage() {
                                 <Input value={newAccount.email} onChange={(e) => setNewAccount({...newAccount, email: e.target.value})} />
                             </div>
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Reporting To (District Manager)</Label>
-                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
-                                <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">National / Unassigned</SelectItem>
-                                    {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {newAccount.role === 'PMR' && (
+                            <div className="grid gap-2">
+                                <Label>Reporting To (District Manager)</Label>
+                                <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">National / Unassigned</SelectItem>
+                                        {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="ghost" onClick={() => setIsAddAccountOpen(false)}>Cancel</Button>
@@ -482,6 +508,20 @@ export default function AdminPage() {
                     </DialogHeader>
                     {editingAccount && (
                         <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label>System Role</Label>
+                                <Select 
+                                    value={editingAccount.role || 'PMR'} 
+                                    onValueChange={(v: any) => setEditingAccount({ ...editingAccount, role: v })}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="PMR">Representative (PMR)</SelectItem>
+                                        <SelectItem value="Manager">District Manager (DSM)</SelectItem>
+                                        <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="grid gap-2">
                                     <Label htmlFor="firstName">First Name</Label>
@@ -508,23 +548,25 @@ export default function AdminPage() {
                                     onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })}
                                 />
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="manager">District DSM</Label>
-                                <Select 
-                                    value={editingAccount.managerId || 'none'} 
-                                    onValueChange={(v) => setEditingAccount({ ...editingAccount, managerId: v })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Unassigned / National" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">National / Unassigned</SelectItem>
-                                        {managers.map(m => (
-                                            <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {editingAccount.role === 'PMR' && (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="manager">District DSM</Label>
+                                    <Select 
+                                        value={editingAccount.managerId || 'none'} 
+                                        onValueChange={(v) => setEditingAccount({ ...editingAccount, managerId: v })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Unassigned / National" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">National / Unassigned</SelectItem>
+                                            {managers.map(m => (
+                                                <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
                     )}
                     <DialogFooter>

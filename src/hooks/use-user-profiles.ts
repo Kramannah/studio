@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
@@ -43,7 +42,7 @@ export function useUserProfiles() {
         fetchProfiles();
     }, [fetchProfiles]);
 
-    const addProfile = async (data: { userId: string; firstName: string; lastName: string; code: string; managerId?: string; email?: string }) => {
+    const addProfile = async (data: { userId: string; firstName: string; lastName: string; code: string; role?: 'Admin' | 'Manager' | 'PMR'; managerId?: string; email?: string }) => {
         if (!db) return false;
         const docRef = doc(db, "userProfiles", data.userId);
         const payload = {
@@ -68,7 +67,7 @@ export function useUserProfiles() {
         }
     };
 
-    const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string, email?: string) => {
+    const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string, email?: string, role?: 'Admin' | 'Manager' | 'PMR') => {
         if (!db) return false;
         
         const docId = userId; 
@@ -88,6 +87,10 @@ export function useUserProfiles() {
 
         if (email) {
             payload.email = email;
+        }
+
+        if (role) {
+            payload.role = role;
         }
 
         try {
