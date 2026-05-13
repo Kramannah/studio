@@ -117,17 +117,17 @@ export default function AdminPage() {
 
     const allAccounts = useMemo(() => {
         const all = Object.entries(mergedUserMap).map(([uid, data]) => {
-            const profile = profiles[uid];
-            const isAdmin = ADMIN_UIDS.includes(uid) || profile?.role === 'Admin';
-            const isManager = Object.keys(MANAGER_TEAMS).includes(uid) || profile?.role === 'Manager';
+            const userProfile = profiles[uid];
+            const isAdmin = ADMIN_UIDS.includes(uid) || userProfile?.role === 'Admin';
+            const isManager = Object.keys(MANAGER_TEAMS).includes(uid) || userProfile?.role === 'Manager';
             
             let role: 'Admin' | 'Manager' | 'PMR' = 'PMR';
             if (isAdmin) role = 'Admin';
             else if (isManager) role = 'Manager';
-            else if (profile?.role === 'PMR') role = 'PMR';
+            else if (userProfile?.role === 'PMR') role = 'PMR';
 
             let district = 'N/A';
-            const managerUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
+            const managerUid = userProfile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
             
             if (role === 'PMR') {
                 if (managerUid) {
@@ -146,16 +146,18 @@ export default function AdminPage() {
         });
 
         const q = (accountSearch ?? "").toLowerCase().trim();
-        if (!q) return all.sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
+        const sorted = all.sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
 
-        return all.filter(a => {
+        if (!q) return sorted;
+
+        return sorted.filter(a => {
             return (a.code ?? "").toLowerCase().includes(q) || 
                    (a.firstName ?? "").toLowerCase().includes(q) || 
                    (a.lastName ?? "").toLowerCase().includes(q) ||
                    (a.role ?? "").toLowerCase().includes(q) ||
                    (a.district ?? "").toLowerCase().includes(q) ||
                    (a.email ?? "").toLowerCase().includes(q);
-        }).sort((a, b) => (a.lastName ?? "").localeCompare(b.lastName ?? ""));
+        });
     }, [accountSearch, profiles, mergedUserMap]);
 
     const managedUserIds = useMemo(() => {
@@ -424,7 +426,7 @@ export default function AdminPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {allAccounts.map((acc) => (
-                                                <TableRow className="h-16 hover:bg-muted/30 border-b">
+                                                <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
                                                         <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
                                                             {acc.code}
