@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -199,7 +198,7 @@ export default function Home() {
           onAddNonCallDay={addNonCallDay} 
         />
       );
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} onAddPlan={addPlan} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
       case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;

@@ -54,8 +54,8 @@ const formSchema = z.object({
   coverageDate: z.date().optional(),
   photos: z.array(z.string()).max(1, "You can only capture one photo.").optional(),
   signature: z.string().nullable().optional(),
-  jointCallWith: z.string().optional(),
   jointCallSignature: z.string().nullable().optional(),
+  jointCallWith: z.string().optional(),
   callObjective: z.string().optional(),
   primaryProduct: z.string().optional(),
   secondaryProduct: z.string().optional(),
@@ -107,7 +107,6 @@ const formSchema = z.object({
 type CoverageFormProps = {
   onSave: (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>) => Promise<boolean>;
   onUpdate: (entry: Omit<CoverageEntry, 'submittedAt'>) => void;
-  onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   isOnline: boolean;
   doctors: Doctor[];
   allocations: Q4Allocation[];
@@ -224,7 +223,6 @@ const SearchableSelect = ({
 export function CoverageForm({ 
     onSave, 
     onUpdate, 
-    onAddPlan, 
     isOnline, 
     doctors, 
     allocations, 
@@ -574,12 +572,7 @@ export function CoverageForm({
       
       const { plannedDoctorId: _pId, ...restOfValues } = values;
 
-      if (callType === 'unplanned') {
-        const doctor = doctors.find(d => d.firstName === values.firstName && d.lastName === values.lastName);
-        if (doctor) {
-          onAddPlan(doctor, values.coverageDate || new Date());
-        }
-      }
+      // NOTE: Automatic plan creation for unplanned calls was removed per user request.
 
       const savedOnline = await onSave({
         ...restOfValues,
