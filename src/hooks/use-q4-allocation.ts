@@ -79,16 +79,23 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        // 2. Aggregate Usage (Optimized with Role Safety)
+        // 2. Aggregate Usage (Optimized with Role Safety and Fallback)
         const currentYearStart = getStartOfYearISO();
-        
-        // If PMR: Only query their own reports to avoid Permission Denied
-        // If Admin/Manager: Query all reports for global oversight
-        const entriesQuery = (isUserAdmin || isUserManager)
-            ? query(collection(db!, "coverageEntries"), limit(5000))
-            : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+        let entriesSnap;
 
-        const entriesSnap = await getDocs(entriesQuery);
+        try {
+            // Attempt oversight fetch for Admin/Manager
+            const entriesQuery = (isUserAdmin || isUserManager)
+                ? query(collection(db!, "coverageEntries"), limit(5000))
+                : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+            entriesSnap = await getDocs(entriesQuery);
+        } catch (e: any) {
+            // Fallback: If global oversight failed (e.g. manager permissions not in Firestore rules yet),
+            // fetch only personal usage to prevent app crash
+            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+            entriesSnap = await getDocs(personalQuery);
+        }
+
         const used: Record<string, number> = {};
 
         entriesSnap.docs.forEach(d => {

@@ -42,20 +42,6 @@ interface Q4AllocationViewProps {
     readOnly?: boolean;
 }
 
-const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: number, icon: any, color: string }) => (
-    <Card className="border-2 shadow-sm">
-        <CardContent className="p-6 flex items-center justify-between">
-            <div className="space-y-1">
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{title}</p>
-                <p className="text-3xl font-black font-headline tabular-nums">{value.toLocaleString()}</p>
-            </div>
-            <div className={cn("p-3 rounded-xl bg-opacity-10", color.replace('text-', 'bg-').replace('500', '500/10'))}>
-                <Icon className={cn("w-6 h-6", color)} />
-            </div>
-        </CardContent>
-    </Card>
-);
-
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
@@ -84,15 +70,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
             return name.includes(q) || group.includes(q);
         });
     }, [allocations, search, mounted]);
-
-    const stats = useMemo(() => {
-        const totalAlloc = filteredSamples.reduce((acc, s) => acc + (s.allocationQuantity || 0), 0);
-        const totalUsed = filteredSamples.reduce((acc, s) => {
-            const key = (s.displayMaterialName || "").toLowerCase().trim();
-            return acc + (usedQuantities[key] || 0);
-        }, 0);
-        return { totalAlloc, totalUsed, balance: Math.max(0, totalAlloc - totalUsed) };
-    }, [filteredSamples, usedQuantities]);
 
     const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
     const paginatedSamples = useMemo(() => {
@@ -165,19 +142,13 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         return (
             <div className="flex flex-col items-center justify-center p-20 gap-4">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Initializing Inventory...</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Initializing Marketing Samples...</p>
             </div>
         );
     }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard title="Total Allocated" value={stats.totalAlloc} icon={Package} color="text-blue-500" />
-                <StatCard title="Units Issued" value={stats.totalUsed} icon={TrendingUp} color="text-orange-500" />
-                <StatCard title="Current Balance" value={stats.balance} icon={ShieldAlert} color="text-primary" />
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
                     <Card className="border-2 shadow-lg overflow-hidden">
