@@ -406,47 +406,40 @@ export function PlanningCalendar({
                     {(selectedDayNonCallDays.length > 0 || selectedHoliday) && (
                         <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
                             {selectedHoliday && (
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
-                                    <div className="flex items-start gap-4">
-                                        <div className="p-2 rounded-full bg-orange-500/10">
+                                <div className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-2 rounded-full bg-black/40">
                                             <StatusIcon status="holiday" />
                                         </div>
-                                        <div>
-                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none">
-                                                {selectedHoliday}
-                                            </p>
-                                        </div>
+                                        <p className="font-black font-headline text-lg text-orange-500 leading-none">
+                                            {selectedHoliday}
+                                        </p>
                                     </div>
-                                    <Badge variant="outline" className="h-8 px-4 capitalize font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
+                                    <Badge variant="outline" className="h-8 px-4 rounded-full font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
                                         Public Holiday
                                     </Badge>
                                 </div>
                             )}
 
                             {selectedDayNonCallDays.map((day) => (
-                                <div key={day.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
-                                    <div className="flex items-start gap-4">
-                                        <div className="p-2 rounded-full bg-orange-500/10">
+                                <div key={day.id} className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-4">
+                                        <div className="p-2 rounded-full bg-black/40">
                                             <StatusIcon status={day.status} />
                                         </div>
                                         <div>
-                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none mb-1">
+                                            <p className="font-black font-headline text-lg text-orange-500 leading-none">
                                                 {day.reason}
                                             </p>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <Badge variant="secondary" className="h-6 px-2 text-[10px] font-black uppercase tracking-tighter bg-orange-500/10 text-orange-600 border-none">
-                                                    {dayTypeLabels[day.dayType]}
-                                                </Badge>
-                                                {day.remarks && (
-                                                    <p className="text-xs text-muted-foreground font-medium italic">
-                                                        "{day.remarks}"
-                                                    </p>
-                                                )}
-                                            </div>
+                                            {day.remarks && (
+                                                <p className="text-[10px] text-muted-foreground mt-1 font-medium italic leading-none">
+                                                    "{day.remarks}"
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                     <Badge variant="outline" className={cn(
-                                        "h-8 px-4 capitalize font-black text-xs border-2 shadow-sm",
+                                        "h-8 px-4 rounded-full capitalize font-black text-xs border-2 shadow-sm",
                                         day.status === 'approved' && "bg-primary/10 text-primary border-primary/30",
                                         day.status === 'pending' && "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
                                         day.status === 'rejected' && "bg-destructive/10 text-destructive border-destructive/30"
