@@ -10,11 +10,16 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
+// SINGLETON CACHE: Makes the Marketing Samples list load instantly across the app
+let cachedAllocations: Q4Allocation[] | null = null;
+let lastAllocationFetch: number = 0;
+const ALLOCATION_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(active);
+  const [loading, setLoading] = useState(!cachedAllocations && active);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -29,15 +34,26 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
   }, [user, profile, isUserAdmin]);
 
-  const performFetch = useCallback(async () => {
+  const performFetch = useCallback(async (force = false) => {
     if (!db || !user || !active) {
         setLoading(false);
         return;
     }
 
-    setLoading(true);
+    // Return cached data instantly if valid
+    const now = Date.now();
+    if (!force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL)) {
+        setAllocations(cachedAllocations);
+        setLoading(false);
+        // We still fetch usage if requested because it's dynamic
+        if (!includeUsage) return;
+    }
+
+    if (!cachedAllocations) setLoading(true);
+
     try {
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(5000)))
+        // Fetch Master Allocations
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(10000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'marketingSamples',
@@ -61,6 +77,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
+        // Update Singleton Cache
+        cachedAllocations = fetchedAllocations;
+        lastAllocationFetch = now;
+        setAllocations(fetchedAllocations);
+
         const used: Record<string, number> = {};
 
         // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
@@ -69,6 +90,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             const canDoGlobalFetch = isUserAdmin || isUserManager;
 
             if (canDoGlobalFetch) {
+                // Limit individual scan to 10k to prevent timeouts
                 entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(10000)));
             } else {
                 entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
@@ -96,10 +118,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     });
                 }
             });
+            setUsedQuantities(used);
         }
 
-        setAllocations(fetchedAllocations);
-        setUsedQuantities(used);
     } catch (error) {
         console.error("Inventory fetch failed:", error);
     } finally {
@@ -122,7 +143,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     });
     try {
         await batch.commit();
-        await performFetch();
+        await performFetch(true);
         return true;
     } catch (serverError: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -139,7 +160,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     ids.forEach(id => batch.delete(doc(db!, "marketingSamples", id)));
     try {
         await batch.commit();
-        await performFetch();
+        await performFetch(true);
         return true;
     } catch (serverError: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -154,7 +175,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: performFetch,
+    refetch: () => performFetch(true),
     addAllocationsBulk,
     deleteAllocationsBulk
   };
