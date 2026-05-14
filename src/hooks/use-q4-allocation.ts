@@ -64,13 +64,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         const used: Record<string, number> = {};
 
         // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
-        // Admin views set readOnly to false/undefined which results in includeUsage being false
         if (includeUsage) {
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || isUserManager;
 
             if (canDoGlobalFetch) {
-                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(20000)));
+                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(10000)));
             } else {
                 entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
             }

@@ -120,7 +120,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(20000))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(10000))),
                     getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(10000))),
                     getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(10000))),
                     getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(5000))),
