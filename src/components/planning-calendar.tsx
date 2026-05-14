@@ -53,15 +53,16 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
     'halfday-pm': 'Half Day (PM)',
 };
 
-const StatusIcon = ({ status }: { status: NonCallDay['status'] }) => {
+const StatusIcon = ({ status }: { status: NonCallDay['status'] | 'holiday' }) => {
     switch (status) {
+        case 'holiday':
         case 'approved':
-            return <CheckCircle className="w-4 h-4 text-primary" />;
+            return <CheckCircle className="w-5 h-5 text-primary" />;
         case 'rejected':
-            return <XCircle className="w-4 h-4 text-destructive" />;
+            return <XCircle className="w-5 h-5 text-destructive" />;
         case 'pending':
         default:
-            return <Clock className="w-4 h-4 text-yellow-500" />;
+            return <Clock className="w-5 h-5 text-yellow-500" />;
     }
 }
 
@@ -362,11 +363,6 @@ export function PlanningCalendar({
                             <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
                                 Daily Plan for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
-                                {selectedHoliday && (
-                                  <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent/30 font-black uppercase text-[10px] ml-2 flex items-center gap-1">
-                                    <PartyPopper size={12} /> {selectedHoliday}
-                                  </Badge>
-                                )}
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
@@ -408,11 +404,35 @@ export function PlanningCalendar({
                         </div>
                     </div>
 
-                    {selectedDayNonCallDays.length > 0 && (
+                    {(selectedDayNonCallDays.length > 0 || selectedHoliday) && (
                         <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
                              <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
                                 <CalendarOff className="w-3 h-3" /> Non-Call Activity
                             </h4>
+
+                            {selectedHoliday && (
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 rounded-full bg-orange-500/10">
+                                            <StatusIcon status="holiday" />
+                                        </div>
+                                        <div>
+                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none mb-1">
+                                                {selectedHoliday}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Badge variant="secondary" className="h-6 px-2 text-[10px] font-black uppercase tracking-tighter bg-orange-500/10 text-orange-600 border-none">
+                                                    Whole Day
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <Badge variant="outline" className="h-8 px-4 capitalize font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
+                                        Public Holiday
+                                    </Badge>
+                                </div>
+                            )}
+
                             {selectedDayNonCallDays.map((day) => (
                                 <div key={day.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
                                     <div className="flex items-start gap-4">
