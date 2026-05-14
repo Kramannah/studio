@@ -69,6 +69,7 @@ export function UserDashboard({
               <SubmittedList 
                 entries={allEntries} 
                 doctors={allDoctors} 
+                nonCallDays={allNonCallDays}
                 onDelete={onDeleteEntry} 
                 onEdit={() => {}} 
                 readOnly={!isAdminView} 

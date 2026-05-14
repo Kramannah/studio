@@ -1,7 +1,7 @@
 
 "use client"
 
-import type { CoverageEntry, Doctor } from "@/lib/types";
+import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
@@ -294,9 +294,16 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     );
 }
 
+const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
+    'wholeday': 'Whole Day',
+    'halfday-am': 'Half Day (AM)',
+    'halfday-pm': 'Half Day (PM)',
+};
+
 export function SubmittedList({ 
     entries = [], 
     doctors = [], 
+    nonCallDays = [],
     onDelete, 
     onEdit, 
     readOnly = false,
@@ -305,6 +312,7 @@ export function SubmittedList({
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
+    nonCallDays?: NonCallDay[],
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
@@ -430,6 +438,32 @@ export function SubmittedList({
     const entryDates = useMemo(() => {
         return Object.keys(entriesCountByDate).map(d => parseISO(d));
     }, [entriesCountByDate]);
+
+    const nonCallDaysByDate = useMemo(() => {
+        const groups: Record<string, NonCallDay[]> = {};
+        (nonCallDays || []).forEach(day => {
+            const dateStr = (day.date ?? "").toString();
+            if (dateStr) {
+                const date = parseISO(dateStr);
+                if (isValid(date)) {
+                    const dateKey = format(date, 'yyyy-MM-dd');
+                    if (!groups[dateKey]) groups[dateKey] = [];
+                    groups[dateKey].push(day);
+                }
+            }
+        });
+        return groups;
+    }, [nonCallDays]);
+
+    const nonCallDates = useMemo(() => {
+        return Object.keys(nonCallDaysByDate).map(d => parseISO(d));
+    }, [nonCallDaysByDate]);
+
+    const selectedDateNonCallDays = useMemo(() => {
+        if (!selectedDate) return [];
+        const dateKey = format(selectedDate, 'yyyy-MM-dd');
+        return nonCallDaysByDate[dateKey] || [];
+    }, [selectedDate, nonCallDaysByDate]);
 
     const holidayDates = useMemo(() => {
         return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
@@ -592,10 +626,11 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
-                                modifiers={{ hasEntry: entryDates, holiday: holidayDates }}
+                                modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
-                                    holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' }
+                                    holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' },
+                                    nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))', fontWeight: 'bold' }
                                 }}
                                 components={{
                                     DayContent: ({ date }) => {
@@ -631,6 +666,43 @@ export function SubmittedList({
                                 <Badge variant="outline" className="h-8 px-4 rounded-full font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
                                     Public Holiday
                                 </Badge>
+                            </div>
+                        )}
+
+                        {selectedDateNonCallDays.length > 0 && (
+                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                {selectedDateNonCallDays.map((day) => (
+                                    <div key={day.id} className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-2 rounded-full bg-black/40">
+                                                <Clock className="w-5 h-5 text-yellow-500" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-black font-headline text-lg text-orange-500 leading-none">
+                                                        {day.reason}
+                                                    </p>
+                                                    <Badge variant="secondary" className="text-[10px] h-5 px-2 bg-orange-500/10 text-orange-500 border-none font-bold uppercase">
+                                                        {dayTypeLabels[day.dayType]}
+                                                    </Badge>
+                                                </div>
+                                                {day.remarks && (
+                                                    <p className="text-[10px] text-muted-foreground mt-1 font-medium italic leading-none">
+                                                        "{day.remarks}"
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <Badge variant="outline" className={cn(
+                                            "h-8 px-4 rounded-full capitalize font-black text-xs border-2 shadow-sm",
+                                            day.status === 'approved' && "bg-primary/10 text-primary border-primary/30",
+                                            day.status === 'pending' && "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
+                                            day.status === 'rejected' && "bg-destructive/10 text-destructive border-destructive/30"
+                                        )}>
+                                            {day.status}
+                                        </Badge>
+                                    </div>
+                                ))}
                             </div>
                         )}
 
