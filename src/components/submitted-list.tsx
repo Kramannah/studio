@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -59,6 +59,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
     }, [entry.submittedAt, readOnly]);
 
     const displayDate = entry.coverageDate ? parseISO(entry.coverageDate) : (entry.submittedAt ? parseISO(entry.submittedAt) : null);
+    const submissionTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
 
     return (
         <React.Fragment>
@@ -76,6 +77,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                     <div className="flex flex-col">
                         <span className="text-sm font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "MMM do,") : 'N/A'}</span>
                         <span className="text-[10px] text-muted-foreground font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "yyyy") : ''}</span>
+                    </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap hidden lg:table-cell">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
+                        <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
                     </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-center">
@@ -147,7 +154,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
             </TableRow>
             {isOpen && (
                 <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
-                    <TableCell colSpan={6} className="p-0">
+                    <TableCell colSpan={7} className="p-0">
                         <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-6">
                                 <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Pre-call Plan</h4>
@@ -462,6 +469,7 @@ export function SubmittedList({
         const dataToExport = filtered.map(entry => {
             const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
             const covDate = dateStr ? parseISO(dateStr) : null;
+            const subTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {
                 const u = userMap[entry.userId];
@@ -473,6 +481,7 @@ export function SubmittedList({
                 "Specialty": entry.specialty || "N/A",
                 "Clinic": entry.clinic || "N/A",
                 "Coverage Date": covDate && isValid(covDate) ? format(covDate, "yyyy-MM-dd") : "N/A",
+                "Submitted At": subTime && isValid(subTime) ? format(subTime, "yyyy-MM-dd HH:mm") : "N/A",
                 "Type": entry.coverageType,
                 "Product": entry.primaryProduct || "N/A",
                 "Qty": entry.primaryProductQty || 0
@@ -545,6 +554,7 @@ export function SubmittedList({
                                 <TableHead className="font-bold text-foreground">Provider</TableHead>
                                 <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
                                 <TableHead className="font-bold text-foreground">Date</TableHead>
+                                <TableHead className="hidden lg:table-cell font-bold text-foreground">Submitted</TableHead>
                                 <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
                                 <TableHead className="font-bold text-foreground">Proof</TableHead>
                                 <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
@@ -554,7 +564,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
                             ) : (
-                                <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
