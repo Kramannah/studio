@@ -9,15 +9,6 @@ import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 
-export interface TeamSummaryData {
-    entries: CoverageEntry[];
-    doctors: Doctor[];
-    nonCallDays: NonCallDay[];
-    timeLogs: TimeLog[];
-    plans: Plan[];
-    usedQuantities: Record<string, number>;
-}
-
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -33,10 +24,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   
-  const [teamSummaryData, setTeamSummaryData] = useState<TeamSummaryData | null>(null);
-  
   const [loadingApprovals, setLoadingApprovals] = useState(false);
-  const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
   const isUserAdmin = useMemo(() => {
@@ -100,80 +88,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [user, managerId, getManagedUserIds, active, isUserManager]);
 
-  const fetchTeamSummary = useCallback(async () => {
-    if (!managerId || !db || !active || !isUserManager) return;
-
-    setLoadingSummary(true);
-    try {
-        const userFilter = getManagedUserIds(managerId);
-        if (userFilter.length === 0) {
-            setTeamSummaryData(null);
-            setLoadingSummary(false);
-            return;
-        }
-
-        const fetchAllForUsers = async (ids: string[]) => {
-            const chunks = [];
-            // Reduced chunk size for summary batches to prevent timeouts
-            for (let i = 0; i < ids.length; i += 3) chunks.push(ids.slice(i, i+3));
-            
-            const aggregated = { entries: [], logs: [], doctors: [], ncds: [], plans: [] } as any;
-
-            for (const c of chunks) {
-                const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
-
-                // Fetch data for this small group of users
-                const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(10000))),
-                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(10000))),
-                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(10000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(5000))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(10000)))
-                ]);
-
-                aggregated.entries.push(...mapDocs(e));
-                aggregated.logs.push(...mapDocs(l));
-                aggregated.doctors.push(...mapDocs(d));
-                aggregated.ncds.push(...mapDocs(ncd));
-                aggregated.plans.push(...mapDocs(p));
-
-                // Small delay between chunks to let the connection breathe
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            return aggregated;
-        };
-
-        const combined = await fetchAllForUsers(userFilter);
-        
-        const used: Record<string, number> = {};
-        combined.entries.forEach((e: CoverageEntry) => {
-            const process = (n?: string, q?: number) => {
-                const key = String(n ?? "").toLowerCase().trim();
-                if (key) used[key] = (used[key] || 0) + (Number(q || 0));
-            };
-            process(e.primarySampleName, e.primaryProductQty);
-            process(e.secondarySampleName, e.secondaryProductQty);
-            if (e.reminderProducts) {
-                e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
-            }
-        });
-
-        setTeamSummaryData({ 
-            entries: combined.entries, 
-            timeLogs: combined.logs, 
-            doctors: combined.doctors, 
-            nonCallDays: combined.ncds, 
-            plans: combined.plans, 
-            usedQuantities: used
-        } as TeamSummaryData);
-    } catch (e) {
-        console.error("Team summary fetch error:", e);
-    } finally {
-        setLoadingSummary(false);
-    }
-  }, [managerId, getManagedUserIds, active, isUserManager]);
-
   const fetchUserData = useCallback(async (uid: string) => {
     if (!uid || !db || !active || !isUserManager) return;
 
@@ -220,8 +134,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
     individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
-    teamSummaryData, loadingSummary, loadingIndividual, loadingApprovals,
-    fetchUserData, fetchTeamSummary, fetchTeamApprovals,
+    loadingIndividual, loadingApprovals,
+    fetchUserData, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
         const ref = firestoreDoc(db!, 'nonCallDays', id);
         await updateDoc(ref, { status });

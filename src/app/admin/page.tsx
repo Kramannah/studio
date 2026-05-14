@@ -39,7 +39,6 @@ const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
 );
 
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton message="Loading Representative Dashboard..." /> });
-const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton message="Aggregating Team Analytics..." /> });
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -90,14 +89,11 @@ export default function AdminPage() {
         individualUsedQuantities,
         allNonCallDays,
         allPlanningRequests,
-        teamSummaryData,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
-        loadingSummary,
         loadingIndividual,
         loadingApprovals,
         fetchUserData,
-        fetchTeamSummary,
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
@@ -107,13 +103,11 @@ export default function AdminPage() {
         if (activeTab === 'district-reports') {
             if (selectedUserId) {
                 fetchUserData(selectedUserId);
-            } else if (selectedManagerId) {
-                fetchTeamSummary();
             }
         } else if (activeTab === 'approvals') {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamSummary, fetchTeamApprovals, mounted, hasAdminAccess]);
+    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -322,7 +316,7 @@ export default function AdminPage() {
                                         <div className="flex items-center gap-2">
                                             <Select onValueChange={setSelectedUserId} value={selectedUserId || ''}>
                                                 <SelectTrigger className="w-full border-2 h-11 font-headline">
-                                                    <SelectValue placeholder="All Representatives (Summary)" />
+                                                    <SelectValue placeholder="Select a Representative..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {Array.from(userMapForSelection.entries()).map(([uid, name]) => <SelectItem key={uid} value={uid}>{name}</SelectItem>)}
@@ -356,12 +350,16 @@ export default function AdminPage() {
                             />
                             )
                         ) : selectedManagerId ? (
-                            <TeamSummary data={teamSummaryData} loading={loadingSummary} />
+                            <Alert className="border-2 py-12 flex flex-col items-center text-center">
+                                <Search className="w-10 h-10 text-primary mb-4" />
+                                <AlertTitle className="font-headline text-xl">Representative Selection Required</AlertTitle>
+                                <AlertDescription className="text-lg">Please select a specific representative from the list above to view their individual Submitted Coverage records and masterlist.</AlertDescription>
+                            </Alert>
                         ) : (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
                                 <AlertCircle className="w-10 h-10 text-primary mb-4" />
                                 <AlertTitle className="font-headline text-xl">Territory Oversight Required</AlertTitle>
-                                <AlertDescription className="text-lg">Please select a District Manager to view team performance analytics or select a specific PMR for individual masterlists.</AlertDescription>
+                                <AlertDescription className="text-lg">Please select a District Manager and then a PMR to view individual coverage performance records.</AlertDescription>
                             </Alert>
                         )}
                     </TabsContent>
