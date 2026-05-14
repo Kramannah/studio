@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { getStartOfYearISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -57,9 +57,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     setLoading(true);
     try {
       const currentYearStart = getStartOfYearISO();
+      // Increased limit to 5000 for standard user history accuracy
       const q = query(
         collection(db!, "coverageEntries"), 
-        where("userId", "==", userId)
+        where("userId", "==", userId),
+        limit(5000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -67,7 +69,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       
       querySnapshot.forEach(doc => {
         const data = doc.data() as CoverageEntry;
-        // Memory filter for current year
         if ((data.submittedAt || data.coverageDate || "") >= currentYearStart) {
             allEntries.push({ id: doc.id, ...data });
         }
@@ -75,7 +76,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       
-      // Update Cache
       userEntriesCache[userId] = { data: allEntries, timestamp: Date.now() };
       setMasterEntries(allEntries);
     } catch (serverError: any) {
@@ -164,7 +164,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     for (const entry of entriesToSync) {
         const { id, isOffline, ...dataToSync } = entry;
         const docRef = doc(collection(db!, "coverageEntries")); 
-        batch.set(docRef, { ...dataToSync, submittedAt: new Date().toISOString() });
+        // Explicitly set userId during sync to ensure correct district attribution
+        batch.set(docRef, { ...dataToSync, userId: userId, submittedAt: new Date().toISOString() });
     }
 
     batch.commit()
@@ -210,7 +211,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
     const docRef = doc(db!, "coverageEntries", e.id);
-    updateDoc(docRef, e)
+    updateDoc(docRef, { ...e, userId: userId })
       .then(() => {
         setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));
       })

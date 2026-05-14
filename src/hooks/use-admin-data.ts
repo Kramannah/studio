@@ -80,11 +80,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) return (await getDocs(query(colRef, limit(200)))).docs.map(d => ({id: d.id, ...d.data()}));
+            if (!filter) return (await getDocs(query(colRef, limit(500)))).docs.map(d => ({id: d.id, ...d.data()}));
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(2000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -111,8 +111,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return;
         }
 
-        const currentYearStart = getStartOfYearISO();
-
         const fetchAllForUsers = async (ids: string[]) => {
             const chunks = [];
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
@@ -120,12 +118,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const results = await Promise.all(chunks.map(async (c) => {
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
+                // Increased limits per chunk to ensure accurate district aggregation
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(1000))),
-                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(1000))),
-                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(1000))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(5000))),
+                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(2000))),
+                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(2000))),
                     getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(1000))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(1000)))
+                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(3000)))
                 ]);
 
                 return { 
@@ -181,11 +180,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     setLoadingIndividual(true);
     try {
+        // High limit for individual PMR view to ensure full audit history
         const [e, d, p, l, ncd, r] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
         ]);

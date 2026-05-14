@@ -20,9 +20,8 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes
 /**
  * Hook for managing Marketing Samples (Allocation and Usage).
  * @param active - Whether the hook should perform initial data fetch.
- * @param isAuditMode - If true, fetches global data (Admin/Manager only).
  */
-export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = false) => {
+export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedCache?.data || {});
@@ -60,7 +59,7 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
     setLoading(true);
     try {
         // 1. Fetch Master List (Marketing Samples)
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(2000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'marketingSamples',
@@ -88,20 +87,18 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
         const currentYearStart = getStartOfYearISO();
         let entriesSnap;
 
-        // Requirement: Admins and Managers should see global usage sum. PMRs see personal.
-        // We attempt a global fetch first if the user has a privileged role.
         const canDoGlobalFetch = isUserAdmin || isUserManager;
 
         try {
+            // High limit for global audit to ensure team accuracy
             const entriesQuery = canDoGlobalFetch
-                ? query(collection(db!, "coverageEntries"), limit(10000))
-                : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+                ? query(collection(db!, "coverageEntries"), limit(20000))
+                : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
             
             entriesSnap = await getDocs(entriesQuery);
         } catch (e: any) {
-            // Permission Fallback: If global oversight is denied by Rules, strictly return personal data
-            console.warn("Global oversight access restricted. Falling back to personal UID query.", e);
-            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+            console.warn("Audit access restricted. Falling back to personal UID query.", e);
+            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
             entriesSnap = await getDocs(personalQuery);
         }
 
