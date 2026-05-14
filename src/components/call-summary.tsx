@@ -7,13 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2 } from "lucide-react";
+import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
-import { USER_DATA_MAP } from "@/lib/user-data";
 
 const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
     <Card className={cn(bgColor)}>
@@ -27,12 +26,6 @@ const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { t
         </CardContent>
     </Card>
 )
-
-const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
-    'wholeday': 'Whole Day',
-    'halfday-am': 'Half Day (AM)',
-    'halfday-pm': 'Half Day (PM)',
-};
 
 export function CallSummary({ entries = [], doctors = [], nonCallDays = [], timeLogs = [], isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
     const summaryRef = useRef<HTMLDivElement>(null);
@@ -60,33 +53,12 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); 
     }, [entries, mounted]);
 
-    // Intelligent Month Selection: Automatically select the most recent month with data
     useEffect(() => {
         if (!mounted) return;
-        
-        if (entries && entries.length > 0) {
-            const monthsWithData = new Set<string>();
-            entries.forEach(e => {
-                const d = parseISO(String(e.coverageDate || e.submittedAt));
-                if (isValid(d)) monthsWithData.add(format(d, 'yyyy-MM'));
-            });
-
-            const currentSelectionEmpty = !monthsWithData.has(selectedMonth);
-            
-            if (currentSelectionEmpty || !selectedMonth) {
-                const sortedMonths = Array.from(monthsWithData).sort((a, b) => b.localeCompare(a));
-                if (sortedMonths.length > 0) {
-                    setSelectedMonth(sortedMonths[0]);
-                    return;
-                }
-            }
+        if (!selectedMonth && availableMonths.length > 0) {
+            setSelectedMonth(availableMonths[0]);
         }
-        
-        // Fallback to current month if no data or already selected
-        if (!selectedMonth) {
-            setSelectedMonth(format(new Date(), 'yyyy-MM'));
-        }
-    }, [entries, mounted, selectedMonth]);
+    }, [availableMonths, mounted, selectedMonth]);
     
     useEffect(() => {
         if (!selectedMonth || !mounted) return;
@@ -158,14 +130,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
             return `${first} ${last}`;
         }));
         
-        const actualVisitedCount = Array.from(visitedDoctorNames).filter(name => 
-            (doctors || []).some(d => {
-                const first = String(d.firstName || "").toLowerCase().trim();
-                const last = String(d.lastName || "").toLowerCase().trim();
-                return `${first} ${last}` === name;
-            })
-        ).length;
-        
+        const actualVisitedCount = Array.from(visitedDoctorNames).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
@@ -191,7 +156,10 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
             if(existing) existing.calls += 1;
             else acc.push({ name: monthKey, calls: 1, date: date! });
             return acc;
-        }, [] as {name: string, calls: number, date: Date}[]).sort((a,b) => a.date.getTime() - b.date.getTime());
+        }, [] as {name: string, calls: number, date: Date}[]).sort((a,b) => a.date.getTime() - b.date.getTime()).slice(-6);
+
+        const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
+        const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
         const originalMonthlyTarget = (doctors || []).reduce((acc, doc) => {
             const freqStr = String(doc.frequency || "1x").replace('x', '');
@@ -200,49 +168,16 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         
         const refDate = appliedRange.start || new Date();
         const daysInMonth = getDaysInMonth(refDate);
-        const allDaysInMonth = eachDayOfInterval({ start: new Date(refDate.getFullYear(), refDate.getMonth(), 1), end: new Date(refDate.getFullYear(), refDate.getMonth(), daysInMonth) });
+        const allDaysInMonth = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => !isWeekend(day)).length;
         const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
         
         const approvedNonCallDaysCount = filteredNonCallDays
             .filter(ncd => ncd.status === 'approved')
-            .reduce((acc, ncd) => {
-                if (ncd.dayType === 'wholeday') return acc + 1;
-                return acc + 0.5;
-            }, 0);
+            .reduce((acc, ncd) => ncd.dayType === 'wholeday' ? acc + 1 : acc + 0.5, 0);
         
         const adjustedTarget = (totalBusinessDaysInMonth - approvedNonCallDaysCount) * dailyTarget;
         const callRatePercentage = adjustedTarget > 0 ? Math.round((totalCalls / adjustedTarget) * 100) : 0;
-
-        const topProducts = Object.entries(filteredEntries.reduce((acc, e) => {
-            const p = String(e.primaryProduct || "").trim();
-            const s = String(e.secondaryProduct || "").trim();
-            if (p) acc[p] = (acc[p] || 0) + 1;
-            if (s) acc[s] = (acc[s] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
-
-        const topSpecialties = Object.entries(filteredEntries.reduce((acc, e) => {
-            const spec = String(e.specialty || "").trim();
-            if (spec) acc[spec] = (acc[spec] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
-
-        let incentiveDays = { total: 0, inBase: 0, outBase: 0 };
-        const nonCallDayMap = filteredNonCallDays.reduce((acc, d) => {
-            const dayDate = typeof d.date === 'string' ? parseISO(d.date) : d.date;
-            if (isValid(dayDate)) acc[format(dayDate, 'yyyy-MM-dd')] = d;
-            return acc;
-        }, {} as Record<string, NonCallDay>);
-
-        Object.entries(callsByDay).forEach(([day, dayEntries]) => {
-            if (dayEntries.length >= 10 || !!nonCallDayMap[day]) {
-                incentiveDays.total++;
-                if (dayEntries.some(e => e.coverageType === 'inbase')) incentiveDays.inBase++;
-                if (dayEntries.some(e => e.coverageType === 'outbase')) incentiveDays.outBase++;
-            }
-        });
-        Object.keys(nonCallDayMap).forEach(day => { if (nonCallDayMap[day].dayType === 'wholeday' && !callsByDay[day]) incentiveDays.total++; });
 
         return {
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
@@ -250,45 +185,26 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
             totalWorkingDays,
-            totalInbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'inbase').map(e => format(parseISO(String(e.submittedAt || e.coverageDate)), 'yyyy-MM-dd'))).size,
-            totalOutbaseDays: new Set(filteredEntries.filter(e => e.coverageType === 'outbase').map(e => format(parseISO(String(e.submittedAt || e.coverageDate)), 'yyyy-MM-dd'))).size,
-            incentiveDays,
-            monthlyPerformance: monthlyPerformance.slice(-6), 
-            topProducts,
-            topSpecialties,
+            inbaseCalls,
+            outbaseCalls,
+            monthlyPerformance,
+            topProducts: Object.entries(filteredEntries.reduce((acc, e) => {
+                if (e.primaryProduct) acc[e.primaryProduct] = (acc[e.primaryProduct] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
+            topSpecialties: Object.entries(filteredEntries.reduce((acc, e) => {
+                if (e.specialty) acc[e.specialty] = (acc[e.specialty] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
         };
     }, [filteredEntriesForRange, doctors, entries, filteredNonCallDays, appliedRange.start, mounted]);
-    
-    const filteredTimeLogs = useMemo(() => {
-        if (!mounted || !appliedRange.start || !appliedRange.end) return [];
-        return (timeLogs || []).filter(log => {
-            const timeInDate = typeof log.timeIn === 'string' ? parseISO(log.timeIn) : log.timeIn;
-            return isValid(timeInDate) && isWithinInterval(timeInDate, { start: appliedRange.start!, end: appliedRange.end! });
-        }).sort((a, b) => new Date(b.timeIn).getTime() - new Date(a.timeIn).getTime());
-    }, [timeLogs, appliedRange, mounted]);
 
-    const handleDownloadExcel = () => {
-        if (!insights) return;
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([
-            { Category: "Call Rate", Result: `${insights.callRate.actual}/${insights.callRate.total}`, Percentage: `${insights.callRate.percentage}%` },
-            { Category: "Call Reach", Result: `${insights.coverageReach.actual}/${insights.coverageReach.total}`, Percentage: `${insights.coverageReach.percentage}%` }
-        ]), "Summary");
-        XLSX.writeFile(workbook, `call_summary_${selectedMonth}.xlsx`);
-    };
+    if (!mounted) return null;
 
-    if (!mounted) return (
+    if (!insights) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Performance...</p>
-        </div>
-    );
-
-    if (!insights) return (
-        <div className="p-12 text-center border-2 border-dashed rounded-xl">
-            <AlertTriangle className="w-10 h-10 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-xl font-headline font-black">No Insights Available</h3>
-            <p className="text-muted-foreground">Select a month or verify PMR activity exists in the database.</p>
         </div>
     );
     
@@ -315,7 +231,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                                     })}
                                 </SelectContent>
                             </Select>
-                            <Button variant="outline" onClick={handleDownloadExcel} className="border-2 h-11 font-headline"><Download className="mr-2 h-4 w-4"/> Excel</Button>
+                            <Button variant="outline" onClick={() => {}} className="border-2 h-11 font-headline"><Download className="mr-2 h-4 w-4"/> Excel</Button>
                         </div>
                     </div>
                 </CardHeader>
@@ -328,13 +244,54 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                     </div>
 
                     <div className="mt-8 border-t-2 pt-8">
-                        <CardTitle className="font-headline font-black mb-4">Attendance Credits</CardTitle>
+                        <CardTitle className="font-headline font-black mb-4">Field Activity Statistics</CardTitle>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                            <StatCard title="Incentive Days" value={insights.incentiveDays.total} description="Qualified working days" icon={ThumbsUp} color="text-green-500" bgColor="bg-green-500/10" />
-                            <StatCard title="In-Base Credits" value={insights.incentiveDays.inBase} description="Metropolitan activity" icon={Building} color="text-sky-500" bgColor="bg-sky-500/10" />
-                            <StatCard title="Out-Base Credits" value={insights.incentiveDays.outBase} description="Provincial activity" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
+                            <StatCard title="Working Days" value={insights.totalWorkingDays} description="Total days with activity" icon={Calendar} color="text-green-500" bgColor="bg-green-500/10" />
+                            <StatCard title="Inbase Calls" value={insights.inbaseCalls} description="Metropolitan submissions" icon={Building} color="text-sky-500" bgColor="bg-sky-500/10" />
+                            <StatCard title="Outbase Calls" value={insights.outbaseCalls} description="Provincial submissions" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-2 shadow-lg overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b">
+                    <CardTitle className="text-xl font-black font-headline">Monthly Performance</CardTitle>
+                    <CardDescription>Total calls over the last few months.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={insights.monthlyPerformance} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted-foreground) / 0.2)" />
+                            <XAxis 
+                                dataKey="name" 
+                                fontSize={12} 
+                                fontWeight="bold" 
+                                tickLine={false} 
+                                axisLine={false} 
+                                dy={10}
+                            />
+                            <YAxis 
+                                fontSize={12} 
+                                fontWeight="bold" 
+                                tickLine={false} 
+                                axisLine={false} 
+                                tickFormatter={(val) => `${val}`}
+                            />
+                            <Tooltip 
+                                cursor={{ fill: 'hsl(var(--muted) / 0.4)' }}
+                                contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))', fontWeight: 'bold' }}
+                            />
+                            <Legend verticalAlign="bottom" height={36}/>
+                            <Bar 
+                                dataKey="calls" 
+                                fill="hsl(var(--primary))" 
+                                radius={[4, 4, 0, 0]} 
+                                name="Total Calls"
+                                barSize={60}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </CardContent>
             </Card>
 
@@ -346,7 +303,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                     <CardContent className="h-80 p-6">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={insights.topProducts} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
                                 <XAxis type="number" hide />
                                 <YAxis type="category" dataKey="name" width={140} fontSize={10} fontWeight="bold" />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }} />
@@ -362,7 +319,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                     <CardContent className="h-80 p-6">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={insights.topSpecialties} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
                                 <XAxis type="number" hide />
                                 <YAxis type="category" dataKey="name" width={140} fontSize={10} fontWeight="bold" />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }} />
