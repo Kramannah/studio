@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -406,10 +405,6 @@ export function PlanningCalendar({
 
                     {(selectedDayNonCallDays.length > 0 || selectedHoliday) && (
                         <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-                             <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
-                                <CalendarOff className="w-3 h-3" /> Non-Call Activity
-                            </h4>
-
                             {selectedHoliday && (
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-4 rounded-xl shadow-sm">
                                     <div className="flex items-start gap-4">
