@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -167,9 +167,15 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         }, 0);
         
         const refDate = appliedRange.start || new Date();
-        const daysInMonth = getDaysInMonth(refDate);
         const allDaysInMonth = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
-        const totalBusinessDaysInMonth = allDaysInMonth.filter(day => !isWeekend(day)).length;
+        
+        // Count total business days excluding weekends and holidays
+        const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
+            if (isWeekend(day)) return false;
+            const dateStr = format(day, 'yyyy-MM-dd');
+            return !PH_HOLIDAYS_2026[dateStr];
+        }).length;
+        
         const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
         
         const approvedNonCallDaysCount = filteredNonCallDays
@@ -184,7 +190,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
             avgCallsPerDay,
-            totalWorkingDays,
+            totalWorkingDays: { actual: totalWorkingDays, total: totalBusinessDaysInMonth },
             inbaseCalls,
             outbaseCalls,
             monthlyPerformance,
@@ -203,7 +209,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
 
     if (!insights) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <RefreshCw className="w-8 h-8 animate-spin text-primary" />
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Performance...</p>
         </div>
     );
@@ -246,7 +252,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                     <div className="mt-8 border-t-2 pt-8">
                         <CardTitle className="font-headline font-black mb-4">Field Activity Statistics</CardTitle>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                            <StatCard title="Working Days" value={insights.totalWorkingDays} description="Total days with activity" icon={Calendar} color="text-green-500" bgColor="bg-green-500/10" />
+                            <StatCard title="Working Days" value={`${insights.totalWorkingDays.actual}/${insights.totalWorkingDays.total}`} description="Active vs Business Days" icon={Calendar} color="text-green-500" bgColor="bg-green-500/10" />
                             <StatCard title="Inbase Calls" value={insights.inbaseCalls} description="Metropolitan submissions" icon={Building} color="text-sky-500" bgColor="bg-sky-500/10" />
                             <StatCard title="Outbase Calls" value={insights.outbaseCalls} description="Provincial submissions" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
                         </div>
