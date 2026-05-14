@@ -168,7 +168,6 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         const refDate = appliedRange.start || new Date();
         const allDaysInMonth = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
         
-        // Count total business days excluding weekends and holidays
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
             if (isWeekend(day)) return false;
             const dateStr = format(day, 'yyyy-MM-dd');
@@ -201,6 +200,19 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                 if (e.specialty) acc[e.specialty] = (acc[e.specialty] || 0) + 1;
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
+            topSamples: Object.entries(filteredEntries.reduce((acc, e) => {
+                const process = (name?: string, qty?: number) => {
+                    if (!name) return;
+                    const cleanName = name.trim();
+                    acc[cleanName] = (acc[cleanName] || 0) + (qty || 0);
+                };
+                process(e.primarySampleName, e.primaryProductQty);
+                process(e.secondarySampleName, e.secondaryProductQty);
+                if (e.reminderProducts) {
+                    e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+                }
+                return acc;
+            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
     }, [filteredEntriesForRange, doctors, entries, filteredNonCallDays, appliedRange.start, mounted]);
 
@@ -334,6 +346,41 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                     </CardContent>
                 </Card>
             </div>
+
+            <Card className="border-2 shadow-sm overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b">
+                    <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><ThumbsUp className="text-primary" /> Samples Distributed</CardTitle>
+                    <CardDescription>Total quantities issued for primary, secondary, and reminder products.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted/20 h-12">
+                                <TableHead className="font-bold text-foreground pl-6">Sample Material</TableHead>
+                                <TableHead className="text-right font-bold text-foreground pr-6">Qty Distributed</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {insights.topSamples.length > 0 ? (
+                                insights.topSamples.map((s, i) => (
+                                    <TableRow key={i} className="h-14 hover:bg-muted/10 border-b last:border-0">
+                                        <TableCell className="pl-6 font-bold text-sm">{s.name}</TableCell>
+                                        <TableCell className="text-right pr-6 font-mono font-black text-primary text-base">
+                                            {s.count}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="h-40 text-center text-muted-foreground italic">
+                                        No samples distributed for this period.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
     );
 }
