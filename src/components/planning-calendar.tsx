@@ -261,7 +261,6 @@ export function PlanningCalendar({
     }
 
     const toggleDoctorSelection = (id: string) => {
-        if (selectedDayPlannedIds.has(id)) return;
         setSelectedDoctorIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
@@ -575,15 +574,13 @@ export function PlanningCalendar({
                                                 const freq = (doctor.frequency || '1x').toString();
                                                 const targetCount = parseInt(freq.replace('x', ''), 10) || 0;
                                                 const remaining = Math.max(0, targetCount - actualCount);
-                                                const isAlreadyPlanned = selectedDayPlannedIds.has(doctor.id);
                                                 
                                                 return (
-                                                    <TableRow key={doctor.id} className={cn("h-10 border-b last:border-0 hover:bg-muted/30 transition-colors", isAlreadyPlanned && "bg-muted/50 opacity-60")}>
+                                                    <TableRow key={doctor.id} className={cn("h-10 border-b last:border-0 hover:bg-muted/30 transition-colors")}>
                                                         <TableCell className="w-[40px] pl-0">
                                                             <Checkbox 
                                                                 checked={selectedDoctorIds.has(doctor.id)} 
                                                                 onCheckedChange={() => toggleDoctorSelection(doctor.id)}
-                                                                disabled={isAlreadyPlanned}
                                                             />
                                                         </TableCell>
                                                         <TableCell className="w-[200px]">
