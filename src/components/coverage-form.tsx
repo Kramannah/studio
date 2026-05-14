@@ -1,9 +1,10 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
-import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter } from "date-fns"
+import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter, isBefore, isToday } from "date-fns"
 import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
@@ -251,14 +252,14 @@ export function CoverageForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      callType: "planned",
+      callType: "unplanned", // Default to unplanned for today or history
       firstName: "",
       lastName: "",
       specialty: "",
       clinic: "",
       hacme: "NO",
       coverageType: "inbase",
-      coverageDate: undefined, // Will be set in useEffect to avoid hydration error
+      coverageDate: undefined,
       photos: [],
       signature: null,
       jointCallSignature: null,
@@ -380,8 +381,9 @@ export function CoverageForm({
 
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
+      const isPastOrToday = initialDate ? (isToday(initialDate) || isBefore(initialDate, startOfToday())) : true;
       form.reset({
-        callType: "planned",
+        callType: isPastOrToday ? "unplanned" : "planned",
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,
@@ -418,7 +420,7 @@ export function CoverageForm({
   
   const resetForm = useCallback(() => {
     form.reset({
-      callType: "planned",
+      callType: "unplanned",
       firstName: "",
       lastName: "",
       specialty: "",
@@ -571,8 +573,6 @@ export function CoverageForm({
       }
       
       const { plannedDoctorId: _pId, ...restOfValues } = values;
-
-      // NOTE: Automatic plan creation for unplanned calls was removed per user request.
 
       const savedOnline = await onSave({
         ...restOfValues,
