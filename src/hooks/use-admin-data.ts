@@ -19,6 +19,11 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
+// MODULE-LEVEL CACHE: Persistent across component remounts to prevent Quota Exceeded errors
+let globalTeamSummaryCache: Record<string, { data: TeamSummaryData, timestamp: number }> = {};
+let globalUserDetailCache: Record<string, { data: any, timestamp: number }> = {};
+const CACHE_TTL = 10 * 60 * 1000; // 10 Minutes
+
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -80,11 +85,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) return (await getDocs(query(colRef, limit(500)))).docs.map(d => ({id: d.id, ...d.data()}));
+            const startYear = getStartOfYearISO();
+            
+            // Standardizing date fields for queries
+            const dateField = name === 'nonCallDays' ? 'date' : 'weekStartDate';
+
+            if (!filter) {
+                return (await getDocs(query(colRef, where(dateField, ">=", startYear), limit(500)))).docs.map(d => ({id: d.id, ...d.data()}));
+            }
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(2000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), where(dateField, ">=", startYear), limit(500)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -102,6 +114,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchTeamSummary = useCallback(async () => {
     if (!managerId || !db || !active || !isUserManager) return;
 
+    // Check Cache first to save quota
+    const now = Date.now();
+    if (globalTeamSummaryCache[managerId] && (now - globalTeamSummaryCache[managerId].timestamp < CACHE_TTL)) {
+        setTeamSummaryData(globalTeamSummaryCache[managerId].data);
+        return;
+    }
+
     setLoadingSummary(true);
     try {
         const userFilter = getManagedUserIds(managerId);
@@ -114,17 +133,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchAllForUsers = async (ids: string[]) => {
             const chunks = [];
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
+            const startYear = getStartOfYearISO();
             
             const results = await Promise.all(chunks.map(async (c) => {
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
-                // Increased limits per chunk to ensure accurate district aggregation
+                // Added date filters to prevent resource-exhaustion/timeout
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(5000))),
-                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(2000))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), where("coverageDate", ">=", startYear), limit(3000))),
+                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), where("timeIn", ">=", startYear), limit(1000))),
                     getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(2000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(1000))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(3000)))
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), where("date", ">=", startYear), limit(500))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), where("plannedDate", ">=", startYear), limit(2000)))
                 ]);
 
                 return { 
@@ -160,14 +180,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         });
 
-        setTeamSummaryData({ 
+        const finalData = { 
             entries: combined.entries, 
             timeLogs: combined.logs, 
             doctors: combined.doctors, 
             nonCallDays: combined.ncds, 
             plans: combined.plans, 
             usedQuantities: used
-        } as TeamSummaryData);
+        } as TeamSummaryData;
+
+        globalTeamSummaryCache[managerId] = { data: finalData, timestamp: now };
+        setTeamSummaryData(finalData);
     } catch (e) {
         console.error("Team summary fetch error:", e);
     } finally {
@@ -177,17 +200,32 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   const fetchUserData = useCallback(async (uid: string) => {
     if (!uid || !db || !active || !isUserManager) return;
+
+    const now = Date.now();
+    if (globalUserDetailCache[uid] && (now - globalUserDetailCache[uid].timestamp < CACHE_TTL)) {
+        const cached = globalUserDetailCache[uid].data;
+        setAllEntries(cached.entries);
+        setAllDoctors(cached.doctors);
+        setAllPlans(cached.plans);
+        setAllTimeLogs(cached.logs);
+        setAllNonCallDaysIndividual(cached.ncds);
+        setIndividualPlanningRequests(cached.requests);
+        setIndividualUsedQuantities(cached.used);
+        return;
+    }
     
     setLoadingIndividual(true);
     try {
-        // High limit for individual PMR view to ensure full audit history
+        const startYear = getStartOfYearISO();
+        
+        // Added date filtering to individual fetch to prevent quota exhaustion
         const [e, d, p, l, ncd, r] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startYear), limit(3000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", startYear), limit(2000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", startYear), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", startYear), limit(500))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), where("weekStartDate", ">=", startYear), limit(500)))
         ]);
 
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
@@ -206,12 +244,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         });
 
+        const userData = {
+            entries,
+            doctors: mapDocs(d),
+            plans: mapDocs(p),
+            logs: mapDocs(l),
+            ncds: mapDocs(ncd),
+            requests: mapDocs(r),
+            used
+        };
+
+        globalUserDetailCache[uid] = { data: userData, timestamp: now };
+
         setAllEntries(entries); 
-        setAllDoctors(mapDocs(d) as any); 
-        setAllPlans(mapDocs(p) as any);
-        setAllTimeLogs(mapDocs(l) as any); 
-        setAllNonCallDaysIndividual(mapDocs(ncd) as any);
-        setIndividualPlanningRequests(mapDocs(r) as any); 
+        setAllDoctors(userData.doctors as any); 
+        setAllPlans(userData.plans as any);
+        setAllTimeLogs(userData.logs as any); 
+        setAllNonCallDaysIndividual(userData.ncds as any);
+        setIndividualPlanningRequests(userData.requests as any); 
         setIndividualUsedQuantities(used);
     } catch (e) {
         console.error("Individual data fetch failed:", e);

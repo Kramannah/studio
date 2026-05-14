@@ -11,7 +11,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { getStartOfYearISO } from '@/lib/utils';
 
-// GLOBAL SESSION CACHE
+// GLOBAL SESSION CACHE: Module-level variables persist across hook instance changes
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedCache: { data: Record<string, number>, timestamp: number } | null = null;
 let lastFetchTime: number = 0;
@@ -19,7 +19,7 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes
 
 /**
  * Hook for managing Marketing Samples (Allocation and Usage).
- * @param active - Whether the hook should perform initial data fetch.
+ * Implements session-level caching to resolve Quota Exceeded errors.
  */
 export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
@@ -90,15 +90,16 @@ export const useQ4Allocation = (active: boolean = true) => {
         const canDoGlobalFetch = isUserAdmin || isUserManager;
 
         try {
-            // High limit for global audit to ensure team accuracy
+            // Apply date filter at the database level to solve Quota/Timeout errors
+            const baseQuery = collection(db!, "coverageEntries");
             const entriesQuery = canDoGlobalFetch
-                ? query(collection(db!, "coverageEntries"), limit(20000))
-                : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
+                ? query(baseQuery, where("coverageDate", ">=", currentYearStart), limit(8000))
+                : query(baseQuery, where("userId", "==", user.uid), where("coverageDate", ">=", currentYearStart), limit(3000));
             
             entriesSnap = await getDocs(entriesQuery);
         } catch (e: any) {
-            console.warn("Audit access restricted. Falling back to personal UID query.", e);
-            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
+            console.warn("Inventory audit restricted. Falling back to personal UID query.", e);
+            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), where("coverageDate", ">=", currentYearStart), limit(3000));
             entriesSnap = await getDocs(personalQuery);
         }
 
@@ -106,9 +107,6 @@ export const useQ4Allocation = (active: boolean = true) => {
 
         entriesSnap.docs.forEach(d => {
             const data = d.data() as CoverageEntry;
-            const subDate = data.submittedAt || data.coverageDate || "";
-            if (subDate < currentYearStart) return;
-
             const process = (name?: string, qty?: number) => {
                 const key = String(name ?? "").toLowerCase().trim();
                 if (!key) return;
@@ -130,6 +128,7 @@ export const useQ4Allocation = (active: boolean = true) => {
             }
         });
 
+        // Update Global Cache
         globalAllocationsCache = fetchedAllocations;
         globalUsedCache = { data: used, timestamp: now };
         lastFetchTime = now;
