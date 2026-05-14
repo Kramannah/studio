@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -156,7 +157,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
             </TableRow>
             {isOpen && (
                 <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
-                    <TableCell colSpan={7} className="p-0">
+                    <TableCell colSpan={isAdminView ? 6 : 7} className="p-0">
                         <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-6">
                                 <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Pre-call Plan</h4>
@@ -427,7 +428,7 @@ export function SubmittedList({
     }, [filteredByMonth]);
 
     const entryDates = useMemo(() => {
-        return Object.keys(countsByDate).map(d => parseISO(d));
+        return Object.keys(entriesCountByDate).map(d => parseISO(d));
     }, [entriesCountByDate]);
 
     const holidayDates = useMemo(() => {
@@ -566,7 +567,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -44,7 +45,7 @@ export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    const { profiles, updateProfile, addProfile, deleteProfile, loading: profilesLoading } = useUserProfiles();
+    const { profiles, updateProfile, addProfile, deleteProfile } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -306,15 +307,6 @@ export default function AdminPage() {
                             <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
                             <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
                         </TabsList>
-                        
-                        <div className="flex items-center gap-3 md:hidden">
-                            <Link href="/admin/inventory" className="flex-1">
-                                <Button className="w-full h-11 font-headline flex items-center justify-between">
-                                    <span className="flex items-center gap-2"><PackageCheck size={18}/> Samples</span>
-                                    <ArrowRight size={16}/>
-                                </Button>
-                            </Link>
-                        </div>
                     </div>
 
                     <TabsContent value="district-reports">
