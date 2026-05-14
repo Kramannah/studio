@@ -438,7 +438,8 @@ export function PlanningCalendar({
                             <TableHeader>
                                 <TableRow className="bg-muted/50 h-14">
                                     <TableHead className="font-bold">Doctor</TableHead>
-                                    <TableHead className="hidden md:table-cell font-bold">Location</TableHead>
+                                    <TableHead className="font-bold">Location</TableHead>
+                                    <TableHead className="font-bold">Call Type</TableHead>
                                     <TableHead className="font-bold">Status</TableHead>
                                     <TableHead className="text-right font-bold">Actions</TableHead>
                                 </TableRow>
@@ -453,31 +454,65 @@ export function PlanningCalendar({
                                             (e.lastName ?? "").toString().toLowerCase() === (plan.doctorLastName ?? "").toString().toLowerCase()
                                         );
                                         return (
-                                            <TableRow key={plan.id} className="h-16">
+                                            <TableRow key={plan.id} className="h-16 border-b last:border-0 hover:bg-muted/10">
                                                 <TableCell>
-                                                    <Button variant="link" className="p-0 h-auto font-bold text-base text-primary" onClick={() => handleLogCallClick(plan)} disabled={readOnly || isCovered}>
+                                                    <Button 
+                                                        variant="link" 
+                                                        className="p-0 h-auto font-black text-sm uppercase tracking-tight text-primary hover:no-underline" 
+                                                        onClick={() => handleLogCallClick(plan)} 
+                                                        disabled={readOnly || isCovered}
+                                                    >
                                                         {plan.doctorFirstName} {plan.doctorLastName}
                                                     </Button>
                                                 </TableCell>
-                                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground font-medium">{doctor?.municipality}</TableCell>
                                                 <TableCell>
-                                                    {isCovered ? (
-                                                        <Badge variant="secondary" className="text-primary font-bold">Covered</Badge>
-                                                    ) : (
-                                                        <Badge 
-                                                            variant="outline" 
-                                                            className={cn("font-bold", plan.callType === 'unplanned' && "border-orange-500/50 text-orange-500")}
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-sm leading-none">{doctor?.municipality || "—"}</span>
+                                                        <span className="text-[10px] text-muted-foreground font-medium mt-1">{doctor?.province || "—"}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge 
+                                                        variant="secondary" 
+                                                        className={cn(
+                                                            "font-black text-[10px] uppercase tracking-tighter px-3 h-6 rounded-full border-none",
+                                                            plan.callType === 'unplanned' ? "bg-orange-500/20 text-orange-500" : "bg-muted text-foreground"
+                                                        )}
+                                                    >
+                                                        {plan.callType === 'unplanned' ? 'Unplanned' : 'Planned'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                     <Badge 
+                                                        variant="outline" 
+                                                        className={cn(
+                                                            "font-black text-[10px] uppercase tracking-tighter px-3 h-6 rounded-full border-2",
+                                                            isCovered 
+                                                                ? "bg-primary/10 text-primary border-primary/30" 
+                                                                : "bg-background text-foreground border-border"
+                                                        )}
+                                                    >
+                                                        {isCovered ? 'Covered' : 'Not Yet Covered'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {!readOnly && (
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            onClick={() => onRemovePlan(plan.id)} 
+                                                            disabled={isLocked || isCovered}
+                                                            className="h-8 w-8 rounded-full hover:bg-destructive/10"
                                                         >
-                                                            {plan.callType === 'unplanned' ? 'Unplanned' : 'Planned'}
-                                                        </Badge>
+                                                            <XCircle size={18} className="text-destructive opacity-80" />
+                                                        </Button>
                                                     )}
                                                 </TableCell>
-                                                <TableCell className="text-right">{!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive"/></Button>}</TableCell>
                                             </TableRow>
                                         )
                                     })
                                 ) : (
-                                    <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground text-lg italic">No visits planned for this day.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground text-lg italic">No visits planned for this day.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
