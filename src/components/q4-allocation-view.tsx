@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -43,7 +44,8 @@ interface Q4AllocationViewProps {
 }
 
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
+    // includeUsage is only true for the PMR view (readOnly=true)
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, readOnly);
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');
@@ -198,8 +200,12 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             {!readOnly && <TableHead className="w-12 pl-6" />}
                                             <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
-                                            <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
+                                            {readOnly && (
+                                                <>
+                                                    <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                                                    <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
+                                                </>
+                                            )}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -230,12 +236,16 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-center font-mono font-bold">{sample.allocationQuantity}</TableCell>
-                                                        <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
-                                                        <TableCell className="text-center">
-                                                            <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
-                                                                {bal}
-                                                            </Badge>
-                                                        </TableCell>
+                                                        {readOnly && (
+                                                            <>
+                                                                <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
+                                                                <TableCell className="text-center">
+                                                                    <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
+                                                                        {bal}
+                                                                    </Badge>
+                                                                </TableCell>
+                                                            </>
+                                                        )}
                                                     </TableRow>
                                                 );
                                             })

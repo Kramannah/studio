@@ -10,7 +10,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 
-export const useQ4Allocation = (active: boolean = true) => {
+export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
@@ -61,39 +61,42 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        let entriesSnap;
-        const canDoGlobalFetch = isUserAdmin || isUserManager;
-
-        if (canDoGlobalFetch) {
-            entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(20000)));
-        } else {
-            entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
-        }
-
         const used: Record<string, number> = {};
 
-        entriesSnap.docs.forEach(d => {
-            const data = d.data() as CoverageEntry;
-            const process = (name?: string, qty?: number) => {
-                const key = String(name ?? "").toLowerCase().trim();
-                if (!key) return;
-                const q = Math.round(Number(qty || 0));
-                if (!isNaN(q) && q !== 0) {
-                    used[key] = (used[key] || 0) + q;
-                }
-            };
+        // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
+        if (includeUsage) {
+            let entriesSnap;
+            const canDoGlobalFetch = isUserAdmin || isUserManager;
 
-            process(data.primarySampleName, data.primaryProductQty);
-            process(data.secondarySampleName, data.secondaryProductQty);
-            
-            if (data.reminderProducts && Array.isArray(data.reminderProducts)) {
-                data.reminderProducts.forEach(rp => {
-                    if (rp && rp.sampleName) {
-                        process(rp.sampleName, rp.quantity);
-                    }
-                });
+            if (canDoGlobalFetch) {
+                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(20000)));
+            } else {
+                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
             }
-        });
+
+            entriesSnap.docs.forEach(d => {
+                const data = d.data() as CoverageEntry;
+                const process = (name?: string, qty?: number) => {
+                    const key = String(name ?? "").toLowerCase().trim();
+                    if (!key) return;
+                    const q = Math.round(Number(qty || 0));
+                    if (!isNaN(q) && q !== 0) {
+                        used[key] = (used[key] || 0) + q;
+                    }
+                };
+
+                process(data.primarySampleName, data.primaryProductQty);
+                process(data.secondarySampleName, data.secondaryProductQty);
+                
+                if (data.reminderProducts && Array.isArray(data.reminderProducts)) {
+                    data.reminderProducts.forEach(rp => {
+                        if (rp && rp.sampleName) {
+                            process(rp.sampleName, rp.quantity);
+                        }
+                    });
+                }
+            });
+        }
 
         setAllocations(fetchedAllocations);
         setUsedQuantities(used);
@@ -102,7 +105,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     } finally {
         setLoading(false);
     }
-  }, [user, isUserAdmin, isUserManager, active]);
+  }, [user, isUserAdmin, isUserManager, active, includeUsage]);
 
   useEffect(() => {
     if (active) {
