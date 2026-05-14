@@ -85,7 +85,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(5000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(10000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -114,14 +114,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const fetchAllForUsers = async (ids: string[]) => {
             const chunks = [];
-            for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
+            // Reduced chunk size for summary batches to prevent timeouts
+            for (let i = 0; i < ids.length; i += 3) chunks.push(ids.slice(i, i+3));
             
             const aggregated = { entries: [], logs: [], doctors: [], ncds: [], plans: [] } as any;
 
-            // Sequential processing of chunks to avoid datastore timeouts
             for (const c of chunks) {
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
+                // Fetch data for this small group of users
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(10000))),
                     getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(10000))),
@@ -135,6 +136,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 aggregated.doctors.push(...mapDocs(d));
                 aggregated.ncds.push(...mapDocs(ncd));
                 aggregated.plans.push(...mapDocs(p));
+
+                // Small delay between chunks to let the connection breathe
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
 
             return aggregated;
@@ -175,18 +179,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const [e, d, p, l, ncd, r] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(2000)))
-        ]);
-
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        const entries = mapDocs(e) as CoverageEntry[];
+        // Fetch specific user data sequentially to prevent Individual Mode timeouts
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
+        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
+        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
+        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(5000)));
+        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000)));
+        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(2000)));
+
+        const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
@@ -201,11 +204,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         });
 
         setAllEntries(entries); 
-        setAllDoctors(mapDocs(d) as any); 
-        setAllPlans(mapDocs(p) as any);
-        setAllTimeLogs(mapDocs(l) as any); 
-        setAllNonCallDaysIndividual(mapDocs(ncd) as any);
-        setIndividualPlanningRequests(mapDocs(r) as any); 
+        setAllDoctors(mapDocs(dSnap) as any); 
+        setAllPlans(mapDocs(pSnap) as any);
+        setAllTimeLogs(mapDocs(lSnap) as any); 
+        setAllNonCallDaysIndividual(mapDocs(ncdSnap) as any);
+        setIndividualPlanningRequests(mapDocs(rSnap) as any); 
         setIndividualUsedQuantities(used);
     } catch (e) {
         console.error("Individual data fetch failed:", e);
