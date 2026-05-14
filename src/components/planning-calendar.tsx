@@ -434,9 +434,14 @@ export function PlanningCalendar({
                                             <StatusIcon status={day.status} />
                                         </div>
                                         <div>
-                                            <p className="font-black font-headline text-lg text-orange-500 leading-none">
-                                                {day.reason}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-black font-headline text-lg text-orange-500 leading-none">
+                                                    {day.reason}
+                                                </p>
+                                                <Badge variant="secondary" className="text-[10px] h-5 px-2 bg-orange-500/10 text-orange-500 border-none font-bold uppercase">
+                                                    {dayTypeLabels[day.dayType]}
+                                                </Badge>
+                                            </div>
                                             {day.remarks && (
                                                 <p className="text-[10px] text-muted-foreground mt-1 font-medium italic leading-none">
                                                     "{day.remarks}"
