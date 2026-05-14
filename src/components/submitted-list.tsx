@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => {
@@ -421,6 +421,10 @@ export function SubmittedList({
         return Object.keys(entriesCountByDate).map(d => parseISO(d));
     }, [entriesCountByDate]);
 
+    const holidayDates = useMemo(() => {
+        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
+    }, []);
+
     const filtered = useMemo(() => {
         if (!mounted) return [];
         let res = [...filteredByMonth];
@@ -571,8 +575,11 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
-                                modifiers={{ hasEntry: entryDates }}
-                                modifiersStyles={{ hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' } }}
+                                modifiers={{ hasEntry: entryDates, holiday: holidayDates }}
+                                modifiersStyles={{ 
+                                    hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
+                                    holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' }
+                                }}
                                 components={{
                                     DayContent: ({ date }) => {
                                         const dateString = format(date, 'yyyy-MM-dd');

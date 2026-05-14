@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -8,7 +9,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, ChevronDown, Settings2, Lock, Unlock, Loader2 } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, ChevronDown, Settings2, Lock, Unlock, Loader2, PartyPopper } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,7 +28,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
-import { getWeekMonday, isCurrentWeek, isPastWeek, cn } from "@/lib/utils";
+import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
@@ -144,6 +145,10 @@ export function PlanningCalendar({
                 .map(r => format(parseISO((r.weekStartDate ?? "").toString()), 'yyyy-MM-dd'))
         );
     }, [planningRequests]);
+
+    const holidayDates = useMemo(() => {
+        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
+    }, []);
 
     const isLocked = useMemo(() => {
         if (!selectedDate || isCurrentWeek(selectedDate) || !isPastWeek(selectedDate)) return false;
@@ -282,6 +287,10 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
+    const selectedHoliday = useMemo(() => {
+      return selectedDate ? getHolidayName(selectedDate) : null;
+    }, [selectedDate]);
+
     if (!mounted) return (
         <div className="flex flex-col items-center justify-center p-20 gap-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -318,11 +327,13 @@ export function PlanningCalendar({
                             modifiers={{ 
                                 planned: Object.keys(plansByDate).map(d => parseISO(d)),
                                 nonCall: Object.keys(nonCallDaysByDate).map(d => parseISO(d)),
+                                holiday: holidayDates,
                                 weekend: { dayOfWeek: [0, 6] }
                             }}
                             modifiersStyles={{
                                 planned: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
-                                nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))', fontWeight: 'bold' }
+                                nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))', fontWeight: 'bold' },
+                                holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' }
                             }}
                             components={{
                                 DayContent: ({ date, activeModifiers }) => {
@@ -351,6 +362,11 @@ export function PlanningCalendar({
                             <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
                                 Daily Plan for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
+                                {selectedHoliday && (
+                                  <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent/30 font-black uppercase text-[10px] ml-2 flex items-center gap-1">
+                                    <PartyPopper size={12} /> {selectedHoliday}
+                                  </Badge>
+                                )}
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
