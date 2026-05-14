@@ -161,7 +161,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(500));
+                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(1000));
                 
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(baseQuery("coverageEntries")),
@@ -206,6 +206,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
             process(e.primarySampleName, e.primaryProductQty);
             process(e.secondarySampleName, e.secondaryProductQty);
+            if (e.reminderProducts) {
+                e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            }
         });
 
         const finalData = { 
@@ -271,6 +274,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
             process(item.primarySampleName, item.primaryProductQty);
             process(item.secondarySampleName, item.secondaryProductQty);
+            if (item.reminderProducts) {
+                item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            }
         });
 
         const packet = {

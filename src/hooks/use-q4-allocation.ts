@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -16,7 +17,12 @@ let globalUsedCache: { data: Record<string, number>, timestamp: number } | null 
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes
 
-export const useQ4Allocation = (active: boolean = true) => {
+/**
+ * Hook for managing Marketing Samples (Allocation and Usage).
+ * @param active - Whether the hook should perform initial data fetch.
+ * @param isAuditMode - If true, fetches global data (Admin/Manager only). If false, fetches personal data for the current user.
+ */
+export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedCache?.data || {});
@@ -43,6 +49,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     }
 
     const now = Date.now();
+    // Cache is only valid for the same mode (Personal vs Audit)
     const useCache = !forceRefresh && globalAllocationsCache && (now - lastFetchTime < CACHE_DURATION);
     
     if (useCache) {
@@ -54,7 +61,7 @@ export const useQ4Allocation = (active: boolean = true) => {
 
     setLoading(true);
     try {
-        // 1. Fetch Master List
+        // 1. Fetch Master List (Marketing Samples)
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -79,19 +86,23 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        // 2. Aggregate Usage (Optimized with Role Safety and Fallback)
+        // 2. Aggregate Usage from Coverage Entries
         const currentYearStart = getStartOfYearISO();
         let entriesSnap;
 
         try {
-            // Attempt oversight fetch for Admin/Manager
-            const entriesQuery = (isUserAdmin || isUserManager)
-                ? query(collection(db!, "coverageEntries"), limit(5000))
+            // CRITICAL: representatives MUST fetch by their UID to comply with Security Rules.
+            // Only use global query if explicitly in Audit Mode and the user has permissions.
+            const shouldDoGlobalFetch = isAuditMode && (isUserAdmin || isUserManager);
+            
+            const entriesQuery = shouldDoGlobalFetch
+                ? query(collection(db!, "coverageEntries"), limit(10000))
                 : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+            
             entriesSnap = await getDocs(entriesQuery);
         } catch (e: any) {
-            // Fallback: If global oversight failed (e.g. manager permissions not in Firestore rules yet),
-            // fetch only personal usage to prevent app crash
+            // Permission Fallback: if global fetch fails, try personal fetch
+            console.warn("Global oversight fetch failed, falling back to personal UID query.", e);
             const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
             entriesSnap = await getDocs(personalQuery);
         }
@@ -101,6 +112,7 @@ export const useQ4Allocation = (active: boolean = true) => {
         entriesSnap.docs.forEach(d => {
             const data = d.data() as CoverageEntry;
             const subDate = data.submittedAt || data.coverageDate || "";
+            // Only aggregate samples from the current calendar year
             if (subDate < currentYearStart) return;
 
             const process = (name?: string, qty?: number) => {
@@ -112,11 +124,16 @@ export const useQ4Allocation = (active: boolean = true) => {
                 }
             };
 
+            // Aggregate from all potential sample fields
             process(data.primarySampleName, data.primaryProductQty);
             process(data.secondarySampleName, data.secondaryProductQty);
             
-            if (data.reminderProducts) {
-                data.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            if (data.reminderProducts && Array.isArray(data.reminderProducts)) {
+                data.reminderProducts.forEach(rp => {
+                    if (rp && rp.sampleName) {
+                        process(rp.sampleName, rp.quantity);
+                    }
+                });
             }
         });
 
@@ -127,11 +144,11 @@ export const useQ4Allocation = (active: boolean = true) => {
         setAllocations(fetchedAllocations);
         setUsedQuantities(used);
     } catch (error) {
-        console.warn("Inventory aggregation limited:", error);
+        console.error("Critical error in inventory aggregation:", error);
     } finally {
         setLoading(false);
     }
-  }, [user, profile, active, isUserAdmin, isUserManager]);
+  }, [user, isUserAdmin, isUserManager, active, isAuditMode]);
 
   useEffect(() => {
     if (active) {
