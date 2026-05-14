@@ -7,9 +7,8 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { getStartOfYearISO } from '@/lib/utils';
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // GLOBAL SESSION CACHE
 let globalAllocationsCache: Q4Allocation[] | null = null;
@@ -18,25 +17,10 @@ let lastFetchTime: number = 0;
 const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 
 export const useQ4Allocation = (active: boolean = true) => {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
   const [loading, setLoading] = useState(!globalAllocationsCache && active);
-
-  const isUserAdmin = useMemo(() => {
-    if (!user) return false;
-    const email = (user.email ?? "").toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || 
-           email === 'mbustamante@hovidinc.com' || 
-           email === 'admin@hovidinc.com' ||
-           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
-           profile?.role === 'Admin';
-  }, [user, profile]);
-
-  const isUserManager = useMemo(() => {
-    if (!user) return false;
-    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
-  }, [user, profile, isUserAdmin]);
 
   const performFetch = useCallback(async (forceRefresh = false) => {
     if (!db || !user || (!active && !forceRefresh)) {
@@ -81,49 +65,34 @@ export const useQ4Allocation = (active: boolean = true) => {
         const currentYearStart = getStartOfYearISO();
         const used: Record<string, number> = {};
 
-        const processEntry = (entry: CoverageEntry) => {
-            const proc = (name?: string, qty?: number) => {
-                const key = String(name ?? "").toLowerCase().trim();
-                if (key) {
-                    const val = Math.round(Number(qty || 0));
-                    if (!isNaN(val)) used[key] = (used[key] || 0) + val;
-                }
-            };
-            proc(entry.primarySampleName, entry.primaryProductQty);
-            proc(entry.secondarySampleName, entry.secondaryProductQty);
-        };
-
-        if (isUserManager) {
-            // Admins and Managers see global usage for the year
-            const q = query(collection(db!, "coverageEntries"), where("submittedAt", ">=", currentYearStart));
-            const entriesSnap = await getDocs(q)
-                .catch(async (e) => {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: 'coverageEntries',
-                        operation: 'list'
-                    }));
-                    throw e;
-                });
-            entriesSnap.docs.forEach(d => processEntry(d.data() as CoverageEntry));
-        } else {
-            // standard PMR sees only their usage
-            const q = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
-            const entriesSnap = await getDocs(q)
-                .catch(async (e) => {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: 'coverageEntries',
-                        operation: 'list'
-                    }));
-                    throw e;
-                });
-            entriesSnap.docs.forEach(d => {
-                const data = d.data() as CoverageEntry;
-                const entryDate = data.submittedAt || data.coverageDate || "";
-                if (entryDate >= currentYearStart) {
-                    processEntry(data);
-                }
+        // Fetch only the current user's entries to satisfy security rules and prevent crashes
+        const q = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
+        const entriesSnap = await getDocs(q)
+            .catch(async (e) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: 'coverageEntries',
+                    operation: 'list'
+                }));
+                throw e;
             });
-        }
+
+        entriesSnap.docs.forEach(d => {
+            const data = d.data() as CoverageEntry;
+            const entryDate = data.submittedAt || data.coverageDate || "";
+            
+            // Only aggregate data from the current year
+            if (entryDate >= currentYearStart) {
+                const process = (name?: string, qty?: number) => {
+                    const key = String(name ?? "").toLowerCase().trim();
+                    if (key) {
+                        const val = Math.round(Number(qty || 0));
+                        if (!isNaN(val)) used[key] = (used[key] || 0) + val;
+                    }
+                };
+                process(data.primarySampleName, data.primaryProductQty);
+                process(data.secondarySampleName, data.secondaryProductQty);
+            }
+        });
 
         globalAllocationsCache = fetchedAllocations;
         globalUsedQuantitiesCache = used;
@@ -136,7 +105,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     } finally {
         setLoading(false);
     }
-  }, [user, active, isUserManager]);
+  }, [user, active]);
 
   useEffect(() => {
     if (active) {
