@@ -20,7 +20,7 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes
 /**
  * Hook for managing Marketing Samples (Allocation and Usage).
  * @param active - Whether the hook should perform initial data fetch.
- * @param isAuditMode - If true, fetches global data (Admin/Manager only). If false, fetches personal data for the current user.
+ * @param isAuditMode - If true, fetches global data (Admin/Manager only).
  */
 export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = false) => {
   const { user, profile } = useAuth();
@@ -32,7 +32,6 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
-           email === 'mbustamante@hovidinc.com' || 
            ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
            profile?.role === 'Admin';
   }, [user, profile]);
@@ -49,7 +48,6 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
     }
 
     const now = Date.now();
-    // Cache is only valid for the same mode (Personal vs Audit)
     const useCache = !forceRefresh && globalAllocationsCache && (now - lastFetchTime < CACHE_DURATION);
     
     if (useCache) {
@@ -90,19 +88,19 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
         const currentYearStart = getStartOfYearISO();
         let entriesSnap;
 
+        // Requirement: Admins and Managers should see global usage sum. PMRs see personal.
+        // We attempt a global fetch first if the user has a privileged role.
+        const canDoGlobalFetch = isUserAdmin || isUserManager;
+
         try {
-            // CRITICAL: representatives MUST fetch by their UID to comply with Security Rules.
-            // Only use global query if explicitly in Audit Mode and the user has permissions.
-            const shouldDoGlobalFetch = isAuditMode && (isUserAdmin || isUserManager);
-            
-            const entriesQuery = shouldDoGlobalFetch
+            const entriesQuery = canDoGlobalFetch
                 ? query(collection(db!, "coverageEntries"), limit(10000))
                 : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
             
             entriesSnap = await getDocs(entriesQuery);
         } catch (e: any) {
-            // Permission Fallback: if global fetch fails, try personal fetch
-            console.warn("Global oversight fetch failed, falling back to personal UID query.", e);
+            // Permission Fallback: If global oversight is denied by Rules, strictly return personal data
+            console.warn("Global oversight access restricted. Falling back to personal UID query.", e);
             const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
             entriesSnap = await getDocs(personalQuery);
         }
@@ -112,7 +110,6 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
         entriesSnap.docs.forEach(d => {
             const data = d.data() as CoverageEntry;
             const subDate = data.submittedAt || data.coverageDate || "";
-            // Only aggregate samples from the current calendar year
             if (subDate < currentYearStart) return;
 
             const process = (name?: string, qty?: number) => {
@@ -124,7 +121,6 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
                 }
             };
 
-            // Aggregate from all potential sample fields
             process(data.primarySampleName, data.primaryProductQty);
             process(data.secondarySampleName, data.secondaryProductQty);
             
@@ -148,7 +144,7 @@ export const useQ4Allocation = (active: boolean = true, isAuditMode: boolean = f
     } finally {
         setLoading(false);
     }
-  }, [user, isUserAdmin, isUserManager, active, isAuditMode]);
+  }, [user, isUserAdmin, isUserManager, active]);
 
   useEffect(() => {
     if (active) {

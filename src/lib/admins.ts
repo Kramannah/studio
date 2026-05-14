@@ -3,7 +3,11 @@
 export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
 // Explicit list of administrator emails (Case-insensitive matching is handled in code)
-export const ADMIN_EMAILS = ["mbustamante@hovidinc.com"];
+export const ADMIN_EMAILS = [
+    "mbustamante@hovidinc.com",
+    "wbmaralit@hovidinc.com",
+    "admin@hovidinc.com"
+];
 
 // Centralized helpdesk contact email
 export const HELPDESK_EMAIL = "mbustamante@hovidinc.com";
