@@ -116,7 +116,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const chunks = [];
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
-            const results = await Promise.all(chunks.map(async (c) => {
+            const aggregated = { entries: [], logs: [], doctors: [], ncds: [], plans: [] } as any;
+
+            // Sequential processing of chunks to avoid datastore timeouts
+            for (const c of chunks) {
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
                 const [e, l, d, ncd, p] = await Promise.all([
@@ -127,22 +130,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(10000)))
                 ]);
 
-                return { 
-                    entries: mapDocs(e), 
-                    logs: mapDocs(l), 
-                    doctors: mapDocs(d), 
-                    ncds: mapDocs(ncd), 
-                    plans: mapDocs(p) 
-                };
-            }));
+                aggregated.entries.push(...mapDocs(e));
+                aggregated.logs.push(...mapDocs(l));
+                aggregated.doctors.push(...mapDocs(d));
+                aggregated.ncds.push(...mapDocs(ncd));
+                aggregated.plans.push(...mapDocs(p));
+            }
 
-            return results.reduce((acc, curr) => ({
-                entries: [...acc.entries, ...curr.entries],
-                logs: [...acc.logs, ...curr.logs],
-                doctors: [...acc.doctors, ...curr.doctors],
-                ncds: [...acc.ncds, ...curr.ncds],
-                plans: [...acc.plans, ...curr.plans],
-            }), { entries: [], logs: [], doctors: [], ncds: [], plans: [] } as any);
+            return aggregated;
         };
 
         const combined = await fetchAllForUsers(userFilter);
