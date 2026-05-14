@@ -18,11 +18,12 @@ export function LoginPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSignUp = async () => {
+    const handleSignUp = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!email || !password) return;
         setLoading(true);
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const userCredential = await createUserWithEmailAndPassword(auth!, email, password);
             const user = userCredential.user;
 
             // Create initial user profile in Firestore to ensure visibility in Admin Dashboard
@@ -45,10 +46,12 @@ export function LoginPage() {
         }
     };
 
-    const handleSignIn = async () => {
+    const handleSignIn = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!email || !password) return;
         setLoading(true);
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            await signInWithEmailAndPassword(auth!, email, password);
             toast({ title: "Signed In", description: "Welcome back!" });
         } catch (error: any) {
             toast({ variant: 'destructive', title: "Sign In Failed", description: error.message });
@@ -59,53 +62,87 @@ export function LoginPage() {
 
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <Tabs defaultValue="signin" className="w-[400px]">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="signin">Sign In</TabsTrigger>
-                    <TabsTrigger value="signup">Sign Up</TabsTrigger>
+        <div className="flex items-center justify-center min-h-screen bg-background p-4">
+            <Tabs defaultValue="signin" className="w-full max-w-[400px]">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="signin" className="font-headline">Sign In</TabsTrigger>
+                    <TabsTrigger value="signup" className="font-headline">Sign Up</TabsTrigger>
                 </TabsList>
                 <TabsContent value="signin">
-                    <Card>
-                    <CardHeader>
-                        <CardTitle className="font-headline">Sign In</CardTitle>
-                        <CardDescription>Enter your credentials to access your account.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email-signin">Email</Label>
-                            <Input id="email-signin" type="email" placeholder="medrep@hovidinc.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password-signin">Password</Label>
-                            <Input id="password-signin" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
-                    </CardContent>
-                    <CardFooter>
-                        <Button className="w-full" onClick={handleSignIn} disabled={loading}>{loading ? 'Signing In...' : 'Sign In'}</Button>
-                    </CardFooter>
-                    </Card>
+                    <form onSubmit={handleSignIn}>
+                        <Card className="border-2 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="font-headline text-2xl">Sign In</CardTitle>
+                                <CardDescription>Enter your credentials to access your account.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email-signin">Email</Label>
+                                    <Input 
+                                        id="email-signin" 
+                                        type="email" 
+                                        placeholder="medrep@hovidinc.com" 
+                                        value={email} 
+                                        onChange={(e) => setEmail(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="password-signin">Password</Label>
+                                    <Input 
+                                        id="password-signin" 
+                                        type="password" 
+                                        value={password} 
+                                        onChange={(e) => setPassword(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                            </CardContent>
+                            <CardFooter>
+                                <Button type="submit" className="w-full font-headline h-11" disabled={loading}>
+                                    {loading ? 'Signing In...' : 'Sign In'}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </form>
                 </TabsContent>
                 <TabsContent value="signup">
-                    <Card>
-                    <CardHeader>
-                        <CardTitle className="font-headline">Sign Up</CardTitle>
-                        <CardDescription>Create a new account to get started.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                        <Label htmlFor="email-signup">Email</Label>
-                        <Input id="email-signup" type="email" placeholder="medrep@hovidinc.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                        </div>
-                        <div className="space-y-2">
-                        <Label htmlFor="password-signup">Password</Label>
-                        <Input id="password-signup" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-                        </div>
-                    </CardContent>
-                    <CardFooter>
-                         <Button className="w-full" onClick={handleSignUp} disabled={loading}>{loading ? 'Creating Account...' : 'Sign Up'}</Button>
-                    </CardFooter>
-                    </Card>
+                    <form onSubmit={handleSignUp}>
+                        <Card className="border-2 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="font-headline text-2xl">Sign Up</CardTitle>
+                                <CardDescription>Create a new account to get started.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email-signup">Email</Label>
+                                    <Input 
+                                        id="email-signup" 
+                                        type="email" 
+                                        placeholder="medrep@hovidinc.com" 
+                                        value={email} 
+                                        onChange={(e) => setEmail(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="password-signup">Password</Label>
+                                    <Input 
+                                        id="password-signup" 
+                                        type="password" 
+                                        value={password} 
+                                        onChange={(e) => setPassword(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                            </CardContent>
+                            <CardFooter>
+                                <Button type="submit" className="w-full font-headline h-11" disabled={loading}>
+                                    {loading ? 'Creating Account...' : 'Sign Up'}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </form>
                 </TabsContent>
             </Tabs>
         </div>
