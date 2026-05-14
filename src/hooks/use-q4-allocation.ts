@@ -64,6 +64,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         const used: Record<string, number> = {};
 
         // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
+        // Admin views set readOnly to false/undefined which results in includeUsage being false
         if (includeUsage) {
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || isUserManager;
@@ -101,7 +102,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         setAllocations(fetchedAllocations);
         setUsedQuantities(used);
     } catch (error) {
-        console.error("Critical error in inventory aggregation:", error);
+        console.error("Inventory fetch failed:", error);
     } finally {
         setLoading(false);
     }

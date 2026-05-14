@@ -69,14 +69,11 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager;
 
-  // CONDITIONAL HOOKS: Data only fetches if the current view requires it
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid, activeView === 'offline' || activeView === 'submitted' || activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary');
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
-  
-  // PMR View always needs usage/balance data for the reporting form and inventory tab
   const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', true);
   
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
@@ -101,17 +98,9 @@ export default function Home() {
               fetchTimeLogs(),
               fetchNonCallDays()
           ]);
-          toast({
-              title: "Sync Finished",
-              description: "All pending data uploaded and server records refreshed.",
-          });
+          toast({ title: "Sync Finished", description: "All records updated." });
       } catch (e) {
-          console.error("Manual sync failed", e);
-          toast({
-              variant: "destructive",
-              title: "Sync Error",
-              description: "There was a problem refreshing your data. Please check your connection.",
-          });
+          toast({ variant: "destructive", title: "Sync Error", description: "Connection issue detected." });
       } finally {
           setIsManualSyncing(false);
       }
@@ -140,7 +129,6 @@ export default function Home() {
 
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...globalUsedQuantities };
-    
     offlineEntries.forEach(entry => {
         const process = (name?: string, qty?: number) => {
             const safeName = (name ?? "").toLowerCase().trim();
@@ -150,7 +138,6 @@ export default function Home() {
                 quantities[safeName] = (quantities[safeName] || 0) + safeQty;
             }
         };
-
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
     });
@@ -283,14 +270,8 @@ export default function Home() {
                         </Link>
                     </div>
                  )}
-                 <Button 
-                    variant="destructive" 
-                    size="lg" 
-                    onClick={logout} 
-                    className="w-full font-headline shadow-lg hover:shadow-destructive/20 transition-all active:scale-95"
-                 >
-                    <LogOut className="mr-2 h-5 w-5" />
-                    Log Out
+                 <Button variant="destructive" size="lg" onClick={logout} className="w-full font-headline">
+                    <LogOut className="mr-2 h-5 w-5" /> Log Out
                 </Button>
             </SidebarFooter>
           </Sidebar>

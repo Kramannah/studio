@@ -120,11 +120,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(10000))),
-                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(5000))),
-                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(5000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(2000))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(5000)))
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(20000))),
+                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(10000))),
+                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(10000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(5000))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(10000)))
                 ]);
 
                 return { 
@@ -182,11 +182,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const [e, d, p, l, ncd, r] = await Promise.all([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(2000)))
         ]);
 
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
