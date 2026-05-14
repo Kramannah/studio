@@ -15,7 +15,10 @@ import {
     RefreshCw,
     Trash2,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    TrendingUp,
+    Package,
+    ShieldAlert
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
@@ -39,8 +42,22 @@ interface Q4AllocationViewProps {
     readOnly?: boolean;
 }
 
+const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: number, icon: any, color: string }) => (
+    <Card className="border-2 shadow-sm">
+        <CardContent className="p-6 flex items-center justify-between">
+            <div className="space-y-1">
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{title}</p>
+                <p className="text-3xl font-black font-headline tabular-nums">{value.toLocaleString()}</p>
+            </div>
+            <div className={cn("p-3 rounded-xl bg-opacity-10", color.replace('text-', 'bg-').replace('500', '500/10'))}>
+                <Icon className={cn("w-6 h-6", color)} />
+            </div>
+        </CardContent>
+    </Card>
+);
+
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    const { allocations, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation();
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');
@@ -67,6 +84,15 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
             return name.includes(q) || group.includes(q);
         });
     }, [allocations, search, mounted]);
+
+    const stats = useMemo(() => {
+        const totalAlloc = filteredSamples.reduce((acc, s) => acc + (s.allocationQuantity || 0), 0);
+        const totalUsed = filteredSamples.reduce((acc, s) => {
+            const key = (s.displayMaterialName || "").toLowerCase().trim();
+            return acc + (usedQuantities[key] || 0);
+        }, 0);
+        return { totalAlloc, totalUsed, balance: Math.max(0, totalAlloc - totalUsed) };
+    }, [filteredSamples, usedQuantities]);
 
     const totalPages = Math.max(1, Math.ceil(filteredSamples.length / itemsPerPage));
     const paginatedSamples = useMemo(() => {
@@ -146,6 +172,12 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard title="Total Allocated" value={stats.totalAlloc} icon={Package} color="text-blue-500" />
+                <StatCard title="Units Issued" value={stats.totalUsed} icon={TrendingUp} color="text-orange-500" />
+                <StatCard title="Current Balance" value={stats.balance} icon={ShieldAlert} color="text-primary" />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
                     <Card className="border-2 shadow-lg overflow-hidden">
@@ -153,7 +185,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <CardTitle className="text-2xl font-black font-headline text-primary">Marketing Samples</CardTitle>
-                                    <CardDescription>Master list of promotional materials and samples.</CardDescription>
+                                    <CardDescription>Real-time distribution tracking for 2026.</CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2 w-full max-w-md">
                                     <div className="relative flex-1">
@@ -194,16 +226,21 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                         <TableRow className="h-12 hover:bg-transparent">
                                             {!readOnly && <TableHead className="w-12 pl-6" />}
                                             <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {dataLoading ? (
-                                            <TableRow><TableCell colSpan={2} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                         ) : paginatedSamples.length > 0 ? (
                                             paginatedSamples.map((sample) => {
                                                 const sId = sample.id;
                                                 const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
                                                 const group = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
+                                                const used = usedQuantities[name.toLowerCase()] || 0;
+                                                const bal = Math.max(0, sample.allocationQuantity - used);
                                                 
                                                 return (
                                                     <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
@@ -221,11 +258,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                 <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
                                                             </div>
                                                         </TableCell>
+                                                        <TableCell className="text-center font-mono font-bold">{sample.allocationQuantity}</TableCell>
+                                                        <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
+                                                        <TableCell className="text-center">
+                                                            <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
+                                                                {bal}
+                                                            </Badge>
+                                                        </TableCell>
                                                     </TableRow>
                                                 );
                                             })
                                         ) : (
-                                            <TableRow><TableCell colSpan={2} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
@@ -262,7 +306,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             </CardContent>
                         </Card>
                         <Button variant="outline" onClick={() => refetch()} disabled={dataLoading} className="w-full border-2 h-12 font-headline shadow-sm">
-                            <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh List
+                            <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh All
                         </Button>
                     </div>
                 )}
