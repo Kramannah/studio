@@ -130,7 +130,7 @@ export interface UserProfile {
     email?: string;
     code?: string;
     managerId?: string;
-    role?: 'Admin' | 'Manager' | 'PMR';
+    role?: 'Admin' | 'Manager' | 'PMR' | 'Marketing' | 'HR';
     updatedAt: string;
 }
 

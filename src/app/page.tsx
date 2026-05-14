@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -67,7 +66,11 @@ export default function Home() {
     return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
   }, [user, profile]);
 
-  const hasAdminAccess = isUserAdmin || isUserManager;
+  const isMarketingOrHR = useMemo(() => {
+    return profile?.role === 'Marketing' || profile?.role === 'HR';
+  }, [profile]);
+
+  const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
   const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid, activeView === 'offline' || activeView === 'submitted' || activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
@@ -259,13 +262,13 @@ export default function Home() {
                         <Link href="/admin" className="w-full block">
                             <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
                                 <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
-                                {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
+                                {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'Manager Dashboard'}
                             </Button>
                         </Link>
                         <Link href="/admin/inventory" className="w-full block">
                             <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10 border-primary/30 text-primary">
                                 <PackageCheck className="mr-2 h-4 w-4" />
-                                Admin Marketing Samples
+                                Marketing Samples List
                             </Button>
                         </Link>
                     </div>

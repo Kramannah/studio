@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -24,7 +23,7 @@ export default function AdminInventoryPage() {
         return ADMIN_UIDS.includes(user.uid) || 
                email === 'mbustamante@hovidinc.com' || 
                ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
-               profile?.role === 'Admin';
+               ['Admin', 'Marketing', 'HR'].includes(profile?.role || '');
     }, [user, profile]);
 
     useEffect(() => {
@@ -56,7 +55,7 @@ export default function AdminInventoryPage() {
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="hidden sm:flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SECURE</span>
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">SECURE ACCESS</span>
                         <div className="flex items-center gap-1.5">
                             <User className="w-3 h-3 text-primary" />
                             <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user?.email}</span>

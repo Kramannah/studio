@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -55,8 +54,8 @@ export default function AdminPage() {
     const [isAddRecordOpen, setIsAddRecordOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     
-    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' } | null>(null);
-    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', password: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
+    const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' | 'Marketing' | 'HR' } | null>(null);
+    const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', password: '', managerId: '', role: 'PMR' as any });
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -77,7 +76,11 @@ export default function AdminPage() {
         return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
     }, [user, profile]);
 
-    const hasAdminAccess = isUserAdmin || isUserManager;
+    const isMarketingOrHR = useMemo(() => {
+        return profile?.role === 'Marketing' || profile?.role === 'HR';
+    }, [profile]);
+
+    const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
     const { 
         allEntries: individualEntries,
@@ -104,10 +107,10 @@ export default function AdminPage() {
             if (selectedUserId) {
                 fetchUserData(selectedUserId);
             }
-        } else if (activeTab === 'approvals') {
+        } else if (activeTab === 'approvals' && !isMarketingOrHR) {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess]);
+    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -128,10 +131,9 @@ export default function AdminPage() {
             const isAdmin = ADMIN_UIDS.includes(uid) || userProfile?.role === 'Admin';
             const isManager = Object.keys(MANAGER_TEAMS).includes(uid) || userProfile?.role === 'Manager';
             
-            let role: 'Admin' | 'Manager' | 'PMR' = 'PMR';
+            let role: string = userProfile?.role || 'PMR';
             if (isAdmin) role = 'Admin';
             else if (isManager) role = 'Manager';
-            else if (userProfile?.role === 'PMR') role = 'PMR';
 
             let district = 'N/A';
             const managerUid = userProfile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
@@ -147,6 +149,8 @@ export default function AdminPage() {
                 district = 'District Sales Manager';
             } else if (role === 'Admin') {
                 district = 'National / HQ';
+            } else {
+                district = 'Corporate / Specialty';
             }
 
             return { uid, ...data, role, district, managerId: managerUid };
@@ -272,7 +276,7 @@ export default function AdminPage() {
                 <div className="flex items-center gap-4">
                     <ShieldCheck className="w-8 h-8 text-primary" />
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
-                        {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
+                        {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'Manager Dashboard'}
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
@@ -283,7 +287,7 @@ export default function AdminPage() {
                         </Button>
                     </Link>
                     <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SESSION</span>
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">SECURE SESSION</span>
                         <div className="flex items-center gap-1.5">
                             <User className="w-3 h-3 text-primary" />
                             <span className="text-sm font-bold text-primary truncate max-w-[200px]">{user?.email}</span>
@@ -298,8 +302,8 @@ export default function AdminPage() {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
-                            <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
-                            <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
+                            {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
+                            {!isMarketingOrHR && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -309,7 +313,7 @@ export default function AdminPage() {
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                      <div className="space-y-3">
                                         <CardTitle className="font-headline text-xl">District Manager</CardTitle>
-                                        <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin} />
+                                        <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin && !isMarketingOrHR} />
                                     </div>
                                     <div className={cn("space-y-3", !selectedManagerId && "opacity-50 pointer-events-none")}>
                                         <CardTitle className="font-headline text-xl">Representative</CardTitle>
@@ -364,130 +368,134 @@ export default function AdminPage() {
                         )}
                     </TabsContent>
 
-                    <TabsContent value="approvals" className="space-y-8">
-                        {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
-                            <>
-                                <NonCallDayApprovals 
-                                    nonCallDays={allNonCallDays} 
-                                    onUpdateStatus={updateNonCallDayStatus}
-                                    userMap={mergedUserMap}
-                                />
-                                <PlanningRequestApprovals 
-                                    requests={allPlanningRequests}
-                                    onUpdateStatus={updatePlanningRequestStatus}
-                                    userMap={mergedUserMap}
-                                />
-                            </>
-                        )}
-                    </TabsContent>
+                    {!isMarketingOrHR && (
+                        <TabsContent value="approvals" className="space-y-8">
+                            {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
+                                <>
+                                    <NonCallDayApprovals 
+                                        nonCallDays={allNonCallDays} 
+                                        onUpdateStatus={updateNonCallDayStatus}
+                                        userMap={mergedUserMap}
+                                    />
+                                    <PlanningRequestApprovals 
+                                        requests={allPlanningRequests}
+                                        onUpdateStatus={updatePlanningRequestStatus}
+                                        userMap={mergedUserMap}
+                                    />
+                                </>
+                            )}
+                        </TabsContent>
+                    )}
 
-                    <TabsContent value="accounts">
-                         <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
-                            <CardHeader className="bg-muted/30 border-b pb-6">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div className="space-y-1">
-                                        <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
-                                            <UserCog className="text-primary" /> User Directory
-                                        </CardTitle>
-                                        <CardDescription>Master mapping of all authorized personnel in the system.</CardDescription>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-2xl">
-                                        <div className="relative flex-1 w-full">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                                            <Input 
-                                                placeholder="Search personnel..." 
-                                                className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
-                                                value={accountSearch}
-                                                onChange={(e) => setAccountSearch(e.target.value)}
-                                            />
+                    {!isMarketingOrHR && (
+                        <TabsContent value="accounts">
+                            <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
+                                <CardHeader className="bg-muted/30 border-b pb-6">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                        <div className="space-y-1">
+                                            <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
+                                                <UserCog className="text-primary" /> User Directory
+                                            </CardTitle>
+                                            <CardDescription>Master mapping of all authorized personnel in the system.</CardDescription>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Button variant="outline" onClick={() => setIsCreateAccountOpen(true)} className="h-11 rounded-xl font-headline">
-                                                <UserPlus className="mr-2 h-4 w-4" />
-                                                Create Account
-                                            </Button>
-                                            <Button onClick={() => setIsAddRecordOpen(true)} className="h-11 rounded-xl font-headline">
-                                                <MapPin className="mr-2 h-4 w-4" />
-                                                Add Record
-                                            </Button>
+                                        <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-2xl">
+                                            <div className="relative flex-1 w-full">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                                                <Input 
+                                                    placeholder="Search personnel..." 
+                                                    className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
+                                                    value={accountSearch}
+                                                    onChange={(e) => setAccountSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Button variant="outline" onClick={() => setIsCreateAccountOpen(true)} className="h-11 rounded-xl font-headline">
+                                                    <UserPlus className="mr-2 h-4 w-4" />
+                                                    Create Account
+                                                </Button>
+                                                <Button onClick={() => setIsAddRecordOpen(true)} className="h-11 rounded-xl font-headline">
+                                                    <MapPin className="mr-2 h-4 w-4" />
+                                                    Add Record
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-muted/20">
-                                            <TableRow className="h-12 hover:bg-transparent">
-                                                <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
-                                                <TableHead className="font-bold text-foreground">Employee Name</TableHead>
-                                                <TableHead className="font-bold text-foreground">Identifier (UID)</TableHead>
-                                                <TableHead className="font-bold text-foreground">System Role</TableHead>
-                                                <TableHead className="font-bold text-foreground">Assignment</TableHead>
-                                                <TableHead className="text-right pr-6">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {allAccounts.map((acc) => (
-                                                <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
-                                                    <TableCell className="pl-6">
-                                                        <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
-                                                            {acc.code}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="font-bold text-sm">
-                                                        {acc.lastName}, {acc.firstName}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2 text-sm">
-                                                            <Fingerprint className="h-3 v-3 text-muted-foreground" />
-                                                            <span className="font-medium text-[10px] font-mono opacity-60">{acc.uid}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}>
-                                                            {acc.role}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm font-medium text-muted-foreground">
-                                                        {acc.district}
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-6">
-                                                        <div className="flex justify-end gap-1">
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code, role: acc.role as any })}
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <Button variant="ghost" size="icon" className="text-destructive">
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader>
-                                                                        <AlertDialogTitle>Remove employee record?</AlertDialogTitle>
-                                                                        <AlertDialogDescription>This will delete the profile override for {acc.firstName} {acc.lastName}. This action cannot be undone.</AlertDialogDescription>
-                                                                    </AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                        <AlertDialogAction onClick={() => handleDeleteAccount(acc.uid)} className="bg-destructive text-destructive-foreground">Remove Record</AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
-                                                        </div>
-                                                    </TableCell>
+                                </CardHeader>
+                                <CardContent className="p-0">
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader className="bg-muted/20">
+                                                <TableRow className="h-12 hover:bg-transparent">
+                                                    <TableHead className="font-bold text-foreground pl-6">Code</TableHead>
+                                                    <TableHead className="font-bold text-foreground">Employee Name</TableHead>
+                                                    <TableHead className="font-bold text-foreground">Identifier (UID)</TableHead>
+                                                    <TableHead className="font-bold text-foreground">System Role</TableHead>
+                                                    <TableHead className="font-bold text-foreground">Assignment</TableHead>
+                                                    <TableHead className="text-right pr-6">Actions</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {allAccounts.map((acc) => (
+                                                    <TableRow key={acc.uid} className="h-16 hover:bg-muted/30 border-b">
+                                                        <TableCell className="pl-6">
+                                                            <Badge variant="outline" className="font-mono font-bold border-primary/20 text-primary">
+                                                                {acc.code}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="font-bold text-sm">
+                                                            {acc.lastName}, {acc.firstName}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-2 text-sm">
+                                                                <Fingerprint className="h-3 v-3 text-muted-foreground" />
+                                                                <span className="font-medium text-[10px] font-mono opacity-60">{acc.uid}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant={acc.role === 'Admin' ? 'destructive' : acc.role === 'Manager' ? 'default' : 'secondary'}>
+                                                                {acc.role}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-sm font-medium text-muted-foreground">
+                                                            {acc.district}
+                                                        </TableCell>
+                                                        <TableCell className="text-right pr-6">
+                                                            <div className="flex justify-end gap-1">
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code, role: acc.role as any })}
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <AlertDialog>
+                                                                    <AlertDialogTrigger asChild>
+                                                                        <Button variant="ghost" size="icon" className="text-destructive">
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        <AlertDialogHeader>
+                                                                            <AlertDialogTitle>Remove employee record?</AlertDialogTitle>
+                                                                            <AlertDialogDescription>This will delete the profile override for {acc.firstName} {acc.lastName}. This action cannot be undone.</AlertDialogDescription>
+                                                                        </AlertDialogHeader>
+                                                                        <AlertDialogFooter>
+                                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                            <AlertDialogAction onClick={() => handleDeleteAccount(acc.uid)} className="bg-destructive text-destructive-foreground">Remove Record</AlertDialogAction>
+                                                                        </AlertDialogFooter>
+                                                                    </AlertDialogContent>
+                                                                </AlertDialog>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                    )}
                 </Tabs>
             </main>
 
@@ -536,6 +544,8 @@ export default function AdminPage() {
                                         <SelectItem value="PMR">Representative (PMR)</SelectItem>
                                         <SelectItem value="Manager">District Manager (DSM)</SelectItem>
                                         <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                        <SelectItem value="Marketing">Marketing</SelectItem>
+                                        <SelectItem value="HR">HR</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -637,6 +647,8 @@ export default function AdminPage() {
                                         <SelectItem value="PMR">Representative (PMR)</SelectItem>
                                         <SelectItem value="Manager">District Manager (DSM)</SelectItem>
                                         <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                        <SelectItem value="Marketing">Marketing</SelectItem>
+                                        <SelectItem value="HR">HR</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

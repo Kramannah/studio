@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -37,10 +36,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  const isUserManager = useMemo(() => {
-    if (!user) return false;
-    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
-  }, [user, profile, isUserAdmin]);
+  const hasFullAdminAccess = useMemo(() => {
+    return isUserAdmin || profile?.role === 'Manager' || Object.keys(MANAGER_TEAMS).includes(user?.uid || '');
+  }, [isUserAdmin, profile, user]);
+
+  const hasLimitedAdminAccess = useMemo(() => {
+    return profile?.role === 'Marketing' || profile?.role === 'HR';
+  }, [profile]);
+
+  const isAuthorized = hasFullAdminAccess || hasLimitedAdminAccess;
 
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
@@ -52,7 +56,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !isUserManager) return;
+    if (!user || !db || !active || !hasFullAdminAccess) return;
     
     setLoadingApprovals(true);
     try {
@@ -86,16 +90,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally {
         setLoadingApprovals(false);
     }
-  }, [user, managerId, getManagedUserIds, active, isUserManager]);
+  }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
 
   const fetchUserData = useCallback(async (uid: string) => {
-    if (!uid || !db || !active || !isUserManager) return;
+    if (!uid || !db || !active || !isAuthorized) return;
 
     setLoadingIndividual(true);
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Fetch specific user data sequentially to prevent Individual Mode timeouts
         const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
@@ -129,7 +132,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally {
         setLoadingIndividual(false);
     }
-  }, [active, isUserManager]);
+  }, [active, isAuthorized]);
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 

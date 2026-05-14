@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -29,9 +28,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  const isUserManager = useMemo(() => {
+  const isAuthorizedAdmin = useMemo(() => {
     if (!user) return false;
-    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
+    return Object.keys(MANAGER_TEAMS).includes(user.uid) || 
+           ['Manager', 'Admin', 'Marketing', 'HR'].includes(profile?.role || '') || 
+           isUserAdmin;
   }, [user, profile, isUserAdmin]);
 
   const performFetch = useCallback(async (force = false) => {
@@ -87,7 +88,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
         if (includeUsage) {
             let entriesSnap;
-            const canDoGlobalFetch = isUserAdmin || isUserManager;
+            const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
             if (canDoGlobalFetch) {
                 // Limit individual scan to 10k to prevent timeouts
@@ -126,7 +127,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, isUserAdmin, isUserManager, active, includeUsage]);
+  }, [user, isAuthorizedAdmin, isUserAdmin, profile, active, includeUsage]);
 
   useEffect(() => {
     if (active) {
