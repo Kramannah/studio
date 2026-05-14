@@ -285,7 +285,7 @@ export default function AdminPage() {
                     <Link href="/admin/inventory">
                         <Button variant="outline" className="border-primary/20 text-primary font-headline hidden sm:flex items-center gap-2 h-10">
                             <PackageCheck className="w-4 h-4" />
-                            Material Inventory
+                            Marketing Samples
                         </Button>
                     </Link>
                     <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">

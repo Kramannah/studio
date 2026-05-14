@@ -35,7 +35,7 @@ export default function AdminInventoryPage() {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
                 <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-                <p className="ml-4 font-headline font-bold text-primary">Accessing Material Database...</p>
+                <p className="ml-4 font-headline font-bold text-primary">Accessing Samples Database...</p>
             </div>
         );
     }
@@ -50,7 +50,7 @@ export default function AdminInventoryPage() {
                     <div className="flex items-center gap-2">
                         <PackageCheck className="w-8 h-8 text-primary" />
                         <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
-                            Inventory Management
+                            Marketing Samples
                         </h1>
                     </div>
                 </div>
@@ -68,7 +68,7 @@ export default function AdminInventoryPage() {
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
                 <div className="mb-8">
-                    <h2 className="text-3xl font-black font-headline text-primary">Master Material List</h2>
+                    <h2 className="text-3xl font-black font-headline text-primary">Master Samples List</h2>
                     <p className="text-muted-foreground">Manage marketing samples and official distribution items independently.</p>
                 </div>
                 <Q4AllocationView readOnly={false} />

@@ -276,7 +276,7 @@ export default function Home() {
                         <Link href="/admin/inventory" className="w-full block">
                             <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10 border-primary/30 text-primary">
                                 <PackageCheck className="mr-2 h-4 w-4" />
-                                Admin Inventory
+                                Admin Marketing Samples
                             </Button>
                         </Link>
                     </div>
