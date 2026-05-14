@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor } from "@/lib/types";
@@ -32,14 +31,15 @@ const DetailField = ({ label, value }: { label: string, value?: string | number 
     )
 }
 
-const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, onPreview }: { 
+const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, onPreview, isAdminView }: { 
     entry: CoverageEntry, 
     doctors: Doctor[], 
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
     onShowHistory: (firstName: string, lastName: string) => void,
-    onPreview: (src: string, title: string) => void
+    onPreview: (src: string, title: string) => void,
+    isAdminView?: boolean
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     
@@ -79,12 +79,14 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                         <span className="text-[10px] text-muted-foreground font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "yyyy") : ''}</span>
                     </div>
                 </TableCell>
-                <TableCell className="whitespace-nowrap hidden sm:table-cell">
-                    <div className="flex flex-col">
-                        <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
-                        <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
-                    </div>
-                </TableCell>
+                {!isAdminView && (
+                    <TableCell className="whitespace-nowrap hidden sm:table-cell">
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
+                            <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
+                        </div>
+                    </TableCell>
+                )}
                 <TableCell className="hidden sm:table-cell text-center">
                     {doctor?.frequency && <Badge variant="outline" className="font-black border-2 h-7 w-10 flex items-center justify-center rounded-full text-xs">{doctor.frequency}</Badge>}
                 </TableCell>
@@ -425,7 +427,7 @@ export function SubmittedList({
     }, [filteredByMonth]);
 
     const entryDates = useMemo(() => {
-        return Object.keys(entriesCountByDate).map(d => parseISO(d));
+        return Object.keys(countsByDate).map(d => parseISO(d));
     }, [entriesCountByDate]);
 
     const holidayDates = useMemo(() => {
@@ -554,7 +556,7 @@ export function SubmittedList({
                                 <TableHead className="font-bold text-foreground">Provider</TableHead>
                                 <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
                                 <TableHead className="font-bold text-foreground">Date</TableHead>
-                                <TableHead className="hidden sm:table-cell font-bold text-foreground">Submitted</TableHead>
+                                {!isAdminView && <TableHead className="hidden sm:table-cell font-bold text-foreground">Submitted</TableHead>}
                                 <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
                                 <TableHead className="font-bold text-foreground">Proof</TableHead>
                                 <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
@@ -562,7 +564,7 @@ export function SubmittedList({
                         </TableHeader>
                         <TableBody>
                             {paginatedEntries.length > 0 ? (
-                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
+                                paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
                                 <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
@@ -641,7 +643,7 @@ export function SubmittedList({
                                 </TableHeader>
                                 <TableBody>
                                 {filtered.length > 0 ? (
-                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} />)
+                                    filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                                 ) : (
                                     <TableRow><TableCell colSpan={2} className="h-56 text-center text-muted-foreground italic">No activity recorded for this date.</TableCell></TableRow>
                                 )}
