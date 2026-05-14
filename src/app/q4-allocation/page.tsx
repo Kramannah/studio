@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 export default function Q4AllocationPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
-    const { marketingSamples, usedQuantities, loading: dataLoading, refetch } = useMarketingSamples();
+    const { marketingSamples, loading: dataLoading, refetch } = useMarketingSamples();
     const [search, setSearch] = useState('');
     const [mounted, setMounted] = useState(false);
 
@@ -53,7 +53,7 @@ export default function Q4AllocationPage() {
                         <Button variant="ghost" size="icon" onClick={() => router.back()}><ChevronLeft className="w-6 h-6" /></Button>
                         <div>
                             <h1 className="text-2xl font-black font-headline text-primary tracking-tight">Marketing Samples</h1>
-                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Inventory Analytics</p>
+                            <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest">Master List</p>
                         </div>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => refetch()} disabled={dataLoading}>
@@ -67,7 +67,7 @@ export default function Q4AllocationPage() {
                 <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                     <CardHeader className="bg-muted/30 border-b">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <CardTitle className="text-xl font-black font-headline">Distribution List</CardTitle>
+                            <CardTitle className="text-xl font-black font-headline">Materials List</CardTitle>
                             <div className="relative max-md:w-full max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input 
@@ -85,21 +85,15 @@ export default function Q4AllocationPage() {
                                 <TableHeader className="bg-muted/20">
                                     <TableRow className="h-12">
                                         <TableHead className="font-bold text-foreground pl-6">Material Name</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground w-32">Alloc</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground w-32">Issued</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground w-32 pr-6">Balance</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {dataLoading ? (
-                                        <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                        <TableRow><TableCell className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                     ) : filteredSamples.length > 0 ? (
                                         filteredSamples.map((sample) => {
                                             const name = String(sample.materialName ?? sample.displayMaterialName ?? "Unknown Item");
                                             const group = String(sample.productGroup ?? sample.prodGroupProdSubGroup ?? "Uncategorized");
-                                            const nameKey = String(name ?? "").toLowerCase().trim();
-                                            const distributed = Number(usedQuantities[nameKey] || 0);
-                                            const balance = Math.max(0, Number(sample.allocationQuantity || 0) - distributed);
                                             return (
                                                 <TableRow key={sample.id} className="h-16 hover:bg-muted/30 border-b">
                                                     <TableCell className="pl-6">
@@ -108,18 +102,11 @@ export default function Q4AllocationPage() {
                                                             <span className="text-[10px] font-black uppercase text-primary opacity-70">{group}</span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-center font-mono">{Number(sample.allocationQuantity || 0)}</TableCell>
-                                                    <TableCell className="text-center font-mono text-orange-500">{distributed}</TableCell>
-                                                    <TableCell className="text-center pr-6">
-                                                        <Badge variant={balance <= 0 ? "destructive" : "outline"} className="font-black font-mono text-base px-3 h-8 min-w-[60px] flex items-center justify-center">
-                                                            {balance}
-                                                        </Badge>
-                                                    </TableCell>
                                                 </TableRow>
                                             );
                                         })
                                     ) : (
-                                        <TableRow><TableCell colSpan={4} className="h-64 text-center text-muted-foreground italic">No matching materials found.</TableCell></TableRow>
+                                        <TableRow><TableCell className="h-64 text-center text-muted-foreground italic">No matching materials found.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>

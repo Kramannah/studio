@@ -1,25 +1,22 @@
-
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Q4Allocation, CoverageEntry } from '@/lib/types';
+import { useState, useEffect, useCallback } from 'react';
+import type { Q4Allocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, writeBatch, doc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
-import { getStartOfYearISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 // GLOBAL SESSION CACHE
 let globalAllocationsCache: Q4Allocation[] | null = null;
-let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 
 export const useQ4Allocation = (active: boolean = true) => {
   const { user } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedQuantitiesCache || {});
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(!globalAllocationsCache && active);
 
   const performFetch = useCallback(async (forceRefresh = false) => {
@@ -29,9 +26,8 @@ export const useQ4Allocation = (active: boolean = true) => {
     }
 
     const now = Date.now();
-    if (!forceRefresh && globalAllocationsCache && globalUsedQuantitiesCache && (now - lastFetchTime < CACHE_DURATION)) {
+    if (!forceRefresh && globalAllocationsCache && (now - lastFetchTime < CACHE_DURATION)) {
         setAllocations(globalAllocationsCache);
-        setUsedQuantities(globalUsedQuantitiesCache);
         setLoading(false);
         return;
     }
@@ -62,44 +58,11 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        const currentYearStart = getStartOfYearISO();
-        const used: Record<string, number> = {};
-
-        // Fetch only the current user's entries to satisfy security rules and prevent crashes
-        const q = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
-        const entriesSnap = await getDocs(q)
-            .catch(async (e) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: 'coverageEntries',
-                    operation: 'list'
-                }));
-                throw e;
-            });
-
-        entriesSnap.docs.forEach(d => {
-            const data = d.data() as CoverageEntry;
-            const entryDate = data.submittedAt || data.coverageDate || "";
-            
-            // Only aggregate data from the current year
-            if (entryDate >= currentYearStart) {
-                const process = (name?: string, qty?: number) => {
-                    const key = String(name ?? "").toLowerCase().trim();
-                    if (key) {
-                        const val = Math.round(Number(qty || 0));
-                        if (!isNaN(val)) used[key] = (used[key] || 0) + val;
-                    }
-                };
-                process(data.primarySampleName, data.primaryProductQty);
-                process(data.secondarySampleName, data.secondaryProductQty);
-            }
-        });
-
         globalAllocationsCache = fetchedAllocations;
-        globalUsedQuantitiesCache = used;
         lastFetchTime = Date.now();
 
         setAllocations(fetchedAllocations);
-        setUsedQuantities(used);
+        setUsedQuantities({}); // Disabled historical aggregation to prevent quota/permission issues
     } catch (error) {
         console.warn("Inventory fetch limited:", error);
     } finally {
