@@ -79,7 +79,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                         <span className="text-[10px] text-muted-foreground font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "yyyy") : ''}</span>
                     </div>
                 </TableCell>
-                <TableCell className="whitespace-nowrap hidden lg:table-cell">
+                <TableCell className="whitespace-nowrap hidden sm:table-cell">
                     <div className="flex flex-col">
                         <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
                         <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
@@ -554,7 +554,7 @@ export function SubmittedList({
                                 <TableHead className="font-bold text-foreground">Provider</TableHead>
                                 <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
                                 <TableHead className="font-bold text-foreground">Date</TableHead>
-                                <TableHead className="hidden lg:table-cell font-bold text-foreground">Submitted</TableHead>
+                                <TableHead className="hidden sm:table-cell font-bold text-foreground">Submitted</TableHead>
                                 <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
                                 <TableHead className="font-bold text-foreground">Proof</TableHead>
                                 <TableHead className="text-right font-bold text-foreground">Actions</TableHead>

@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import * as XLSX from 'xlsx';
-import { USER_DATA_MAP } from "@/lib/user-data";
+import { USER_DATA_MAP } from "@/lib/data/user-data";
 
 type AdminReportListProps = {
   entries: CoverageEntry[];
@@ -105,7 +105,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
                         <TableHead>Doctor</TableHead>
                         <TableHead>Clinic</TableHead>
                         <TableHead>Type</TableHead>
-                        <TableHead>Submitted On</TableHead>
+                        <TableHead>Submitted At</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -119,7 +119,7 @@ export function AdminReportList({ entries, onDelete }: AdminReportListProps) {
                                 <TableCell className="font-medium">{entry.firstName} {entry.lastName}</TableCell>
                                 <TableCell>{entry.clinic}</TableCell>
                                 <TableCell className="capitalize">{entry.coverageType}</TableCell>
-                                <TableCell>{typeof entry.submittedAt === 'string' ? format(parseISO(entry.submittedAt), "PPP") : 'Invalid Date'}</TableCell>
+                                <TableCell>{typeof entry.submittedAt === 'string' ? format(parseISO(entry.submittedAt), "Pp") : 'Invalid Date'}</TableCell>
                                 <TableCell className="text-right">
                                   <AlertDialog>
                                     <DropdownMenu>
