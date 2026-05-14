@@ -412,14 +412,9 @@ export function PlanningCalendar({
                                             <StatusIcon status="holiday" />
                                         </div>
                                         <div>
-                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none mb-1">
+                                            <p className="font-black font-headline text-lg text-orange-600 dark:text-orange-400 leading-none">
                                                 {selectedHoliday}
                                             </p>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <Badge variant="secondary" className="h-6 px-2 text-[10px] font-black uppercase tracking-tighter bg-orange-500/10 text-orange-600 border-none">
-                                                    Whole Day
-                                                </Badge>
-                                            </div>
                                         </div>
                                     </div>
                                     <Badge variant="outline" className="h-8 px-4 capitalize font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
