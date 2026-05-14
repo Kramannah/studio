@@ -1,4 +1,3 @@
-
 export const USER_DATA_MAP: Record<string, { code: string; firstName: string; lastName: string; email: string }> = {
     "JvBQZydSDxNkZRP2vNofGXMGbGk1": {
         code: "NL-04",
@@ -269,5 +268,17 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Marynald Sweetsyl",
         lastName: "General",
         email: "msgeneral@hovidinc.com"
+    },
+    "fwBf7XGUb6MSJygdL5NitBcbHRA3": {
+        code: "MQ-06",
+        firstName: "Isabel",
+        lastName: "De Castro",
+        email: "idecastro@hovidinc.com"
+    },
+    "WkLHNPDvLmfJBvQSDSn5ImY3nkg1": {
+        code: "MIN-02",
+        firstName: "Jamaica",
+        lastName: "Espare",
+        email: "jespare@hovidinc.com"
     }
 };

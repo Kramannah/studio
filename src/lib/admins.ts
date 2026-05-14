@@ -1,4 +1,3 @@
-
 // This is a temporary list of admin UIDs.
 export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
@@ -24,6 +23,8 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
     "UmyUP0VwccRKLfrej67idFukFz42": [
         "l5GMEE0OxpMOObd5qguyJtrVUi42",
         "IedPtMmuniSwpkYZ5YAXOSREoxl2",
+        "fwBf7XGUb6MSJygdL5NitBcbHRA3",
+        "WkLHNPDvLmfJBvQSDSn5ImY3nkg1"
     ],
     "tb73WEIzndUrPEaD1q4H0VQfQaD3": [
         "8QiLTKzhovh43RX2arJ4xNAgoRj2",
