@@ -7,7 +7,7 @@ import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { useQ4Allocation } from '@/hooks/use-q4-allocation';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, PackageCheck } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, isValid } from "date-fns";
@@ -266,12 +266,20 @@ export default function Home() {
                     <p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p>
                  </div>
                  {hasAdminAccess && (
-                    <Link href="/admin" className="w-full mb-2 block">
-                        <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
-                            <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
-                            {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
-                        </Button>
-                    </Link>
+                    <div className="space-y-2 mb-2">
+                        <Link href="/admin" className="w-full block">
+                            <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
+                                <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
+                                {isUserAdmin ? 'Admin Dashboard' : 'Manager Dashboard'}
+                            </Button>
+                        </Link>
+                        <Link href="/admin/inventory" className="w-full block">
+                            <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10 border-primary/30 text-primary">
+                                <PackageCheck className="mr-2 h-4 w-4" />
+                                Admin Inventory
+                            </Button>
+                        </Link>
+                    </div>
                  )}
                  <Button 
                     variant="destructive" 

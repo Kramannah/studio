@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, ArrowRight } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -29,6 +29,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -39,7 +40,6 @@ const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
 
 const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton message="Loading Representative Dashboard..." /> });
 const TeamSummary = dynamic(() => import('@/components/team-summary').then(mod => mod.TeamSummary), { loading: () => <DynamicSkeleton message="Aggregating Team Analytics..." /> });
-const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton message="Fetching Inventory Records..." /> });
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -101,7 +101,6 @@ export default function AdminPage() {
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
-    // LAZY DATA FETCHING: Only trigger fetches when the specific tab or selection is active
     useEffect(() => {
         if (!mounted || !hasAdminAccess) return;
         
@@ -283,6 +282,12 @@ export default function AdminPage() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
+                    <Link href="/admin/inventory">
+                        <Button variant="outline" className="border-primary/20 text-primary font-headline hidden sm:flex items-center gap-2 h-10">
+                            <PackageCheck className="w-4 h-4" />
+                            Material Inventory
+                        </Button>
+                    </Link>
                     <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">ADMIN SESSION</span>
                         <div className="flex items-center gap-1.5">
@@ -296,12 +301,20 @@ export default function AdminPage() {
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit mb-8 overflow-x-auto overflow-y-hidden">
-                        <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
-                        <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
-                        <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
-                        <TabsTrigger value="marketing-samples" className="px-6 rounded-lg font-headline">Marketing Samples</TabsTrigger>
-                    </TabsList>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                        <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
+                            <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
+                            <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>
+                            <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
+                        </TabsList>
+                        
+                        <Link href="/admin/inventory" className="md:hidden w-full">
+                            <Button className="w-full h-11 font-headline flex items-center justify-between">
+                                <span className="flex items-center gap-2"><PackageCheck size={18}/> Marketing Samples</span>
+                                <ArrowRight size={16}/>
+                            </Button>
+                        </Link>
+                    </div>
 
                     <TabsContent value="district-reports">
                          <Card className="mb-8 border-2 shadow-sm">
@@ -483,10 +496,6 @@ export default function AdminPage() {
                                 </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>
-
-                    <TabsContent value="marketing-samples">
-                        {activeTab === 'marketing-samples' && <Q4AllocationView readOnly={false} />}
                     </TabsContent>
                 </Tabs>
             </main>
