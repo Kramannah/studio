@@ -12,20 +12,15 @@ import {
     Download, 
     Search, 
     Loader2, 
-    AlertCircle, 
-    PackageCheck,
     RefreshCw,
-    TrendingUp,
     Trash2,
     ChevronLeft,
-    ChevronRight,
-    History
+    ChevronRight
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import type { Q4Allocation } from "@/lib/types";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -83,25 +78,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         setCurrentPage(1);
         setSelectedIds([]);
     }, [search]);
-
-    const stats = useMemo(() => {
-        if (!mounted || !allocations) return { totalAllocated: 0, totalUsed: 0, remaining: 0, percent: 0 };
-
-        let totalAllocated = 0;
-        let totalUsedCount = 0;
-        
-        allocations.forEach(s => {
-            const nameKey = (s.displayMaterialName ?? s.materialName ?? "").toString().toLowerCase().trim();
-            const used = Number(usedQuantities?.[nameKey] || 0);
-            totalAllocated += Number(s.allocationQuantity || 0);
-            totalUsedCount += used;
-        });
-
-        const remaining = Math.max(0, totalAllocated - totalUsedCount);
-        const percent = totalAllocated > 0 ? Math.round((totalUsedCount / totalAllocated) * 100) : 0;
-
-        return { totalAllocated, totalUsed: totalUsedCount, remaining, percent };
-    }, [allocations, usedQuantities, mounted]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -170,30 +146,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-2 shadow-sm bg-primary/5 p-4 flex items-center justify-between">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-black text-primary uppercase tracking-widest">Total Allocated</span>
-                        <span className="text-3xl font-black font-mono leading-none tabular-nums">{stats.totalAllocated}</span>
-                    </div>
-                    <PackageCheck className="w-10 h-10 text-primary opacity-30" />
-                </Card>
-                <Card className="border-2 shadow-sm bg-orange-500/5 p-4 flex items-center justify-between">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-black text-orange-500 uppercase tracking-widest">Units Issued</span>
-                        <span className="text-3xl font-black font-mono leading-none text-orange-500 tabular-nums">{stats.totalUsed}</span>
-                    </div>
-                    <TrendingUp className="w-10 h-10 text-orange-500 opacity-30" />
-                </Card>
-                <Card className="border-2 shadow-sm bg-green-500/5 p-4 flex items-center justify-between">
-                    <div className="flex flex-col">
-                        <span className="text-xs font-black text-green-500 uppercase tracking-widest">Current Balance</span>
-                        <span className="text-3xl font-black font-mono leading-none text-green-500 tabular-nums">{stats.remaining}</span>
-                    </div>
-                    <History className="w-10 h-10 text-green-500 opacity-30" />
-                </Card>
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
                     <Card className="border-2 shadow-lg overflow-hidden">
@@ -299,7 +251,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                             <div className="flex items-center gap-2">
                                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10 px-4"><ChevronLeft className="h-4 w-4 mr-1" /> Prev</Button>
-                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10 px-4">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10 px-4">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
                             </div>
                         </div>
                     )}

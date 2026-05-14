@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronLeft, Search, PackageCheck, TrendingUp, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, Search, RefreshCw } from 'lucide-react';
 import { useMarketingSamples } from '@/hooks/use-marketing-samples';
 import { cn } from '@/lib/utils';
 
@@ -39,18 +39,6 @@ export default function Q4AllocationPage() {
         });
     }, [marketingSamples, search, mounted]);
 
-    const stats = useMemo(() => {
-        let totalAllocated = 0, totalUsedCount = 0;
-        filteredSamples.forEach(s => {
-            const nameKey = String(s.materialName ?? s.displayMaterialName ?? "Unknown").toLowerCase().trim();
-            totalAllocated += Number(s.allocationQuantity || 0);
-            totalUsedCount += Number(usedQuantities[nameKey] || 0);
-        });
-        const remaining = Math.max(0, totalAllocated - totalUsedCount);
-        const percent = totalAllocated > 0 ? Math.round((totalUsedCount / totalAllocated) * 100) : 0;
-        return { totalAllocated, totalUsed: totalUsedCount, remaining, percent };
-    }, [filteredSamples, usedQuantities]);
-
     if (!mounted || authLoading) return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <RefreshCw className="animate-spin text-primary w-12 h-12" />
@@ -76,30 +64,6 @@ export default function Q4AllocationPage() {
             </header>
 
             <main className="flex-1 p-4 md:p-8 max-w-[1600px] mx-auto w-full space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="border-2 shadow-sm bg-primary/5 p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">Total Allocated</p>
-                            <p className="text-3xl font-black font-mono">{stats.totalAllocated}</p>
-                        </div>
-                        <PackageCheck className="w-8 h-8 text-primary opacity-20" />
-                    </Card>
-                    <Card className="border-2 shadow-sm bg-orange-500/5 p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Units Issued</p>
-                            <p className="text-3xl font-black font-mono text-orange-500">{stats.totalUsed} <span className="text-xs">({stats.percent}%)</span></p>
-                        </div>
-                        <TrendingUp className="w-8 h-8 text-orange-500 opacity-20" />
-                    </Card>
-                    <Card className="border-2 shadow-sm bg-green-500/5 p-4 flex items-center justify-between">
-                        <div>
-                            <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">Balance</p>
-                            <p className="text-3xl font-black font-mono text-green-500">{stats.remaining}</p>
-                        </div>
-                        <Filter className="w-8 h-8 text-green-500 opacity-20" />
-                    </Card>
-                </div>
-
                 <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                     <CardHeader className="bg-muted/30 border-b">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
