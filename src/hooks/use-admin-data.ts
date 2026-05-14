@@ -118,17 +118,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(1000));
-                
-                const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(baseQuery("coverageEntries")),
-                    getDocs(baseQuery("timeLogs")),
-                    getDocs(baseQuery("doctors")),
-                    getDocs(baseQuery("nonCallDays")),
-                    getDocs(baseQuery("plans"))
-                ]);
-
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
+
+                const [e, l, d, ncd, p] = await Promise.all([
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), where("coverageDate", ">=", currentYearStart), limit(1000))),
+                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), where("timeIn", ">=", currentYearStart), limit(1000))),
+                    getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(1000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), where("date", ">=", currentYearStart), limit(1000))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), where("plannedDate", ">=", currentYearStart), limit(1000)))
+                ]);
 
                 return { 
                     entries: mapDocs(e), 
@@ -184,19 +182,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const currentYearStart = getStartOfYearISO();
-        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
-            f("coverageEntries"), 
-            f("doctors"), 
-            f("plans"), 
-            f("timeLogs"), 
-            f("nonCallDays"), 
-            f("planningRequests")
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
         ]);
+
+        const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
+        const entries = mapDocs(e) as CoverageEntry[];
         const used: Record<string, number> = {};
-        (e as CoverageEntry[]).forEach((item) => {
+        entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
                 if (key) used[key] = (used[key] || 0) + (Number(q || 0));
@@ -208,12 +208,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         });
 
-        setAllEntries(e as any); 
-        setAllDoctors(d as any); 
-        setAllPlans(p as any);
-        setAllTimeLogs(l as any); 
-        setAllNonCallDaysIndividual(ncd as any);
-        setIndividualPlanningRequests(r as any); 
+        setAllEntries(entries); 
+        setAllDoctors(mapDocs(d) as any); 
+        setAllPlans(mapDocs(p) as any);
+        setAllTimeLogs(mapDocs(l) as any); 
+        setAllNonCallDaysIndividual(mapDocs(ncd) as any);
+        setIndividualPlanningRequests(mapDocs(r) as any); 
         setIndividualUsedQuantities(used);
     } catch (e) {
         console.error("Individual data fetch failed:", e);
