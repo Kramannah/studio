@@ -41,6 +41,11 @@ service cloud.firestore {
       );
     }
 
+    function isStaff() {
+      let profile = getUserData();
+      return isSignedIn() && profile != null && (profile.role == "Marketing" || profile.role == "HR");
+    }
+
     function isOwner(userId) {
       return isSignedIn() && userId == request.auth.uid;
     }
@@ -48,37 +53,37 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /doctors/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /plans/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /timeLogs/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /planningRequests/{id} {
-      allow read, list: if isAdmin() || isManager() || isOwner(resource.data.userId);
+      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || isOwner(resource.data.userId);
     }
