@@ -121,11 +121,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const mapDocs = (s: any) => s.docs.map((d: any) => ({id: d.id, ...d.data()}));
 
                 const [e, l, d, ncd, p] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), where("coverageDate", ">=", currentYearStart), limit(1000))),
-                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), where("timeIn", ">=", currentYearStart), limit(1000))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", c), limit(1000))),
+                    getDocs(query(collection(db!, "timeLogs"), where("userId", "in", c), limit(1000))),
                     getDocs(query(collection(db!, "doctors"), where("userId", "in", c), limit(1000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), where("date", ">=", currentYearStart), limit(1000))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), where("plannedDate", ">=", currentYearStart), limit(1000)))
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", c), limit(1000))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "in", c), limit(1000)))
                 ]);
 
                 return { 
@@ -181,14 +181,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     setLoadingIndividual(true);
     try {
-        const currentYearStart = getStartOfYearISO();
-        
         const [e, d, p, l, ncd, r] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", currentYearStart), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", currentYearStart), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", currentYearStart), limit(1000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
         ]);
 

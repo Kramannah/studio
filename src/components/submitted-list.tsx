@@ -420,7 +420,7 @@ export function SubmittedList({
                 const date = parseISO(dateStr);
                 if (date && isValid(date)) {
                     const key = format(date, 'yyyy-MM-dd');
-                    counts[key] = (counts[key] || 0) + 1;
+                    counts[key] = (counts[key] || 0) + (1);
                 }
             }
         });
