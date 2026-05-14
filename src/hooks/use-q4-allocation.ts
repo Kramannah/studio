@@ -7,20 +7,16 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { getStartOfYearISO } from '@/lib/utils';
-import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-// GLOBAL SESSION CACHE: Prevents redundant heavy scans during navigation
+// GLOBAL SESSION CACHE
 let globalAllocationsCache: Q4Allocation[] | null = null;
 let globalUsedQuantitiesCache: Record<string, number> | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 
-/**
- * Hook for managing inventory and marketing samples.
- * Aggregates usage from 'coverageEntries' (primaryProductQty and secondaryProductQty) for the current year.
- */
 export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
@@ -32,9 +28,15 @@ export const useQ4Allocation = (active: boolean = true) => {
     const email = (user.email ?? "").toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
            email === 'mbustamante@hovidinc.com' || 
+           email === 'admin@hovidinc.com' ||
            ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
            profile?.role === 'Admin';
   }, [user, profile]);
+
+  const isUserManager = useMemo(() => {
+    if (!user) return false;
+    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
+  }, [user, profile, isUserAdmin]);
 
   const performFetch = useCallback(async (forceRefresh = false) => {
     if (!db || !user || (!active && !forceRefresh)) {
@@ -52,7 +54,6 @@ export const useQ4Allocation = (active: boolean = true) => {
 
     setLoading(true);
     try {
-        // 1. Fetch the master marketing materials list
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -77,7 +78,6 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        // 2. Fetch and aggregate usage (Current Year Only)
         const currentYearStart = getStartOfYearISO();
         const used: Record<string, number> = {};
 
@@ -93,8 +93,8 @@ export const useQ4Allocation = (active: boolean = true) => {
             proc(entry.secondarySampleName, entry.secondaryProductQty);
         };
 
-        if (isUserAdmin) {
-            // Admin sees global usage for the year
+        if (isUserManager) {
+            // Admins and Managers see global usage for the year
             const q = query(collection(db!, "coverageEntries"), where("submittedAt", ">=", currentYearStart));
             const entriesSnap = await getDocs(q)
                 .catch(async (e) => {
@@ -106,7 +106,7 @@ export const useQ4Allocation = (active: boolean = true) => {
                 });
             entriesSnap.docs.forEach(d => processEntry(d.data() as CoverageEntry));
         } else {
-            // PMR sees only their usage (filter by userId to avoid index requirements)
+            // standard PMR sees only their usage
             const q = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid));
             const entriesSnap = await getDocs(q)
                 .catch(async (e) => {
@@ -118,7 +118,6 @@ export const useQ4Allocation = (active: boolean = true) => {
                 });
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
-                // Memory filter for current year to avoid composite index requirements
                 const entryDate = data.submittedAt || data.coverageDate || "";
                 if (entryDate >= currentYearStart) {
                     processEntry(data);
@@ -126,7 +125,6 @@ export const useQ4Allocation = (active: boolean = true) => {
             });
         }
 
-        // Update Persistence Cache
         globalAllocationsCache = fetchedAllocations;
         globalUsedQuantitiesCache = used;
         lastFetchTime = Date.now();
@@ -134,11 +132,11 @@ export const useQ4Allocation = (active: boolean = true) => {
         setAllocations(fetchedAllocations);
         setUsedQuantities(used);
     } catch (error) {
-        console.warn("Marketing samples audit limited for quota:", error);
+        console.warn("Inventory fetch limited:", error);
     } finally {
         setLoading(false);
     }
-  }, [user, active, isUserAdmin]);
+  }, [user, active, isUserManager]);
 
   useEffect(() => {
     if (active) {

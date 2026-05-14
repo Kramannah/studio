@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { MANAGER_TEAMS } from "@/lib/admins";
+import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getStartOfYearISO } from "@/lib/utils";
@@ -19,7 +19,6 @@ export interface TeamSummaryData {
     usedQuantities: Record<string, number>;
 }
 
-// GLOBAL CACHE: Persists across navigation to save Quota
 const adminDataCache: {
     summary: Record<string, { data: TeamSummaryData, timestamp: number }>,
     individual: Record<string, { data: any, timestamp: number }>,
@@ -30,7 +29,7 @@ const adminDataCache: {
     approvals: {}
 };
 
-const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
+const CACHE_TTL = 15 * 60 * 1000;
 const FETCH_LOCKS: Record<string, boolean> = {};
 
 const safeToDateISO = (val: any): string => {
@@ -42,7 +41,7 @@ const safeToDateISO = (val: any): string => {
 };
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   
   const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
@@ -62,6 +61,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
+  const isUserAdmin = useMemo(() => {
+    if (!user) return false;
+    const email = (user.email ?? "").toLowerCase();
+    return ADMIN_UIDS.includes(user.uid) || 
+           email === 'mbustamante@hovidinc.com' || 
+           email === 'admin@hovidinc.com' ||
+           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
+           profile?.role === 'Admin';
+  }, [user, profile]);
+
+  const isUserManager = useMemo(() => {
+    if (!user) return false;
+    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
+  }, [user, profile, isUserAdmin]);
+
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
     const hardcoded = MANAGER_TEAMS[mgrId] || [];
@@ -72,7 +86,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || FETCH_LOCKS['approvals']) return;
+    if (!user || !db || !active || !isUserManager || FETCH_LOCKS['approvals']) return;
     
     const cacheKey = managerId || 'global';
     if (adminDataCache.approvals[cacheKey] && (Date.now() - adminDataCache.approvals[cacheKey].timestamp < CACHE_TTL)) {
@@ -88,7 +102,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         let userFilter: string[] | null = null;
         if (managerId) {
             userFilter = getManagedUserIds(managerId);
-            if (userFilter.length === 0) return;
+            if (userFilter.length === 0) {
+                setLoadingApprovals(false);
+                FETCH_LOCKS['approvals'] = false;
+                return;
+            }
         }
 
         const fetchCol = async (name: string, filter: string[] | null) => {
@@ -110,15 +128,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllPlanningRequests(sortedPr);
         adminDataCache.approvals[cacheKey] = { data: { ncd: sortedNcd, pr: sortedPr }, timestamp: Date.now() };
     } catch (e) {
-        console.warn("Approvals load limited to save quota");
+        console.warn("Approvals load limited:", e);
     } finally {
         setLoadingApprovals(false);
         FETCH_LOCKS['approvals'] = false;
     }
-  }, [user, managerId, getManagedUserIds, active]);
+  }, [user, managerId, getManagedUserIds, active, isUserManager]);
 
   const fetchTeamSummary = useCallback(async (forceRefresh = false) => {
-    if (!managerId || !db || !active || FETCH_LOCKS[`summary_${managerId}`]) return;
+    if (!managerId || !db || !active || !isUserManager || FETCH_LOCKS[`summary_${managerId}`]) return;
 
     if (!forceRefresh && adminDataCache.summary[managerId] && (Date.now() - adminDataCache.summary[managerId].timestamp < CACHE_TTL)) {
         setTeamSummaryData(adminDataCache.summary[managerId].data);
@@ -131,6 +149,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const userFilter = getManagedUserIds(managerId);
         if (userFilter.length === 0) {
             setTeamSummaryData(null);
+            setLoadingSummary(false);
+            FETCH_LOCKS[`summary_${managerId}`] = false;
             return;
         }
 
@@ -141,7 +161,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                // Tiered approach: Summaries only read 500 docs per group to save quota
                 const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(500));
                 
                 const [e, l, d, ncd, p] = await Promise.all([
@@ -202,16 +221,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setTeamSummaryData(finalData);
     } catch (e: any) {
         if (e.code === 'resource-exhausted') {
-            toast({ variant: "destructive", title: "Quota Limit Reached", description: "The system is paused to prevent overuse. Please try again later." });
+            toast({ variant: "destructive", title: "Quota Limit Reached", description: "Database access paused. Please try again later." });
         }
     } finally {
         setLoadingSummary(false);
         FETCH_LOCKS[`summary_${managerId}`] = false;
     }
-  }, [managerId, getManagedUserIds, active, toast]);
+  }, [managerId, getManagedUserIds, active, isUserManager, toast]);
 
   const fetchUserData = useCallback(async (uid: string) => {
-    if (!uid || !db || !active || FETCH_LOCKS[`individual_${uid}`]) return;
+    if (!uid || !db || !active || !isUserManager || FETCH_LOCKS[`individual_${uid}`]) return;
     
     if (adminDataCache.individual[uid] && (Date.now() - adminDataCache.individual[uid].timestamp < CACHE_TTL)) {
         const cached = adminDataCache.individual[uid].data;
@@ -229,9 +248,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const currentYearStart = getStartOfYearISO();
-        
-        // Tiered Detail: Fetching 2,000 ensures completeness for 2026 individually
-        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2000)))).docs.map(d => ({id: d.id, ...d.data()}));
+        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2500)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
             f("coverageEntries"), 
@@ -276,12 +293,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         adminDataCache.individual[uid] = { data: packet, timestamp: Date.now() };
     } catch (e) {
-        console.warn("Individual fetch limited");
+        console.warn("Individual data fetch failed:", e);
     } finally {
         setLoadingIndividual(false);
         FETCH_LOCKS[`individual_${uid}`] = false;
     }
-  }, [active]);
+  }, [active, isUserManager]);
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
@@ -289,13 +306,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     teamSummaryData, loadingSummary, loadingIndividual, loadingApprovals,
     fetchUserData, fetchTeamSummary, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
-        const ref = doc(db!, 'nonCallDays', id);
+        const ref = firestoreDoc(db!, 'nonCallDays', id);
         await updateDoc(ref, { status });
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
         toast({ title: `Request ${status}` });
     },
     updatePlanningRequestStatus: async (id: string, status: 'approved' | 'rejected') => {
-        const ref = doc(db!, 'planningRequests', id);
+        const ref = firestoreDoc(db!, 'planningRequests', id);
         await updateDoc(ref, { status });
         setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
         toast({ title: `Request ${status}` });

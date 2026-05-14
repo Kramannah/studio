@@ -10,17 +10,19 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
+      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      return exists(path) ? get(path).data : null;
     }
 
     function isAdmin() {
       let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
       let email = request.auth.token.get('email', '').lower();
+      let profile = getUserData();
       return isSignedIn() && (
         request.auth.uid in adminUids ||
-        email == "mbustamante@hovidinc.com" ||
-        email == "admin@hovidinc.com" ||
-        getUserData().role == "Admin"
+        email in adminEmails ||
+        (profile != null && profile.role == "Admin")
       );
     }
 
@@ -31,9 +33,10 @@ service cloud.firestore {
         "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2",
         "r19lVIqk4xTtzxvbs4W0kprHSvD2"
       ];
+      let profile = getUserData();
       return isSignedIn() && (
         request.auth.uid in managerUids || 
-        getUserData().role == "Manager" ||
+        (profile != null && profile.role == "Manager") ||
         isAdmin()
       );
     }
@@ -82,7 +85,7 @@ service cloud.firestore {
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isManager();
     }
     
     match /userProfiles/{id} {
