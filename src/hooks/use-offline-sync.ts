@@ -6,15 +6,10 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
-import { getStartOfYearISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
-
-// SESSION CACHE: Shared across Sidebar, Dashboard, and Reporting to save reads
-let userEntriesCache: Record<string, { data: CoverageEntry[], timestamp: number }> = {};
-const CACHE_TIME = 10 * 60 * 1000; // 10 Minutes
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -42,41 +37,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     };
   }, []);
 
-  const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !isOnline || !db || (!active && !force)) {
+  const fetchMasterEntries = useCallback(async () => {
+    if (!userId || !isOnline || !db || !active) {
       setLoading(false);
       return;
     }
 
-    if (!force && userEntriesCache[userId] && (Date.now() - userEntriesCache[userId].timestamp < CACHE_TIME)) {
-        setMasterEntries(userEntriesCache[userId].data);
-        setLoading(false);
-        return;
-    }
-
     setLoading(true);
     try {
-      const currentYearStart = getStartOfYearISO();
-      // Increased limit to 5000 for standard user history accuracy
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(5000)
+        limit(10000)
       );
       
       const querySnapshot = await getDocs(q);
       const allEntries: CoverageEntry[] = [];
       
       querySnapshot.forEach(doc => {
-        const data = doc.data() as CoverageEntry;
-        if ((data.submittedAt || data.coverageDate || "") >= currentYearStart) {
-            allEntries.push({ id: doc.id, ...data });
-        }
+        allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
-      
-      userEntriesCache[userId] = { data: allEntries, timestamp: Date.now() };
       setMasterEntries(allEntries);
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
@@ -164,14 +146,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     for (const entry of entriesToSync) {
         const { id, isOffline, ...dataToSync } = entry;
         const docRef = doc(collection(db!, "coverageEntries")); 
-        // Explicitly set userId during sync to ensure correct district attribution
         batch.set(docRef, { ...dataToSync, userId: userId, submittedAt: new Date().toISOString() });
     }
 
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        await fetchMasterEntries(true);
+        await fetchMasterEntries();
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {

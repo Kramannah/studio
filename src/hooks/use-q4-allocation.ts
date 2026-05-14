@@ -9,23 +9,12 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { getStartOfYearISO } from '@/lib/utils';
 
-// GLOBAL SESSION CACHE: Module-level variables persist across hook instance changes
-let globalAllocationsCache: Q4Allocation[] | null = null;
-let globalUsedCache: { data: Record<string, number>, timestamp: number } | null = null;
-let lastFetchTime: number = 0;
-const CACHE_DURATION = 10 * 60 * 1000; // 10 Minutes
-
-/**
- * Hook for managing Marketing Samples (Allocation and Usage).
- * Implements session-level caching to resolve Quota Exceeded errors.
- */
 export const useQ4Allocation = (active: boolean = true) => {
   const { user, profile } = useAuth();
-  const [allocations, setAllocations] = useState<Q4Allocation[]>(globalAllocationsCache || []);
-  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>(globalUsedCache?.data || {});
-  const [loading, setLoading] = useState(!globalAllocationsCache && active);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
+  const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(active);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -40,26 +29,15 @@ export const useQ4Allocation = (active: boolean = true) => {
     return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager' || isUserAdmin;
   }, [user, profile, isUserAdmin]);
 
-  const performFetch = useCallback(async (forceRefresh = false) => {
-    if (!db || !user || (!active && !forceRefresh)) {
-        setLoading(false);
-        return;
-    }
-
-    const now = Date.now();
-    const useCache = !forceRefresh && globalAllocationsCache && (now - lastFetchTime < CACHE_DURATION);
-    
-    if (useCache) {
-        setAllocations(globalAllocationsCache!);
-        if (globalUsedCache) setUsedQuantities(globalUsedCache.data);
+  const performFetch = useCallback(async () => {
+    if (!db || !user || !active) {
         setLoading(false);
         return;
     }
 
     setLoading(true);
     try {
-        // 1. Fetch Master List (Marketing Samples)
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(2000)))
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(5000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'marketingSamples',
@@ -83,24 +61,13 @@ export const useQ4Allocation = (active: boolean = true) => {
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        // 2. Aggregate Usage from Coverage Entries
-        const currentYearStart = getStartOfYearISO();
         let entriesSnap;
-
         const canDoGlobalFetch = isUserAdmin || isUserManager;
 
-        try {
-            // Apply date filter at the database level to solve Quota/Timeout errors
-            const baseQuery = collection(db!, "coverageEntries");
-            const entriesQuery = canDoGlobalFetch
-                ? query(baseQuery, where("coverageDate", ">=", currentYearStart), limit(8000))
-                : query(baseQuery, where("userId", "==", user.uid), where("coverageDate", ">=", currentYearStart), limit(3000));
-            
-            entriesSnap = await getDocs(entriesQuery);
-        } catch (e: any) {
-            console.warn("Inventory audit restricted. Falling back to personal UID query.", e);
-            const personalQuery = query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), where("coverageDate", ">=", currentYearStart), limit(3000));
-            entriesSnap = await getDocs(personalQuery);
+        if (canDoGlobalFetch) {
+            entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(20000)));
+        } else {
+            entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
         }
 
         const used: Record<string, number> = {};
@@ -128,11 +95,6 @@ export const useQ4Allocation = (active: boolean = true) => {
             }
         });
 
-        // Update Global Cache
-        globalAllocationsCache = fetchedAllocations;
-        globalUsedCache = { data: used, timestamp: now };
-        lastFetchTime = now;
-
         setAllocations(fetchedAllocations);
         setUsedQuantities(used);
     } catch (error) {
@@ -157,7 +119,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     });
     try {
         await batch.commit();
-        await performFetch(true);
+        await performFetch();
         return true;
     } catch (serverError: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -174,7 +136,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     ids.forEach(id => batch.delete(doc(db!, "marketingSamples", id)));
     try {
         await batch.commit();
-        await performFetch(true);
+        await performFetch();
         return true;
     } catch (serverError: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -189,7 +151,7 @@ export const useQ4Allocation = (active: boolean = true) => {
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: () => performFetch(true),
+    refetch: performFetch,
     addAllocationsBulk,
     deleteAllocationsBulk
   };
