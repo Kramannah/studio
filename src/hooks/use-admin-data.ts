@@ -29,7 +29,7 @@ const adminDataCache: {
     approvals: {}
 };
 
-const CACHE_TTL = 15 * 60 * 1000;
+const CACHE_TTL = 2 * 60 * 1000; // Reduced to 2 minutes for better responsiveness
 const FETCH_LOCKS: Record<string, boolean> = {};
 
 const safeToDateISO = (val: any): string => {
@@ -85,17 +85,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     return Array.from(new Set([...hardcoded, ...dynamic]));
   }, [userProfiles]);
 
-  const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !isUserManager || FETCH_LOCKS['approvals']) return;
+  const fetchTeamApprovals = useCallback(async (forceRefresh = false) => {
+    if (!user || !db || !active || !isUserManager) return;
     
     const cacheKey = managerId || 'global';
-    if (adminDataCache.approvals[cacheKey] && (Date.now() - adminDataCache.approvals[cacheKey].timestamp < CACHE_TTL)) {
+    if (!forceRefresh && adminDataCache.approvals[cacheKey] && (Date.now() - adminDataCache.approvals[cacheKey].timestamp < CACHE_TTL)) {
         const cached = adminDataCache.approvals[cacheKey].data;
         setAllNonCallDays(cached.ncd);
         setAllPlanningRequests(cached.pr);
         return;
     }
 
+    if (FETCH_LOCKS['approvals']) return;
     FETCH_LOCKS['approvals'] = true;
     setLoadingApprovals(true);
     try {
@@ -115,7 +116,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(50)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(100)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -136,13 +137,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [user, managerId, getManagedUserIds, active, isUserManager]);
 
   const fetchTeamSummary = useCallback(async (forceRefresh = false) => {
-    if (!managerId || !db || !active || !isUserManager || FETCH_LOCKS[`summary_${managerId}`]) return;
+    if (!managerId || !db || !active || !isUserManager) return;
 
     if (!forceRefresh && adminDataCache.summary[managerId] && (Date.now() - adminDataCache.summary[managerId].timestamp < CACHE_TTL)) {
         setTeamSummaryData(adminDataCache.summary[managerId].data);
         return;
     }
 
+    if (FETCH_LOCKS[`summary_${managerId}`]) return;
     FETCH_LOCKS[`summary_${managerId}`] = true;
     setLoadingSummary(true);
     try {
@@ -161,7 +163,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i+10));
             
             const results = await Promise.all(chunks.map(async (c) => {
-                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(1000));
+                const baseQuery = (n: string) => query(collection(db!, n), where("userId", "in", c), limit(2000));
                 
                 const [e, l, d, ncd, p] = await Promise.all([
                     getDocs(baseQuery("coverageEntries")),
@@ -174,7 +176,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const mapDocs = (s: any, dateField?: string) => s.docs.map((d: any) => ({id: d.id, ...d.data()}))
                     .filter((item: any) => {
                         if (!dateField) return true;
-                        const val = item[dateField];
+                        const val = safeToDateISO(item[dateField]);
                         return val && val >= currentYearStart;
                     });
 
@@ -232,10 +234,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [managerId, getManagedUserIds, active, isUserManager, toast]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
-    if (!uid || !db || !active || !isUserManager || FETCH_LOCKS[`individual_${uid}`]) return;
+  const fetchUserData = useCallback(async (uid: string, forceRefresh = false) => {
+    if (!uid || !db || !active || !isUserManager) return;
     
-    if (adminDataCache.individual[uid] && (Date.now() - adminDataCache.individual[uid].timestamp < CACHE_TTL)) {
+    if (!forceRefresh && adminDataCache.individual[uid] && (Date.now() - adminDataCache.individual[uid].timestamp < CACHE_TTL)) {
         const cached = adminDataCache.individual[uid].data;
         setAllEntries(cached.entries);
         setAllDoctors(cached.doctors);
@@ -247,11 +249,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         return;
     }
 
+    if (FETCH_LOCKS[`individual_${uid}`]) return;
     FETCH_LOCKS[`individual_${uid}`] = true;
     setLoadingIndividual(true);
     try {
         const currentYearStart = getStartOfYearISO();
-        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(2500)))).docs.map(d => ({id: d.id, ...d.data()}));
+        const f = async (n: string) => (await getDocs(query(collection(db!, n), where("userId", "==", uid), limit(5000)))).docs.map(d => ({id: d.id, ...d.data()}));
         
         const [e, d, p, l, ncd, r] = await Promise.all([
             f("coverageEntries"), 
@@ -262,7 +265,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             f("planningRequests")
         ]);
         
-        const filterYear = (list: any[], field: string) => list.filter(item => (item[field] || "") >= currentYearStart);
+        const filterYear = (list: any[], field: string) => list.filter(item => {
+            const dateVal = safeToDateISO(item[field]);
+            return dateVal && dateVal >= currentYearStart;
+        });
 
         const filteredEntries = filterYear(e, 'submittedAt');
         
@@ -306,11 +312,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [active, isUserManager]);
 
+  const refreshAll = useCallback(async () => {
+      if (managerId) await fetchTeamSummary(true);
+      const currentUid = allEntries[0]?.userId;
+      if (currentUid) await fetchUserData(currentUid, true);
+      await fetchTeamApprovals(true);
+      toast({ title: "Data Refreshed", description: "Oversight reports have been synchronized with the server." });
+  }, [managerId, allEntries, fetchTeamSummary, fetchUserData, fetchTeamApprovals, toast]);
+
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
     individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
     teamSummaryData, loadingSummary, loadingIndividual, loadingApprovals,
-    fetchUserData, fetchTeamSummary, fetchTeamApprovals,
+    fetchUserData, fetchTeamSummary, fetchTeamApprovals, refreshAll,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
         const ref = firestoreDoc(db!, 'nonCallDays', id);
         await updateDoc(ref, { status });

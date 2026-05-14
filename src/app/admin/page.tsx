@@ -55,6 +55,7 @@ export default function AdminPage() {
     const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
     const [isAddRecordOpen, setIsAddRecordOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     
     const [editingAccount, setEditingAccount] = useState<{ uid: string; firstName: string; lastName: string; managerId?: string; email: string; code?: string; role?: 'Admin' | 'Manager' | 'PMR' } | null>(null);
     const [newAccount, setNewAccount] = useState({ uid: '', firstName: '', lastName: '', code: '', email: '', password: '', managerId: '', role: 'PMR' as 'Admin' | 'Manager' | 'PMR' });
@@ -98,7 +99,8 @@ export default function AdminPage() {
         loadingApprovals,
         fetchUserData,
         fetchTeamSummary,
-        fetchTeamApprovals
+        fetchTeamApprovals,
+        refreshAll
     } = useAdminData(selectedManagerId, profiles, mounted);
 
     useEffect(() => {
@@ -263,6 +265,12 @@ export default function AdminPage() {
         await deleteProfile(uid);
     };
 
+    const handleManualRefresh = async () => {
+        setIsRefreshing(true);
+        await refreshAll();
+        setIsRefreshing(false);
+    };
+
     if (!mounted || authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background text-primary">
@@ -282,6 +290,16 @@ export default function AdminPage() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleManualRefresh} 
+                        disabled={isRefreshing}
+                        className="font-headline border-2 h-10 hidden sm:flex items-center gap-2"
+                    >
+                        <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+                        Refresh Data
+                    </Button>
                     <Link href="/admin/inventory">
                         <Button variant="outline" className="border-primary/20 text-primary font-headline hidden sm:flex items-center gap-2 h-10">
                             <PackageCheck className="w-4 h-4" />
@@ -308,12 +326,23 @@ export default function AdminPage() {
                             <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>
                         </TabsList>
                         
-                        <Link href="/admin/inventory" className="md:hidden w-full">
-                            <Button className="w-full h-11 font-headline flex items-center justify-between">
-                                <span className="flex items-center gap-2"><PackageCheck size={18}/> Marketing Samples</span>
-                                <ArrowRight size={16}/>
+                        <div className="flex items-center gap-3 md:hidden">
+                             <Button 
+                                variant="outline" 
+                                className="flex-1 h-11 font-headline border-2" 
+                                onClick={handleManualRefresh}
+                                disabled={isRefreshing}
+                            >
+                                <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")} />
+                                Refresh
                             </Button>
-                        </Link>
+                            <Link href="/admin/inventory" className="flex-1">
+                                <Button className="w-full h-11 font-headline flex items-center justify-between">
+                                    <span className="flex items-center gap-2"><PackageCheck size={18}/> Samples</span>
+                                    <ArrowRight size={16}/>
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
 
                     <TabsContent value="district-reports">
