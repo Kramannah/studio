@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => {
@@ -425,6 +425,10 @@ export function SubmittedList({
         return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
     }, []);
 
+    const selectedHoliday = useMemo(() => {
+        return selectedDate ? getHolidayName(selectedDate) : null;
+    }, [selectedDate]);
+
     const filtered = useMemo(() => {
         if (!mounted) return [];
         let res = [...filteredByMonth];
@@ -601,6 +605,22 @@ export function SubmittedList({
                         </Card>
                     </div>
                     <div className="flex-1 w-full space-y-6">
+                        {selectedHoliday && (
+                            <div className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2 rounded-full bg-black/40">
+                                        <CheckCircle className="w-5 h-5 text-primary" />
+                                    </div>
+                                    <p className="font-black font-headline text-lg text-orange-500 leading-none">
+                                        {selectedHoliday}
+                                    </p>
+                                </div>
+                                <Badge variant="outline" className="h-8 px-4 rounded-full font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
+                                    Public Holiday
+                                </Badge>
+                            </div>
+                        )}
+
                         <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
                             <Table>
                                 <TableHeader>
