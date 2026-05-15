@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -115,7 +114,12 @@ export function PlanningCalendar({
 
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
-        plans.forEach(plan => {
+        const uniquePlansMap = new Map<string, Plan>();
+        
+        // Deduplicate plans by ID
+        (plans || []).forEach(p => { if (p && p.id) uniquePlansMap.set(p.id, p); });
+
+        Array.from(uniquePlansMap.values()).forEach(plan => {
             const date = typeof plan.plannedDate === 'string' ? parseISO(plan.plannedDate) : plan.plannedDate;
             if(isValid(date)) {
                 const dateStr = format(date, 'yyyy-MM-dd');
@@ -128,7 +132,10 @@ export function PlanningCalendar({
     
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
-        nonCallDays.forEach(day => {
+        const uniqueNCDMap = new Map<string, NonCallDay>();
+        (nonCallDays || []).forEach(d => { if (d && d.id) uniqueNCDMap.set(d.id, d); });
+
+        Array.from(uniqueNCDMap.values()).forEach(day => {
             const date = typeof day.date === 'string' ? parseISO(day.date) : day.date;
             if(isValid(date)) {
                 const dateStr = format(date, 'yyyy-MM-dd');
@@ -185,7 +192,10 @@ export function PlanningCalendar({
             '4x': { completed: 0, target: 0 },
         };
 
-        (doctors || []).forEach(d => {
+        const uniqueDoctors = new Map<string, Doctor>();
+        (doctors || []).forEach(d => { if (d && d.id) uniqueDoctors.set(d.id, d); });
+
+        Array.from(uniqueDoctors.values()).forEach(d => {
             const freq = (d.frequency || '1x').toString();
             const target = parseInt(freq.replace('x', ''), 10) || 0;
             const first = (d.firstName ?? "").toString().toLowerCase().trim();
@@ -243,8 +253,13 @@ export function PlanningCalendar({
 
     const filteredDoctorsForSearch = useMemo(() => {
         const q = (doctorFilter ?? "").toString().toLowerCase().trim();
-        if (!q) return doctors || [];
-        return (doctors || []).filter(d => 
+        const uniqueDoctors = new Map<string, Doctor>();
+        (doctors || []).forEach(d => { if (d && d.id) uniqueDoctors.set(d.id, d); });
+        
+        const doctorList = Array.from(uniqueDoctors.values());
+        if (!q) return doctorList;
+        
+        return doctorList.filter(d => 
             `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase().includes(q) ||
             (d.municipality ?? "").toString().toLowerCase().includes(q) ||
             (d.specialty ?? "").toString().toLowerCase().includes(q)
@@ -283,7 +298,10 @@ export function PlanningCalendar({
     const handleBulkSubmit = async () => {
         if (selectedDoctorIds.size === 0 || !selectedDate) return;
         setIsSubmitting(true);
-        const doctorsToPlan = (doctors || []).filter(d => selectedDoctorIds.has(d.id));
+        const uniqueDoctors = new Map<string, Doctor>();
+        (doctors || []).forEach(d => { if (d && d.id) uniqueDoctors.set(d.id, d); });
+        
+        const doctorsToPlan = Array.from(uniqueDoctors.values()).filter(d => selectedDoctorIds.has(d.id));
         const success = await onAddPlansBulk(doctorsToPlan, selectedDate);
         if (success) {
             setIsAddPlanDialogOpen(false);

@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -40,9 +39,15 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
 
   const filteredDoctors = React.useMemo(() => {
     const lowercasedValue = (value || "").toLowerCase();
-    if (!lowercasedValue) return doctors;
     
-    return doctors.filter(doctor => {
+    // Deduplicate doctors by ID before filtering
+    const uniqueMap = new Map<string, Doctor>();
+    (doctors || []).forEach(d => { if (d && d.id) uniqueMap.set(d.id, d); });
+    const doctorList = Array.from(uniqueMap.values());
+
+    if (!lowercasedValue) return doctorList;
+    
+    return doctorList.filter(doctor => {
       const firstName = String(doctor.firstName || "").toLowerCase();
       const lastName = String(doctor.lastName || "").toLowerCase();
       const fullName = `${firstName} ${lastName}`;

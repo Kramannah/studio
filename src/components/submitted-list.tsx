@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -412,7 +411,12 @@ export function SubmittedList({
 
     const filteredByMonth = useMemo(() => {
         if (!mounted) return [];
-        return (entries || []).filter(e => {
+        
+        // Deduplicate entries by ID
+        const uniqueMap = new Map<string, CoverageEntry>();
+        (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
+        
+        return Array.from(uniqueMap.values()).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const date = parseISO(dateStr);

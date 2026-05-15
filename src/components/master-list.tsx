@@ -356,7 +356,14 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
 
     const filteredDoctors = useMemo(() => {
         const q = (filter ?? "").toLowerCase().trim();
-        return (doctors || []).filter(d => {
+        const uniqueMap = new Map<string, Doctor>();
+        
+        // Deduplicate doctors by ID to prevent React key errors
+        (doctors || []).forEach(d => {
+            if (d && d.id) uniqueMap.set(d.id, d);
+        });
+
+        return Array.from(uniqueMap.values()).filter(d => {
             const name = `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase();
             const specialty = (d.specialty ?? "").toLowerCase();
             const clinic = (d.clinic ?? "").toLowerCase();
@@ -376,7 +383,10 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     }, [filteredDoctors, currentPage]);
 
     const frequencyCounts = useMemo(() => {
-        return (doctors || []).reduce((acc, d) => {
+        const uniqueMap = new Map<string, Doctor>();
+        (doctors || []).forEach(d => { if (d && d.id) uniqueMap.set(d.id, d); });
+        
+        return Array.from(uniqueMap.values()).reduce((acc, d) => {
             if (d.frequency) acc[d.frequency] = (acc[d.frequency] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
