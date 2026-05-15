@@ -129,18 +129,29 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
-const compressImage = (dataUrl: string, quality = 0.6, maxWidth = 600): Promise<string> => {
+const compressImage = (dataUrl: string, quality = 0.5, maxWidth = 800): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = dataUrl;
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const aspect = img.height / img.width;
-            canvas.width = Math.min(img.width, maxWidth);
-            canvas.height = canvas.width * aspect;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Failed to get canvas context'));
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = (error) => reject(error);
@@ -252,7 +263,7 @@ export function CoverageForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      callType: "unplanned", // Default to unplanned for today or history
+      callType: "unplanned",
       firstName: "",
       lastName: "",
       specialty: "",
@@ -352,11 +363,15 @@ export function CoverageForm({
     if (file) {
       const reader = new FileReader();
       reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        const compressedDataUrl = await compressImage(dataUrl);
-        form.setValue('photos', [compressedDataUrl], { shouldValidate: true });
-        form.setValue('signature', null);
-        setProofMethod('photo');
+        try {
+            const dataUrl = e.target?.result as string;
+            const compressedDataUrl = await compressImage(dataUrl);
+            form.setValue('photos', [compressedDataUrl], { shouldValidate: true });
+            form.setValue('signature', null);
+            setProofMethod('photo');
+        } catch (err) {
+            toast({ variant: "destructive", title: "Image Error", description: "Failed to process the photo." });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -559,12 +574,26 @@ export function CoverageForm({
         }
       }
 
+      // CRITICAL: Firestore throws errors if the payload contains undefined values.
+      // We clean the payload to ensure all optional fields are either present or omitted.
+      const cleanPayload = (obj: any) => {
+          const result: any = {};
+          Object.keys(obj).forEach(key => {
+              const val = obj[key];
+              if (val !== undefined && val !== null) {
+                  result[key] = val;
+              }
+          });
+          return result;
+      };
+
       if (isEditMode) {
-          onUpdate({
+          const updateData = cleanPayload({
               ...values,
               id: entryToEdit!.id,
               coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
           });
+          onUpdate(updateData);
           toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
@@ -574,15 +603,17 @@ export function CoverageForm({
       
       const { plannedDoctorId: _pId, ...restOfValues } = values;
 
-      const savedOnline = await onSave({
+      const savePayload = cleanPayload({
         ...restOfValues,
         coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
       });
+
+      const savedOnline = await onSave(savePayload);
       resetForm();
       onFormSubmit?.(savedOnline);
     } catch (error) {
-      console.error("Submission failed", error);
-      toast({ variant: 'destructive', title: 'Submission Error', description: 'Check connection.' });
+      console.error("Submission failed:", error);
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'Check data or connection.' });
     } finally {
       setIsSubmitting(false);
     }
