@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -19,10 +18,21 @@ import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PlanningCalendar } from '@/components/planning-calendar';
+
+// Static imports for offline availability
+import { CoverageForm } from '@/components/coverage-form';
+import { OfflineList } from '@/components/offline-list';
+import { MasterList } from '@/components/master-list';
+import { CallSummary } from '@/components/call-summary';
+import { SubmittedList } from '@/components/submitted-list';
+import { Q4AllocationView } from '@/components/q4-allocation-view';
+import { TimeLogDialog } from '@/components/time-log-dialog';
+import { HelpdeskDialog } from '@/components/helpdesk-dialog';
+
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
 
 const DynamicSkeleton = () => (
   <div className="space-y-4 w-full">
@@ -31,17 +41,6 @@ const DynamicSkeleton = () => (
     <Skeleton className="w-full h-[600px]" />
   </div>
 );
-
-const CoverageForm = dynamic(() => import('@/components/coverage-form').then(mod => mod.CoverageForm), { loading: () => <DynamicSkeleton /> });
-const OfflineList = dynamic(() => import('@/components/offline-list').then(mod => mod.OfflineList), { loading: () => <DynamicSkeleton /> });
-const MasterList = dynamic(() => import('@/components/master-list').then(mod => mod.MasterList), { loading: () => <DynamicSkeleton /> });
-const CallSummary = dynamic(() => import('@/components/call-summary').then(mod => mod.CallSummary), { loading: () => <DynamicSkeleton /> });
-const SubmittedList = dynamic(() => import('@/components/submitted-list').then(mod => mod.SubmittedList), { loading: () => <DynamicSkeleton /> });
-const Q4AllocationView = dynamic(() => import('@/components/q4-allocation-view').then(mod => mod.Q4AllocationView), { loading: () => <DynamicSkeleton /> });
-const TimeLogDialog = dynamic(() => import('@/components/time-log-dialog').then(mod => mod.TimeLogDialog), { ssr: false });
-const HelpdeskDialog = dynamic(() => import('@/components/helpdesk-dialog').then(mod => mod.HelpdeskDialog), { ssr: false });
-
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
 
 export default function Home() {
   const { user, profile, loading: authLoading, logout } = useAuth();

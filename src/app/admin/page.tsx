@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { managers } from '@/lib/managers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
@@ -30,14 +29,15 @@ import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
+// Static import for offline availability
+import { UserDashboard } from '@/components/user-dashboard';
+
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
         <RefreshCw className="w-8 h-8 animate-spin text-primary" />
         <p className="ml-4 font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">{message}</p>
     </div>
 );
-
-const UserDashboard = dynamic(() => import('@/components/user-dashboard').then(mod => mod.UserDashboard), { loading: () => <DynamicSkeleton message="Loading Representative Dashboard..." /> });
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
