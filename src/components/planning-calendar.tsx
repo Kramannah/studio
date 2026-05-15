@@ -381,31 +381,39 @@ export function PlanningCalendar({
                                 </Badge>
                             </div>
                         </div>
-                        <div className="flex gap-3">
-                            <DropdownMenu modal={false}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="lg" className="h-12 px-6 font-bold text-lg gap-2" disabled={readOnly}>
-                                        <Settings2 className="w-5 h-5" />
-                                        Actions
-                                        <ChevronDown className="w-4 h-4 ml-1 opacity-70" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
-                                    <DropdownMenuLabel>Daily Management</DropdownMenuLabel>
-                                    {isLocked ? (
-                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsUnlockDialogOpen(true); }} className="gap-2 py-3">
-                                            <Unlock className="w-4 h-4 text-primary" /> Unlock Planning
-                                        </DropdownMenuItem>
-                                    ) : (
-                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsAddPlanDialogOpen(true); }} className="gap-2 py-3">
-                                            <PlusCircle className="w-4 h-4 text-primary" /> Add Visit Plans
-                                        </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsNonCallDialogOpen(true); }} className="gap-2 py-3" disabled={isLocked}>
-                                        <CalendarOff className="w-4 h-4 text-orange-500" /> Log Leave / Non-Call
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                        <div className="flex flex-wrap gap-2">
+                            {isLocked ? (
+                                <Button 
+                                    size="lg" 
+                                    variant="outline"
+                                    className="h-12 px-6 font-bold text-base gap-2 border-2" 
+                                    onClick={() => setIsUnlockDialogOpen(true)}
+                                    disabled={readOnly}
+                                >
+                                    <Unlock className="w-5 h-5 text-primary" /> 
+                                    Unlock Week
+                                </Button>
+                            ) : (
+                                <Button 
+                                    size="lg" 
+                                    className="h-12 px-6 font-bold text-base gap-2" 
+                                    onClick={() => setIsAddPlanDialogOpen(true)}
+                                    disabled={readOnly}
+                                >
+                                    <PlusCircle className="w-5 h-5" /> 
+                                    Add Visits
+                                </Button>
+                            )}
+                            <Button 
+                                size="lg" 
+                                variant="outline"
+                                className="h-12 px-6 font-bold text-base gap-2 border-2 border-orange-500/30 text-orange-500 hover:bg-orange-500/10" 
+                                onClick={() => setIsNonCallDialogOpen(true)}
+                                disabled={readOnly || isLocked}
+                            >
+                                <CalendarOff className="w-5 h-5" /> 
+                                Log Leave
+                            </Button>
                         </div>
                     </div>
 
