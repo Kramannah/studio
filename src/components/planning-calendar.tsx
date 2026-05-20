@@ -131,7 +131,7 @@ export function PlanningCalendar({
             if(isValid(date)) {
                 const dateStr = format(date, 'yyyy-MM-dd');
                 if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateKey].push(day);
+                groups[dateStr].push(day);
             }
         });
         return groups;
