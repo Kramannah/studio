@@ -44,10 +44,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
+      // Increased limit to 10,000 to ensure heavy users like Dimaala get all their records.
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(1000)
+        limit(10000)
       );
       
       const querySnapshot = await getDocs(q);
