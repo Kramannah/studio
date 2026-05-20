@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -574,26 +573,12 @@ export function CoverageForm({
         }
       }
 
-      // CRITICAL: Firestore throws errors if the payload contains undefined values.
-      // We clean the payload to ensure all optional fields are either present or omitted.
-      const cleanPayload = (obj: any) => {
-          const result: any = {};
-          Object.keys(obj).forEach(key => {
-              const val = obj[key];
-              if (val !== undefined && val !== null) {
-                  result[key] = val;
-              }
-          });
-          return result;
-      };
-
       if (isEditMode) {
-          const updateData = cleanPayload({
+          onUpdate({
               ...values,
               id: entryToEdit!.id,
               coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
-          });
-          onUpdate(updateData);
+          } as any);
           toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
@@ -603,12 +588,10 @@ export function CoverageForm({
       
       const { plannedDoctorId: _pId, ...restOfValues } = values;
 
-      const savePayload = cleanPayload({
+      const savedOnline = await onSave({
         ...restOfValues,
         coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
-      });
-
-      const savedOnline = await onSave(savePayload);
+      } as any);
       resetForm();
       onFormSubmit?.(savedOnline);
     } catch (error) {

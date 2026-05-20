@@ -400,38 +400,28 @@ export function PlanningCalendar({
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            {isLocked ? (
-                                <Button 
-                                    size="lg" 
-                                    variant="outline"
-                                    className="h-12 px-6 font-bold text-base gap-2 border-2" 
-                                    onClick={() => setIsUnlockDialogOpen(true)}
-                                    disabled={readOnly}
-                                >
-                                    <Unlock className="w-5 h-5 text-primary" /> 
-                                    Unlock Week
-                                </Button>
-                            ) : (
-                                <Button 
-                                    size="lg" 
-                                    className="h-12 px-6 font-bold text-base gap-2" 
-                                    onClick={() => setIsAddPlanDialogOpen(true)}
-                                    disabled={readOnly}
-                                >
-                                    <PlusCircle className="w-5 h-5" /> 
-                                    Add Visits
-                                </Button>
-                            )}
-                            <Button 
-                                size="lg" 
-                                variant="outline"
-                                className="h-12 px-6 font-bold text-base gap-2 border-2 border-orange-500/30 text-orange-500 hover:bg-orange-500/10" 
-                                onClick={() => setIsNonCallDialogOpen(true)}
-                                disabled={readOnly || isLocked}
-                            >
-                                <CalendarOff className="w-5 h-5" /> 
-                                Log Leave
-                            </Button>
+                            <DropdownMenu modal={false}>
+                                <DropdownMenuTrigger asChild>
+                                    <Button size="lg" className="h-12 px-6 font-bold text-base gap-2" disabled={readOnly}>
+                                        <Settings2 className="w-5 h-5" /> Actions <ChevronDown className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel>Planning Options</DropdownMenuLabel>
+                                    {isLocked ? (
+                                        <DropdownMenuItem onClick={() => setIsUnlockDialogOpen(true)} className="py-3 gap-2">
+                                            <Unlock className="w-4 h-4 text-primary" /> Request Unlock
+                                        </DropdownMenuItem>
+                                    ) : (
+                                        <DropdownMenuItem onClick={() => setIsAddPlanDialogOpen(true)} className="py-3 gap-2">
+                                            <PlusCircle className="w-4 h-4 text-primary" /> Add Visit Plans
+                                        </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onClick={() => setIsNonCallDialogOpen(true)} disabled={isLocked} className="py-3 gap-2">
+                                        <CalendarOff className="w-4 h-4 text-orange-500" /> Log Non-Call Day
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
 
