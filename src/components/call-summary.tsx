@@ -5,12 +5,13 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth } from "date-fns";
+import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar, RefreshCw } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
 import { Badge } from "./ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
     <Card className={cn(bgColor)}>
@@ -40,17 +41,27 @@ export function CallSummary({
 }) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
+    const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
+    const monthOptions = useMemo(() => {
+        const now = new Date();
+        const start = subMonths(now, 11);
+        return eachMonthOfInterval({ start, end: now }).map(d => ({
+            label: format(d, 'MMMM yyyy'),
+            value: format(d, 'yyyy-MM')
+        })).reverse();
+    }, []);
+
     const insights = useMemo(() => {
         if (!mounted) return null;
         
-        const now = new Date();
-        const start = startOfMonth(now);
-        const end = endOfMonth(now);
+        const referenceDate = parseISO(selectedMonth + "-01");
+        const start = startOfMonth(referenceDate);
+        const end = endOfMonth(referenceDate);
 
         const filteredEntries = (entries || []).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
@@ -178,7 +189,7 @@ export function CallSummary({
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
-    }, [entries, doctors, nonCallDays, mounted]);
+    }, [entries, doctors, nonCallDays, mounted, selectedMonth]);
 
     if (!mounted) return null;
 
@@ -196,7 +207,19 @@ export function CallSummary({
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
-                            <CardDescription>Territory activity and productivity analytics for {format(new Date(), 'MMMM yyyy')}.</CardDescription>
+                            <CardDescription>Territory activity and productivity analytics.</CardDescription>
+                            <div className="mt-2">
+                                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                    <SelectTrigger className="w-[180px] h-9 border-2 font-headline bg-muted/50">
+                                        <SelectValue placeholder="Select Month" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {monthOptions.map(opt => (
+                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <Button variant="outline" onClick={() => {}} className="border-2 h-11 font-headline mt-4 md:mt-0"><Download className="mr-2 h-4 w-4"/> Excel</Button>
                     </div>

@@ -3,7 +3,7 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => {
     return (
@@ -325,11 +326,21 @@ export function SubmittedList({
     const [mounted, setMounted] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
+    const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
     const itemsPerPage = 10;
 
     useEffect(() => {
         setMounted(true);
         setSelectedDate(new Date());
+    }, []);
+
+    const monthOptions = useMemo(() => {
+        const now = new Date();
+        const start = subMonths(now, 11);
+        return eachMonthOfInterval({ start, end: now }).map(d => ({
+            label: format(d, 'MMMM yyyy'),
+            value: format(d, 'yyyy-MM')
+        })).reverse();
     }, []);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
@@ -348,6 +359,14 @@ export function SubmittedList({
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         
         let res = Array.from(uniqueMap.values());
+
+        // Month Filter
+        res = res.filter(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return d && format(d, 'yyyy-MM') === selectedMonth;
+        });
 
         const q = (searchQuery || "").toLowerCase().trim();
         if (q) {
@@ -368,7 +387,7 @@ export function SubmittedList({
             });
         }
         return res;
-    }, [entries, searchQuery, activeTab, selectedDate, mounted]);
+    }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -462,7 +481,21 @@ export function SubmittedList({
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
+            <div className="space-y-1">
+                <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
+                <div className="flex items-center gap-2">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-[180px] h-9 border-2 font-headline bg-muted/50">
+                            <SelectValue placeholder="Select Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {monthOptions.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
             <Button onClick={handleDownloadExcel} variant="outline" className="border-2 font-headline h-11 w-full md:w-auto">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
             </Button>
@@ -508,7 +541,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found matching your search.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for {format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -523,6 +556,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
+                                defaultMonth={parseISO(selectedMonth + "-01")}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
