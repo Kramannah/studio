@@ -72,12 +72,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
             if (!filter) {
-                return (await getDocs(query(colRef, limit(10000)))).docs.map(d => ({id: d.id, ...d.data()}));
+                return (await getDocs(query(colRef, limit(15000)))).docs.map(d => ({id: d.id, ...d.data()}));
             }
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(10000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(15000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -99,7 +99,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
+        // Increased limit to 20,000 for individual PMR reports to prevent missing data
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(20000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
         const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(5000)));

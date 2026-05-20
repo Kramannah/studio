@@ -80,9 +80,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                entriesSnap = await getDocs(query(baseQuery, limit(10000)));
+                // Increased limit to 30,000 for global usage calculation to ensure balance accuracy
+                entriesSnap = await getDocs(query(baseQuery, limit(30000)));
             } else {
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
+                // Increased individual limit to 20,000 for users with high reporting volume
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(20000)));
             }
 
             entriesSnap.docs.forEach(d => {
