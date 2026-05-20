@@ -1,10 +1,9 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse, subMonths } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
@@ -19,7 +18,6 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
@@ -45,11 +43,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
-        const eFirst = (entry.firstName ?? "").toString().toLowerCase().trim();
-        const eLast = (entry.lastName ?? "").toString().toLowerCase().trim();
+        const eFirst = (entry.firstName || "").toLowerCase().trim();
+        const eLast = (entry.lastName || "").toLowerCase().trim();
         return (doctors || []).find(d => 
-            (d.firstName ?? "").toString().toLowerCase().trim() === eFirst && 
-            (d.lastName ?? "").toString().toLowerCase().trim() === eLast
+            (d.firstName || "").toLowerCase().trim() === eFirst && 
+            (d.lastName || "").toLowerCase().trim() === eLast
         );
     }, [doctors, entry.firstName, entry.lastName]);
 
@@ -308,9 +306,7 @@ export function SubmittedList({
     onEdit, 
     readOnly = false,
     isAdminView = false,
-    userMap,
-    externalSelectedMonth,
-    onMonthChange
+    userMap
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -319,9 +315,7 @@ export function SubmittedList({
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
     isAdminView?: boolean,
-    userMap?: Record<string, { code: string; firstName: string; lastName: string }>,
-    externalSelectedMonth?: string,
-    onMonthChange?: (val: string) => void
+    userMap?: Record<string, { code: string; firstName: string; lastName: string }>
 }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
@@ -335,35 +329,8 @@ export function SubmittedList({
 
     useEffect(() => {
         setMounted(true);
+        setSelectedDate(new Date());
     }, []);
-
-    const availableMonths = useMemo(() => {
-        if (!mounted) return [];
-        // PERFORMANCE: Return a static list of the last 12 months for the dropdown
-        const months = [];
-        const today = new Date();
-        for (let i = 0; i < 12; i++) {
-            months.push(format(subMonths(today, i), 'yyyy-MM'));
-        }
-        return months;
-    }, [mounted]);
-
-    const currentMonthStr = externalSelectedMonth || format(new Date(), 'yyyy-MM');
-
-    useEffect(() => {
-        if (!mounted) return;
-        try {
-            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
-            if (isValid(monthDate)) {
-                setSelectedDate(monthDate);
-                setCurrentPage(1);
-            }
-        } catch (e) {}
-    }, [currentMonthStr, mounted]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [activeTab, searchQuery]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -374,36 +341,20 @@ export function SubmittedList({
         setPreviewData({ src, title });
     };
 
-    const monthRange = useMemo(() => {
-        if (!mounted) return { start: new Date(), end: new Date() };
-        try {
-            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
-            return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
-        } catch (e) {
-            return { start: new Date(), end: new Date() };
-        }
-    }, [currentMonthStr, mounted]);
-
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
-        // Deduplicate entries by ID
         const uniqueMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         
-        let res = Array.from(uniqueMap.values()).filter(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return false;
-            const date = parseISO(dateStr);
-            return date && isValid(date) && isWithinInterval(date, monthRange);
-        });
+        let res = Array.from(uniqueMap.values());
 
-        const q = (searchQuery ?? "").toString().toLowerCase().trim();
+        const q = (searchQuery || "").toLowerCase().trim();
         if (q) {
             res = res.filter(e => {
-                const first = (e.firstName ?? "").toString().toLowerCase();
-                const last = (e.lastName ?? "").toString().toLowerCase();
-                const clinic = (e.clinic ?? "").toString().toLowerCase();
+                const first = (e.firstName || "").toLowerCase();
+                const last = (e.lastName || "").toLowerCase();
+                const clinic = (e.clinic || "").toLowerCase();
                 return first.includes(q) || last.includes(q) || clinic.includes(q);
             });
         }
@@ -417,22 +368,22 @@ export function SubmittedList({
             });
         }
         return res;
-    }, [entries, monthRange, searchQuery, activeTab, selectedDate, mounted]);
+    }, [entries, searchQuery, activeTab, selectedDate, mounted]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
-        filtered.forEach(e => {
+        (entries || []).forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (date && isValid(date)) {
                     const key = format(date, 'yyyy-MM-dd');
-                    counts[key] = (counts[key] || 0) + (1);
+                    counts[key] = (counts[key] || 0) + 1;
                 }
             }
         });
         return counts;
-    }, [filtered]);
+    }, [entries]);
 
     const entryDates = useMemo(() => {
         return Object.keys(entriesCountByDate).map(d => parseISO(d));
@@ -441,7 +392,7 @@ export function SubmittedList({
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            const dateStr = (day.date ?? "").toString();
+            const dateStr = (day.date || "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
                 if (isValid(date)) {
@@ -503,15 +454,10 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Report_${currentMonthStr}.xlsx`);
+        XLSX.writeFile(workbook, `Submitted_Coverage_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
-    if (!mounted) return (
-        <div className="flex flex-col items-center justify-center p-20 gap-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Reports...</p>
-        </div>
-    );
+    if (!mounted) return null;
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
@@ -533,29 +479,14 @@ export function SubmittedList({
                     </TabsTrigger>
                 </TabsList>
                 
-                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto flex-1">
-                    <Select value={currentMonthStr} onValueChange={onMonthChange}>
-                        <SelectTrigger className="w-full sm:w-[220px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline text-base">
-                            <SelectValue placeholder="Select month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableMonths.map(month => {
-                                try {
-                                    const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
-                                    return <SelectItem key={month} value={month}>{label}</SelectItem>
-                                } catch (e) { return null; }
-                            })}
-                        </SelectContent>
-                    </Select>
-                    <div className="relative w-full max-w-md">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input 
-                            placeholder="Search by name or clinic..." 
-                            value={searchQuery} 
-                            onChange={(e) => setSearchQuery(e.target.value)} 
-                            className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
-                        />
-                    </div>
+                <div className="relative w-full max-w-md">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input 
+                        placeholder="Search by name or clinic..." 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                        className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" 
+                    />
                 </div>
             </div>
 
@@ -577,20 +508,11 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found matching your search.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </Card>
-                {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 px-1">
-                        <p className="text-sm text-muted-foreground font-medium">Page {currentPage} of {totalPages}</p>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="h-9 px-4 border-2 rounded-lg font-headline">Previous</Button>
-                            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="h-9 px-4 border-2 rounded-lg font-headline">Next</Button>
-                        </div>
-                    </div>
-                )}
             </TabsContent>
 
             <TabsContent value="calendar" className="mt-0 w-full">
@@ -601,7 +523,6 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                month={currentMonthStr ? parse(currentMonthStr, 'yyyy-MM', new Date()) : undefined}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
@@ -708,9 +629,6 @@ export function SubmittedList({
         
         <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90">
-                <DialogHeader className="p-4 bg-background border-b sr-only">
-                    <DialogTitle>{previewData?.title}</DialogTitle>
-                </DialogHeader>
                 <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
                     {previewData?.src && (
                         <Image 

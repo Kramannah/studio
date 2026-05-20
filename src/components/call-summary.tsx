@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -6,12 +5,11 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse, subMonths } from "date-fns";
+import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar, RefreshCw } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
 import * as XLSX from 'xlsx';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 
 const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
@@ -32,17 +30,13 @@ export function CallSummary({
     doctors = [], 
     nonCallDays = [], 
     timeLogs = [], 
-    isAdminView = false,
-    externalSelectedMonth,
-    onMonthChange
+    isAdminView = false
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
     nonCallDays: NonCallDay[], 
     timeLogs: TimeLog[], 
-    isAdminView?: boolean,
-    externalSelectedMonth?: string,
-    onMonthChange?: (val: string) => void
+    isAdminView?: boolean
 }) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
@@ -51,55 +45,20 @@ export function CallSummary({
         setMounted(true);
     }, []);
 
-    const availableMonths = useMemo(() => {
-        if (!mounted) return [];
-        // Static list of the last 12 months
-        const months = [];
-        const today = new Date();
-        for (let i = 0; i < 12; i++) {
-            months.push(format(subMonths(today, i), 'yyyy-MM'));
-        }
-        return months;
-    }, [mounted]);
+    const insights = useMemo(() => {
+        if (!mounted) return null;
+        
+        const now = new Date();
+        const start = startOfMonth(now);
+        const end = endOfMonth(now);
 
-    const currentMonthStr = externalSelectedMonth || format(new Date(), 'yyyy-MM');
-
-    const appliedRange = useMemo(() => {
-        if (!mounted) return { start: new Date(), end: new Date() };
-        try {
-            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
-            return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
-        } catch (e) {
-            return { start: new Date(), end: new Date() };
-        }
-    }, [currentMonthStr, mounted]);
-
-    const filteredEntriesForRange = useMemo(() => {
-        if (!mounted || !appliedRange.start || !appliedRange.end) return [];
-        const start = appliedRange.start;
-        const end = appliedRange.end;
-        return (entries || []).filter(e => {
+        const filteredEntries = (entries || []).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const d = parseISO(dateStr);
             return isValid(d) && isWithinInterval(d, { start, end });
         });
-    }, [entries, appliedRange, mounted]);
-    
-    const filteredNonCallDays = useMemo(() => {
-         if (!mounted || !appliedRange.start || !appliedRange.end) return [];
-        const start = appliedRange.start;
-        const end = appliedRange.end;
-        return (nonCallDays || []).filter(day => {
-            const dayDate = typeof day.date === 'string' ? parseISO(day.date) : day.date;
-            return isValid(dayDate) && isWithinInterval(dayDate, { start, end });
-        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [nonCallDays, appliedRange, mounted]);
 
-    const insights = useMemo(() => {
-        if (!mounted || !appliedRange.start) return null;
-        const filteredEntries = filteredEntriesForRange;
-        
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const first = String(entry.firstName || "").toLowerCase().trim();
             const last = String(entry.lastName || "").toLowerCase().trim();
@@ -168,8 +127,7 @@ export function CallSummary({
             return acc + (parseInt(freqStr, 10) || 0);
         }, 0);
         
-        const refDate = appliedRange.start || new Date();
-        const allDaysInMonth = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
+        const allDaysInMonth = eachDayOfInterval({ start, end });
         
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
             if (isWeekend(day)) return false;
@@ -179,8 +137,11 @@ export function CallSummary({
         
         const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
         
-        const approvedNonCallDaysCount = filteredNonCallDays
-            .filter(ncd => ncd.status === 'approved')
+        const approvedNonCallDaysCount = (nonCallDays || [])
+            .filter(ncd => {
+                const d = typeof ncd.date === 'string' ? parseISO(ncd.date) : ncd.date;
+                return ncd.status === 'approved' && isWithinInterval(d, { start, end });
+            })
             .reduce((acc, ncd) => ncd.dayType === 'wholeday' ? acc + 1 : acc + 0.5, 0);
         
         const adjustedTarget = (totalBusinessDaysInMonth - approvedNonCallDaysCount) * dailyTarget;
@@ -217,7 +178,7 @@ export function CallSummary({
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
-    }, [filteredEntriesForRange, doctors, entries, filteredNonCallDays, appliedRange.start, mounted]);
+    }, [entries, doctors, nonCallDays, mounted]);
 
     if (!mounted) return null;
 
@@ -235,24 +196,9 @@ export function CallSummary({
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
-                            <CardDescription>Territory activity and productivity analytics.</CardDescription>
+                            <CardDescription>Territory activity and productivity analytics for {format(new Date(), 'MMMM yyyy')}.</CardDescription>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
-                             <Select value={currentMonthStr} onValueChange={onMonthChange}>
-                                <SelectTrigger className="w-[200px] border-2 h-11 font-headline">
-                                    <SelectValue placeholder="Select month" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableMonths.map(month => {
-                                        try {
-                                            const label = format(parse(month, 'yyyy-MM', new Date()), 'MMMM yyyy');
-                                            return <SelectItem key={month} value={month}>{label}</SelectItem>
-                                        } catch (e) { return null; }
-                                    })}
-                                </SelectContent>
-                            </Select>
-                            <Button variant="outline" onClick={() => {}} className="border-2 h-11 font-headline"><Download className="mr-2 h-4 w-4"/> Excel</Button>
-                        </div>
+                        <Button variant="outline" onClick={() => {}} className="border-2 h-11 font-headline mt-4 md:mt-0"><Download className="mr-2 h-4 w-4"/> Excel</Button>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -277,7 +223,7 @@ export function CallSummary({
             <Card className="border-2 shadow-lg overflow-hidden">
                 <CardHeader className="bg-muted/30 border-b">
                     <CardTitle className="text-xl font-black font-headline">Monthly Performance</CardTitle>
-                    <CardDescription>Total calls over the last few months.</CardDescription>
+                    <CardDescription>Total calls over the last 6 months.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6 h-[400px]">
                     <ResponsiveContainer width="100%" height="100%">

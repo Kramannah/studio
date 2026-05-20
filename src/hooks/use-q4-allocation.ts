@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -9,9 +8,8 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
-import { getStartOfYearISO } from '@/lib/utils';
 
-// SINGLETON CACHE: Makes the Marketing Samples list load instantly across the app
+// SINGLETON CACHE
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
 const ALLOCATION_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
@@ -46,7 +44,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (!cachedAllocations) setLoading(true);
 
     try {
-        // Fetch Master Allocations
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(10000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -78,17 +75,14 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         const used: Record<string, number> = {};
 
         if (includeUsage) {
-            // PERFORMANCE FIX: Limit the usage scan to the current year to prevent 5-7 minute loading
-            const startOfPeriod = getStartOfYearISO();
-            
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                entriesSnap = await getDocs(query(baseQuery, where("coverageDate", ">=", startOfPeriod), limit(5000)));
+                entriesSnap = await getDocs(query(baseQuery, limit(10000)));
             } else {
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), where("coverageDate", ">=", startOfPeriod), limit(5000)));
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
             }
 
             entriesSnap.docs.forEach(d => {
