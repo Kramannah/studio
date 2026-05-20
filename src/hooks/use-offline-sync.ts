@@ -44,12 +44,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
-      // Use a simple query to avoid triggering "Missing or insufficient permissions" due to missing indexes
-      // Increased limit to 20,000 to ensure all calls for active users are retrieved
+      // Increased limit to 30,000 to ensure highly active PMRs see all their data
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(20000)
+        limit(30000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -59,10 +58,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
-      // Sort client-side by submission date to capture the latest submissions first
-      allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+      // Sort client-side by date to handle large datasets correctly
+      allEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {
+        // Log detailed error for debugging
+        console.error("Fetch coverage entries failed:", serverError);
+        
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'list',
@@ -110,10 +112,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         const docRef = doc(db!, "coverageEntries", entryId);
         setDoc(docRef, newEntryPayload)
           .then(() => {
-            setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
+            setMasterEntries(prev => {
+                const next = [newEntryPayload as CoverageEntry, ...prev];
+                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+            });
             toast({ title: "Entry Saved", description: "Report saved to server." });
           })
           .catch(async (serverError) => {
+            console.error("Save entry failed:", serverError);
             const permissionError = new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'create',
@@ -131,7 +137,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
   const saveEntryOffline = (newEntry: Omit<CoverageEntry, 'id'>) => {
     const entryWithId = { ...newEntry, id: generateUniqueId() };
-    const updatedEntries = [...offlineEntries, entryWithId];
+    const updatedEntries = [entryWithId, ...offlineEntries];
     updateOfflineInStorage(updatedEntries);
     toast({ title: "Saved Locally", description: "Offline mode active." });
   }
@@ -158,6 +164,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
+        console.error("Sync failed:", serverError);
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'create',

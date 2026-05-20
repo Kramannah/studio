@@ -9,23 +9,26 @@ service cloud.firestore {
     }
 
     function getUserData() {
+      // Safety check to ensure auth exists before constructing path
+      if (!isSignedIn()) return null;
       let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       return exists(path) ? get(path).data : null;
     }
 
     function isAdmin() {
+      if (!isSignedIn()) return false;
       let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
       let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
       let email = request.auth.token.get('email', '').lower();
       let profile = getUserData();
-      return isSignedIn() && (
-        request.auth.uid in adminUids ||
-        email in adminEmails ||
-        (profile != null && profile.role == "Admin")
-      );
+      
+      return request.auth.uid in adminUids ||
+             email in adminEmails ||
+             (profile != null && profile.get('role', '') == "Admin");
     }
 
     function isManager() {
+      if (!isSignedIn()) return false;
       let managerUids = [
         "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
         "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
@@ -33,16 +36,15 @@ service cloud.firestore {
         "r19lVIqk4xTtzxvbs4W0kprHSvD2"
       ];
       let profile = getUserData();
-      return isSignedIn() && (
-        request.auth.uid in managerUids || 
-        (profile != null && profile.role == "Manager") ||
-        isAdmin()
-      );
+      
+      return request.auth.uid in managerUids || 
+             (profile != null && profile.get('role', '') == "Manager") ||
+             isAdmin();
     }
 
     function isStaff() {
       let profile = getUserData();
-      return isSignedIn() && profile != null && (profile.role == "Marketing" || profile.role == "HR");
+      return profile != null && (profile.get('role', '') == "Marketing" || profile.get('role', '') == "HR");
     }
 
     function isOwner(userId) {
@@ -52,39 +54,40 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      // Prioritize owner check for performance and to avoid unnecessary Admin/Manager get() calls for standard users
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /doctors/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /plans/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /timeLogs/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /planningRequests/{id} {
-      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
+      allow read, list: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin() || isManager() || isStaff());
+      allow create: if isSignedIn() && request.resource.data.get('userId', '') == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.get('userId', '') == request.auth.uid || isAdmin());
     }
 
     match /marketingSamples/{id} {
