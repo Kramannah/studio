@@ -7,7 +7,7 @@ import { collection, getDocs, limit, query, where, writeBatch, doc } from 'fireb
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 
 // SINGLETON CACHE
 let cachedAllocations: Q4Allocation[] | null = null;
@@ -80,10 +80,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                // Increased limit to 30,000 for global usage calculation to ensure balance accuracy
+                // High limit for global usage scan
                 entriesSnap = await getDocs(query(baseQuery, limit(30000)));
             } else {
-                // Increased individual limit to 20,000 for users with high reporting volume
+                // Increased limit to 20,000 for users with high reporting volume
                 entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(20000)));
             }
 

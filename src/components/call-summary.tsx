@@ -5,12 +5,10 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
-import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar, RefreshCw } from "lucide-react";
+import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth } from "date-fns";
+import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase, Download } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
-import * as XLSX from 'xlsx';
-import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
@@ -49,7 +47,6 @@ export function CallSummary({
 
     const monthOptions = useMemo(() => {
         const months = new Set<string>();
-        
         entries.forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (dateStr) {
@@ -60,7 +57,6 @@ export function CallSummary({
             }
         });
 
-        // Always include current month if there are no reports at all
         if (months.size === 0) {
             months.add(format(new Date(), 'yyyy-MM'));
         }
@@ -70,10 +66,7 @@ export function CallSummary({
             .reverse()
             .map(m => {
                 const d = parseISO(m + "-01");
-                return {
-                    label: format(d, 'MMMM yyyy'),
-                    value: m
-                };
+                return { label: format(d, 'MMMM yyyy'), value: m };
             });
     }, [entries]);
 
@@ -93,7 +86,12 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        const filteredEntries = (entries || []).filter(e => {
+        // Deduplicate entries by ID to ensure accuracy
+        const uniqueEntriesMap = new Map<string, CoverageEntry>();
+        (entries || []).forEach(e => { if (e && e.id) uniqueEntriesMap.set(e.id, e); });
+        const allUniqueEntries = Array.from(uniqueEntriesMap.values());
+
+        const filteredEntries = allUniqueEntries.filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const d = parseISO(dateStr);
@@ -149,17 +147,6 @@ export function CallSummary({
         const totalCalls = filteredEntries.length;
         const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
-        const monthlyPerformance = (entries || []).reduce((acc, entry) => {
-            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-            const date = dateStr ? parseISO(dateStr) : null;
-            if (!isValid(date)) return acc;
-            const monthKey = format(date!, 'MMM yyyy');
-            const existing = acc.find(d => d.name === monthKey);
-            if(existing) existing.calls += 1;
-            else acc.push({ name: monthKey, calls: 1, date: date! });
-            return acc;
-        }, [] as {name: string, calls: number, date: Date}[]).sort((a,b) => a.date.getTime() - b.date.getTime()).slice(-6);
-
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
@@ -169,7 +156,6 @@ export function CallSummary({
         }, 0);
         
         const allDaysInMonth = eachDayOfInterval({ start, end });
-        
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
             if (isWeekend(day)) return false;
             const dateStr = format(day, 'yyyy-MM-dd');
@@ -177,7 +163,6 @@ export function CallSummary({
         }).length;
         
         const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
-        
         const approvedNonCallDaysCount = (nonCallDays || [])
             .filter(ncd => {
                 const d = typeof ncd.date === 'string' ? parseISO(ncd.date) : ncd.date;
@@ -196,7 +181,6 @@ export function CallSummary({
             totalWorkingDays: { actual: totalWorkingDays, total: totalBusinessDaysInMonth },
             inbaseCalls,
             outbaseCalls,
-            monthlyPerformance,
             topProducts: Object.entries(filteredEntries.reduce((acc, e) => {
                 if (e.primaryProduct) acc[e.primaryProduct] = (acc[e.primaryProduct] || 0) + 1;
                 return acc;
@@ -251,7 +235,6 @@ export function CallSummary({
                                 </Select>
                             </div>
                         </div>
-                        <Button variant="outline" onClick={() => {}} className="border-2 h-11 font-headline mt-4 md:mt-0"><Download className="mr-2 h-4 w-4"/> Excel</Button>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -270,47 +253,6 @@ export function CallSummary({
                             <StatCard title="Outbase Calls" value={insights.outbaseCalls} description="Provincial submissions" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
                         </div>
                     </div>
-                </CardContent>
-            </Card>
-
-            <Card className="border-2 shadow-lg overflow-hidden">
-                <CardHeader className="bg-muted/30 border-b">
-                    <CardTitle className="text-xl font-black font-headline">Monthly Performance</CardTitle>
-                    <CardDescription>Total calls over the last 6 months.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 h-[400px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={insights.monthlyPerformance} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted-foreground) / 0.2)" />
-                            <XAxis 
-                                dataKey="name" 
-                                fontSize={12} 
-                                fontWeight="bold" 
-                                tickLine={false} 
-                                axisLine={false} 
-                                dy={10}
-                            />
-                            <YAxis 
-                                fontSize={12} 
-                                fontWeight="bold" 
-                                tickLine={false} 
-                                axisLine={false} 
-                                tickFormatter={(val) => `${val}`}
-                            />
-                            <Tooltip 
-                                cursor={{ fill: 'hsl(var(--muted) / 0.4)' }}
-                                contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))', fontWeight: 'bold' }}
-                            />
-                            <Legend verticalAlign="bottom" height={36}/>
-                            <Bar 
-                                dataKey="calls" 
-                                fill="hsl(var(--primary))" 
-                                radius={[4, 4, 0, 0]} 
-                                name="Total Calls"
-                                barSize={60}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
                 </CardContent>
             </Card>
 

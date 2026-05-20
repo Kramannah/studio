@@ -356,12 +356,9 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
 
     const filteredDoctors = useMemo(() => {
         const q = (filter ?? "").toLowerCase().trim();
+        // Deduplicate by ID to prevent key errors
         const uniqueMap = new Map<string, Doctor>();
-        
-        // Deduplicate doctors by ID to prevent React key errors
-        (doctors || []).forEach(d => {
-            if (d && d.id) uniqueMap.set(d.id, d);
-        });
+        (doctors || []).forEach(d => { if (d && d.id) uniqueMap.set(d.id, d); });
 
         return Array.from(uniqueMap.values()).filter(d => {
             const name = `${(d.firstName ?? "")} ${(d.lastName ?? "")}`.toLowerCase();

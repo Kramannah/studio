@@ -3,7 +3,7 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
@@ -334,9 +334,9 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
+    // Generate month options based on ACTUAL data presence
     const monthOptions = useMemo(() => {
         const months = new Set<string>();
-        
         entries.forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (dateStr) {
@@ -347,8 +347,6 @@ export function SubmittedList({
             }
         });
 
-        // Always include current month if there are no reports at all, 
-        // to ensure the dropdown is not empty and UI logic stays stable.
         if (months.size === 0) {
             months.add(format(new Date(), 'yyyy-MM'));
         }
@@ -358,10 +356,7 @@ export function SubmittedList({
             .reverse()
             .map(m => {
                 const d = parseISO(m + "-01");
-                return {
-                    label: format(d, 'MMMM yyyy'),
-                    value: m
-                };
+                return { label: format(d, 'MMMM yyyy'), value: m };
             });
     }, [entries]);
 
@@ -369,7 +364,6 @@ export function SubmittedList({
         if (mounted && monthOptions.length > 0) {
             const isValidSelection = monthOptions.some(opt => opt.value === selectedMonth);
             if (!isValidSelection) {
-                // Default to the most recent month with data if the current one has none
                 setSelectedMonth(monthOptions[0].value);
             }
         }
@@ -387,12 +381,13 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
+        // Use Map for deduplication based on ID
         const uniqueMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         
         let res = Array.from(uniqueMap.values());
 
-        // Month Filter
+        // Targeted Month Filter
         res = res.filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
@@ -573,7 +568,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for {monthOptions.find(o => o.value === selectedMonth)?.label || selectedMonth}.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

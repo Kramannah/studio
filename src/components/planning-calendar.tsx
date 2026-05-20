@@ -8,14 +8,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, ChevronDown, Settings2, Lock, Unlock, Loader2, PartyPopper } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -115,8 +108,6 @@ export function PlanningCalendar({
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
         const uniquePlansMap = new Map<string, Plan>();
-        
-        // Deduplicate plans by ID
         (plans || []).forEach(p => { if (p && p.id) uniquePlansMap.set(p.id, p); });
 
         Array.from(uniquePlansMap.values()).forEach(plan => {
@@ -171,7 +162,6 @@ export function PlanningCalendar({
             const dateStr = (e.coverageDate ?? "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
-                // Ensure name-key accuracy by trimming leading/trailing spaces
                 if (isValid(date) && isSameMonth(date, today)) {
                     const first = (e.firstName ?? "").toString().toLowerCase().trim();
                     const last = (e.lastName ?? "").toString().toLowerCase().trim();
@@ -218,7 +208,11 @@ export function PlanningCalendar({
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        return plansByDate[dateStr] || [];
+        const dayPlans = plansByDate[dateStr] || [];
+        // Deduplicate locally
+        const unique = new Map<string, Plan>();
+        dayPlans.forEach(p => unique.set(p.id, p));
+        return Array.from(unique.values());
     }, [plansByDate, selectedDate]);
 
     const selectedDayNonCallDays = useMemo(() => {
@@ -246,10 +240,6 @@ export function PlanningCalendar({
             notCovered: Math.max(0, dayPlans.length - coveredCount)
         };
     }, [selectedDate, plansByDate, entriesByDate]);
-
-    const selectedDayPlannedIds = useMemo(() => {
-        return new Set(selectedDayPlans.map(p => p.doctorId));
-    }, [selectedDayPlans]);
 
     const filteredDoctorsForSearch = useMemo(() => {
         const q = (doctorFilter ?? "").toString().toLowerCase().trim();
@@ -322,16 +312,6 @@ export function PlanningCalendar({
         </div>
     );
 
-    if ((!doctors || doctors.length === 0) && !readOnly) {
-        return (
-            <Card className="border-2 border-dashed">
-                <CardContent className="p-12 text-center">
-                    <p className="text-xl text-muted-foreground font-headline">You must add doctors to your masterlist before you can plan visits.</p>
-                </CardContent>
-            </Card>
-        );
-    }
-
     return (
         <div className="w-full space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -389,90 +369,54 @@ export function PlanningCalendar({
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
-                                    Total Visits: {selectedDayStats.total}
+                                    Visits: {selectedDayStats.total}
                                 </Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">
                                     Covered: {selectedDayStats.covered}
                                 </Badge>
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-destructive/30 text-destructive bg-destructive/10">
-                                    Not Covered: {selectedDayStats.notCovered}
-                                </Badge>
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <DropdownMenu modal={false}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="lg" className="h-12 px-6 font-bold text-base gap-2" disabled={readOnly}>
-                                        <Settings2 className="w-5 h-5" /> Actions <ChevronDown className="w-4 h-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
-                                    <DropdownMenuLabel>Planning Options</DropdownMenuLabel>
+                            {!readOnly && (
+                                <>
                                     {isLocked ? (
-                                        <DropdownMenuItem onClick={() => setIsUnlockDialogOpen(true)} className="py-3 gap-2">
-                                            <Unlock className="w-4 h-4 text-primary" /> Request Unlock
-                                        </DropdownMenuItem>
+                                        <Button variant="outline" onClick={() => setIsUnlockDialogOpen(true)} className="h-10 border-2 font-headline gap-2">
+                                            <Unlock className="w-4 h-4 text-primary" /> Unlock Week
+                                        </Button>
                                     ) : (
-                                        <DropdownMenuItem onClick={() => setIsAddPlanDialogOpen(true)} className="py-3 gap-2">
-                                            <PlusCircle className="w-4 h-4 text-primary" /> Add Visit Plans
-                                        </DropdownMenuItem>
+                                        <Button onClick={() => setIsAddPlanDialogOpen(true)} className="h-10 font-headline gap-2">
+                                            <PlusCircle className="w-4 h-4" /> Add Visits
+                                        </Button>
                                     )}
-                                    <DropdownMenuItem onClick={() => setIsNonCallDialogOpen(true)} disabled={isLocked} className="py-3 gap-2">
-                                        <CalendarOff className="w-4 h-4 text-orange-500" /> Log Non-Call Day
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                    <Button variant="outline" onClick={() => setIsNonCallDialogOpen(true)} className="h-10 border-orange-500/50 text-orange-500 font-headline gap-2" disabled={isLocked}>
+                                        <CalendarOff className="w-4 h-4" /> Log Leave
+                                    </Button>
+                                </>
+                            )}
                         </div>
                     </div>
 
                     {(selectedDayNonCallDays.length > 0 || selectedHoliday) && (
-                        <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                        <div className="space-y-3">
                             {selectedHoliday && (
-                                <div className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
+                                <div className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl">
                                     <div className="flex items-center gap-4">
-                                        <div className="p-2 rounded-full bg-black/40">
-                                            <StatusIcon status="holiday" />
-                                        </div>
-                                        <p className="font-black font-headline text-lg text-orange-500 leading-none">
-                                            {selectedHoliday}
-                                        </p>
+                                        <StatusIcon status="holiday" />
+                                        <p className="font-black font-headline text-lg text-orange-500">{selectedHoliday}</p>
                                     </div>
-                                    <Badge variant="outline" className="h-8 px-4 rounded-full font-black text-xs border-2 shadow-sm bg-primary/10 text-primary border-primary/30">
-                                        Public Holiday
-                                    </Badge>
                                 </div>
                             )}
 
                             {selectedDayNonCallDays.map((day) => (
-                                <div key={day.id} className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
+                                <div key={day.id} className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl">
                                     <div className="flex items-center gap-4">
-                                        <div className="p-2 rounded-full bg-black/40">
-                                            <StatusIcon status={day.status} />
-                                        </div>
+                                        <StatusIcon status={day.status} />
                                         <div>
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-black font-headline text-lg text-orange-500 leading-none">
-                                                    {day.reason}
-                                                </p>
-                                                <Badge variant="secondary" className="text-[10px] h-5 px-2 bg-orange-500/10 text-orange-500 border-none font-bold uppercase">
-                                                    {dayTypeLabels[day.dayType]}
-                                                </Badge>
-                                            </div>
-                                            {day.remarks && (
-                                                <p className="text-[10px] text-muted-foreground mt-1 font-medium italic leading-none">
-                                                    "{day.remarks}"
-                                                </p>
-                                            )}
+                                            <p className="font-black font-headline text-lg text-orange-500 leading-none">{day.reason}</p>
+                                            <p className="text-[10px] text-muted-foreground mt-1 font-bold uppercase tracking-widest">{dayTypeLabels[day.dayType]}</p>
                                         </div>
                                     </div>
-                                    <Badge variant="outline" className={cn(
-                                        "h-8 px-4 rounded-full capitalize font-black text-xs border-2 shadow-sm",
-                                        day.status === 'approved' && "bg-primary/10 text-primary border-primary/30",
-                                        day.status === 'pending' && "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
-                                        day.status === 'rejected' && "bg-destructive/10 text-destructive border-destructive/30"
-                                    )}>
-                                        {day.status}
-                                    </Badge>
+                                    <Badge variant="outline" className="capitalize font-black border-2">{day.status}</Badge>
                                 </div>
                             ))}
                         </div>
@@ -517,39 +461,17 @@ export function PlanningCalendar({
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge 
-                                                        variant="secondary" 
-                                                        className={cn(
-                                                            "font-black text-[10px] uppercase tracking-tighter px-3 h-6 rounded-full border-none",
-                                                            plan.callType === 'unplanned' ? "bg-orange-500/20 text-orange-500" : "bg-muted text-foreground"
-                                                        )}
-                                                    >
-                                                        {plan.callType === 'unplanned' ? 'Unplanned' : 'Planned'}
-                                                    </Badge>
+                                                    <Badge variant="secondary" className="font-black text-[10px] uppercase">{plan.callType}</Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                     <Badge 
-                                                        variant="outline" 
-                                                        className={cn(
-                                                            "font-black text-[10px] uppercase tracking-tighter px-3 h-6 rounded-full border-2",
-                                                            isCovered 
-                                                                ? "bg-primary/10 text-primary border-primary/30" 
-                                                                : "bg-background text-foreground border-border"
-                                                        )}
-                                                    >
-                                                        {isCovered ? 'Covered' : 'Not Yet Covered'}
+                                                     <Badge variant="outline" className={cn("font-black text-[10px] uppercase", isCovered && "bg-primary/10 text-primary border-primary/30")}>
+                                                        {isCovered ? 'Covered' : 'Not Covered'}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {!readOnly && (
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
-                                                            onClick={() => onRemovePlan(plan.id)} 
-                                                            disabled={isLocked || isCovered}
-                                                            className="h-8 w-8 rounded-full hover:bg-destructive/10"
-                                                        >
-                                                            <XCircle size={18} className="text-destructive opacity-80" />
+                                                        <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}>
+                                                            <XCircle size={18} className="text-destructive" />
                                                         </Button>
                                                     )}
                                                 </TableCell>
@@ -575,82 +497,43 @@ export function PlanningCalendar({
                     <div className="flex-1 flex flex-col min-h-0 p-4 pt-0 space-y-4 overflow-hidden">
                         <div className="relative shrink-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="Search by name, specialty, or city..." 
-                                value={doctorFilter} 
-                                onChange={(e) => setDoctorFilter(e.target.value)} 
-                                className="pl-10 h-9 text-sm rounded-lg border-2 focus-visible:ring-primary bg-card"
-                            />
+                            <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-10 h-9 text-sm border-2" />
                         </div>
 
-                        <div className="space-y-3 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold font-headline text-xs uppercase tracking-tight">Total Completed:</span>
-                                <span className="font-black text-primary text-sm">{territoryStats.total.completed} / {territoryStats.total.target}</span>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest">By Frequency:</span>
-                                {['1x', '2x', '3x', '4x'].map(f => (
-                                    territoryStats[f as keyof typeof territoryStats].target > 0 && (
-                                        <Badge key={f} variant="outline" className="h-7 px-2 font-bold border-2 bg-background/50 text-[10px]">
-                                            {f}: {territoryStats[f as keyof typeof territoryStats].completed} / {territoryStats[f as keyof typeof territoryStats].target}
-                                        </Badge>
-                                    )
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-hidden flex flex-col relative">
-                            <div className="flex-1 w-full overflow-y-auto scrollbar-hide">
+                        <div className="flex-1 overflow-hidden flex flex-col">
+                            <div className="flex-1 w-full overflow-y-auto">
                                 <Table className="w-full">
                                     <TableHeader className="sticky top-0 bg-background z-20">
-                                        <TableRow className="h-10 hover:bg-transparent">
+                                        <TableRow className="h-10">
                                             <TableHead className="w-[40px] pl-0"></TableHead>
-                                            <TableHead className="w-[200px] text-xs font-bold uppercase tracking-tighter">Doctor Name</TableHead>
-                                            <TableHead className="text-xs font-bold uppercase tracking-tighter">Location</TableHead>
-                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase tracking-tighter">Freq</TableHead>
-                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase tracking-tighter pr-0">Left</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase">Doctor</TableHead>
+                                            <TableHead className="text-xs font-bold uppercase">Location</TableHead>
+                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase">Freq</TableHead>
+                                            <TableHead className="w-[60px] text-center text-xs font-bold uppercase">Left</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredDoctorsForSearch.length > 0 ? (
-                                            filteredDoctorsForSearch.map(doctor => {
-                                                const first = (doctor.firstName ?? "").toString().toLowerCase().trim();
-                                                const last = (doctor.lastName ?? "").toString().toLowerCase().trim();
-                                                const nameKey = `${first}|${last}`;
-                                                const actualCount = visitCountsThisMonth[nameKey] || 0;
-                                                const freq = (doctor.frequency || '1x').toString();
-                                                const targetCount = parseInt(freq.replace('x', ''), 10) || 0;
-                                                const remaining = Math.max(0, targetCount - actualCount);
-                                                
-                                                return (
-                                                    <TableRow key={doctor.id} className={cn("h-10 border-b last:border-0 hover:bg-muted/30 transition-colors")}>
-                                                        <TableCell className="w-[40px] pl-0">
-                                                            <Checkbox 
-                                                                checked={selectedDoctorIds.has(doctor.id)} 
-                                                                onCheckedChange={() => toggleDoctorSelection(doctor.id)}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="w-[200px]">
-                                                            <span className="font-bold text-xs">{doctor.firstName} {doctor.lastName}</span>
-                                                        </TableCell>
-                                                        <TableCell className="text-muted-foreground text-[10px] font-medium truncate max-w-[150px]">
-                                                            {doctor.municipality}
-                                                        </TableCell>
-                                                        <TableCell className="w-[60px] text-center font-bold text-[10px]">
-                                                            {doctor.frequency}
-                                                        </TableCell>
-                                                        <TableCell className="w-[60px] font-mono text-xs font-black text-center pr-0">
-                                                            {remaining}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground italic text-xs">No results found.</TableCell>
-                                            </TableRow>
-                                        )}
+                                        {filteredDoctorsForSearch.map(doctor => {
+                                            const first = (doctor.firstName ?? "").toString().toLowerCase().trim();
+                                            const last = (doctor.lastName ?? "").toString().toLowerCase().trim();
+                                            const nameKey = `${first}|${last}`;
+                                            const actualCount = visitCountsThisMonth[nameKey] || 0;
+                                            const freq = (doctor.frequency || '1x').toString();
+                                            const targetCount = parseInt(freq.replace('x', ''), 10) || 0;
+                                            const remaining = Math.max(0, targetCount - actualCount);
+                                            
+                                            return (
+                                                <TableRow key={doctor.id} className="h-10 border-b">
+                                                    <TableCell className="w-[40px] pl-0">
+                                                        <Checkbox checked={selectedDoctorIds.has(doctor.id)} onCheckedChange={() => toggleDoctorSelection(doctor.id)} />
+                                                    </TableCell>
+                                                    <TableCell className="font-bold text-xs">{doctor.firstName} {doctor.lastName}</TableCell>
+                                                    <TableCell className="text-muted-foreground text-[10px] truncate max-w-[150px]">{doctor.municipality}</TableCell>
+                                                    <TableCell className="w-[60px] text-center font-bold text-[10px]">{doctor.frequency}</TableCell>
+                                                    <TableCell className="w-[60px] font-mono text-xs font-black text-center">{remaining}</TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
                                     </TableBody>
                                 </Table>
                             </div>
@@ -658,8 +541,8 @@ export function PlanningCalendar({
                     </div>
 
                     <DialogFooter className="p-4 pt-0 gap-3 flex-row justify-end shrink-0">
-                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-10 px-6 font-bold border-2 text-sm">Close</Button>
-                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[160px] font-headline text-base font-black h-10 shadow-lg transition-all active:scale-95 bg-primary text-primary-foreground hover:bg-primary/90">
+                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="h-10 font-bold border-2">Close</Button>
+                        <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="min-w-[160px] font-headline font-black h-10 shadow-lg">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
                             Schedule ({selectedDoctorIds.size})
                         </Button>

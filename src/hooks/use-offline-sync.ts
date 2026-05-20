@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
@@ -45,6 +45,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     setLoading(true);
     try {
       // Increased limit to 20,000 to ensure all calls for active users are retrieved
+      // without requiring complex ordering indexes
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -58,6 +59,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
+      // Sort client-side to capture the latest submissions first
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {
