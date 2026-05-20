@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -8,6 +9,7 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
+import { getStartOfYearISO } from '@/lib/utils';
 
 // SINGLETON CACHE: Makes the Marketing Samples list load instantly across the app
 let cachedAllocations: Q4Allocation[] | null = null;
@@ -28,25 +30,16 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  const isAuthorizedAdmin = useMemo(() => {
-    if (!user) return false;
-    return Object.keys(MANAGER_TEAMS).includes(user.uid) || 
-           ['Manager', 'Admin', 'Marketing', 'HR'].includes(profile?.role || '') || 
-           isUserAdmin;
-  }, [user, profile, isUserAdmin]);
-
   const performFetch = useCallback(async (force = false) => {
     if (!db || !user || !active) {
         setLoading(false);
         return;
     }
 
-    // Return cached data instantly if valid
     const now = Date.now();
     if (!force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL)) {
         setAllocations(cachedAllocations);
         setLoading(false);
-        // We still fetch usage if requested because it's dynamic
         if (!includeUsage) return;
     }
 
@@ -78,23 +71,24 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        // Update Singleton Cache
         cachedAllocations = fetchedAllocations;
         lastAllocationFetch = now;
         setAllocations(fetchedAllocations);
 
         const used: Record<string, number> = {};
 
-        // Only load usage if includeUsage is TRUE (typically for the PMR reporting form/view)
         if (includeUsage) {
+            // PERFORMANCE FIX: Limit the usage scan to the current year to prevent 5-7 minute loading
+            const startOfPeriod = getStartOfYearISO();
+            
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
+            const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                // Limit individual scan to 10k to prevent timeouts
-                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), limit(10000)));
+                entriesSnap = await getDocs(query(baseQuery, where("coverageDate", ">=", startOfPeriod), limit(5000)));
             } else {
-                entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(10000)));
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), where("coverageDate", ">=", startOfPeriod), limit(5000)));
             }
 
             entriesSnap.docs.forEach(d => {
@@ -127,7 +121,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, isAuthorizedAdmin, isUserAdmin, profile, active, includeUsage]);
+  }, [user, isUserAdmin, profile, active, includeUsage]);
 
   useEffect(() => {
     if (active) {

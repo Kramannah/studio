@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -5,7 +6,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse } from "date-fns";
+import { getYear, parseISO, format, isWithinInterval, differenceInMinutes, isValid, getDaysInMonth, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, parse, subMonths } from "date-fns";
 import { Target, Users, TrendingUp, CalendarDays, Home, Plane, AlertTriangle, Download, Send, LogIn, LogOut, Percent, Briefcase, Pill, ThumbsUp, Building, PlaneTakeoff, Loader2, Calendar, RefreshCw } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -26,10 +27,24 @@ const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { t
     </Card>
 )
 
-export function CallSummary({ entries = [], doctors = [], nonCallDays = [], timeLogs = [], isAdminView = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[], isAdminView?: boolean }) {
+export function CallSummary({ 
+    entries = [], 
+    doctors = [], 
+    nonCallDays = [], 
+    timeLogs = [], 
+    isAdminView = false,
+    externalSelectedMonth,
+    onMonthChange
+}: { 
+    entries: CoverageEntry[], 
+    doctors: Doctor[], 
+    nonCallDays: NonCallDay[], 
+    timeLogs: TimeLog[], 
+    isAdminView?: boolean,
+    externalSelectedMonth?: string,
+    onMonthChange?: (val: string) => void
+}) {
     const summaryRef = useRef<HTMLDivElement>(null);
-    const [selectedMonth, setSelectedMonth] = useState<string>("");
-    const [appliedRange, setAppliedRange] = useState<{ start?: Date; end?: Date }>({});
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -38,38 +53,26 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
 
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
-        const monthSet = new Set<string>();
-        (entries || []).forEach(entry => {
-            const dateStr = (entry.coverageDate ?? entry.submittedAt ?? "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (isValid(date)) {
-                    monthSet.add(format(date, 'yyyy-MM'));
-                }
-            }
-        });
-        monthSet.add(format(new Date(), 'yyyy-MM'));
-        return Array.from(monthSet).sort((a, b) => b.localeCompare(a)); 
-    }, [entries, mounted]);
-
-    useEffect(() => {
-        if (!mounted) return;
-        if (!selectedMonth && availableMonths.length > 0) {
-            setSelectedMonth(availableMonths[0]);
+        // Static list of the last 12 months
+        const months = [];
+        const today = new Date();
+        for (let i = 0; i < 12; i++) {
+            months.push(format(subMonths(today, i), 'yyyy-MM'));
         }
-    }, [availableMonths, mounted, selectedMonth]);
-    
-    useEffect(() => {
-        if (!selectedMonth || !mounted) return;
+        return months;
+    }, [mounted]);
+
+    const currentMonthStr = externalSelectedMonth || format(new Date(), 'yyyy-MM');
+
+    const appliedRange = useMemo(() => {
+        if (!mounted) return { start: new Date(), end: new Date() };
         try {
-            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
-            if (isValid(monthDate)) {
-                const start = startOfMonth(monthDate);
-                const end = endOfMonth(monthDate);
-                setAppliedRange({ start, end });
-            }
-        } catch (e) {}
-    }, [selectedMonth, mounted]);
+            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
+            return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
+        } catch (e) {
+            return { start: new Date(), end: new Date() };
+        }
+    }, [currentMonthStr, mounted]);
 
     const filteredEntriesForRange = useMemo(() => {
         if (!mounted || !appliedRange.start || !appliedRange.end) return [];
@@ -235,7 +238,7 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
                             <CardDescription>Territory activity and productivity analytics.</CardDescription>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0">
-                             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                             <Select value={currentMonthStr} onValueChange={onMonthChange}>
                                 <SelectTrigger className="w-[200px] border-2 h-11 font-headline">
                                     <SelectValue placeholder="Select month" />
                                 </SelectTrigger>

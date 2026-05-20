@@ -1,7 +1,7 @@
 
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths, format } from "date-fns"
+import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths, format, endOfMonth } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -51,15 +51,26 @@ export function getStartOfYearISO(): string {
 }
 
 /**
+ * Returns the ISO strings for the start and end of a given month string (YYYY-MM).
+ */
+export function getMonthRangeISO(monthStr?: string): { start: string, end: string } {
+    const date = monthStr ? new Date(monthStr + "-01") : new Date();
+    const start = startOfMonth(date).toISOString();
+    const end = endOfMonth(date).toISOString();
+    return { start, end };
+}
+
+/**
  * Returns the ISO string for the start of the current period.
- * Defaulting to 6 months for general visibility.
+ * Defaulting to current month to prevent massive data fetch.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  return subMonths(startOfMonth(now), 5).toISOString();
+  // Default to start of current month for performance
+  return startOfMonth(now).toISOString();
 }
 
 /**

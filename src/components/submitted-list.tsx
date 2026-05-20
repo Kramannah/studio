@@ -1,9 +1,10 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, startOfMonth, endOfMonth, isWithinInterval, parse, subMonths } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
@@ -307,7 +308,9 @@ export function SubmittedList({
     onEdit, 
     readOnly = false,
     isAdminView = false,
-    userMap
+    userMap,
+    externalSelectedMonth,
+    onMonthChange
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -316,14 +319,15 @@ export function SubmittedList({
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
     isAdminView?: boolean,
-    userMap?: Record<string, { code: string; firstName: string; lastName: string }>
+    userMap?: Record<string, { code: string; firstName: string; lastName: string }>,
+    externalSelectedMonth?: string,
+    onMonthChange?: (val: string) => void
 }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [activeTab, setActiveTab] = useState("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-    const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [mounted, setMounted] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
@@ -335,56 +339,27 @@ export function SubmittedList({
 
     const availableMonths = useMemo(() => {
         if (!mounted) return [];
-        const monthSet = new Set<string>();
-        (entries || []).forEach(entry => {
-            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (isValid(date)) monthSet.add(format(date, 'yyyy-MM'));
-            }
-        });
-        monthSet.add(format(new Date(), 'yyyy-MM'));
-        return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
-    }, [entries, mounted]);
+        // PERFORMANCE: Return a static list of the last 12 months for the dropdown
+        const months = [];
+        const today = new Date();
+        for (let i = 0; i < 12; i++) {
+            months.push(format(subMonths(today, i), 'yyyy-MM'));
+        }
+        return months;
+    }, [mounted]);
+
+    const currentMonthStr = externalSelectedMonth || format(new Date(), 'yyyy-MM');
 
     useEffect(() => {
         if (!mounted) return;
-        
-        if (entries && entries.length > 0) {
-            const monthsWithData = new Set<string>();
-            entries.forEach(e => {
-                const d = parseISO(String(e.coverageDate || e.submittedAt));
-                if (isValid(d)) monthsWithData.add(format(d, 'yyyy-MM'));
-            });
-
-            const currentSelectionEmpty = !monthsWithData.has(selectedMonth);
-            
-            if (currentSelectionEmpty || !selectedMonth) {
-                const sortedMonths = Array.from(monthsWithData).sort((a, b) => b.localeCompare(a));
-                if (sortedMonths.length > 0) {
-                    setSelectedMonth(sortedMonths[0]);
-                    setSelectedDate(parse(sortedMonths[0], 'yyyy-MM', new Date()));
-                    return;
-                }
-            }
-        }
-        
-        if (!selectedMonth) {
-            setSelectedMonth(format(new Date(), 'yyyy-MM'));
-            setSelectedDate(new Date());
-        }
-    }, [entries, mounted, selectedMonth]);
-
-    useEffect(() => {
-        if (!selectedMonth || !mounted) return;
         try {
-            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
             if (isValid(monthDate)) {
                 setSelectedDate(monthDate);
                 setCurrentPage(1);
             }
         } catch (e) {}
-    }, [selectedMonth, mounted]);
+    }, [currentMonthStr, mounted]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -400,33 +375,53 @@ export function SubmittedList({
     };
 
     const monthRange = useMemo(() => {
-        if (!selectedMonth || !mounted) return { start: new Date(), end: new Date() };
+        if (!mounted) return { start: new Date(), end: new Date() };
         try {
-            const monthDate = parse(selectedMonth, 'yyyy-MM', new Date());
+            const monthDate = parse(currentMonthStr, 'yyyy-MM', new Date());
             return { start: startOfMonth(monthDate), end: endOfMonth(monthDate) };
         } catch (e) {
             return { start: new Date(), end: new Date() };
         }
-    }, [selectedMonth, mounted]);
+    }, [currentMonthStr, mounted]);
 
-    const filteredByMonth = useMemo(() => {
+    const filtered = useMemo(() => {
         if (!mounted) return [];
         
         // Deduplicate entries by ID
         const uniqueMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         
-        return Array.from(uniqueMap.values()).filter(e => {
+        let res = Array.from(uniqueMap.values()).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const date = parseISO(dateStr);
             return date && isValid(date) && isWithinInterval(date, monthRange);
         });
-    }, [entries, monthRange, mounted]);
+
+        const q = (searchQuery ?? "").toString().toLowerCase().trim();
+        if (q) {
+            res = res.filter(e => {
+                const first = (e.firstName ?? "").toString().toLowerCase();
+                const last = (e.lastName ?? "").toString().toLowerCase();
+                const clinic = (e.clinic ?? "").toString().toLowerCase();
+                return first.includes(q) || last.includes(q) || clinic.includes(q);
+            });
+        }
+
+        if (activeTab === 'calendar' && selectedDate) {
+            res = res.filter(e => {
+                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+                if (!dateStr) return false;
+                const d = parseISO(dateStr);
+                return d && isSameDay(d, selectedDate);
+            });
+        }
+        return res;
+    }, [entries, monthRange, searchQuery, activeTab, selectedDate, mounted]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
-        filteredByMonth.forEach(e => {
+        filtered.forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
@@ -437,7 +432,7 @@ export function SubmittedList({
             }
         });
         return counts;
-    }, [filteredByMonth]);
+    }, [filtered]);
 
     const entryDates = useMemo(() => {
         return Object.keys(entriesCountByDate).map(d => parseISO(d));
@@ -477,29 +472,6 @@ export function SubmittedList({
         return selectedDate ? getHolidayName(selectedDate) : null;
     }, [selectedDate]);
 
-    const filtered = useMemo(() => {
-        if (!mounted) return [];
-        let res = [...filteredByMonth];
-        const q = (searchQuery ?? "").toString().toLowerCase().trim();
-        if (q) {
-            res = res.filter(e => {
-                const first = (e.firstName ?? "").toString().toLowerCase();
-                const last = (e.lastName ?? "").toString().toLowerCase();
-                const clinic = (e.clinic ?? "").toString().toLowerCase();
-                return first.includes(q) || last.includes(q) || clinic.includes(q);
-            });
-        }
-        if (activeTab === 'calendar' && selectedDate) {
-            res = res.filter(e => {
-                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-                if (!dateStr) return false;
-                const d = parseISO(dateStr);
-                return d && isSameDay(d, selectedDate);
-            });
-        }
-        return res;
-    }, [filteredByMonth, searchQuery, activeTab, selectedDate, mounted]);
-
     const totalPages = Math.ceil(filtered.length / itemsPerPage);
     const paginatedEntries = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
@@ -531,7 +503,7 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Report_${selectedMonth || 'current'}.xlsx`);
+        XLSX.writeFile(workbook, `Report_${currentMonthStr}.xlsx`);
     };
 
     if (!mounted) return (
@@ -562,7 +534,7 @@ export function SubmittedList({
                 </TabsList>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto flex-1">
-                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <Select value={currentMonthStr} onValueChange={onMonthChange}>
                         <SelectTrigger className="w-full sm:w-[220px] h-12 border-2 rounded-xl bg-card shadow-sm font-headline text-base">
                             <SelectValue placeholder="Select month" />
                         </SelectTrigger>
@@ -629,7 +601,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                month={selectedMonth ? parse(selectedMonth, 'yyyy-MM', new Date()) : undefined}
+                                month={currentMonthStr ? parse(currentMonthStr, 'yyyy-MM', new Date()) : undefined}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

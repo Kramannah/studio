@@ -5,9 +5,11 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { getMonthRangeISO } from '@/lib/utils';
+import { format } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 
@@ -15,7 +17,7 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true) => {
+export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -37,7 +39,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     };
   }, []);
 
-  const fetchMasterEntries = useCallback(async () => {
+  const fetchMasterEntries = useCallback(async (monthStr?: string) => {
     if (!userId || !isOnline || !db || !active) {
       setLoading(false);
       return;
@@ -45,10 +47,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
+      const { start, end } = getMonthRangeISO(monthStr);
+      
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        orderBy("coverageDate", "desc"),
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -58,9 +65,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
+      // Secondary sort in case dates match
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {
+        // Fallback for missing composite index or permission errors
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'list',
@@ -79,14 +88,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         } catch (error) {}
         
         if (active) {
-            fetchMasterEntries();
+            fetchMasterEntries(selectedMonth);
         }
     } else {
       setOfflineEntries([]);
       setMasterEntries([]);
       setLoading(false);
     }
-  }, [userId, getOfflineKey, fetchMasterEntries, active]);
+  }, [userId, getOfflineKey, fetchMasterEntries, active, selectedMonth]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
@@ -108,7 +117,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         const docRef = doc(db!, "coverageEntries", entryId);
         setDoc(docRef, newEntryPayload)
           .then(() => {
-            setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
+            // Only add to list if it's within the currently viewed month
+            const monthOfEntry = format(new Date(entry.coverageDate || new Date()), 'yyyy-MM');
+            if (!selectedMonth || monthOfEntry === selectedMonth) {
+                setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);
+            }
             toast({ title: "Entry Saved", description: "Report saved to server." });
           })
           .catch(async (serverError) => {
@@ -152,7 +165,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        await fetchMasterEntries();
+        await fetchMasterEntries(selectedMonth);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
@@ -165,7 +178,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       .finally(() => {
         setIsSyncing(false);
       });
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing, selectedMonth]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0) {
@@ -219,6 +232,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
         updateOfflineInStorage(updated);
     },
-    loading 
+    loading,
+    refetch: () => fetchMasterEntries(selectedMonth)
   };
 };
