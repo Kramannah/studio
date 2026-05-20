@@ -41,7 +41,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const fetchMasterEntries = useCallback(async (monthStr?: string) => {
     if (!userId || !isOnline || !db || !active) {
-      setLoading(false);
+      if (!active) setLoading(false);
       return;
     }
 
@@ -65,10 +65,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
-      // Secondary sort in case dates match
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {
+        console.error("Fetch reports error:", serverError);
         // Fallback for missing composite index or permission errors
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
@@ -117,7 +117,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const docRef = doc(db!, "coverageEntries", entryId);
         setDoc(docRef, newEntryPayload)
           .then(() => {
-            // Only add to list if it's within the currently viewed month
             const monthOfEntry = format(new Date(entry.coverageDate || new Date()), 'yyyy-MM');
             if (!selectedMonth || monthOfEntry === selectedMonth) {
                 setMasterEntries(prev => [newEntryPayload as CoverageEntry, ...prev]);

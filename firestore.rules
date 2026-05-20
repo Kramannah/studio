@@ -53,39 +53,40 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      // Prioritize isOwner check to avoid expensive role checks for PMRs
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /doctors/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /plans/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /timeLogs/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /planningRequests/{id} {
-      allow read, list: if isAdmin() || isManager() || isStaff() || isOwner(resource.data.userId);
+      allow read, list: if (isSignedIn() && (resource == null || resource.data.userId == request.auth.uid)) || isAdmin() || isManager() || isStaff();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin() || isOwner(resource.data.userId);
+      allow update, delete: if (isSignedIn() && (resource != null && resource.data.userId == request.auth.uid)) || isAdmin();
     }
 
     match /marketingSamples/{id} {
