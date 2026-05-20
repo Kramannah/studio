@@ -335,13 +335,45 @@ export function SubmittedList({
     }, []);
 
     const monthOptions = useMemo(() => {
-        const now = new Date();
-        const start = subMonths(now, 11);
-        return eachMonthOfInterval({ start, end: now }).map(d => ({
-            label: format(d, 'MMMM yyyy'),
-            value: format(d, 'yyyy-MM')
-        })).reverse();
-    }, []);
+        const months = new Set<string>();
+        
+        entries.forEach(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d)) {
+                    months.add(format(d, 'yyyy-MM'));
+                }
+            }
+        });
+
+        // Always include current month if there are no reports at all, 
+        // to ensure the dropdown is not empty and UI logic stays stable.
+        if (months.size === 0) {
+            months.add(format(new Date(), 'yyyy-MM'));
+        }
+
+        return Array.from(months)
+            .sort()
+            .reverse()
+            .map(m => {
+                const d = parseISO(m + "-01");
+                return {
+                    label: format(d, 'MMMM yyyy'),
+                    value: m
+                };
+            });
+    }, [entries]);
+
+    useEffect(() => {
+        if (mounted && monthOptions.length > 0) {
+            const isValidSelection = monthOptions.some(opt => opt.value === selectedMonth);
+            if (!isValidSelection) {
+                // Default to the most recent month with data if the current one has none
+                setSelectedMonth(monthOptions[0].value);
+            }
+        }
+    }, [monthOptions, selectedMonth, mounted]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -504,7 +536,7 @@ export function SubmittedList({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
                 <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[320px] h-12">
-                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-center gap-2">
+                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-gap-2">
                         <ListIcon size={16} /> List
                     </TabsTrigger>
                     <TabsTrigger value="calendar" className="rounded-lg font-headline flex items-center gap-2">
@@ -512,7 +544,7 @@ export function SubmittedList({
                     </TabsTrigger>
                 </TabsList>
                 
-                <div className="relative w-full max-w-md">
+                <div className="relative w-full max-md:max-w-md">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input 
                         placeholder="Search by name or clinic..." 
@@ -541,7 +573,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for {format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for {monthOptions.find(o => o.value === selectedMonth)?.label || selectedMonth}.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

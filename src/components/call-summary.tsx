@@ -48,13 +48,43 @@ export function CallSummary({
     }, []);
 
     const monthOptions = useMemo(() => {
-        const now = new Date();
-        const start = subMonths(now, 11);
-        return eachMonthOfInterval({ start, end: now }).map(d => ({
-            label: format(d, 'MMMM yyyy'),
-            value: format(d, 'yyyy-MM')
-        })).reverse();
-    }, []);
+        const months = new Set<string>();
+        
+        entries.forEach(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d)) {
+                    months.add(format(d, 'yyyy-MM'));
+                }
+            }
+        });
+
+        // Always include current month if there are no reports at all
+        if (months.size === 0) {
+            months.add(format(new Date(), 'yyyy-MM'));
+        }
+
+        return Array.from(months)
+            .sort()
+            .reverse()
+            .map(m => {
+                const d = parseISO(m + "-01");
+                return {
+                    label: format(d, 'MMMM yyyy'),
+                    value: m
+                };
+            });
+    }, [entries]);
+
+    useEffect(() => {
+        if (mounted && monthOptions.length > 0) {
+            const isValidSelection = monthOptions.some(opt => opt.value === selectedMonth);
+            if (!isValidSelection) {
+                setSelectedMonth(monthOptions[0].value);
+            }
+        }
+    }, [monthOptions, selectedMonth, mounted]);
 
     const insights = useMemo(() => {
         if (!mounted) return null;
