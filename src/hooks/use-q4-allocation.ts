@@ -44,7 +44,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (!cachedAllocations) setLoading(true);
 
     try {
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(10000)))
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (e) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'marketingSamples',
@@ -78,13 +78,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
-            // Use simple queries only to avoid permission errors due to missing indexes
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                // Limit set to 10,000 for service stability
-                entriesSnap = await getDocs(query(baseQuery, limit(10000)));
+                entriesSnap = await getDocs(query(baseQuery, limit(1000)));
             } else {
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(1000)));
             }
 
             entriesSnap.docs.forEach(d => {
