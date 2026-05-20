@@ -72,12 +72,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
             if (!filter) {
-                return (await getDocs(query(colRef, limit(30000)))).docs.map(d => ({id: d.id, ...d.data()}));
+                return (await getDocs(query(colRef, limit(10000)))).docs.map(d => ({id: d.id, ...d.data()}));
             }
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(30000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(10000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -99,13 +99,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Increased limit to 30,000 to ensure all calls for active users are retrieved in Admin/Manager view
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(30000)));
-        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(15000)));
-        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(15000)));
-        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(10000)));
-        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(5000)));
-        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(5000)));
+        // Structured queries are capped at 10,000 results in Firestore StructuredQuery
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
+        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
+        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
+        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(5000)));
+        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000)));
+        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(2000)));
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};

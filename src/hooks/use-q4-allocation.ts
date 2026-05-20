@@ -81,11 +81,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             // Use simple queries only to avoid permission errors due to missing indexes
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                // High limit for global usage scan
-                entriesSnap = await getDocs(query(baseQuery, limit(30000)));
+                // Limit set to 10,000 for service stability
+                entriesSnap = await getDocs(query(baseQuery, limit(10000)));
             } else {
-                // Increased limit for users with high reporting volume
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(20000)));
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
             }
 
             entriesSnap.docs.forEach(d => {

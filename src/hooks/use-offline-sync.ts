@@ -44,11 +44,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
-      // Increased limit to 30,000 to ensure highly active PMRs see all their data
+      // Capped at 10,000 to satisfy Firestore structured query limits
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(30000)
+        limit(10000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -58,11 +58,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
-      // Sort client-side by date to handle large datasets correctly
+      // Sort client-side by date to handle the dataset correctly
       allEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {
-        // Log detailed error for debugging
         console.error("Fetch coverage entries failed:", serverError);
         
         const permissionError = new FirestorePermissionError({
