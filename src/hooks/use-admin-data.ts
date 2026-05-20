@@ -99,6 +99,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
+        // Use simple single-field queries to avoid triggering "Missing or insufficient permissions" due to missing indexes
         // Increased limit to 20,000 for individual PMR reports to prevent missing data
         const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(20000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
@@ -120,6 +121,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
             }
         });
+
+        // Client-side sort for better ordering without needing additional indexes
+        entries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
 
         setAllEntries(entries); 
         setAllDoctors(mapDocs(dSnap) as any); 

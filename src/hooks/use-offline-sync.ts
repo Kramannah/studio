@@ -44,8 +44,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
+      // Use a simple query to avoid triggering "Missing or insufficient permissions" due to missing indexes
       // Increased limit to 20,000 to ensure all calls for active users are retrieved
-      // without requiring complex ordering indexes
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -59,7 +59,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
       });
       
-      // Sort client-side to capture the latest submissions first
+      // Sort client-side by submission date to capture the latest submissions first
       allEntries.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(allEntries);
     } catch (serverError: any) {

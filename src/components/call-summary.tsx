@@ -45,6 +45,7 @@ export function CallSummary({
         setMounted(true);
     }, []);
 
+    // Generate month options based on months where reports actually exist
     const monthOptions = useMemo(() => {
         const months = new Set<string>();
         entries.forEach(e => {
@@ -86,7 +87,7 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // Deduplicate entries by ID to ensure accuracy
+        // Deduplicate locally
         const uniqueEntriesMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueEntriesMap.set(e.id, e); });
         const allUniqueEntries = Array.from(uniqueEntriesMap.values());

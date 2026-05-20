@@ -225,14 +225,17 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         if (!doctorName || !db) return;
         setLoading(true);
         try {
+            // Simplified history query to avoid index errors
             const q = query(
                 collection(db, "coverageEntries"),
                 where("firstName", "==", doctorName.first),
-                where("lastName", "==", doctorName.last),
-                orderBy("coverageDate", "desc")
+                where("lastName", "==", doctorName.last)
             );
             const snapshot = await getDocs(q);
-            setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry)));
+            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
+            // Sort client-side
+            fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+            setHistory(fetched);
         } catch (error) {
             console.error("History fetch error:", error);
         } finally {
@@ -334,7 +337,7 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
-    // Generate month options based on ACTUAL data presence
+    // Generate month options based on reports that actually have data
     const monthOptions = useMemo(() => {
         const months = new Set<string>();
         entries.forEach(e => {
@@ -381,7 +384,7 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
-        // Use Map for deduplication based on ID
+        // Deduplicate using ID
         const uniqueMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         

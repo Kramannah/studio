@@ -78,12 +78,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
+            // Use simple queries only to avoid permission errors due to missing indexes
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
                 // High limit for global usage scan
                 entriesSnap = await getDocs(query(baseQuery, limit(30000)));
             } else {
-                // Increased limit to 20,000 for users with high reporting volume
+                // Increased limit for users with high reporting volume
                 entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(20000)));
             }
 

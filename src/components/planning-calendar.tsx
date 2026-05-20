@@ -131,7 +131,7 @@ export function PlanningCalendar({
             if(isValid(date)) {
                 const dateStr = format(date, 'yyyy-MM-dd');
                 if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateStr].push(day);
+                groups[dateKey].push(day);
             }
         });
         return groups;
@@ -209,7 +209,6 @@ export function PlanningCalendar({
         if (!selectedDate) return [];
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
         const dayPlans = plansByDate[dateStr] || [];
-        // Deduplicate locally
         const unique = new Map<string, Plan>();
         dayPlans.forEach(p => unique.set(p.id, p));
         return Array.from(unique.values());
