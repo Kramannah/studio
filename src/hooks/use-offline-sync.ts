@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
@@ -39,17 +39,35 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     };
   }, []);
 
+  // 1. Initial Cache Load - Only runs once when userId is available
+  useEffect(() => {
+    if (userId) {
+        try {
+            const localOffline = localStorage.getItem(getOfflineKey());
+            if (localOffline) setOfflineEntries(JSON.parse(localOffline));
+            
+            const localMaster = localStorage.getItem(getMasterKey());
+            if (localMaster) setMasterEntries(JSON.parse(localMaster));
+        } catch (error) {
+            console.warn("Could not load initial cache:", error);
+        }
+    } else {
+        setOfflineEntries([]);
+        setMasterEntries([]);
+        setHasFullHistory(false);
+    }
+  }, [userId, getOfflineKey, getMasterKey]);
+
   const fetchMasterEntries = useCallback(async () => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
 
-    // Reverting to ONLY fetch if fullHistory is true.
-    // This prevents the automatic current-month fetch on startup for Planning/Reporting.
+    // Only proceed with the heavy fetch if specifically requested (Submitted/Summary views)
     if (!fullHistory) return;
 
-    // If we have already loaded the full history in this session, we don't need to fetch again.
+    // Prevent redundant fetches if we already have the full history in state
     if (hasFullHistory) return;
 
     setLoading(true);
@@ -69,10 +87,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       });
       
       fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      
+      // Update state with FULL data (including photos and signatures)
       setMasterEntries(fetchedEntries);
       setHasFullHistory(true);
       
-      // Update local storage for offline access (lightweight version)
+      // Update local storage with minimal data to stay within quota
       try {
           const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
@@ -92,27 +112,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey, fullHistory, hasFullHistory]);
+  }, [userId, isOnline, active, fullHistory, hasFullHistory, getMasterKey]);
   
+  // 2. Data Synchronization Effect - Triggers when views change or app comes online
   useEffect(() => {
-    if (userId) {
-        try {
-            const localOffline = localStorage.getItem(getOfflineKey());
-            if (localOffline) setOfflineEntries(JSON.parse(localOffline));
-            
-            const localMaster = localStorage.getItem(getMasterKey());
-            if (localMaster) setMasterEntries(JSON.parse(localMaster));
-        } catch (error) {}
-        
-        if (active) {
-            fetchMasterEntries();
-        }
-    } else {
-      setOfflineEntries([]);
-      setMasterEntries([]);
-      setLoading(false);
+    if (userId && active) {
+        fetchMasterEntries();
     }
-  }, [userId, getOfflineKey, getMasterKey, fetchMasterEntries, active]);
+  }, [userId, active, fetchMasterEntries]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
@@ -194,8 +201,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        setHasFullHistory(false); // Force a re-fetch of master entries
-        await fetchMasterEntries();
+        setHasFullHistory(false); // Reset to force a re-fetch of full master entries
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
@@ -209,7 +215,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       .finally(() => {
         setIsSyncing(false);
       });
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, isSyncing]);
+  }, [isOnline, userId, offlineEntries, toast, isSyncing]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0) {
