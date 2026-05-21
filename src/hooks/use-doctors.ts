@@ -71,7 +71,9 @@ export const useDoctors = (active: boolean = true) => {
       });
 
       setDoctors(fetchedDoctors);
-      localStorage.setItem(getStoreKey(), JSON.stringify(fetchedDoctors));
+      try {
+          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedDoctors));
+      } catch (e) {}
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
             path: 'doctors',
@@ -99,7 +101,9 @@ export const useDoctors = (active: boolean = true) => {
             const created = { id: docRef.id, ...newDoctorData };
             setDoctors((prev) => {
                 const next = [...prev, created];
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                try {
+                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                } catch (e) {}
                 return next;
             });
             toast({
@@ -190,7 +194,9 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                try {
+                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                } catch (e) {}
                 return next;
             });
         })
@@ -214,7 +220,9 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.filter((d) => d.id !== id);
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                try {
+                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                } catch (e) {}
                 return next;
             });
             toast({ variant: "destructive", title: "Doctor Removed" });
@@ -240,7 +248,9 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.filter((d) => !ids.includes(d.id));
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                try {
+                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                } catch (e) {}
                 return next;
             });
             toast({ variant: "destructive", title: "Doctors Deleted" });

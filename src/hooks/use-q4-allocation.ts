@@ -94,7 +94,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         cachedAllocations = fetchedAllocations;
         lastAllocationFetch = now;
         setAllocations(fetchedAllocations);
-        localStorage.setItem(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
+        
+        try {
+            localStorage.setItem(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
+        } catch (e) {}
 
         if (includeUsage) {
             const used: Record<string, number> = {};
@@ -131,7 +134,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                 }
             });
             setUsedQuantities(used);
-            localStorage.setItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
+            try {
+                localStorage.setItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
+            } catch (e) {}
         }
 
     } catch (error) {

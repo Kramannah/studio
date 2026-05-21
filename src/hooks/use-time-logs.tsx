@@ -63,7 +63,9 @@ export const useTimeLogs = (active: boolean = true) => {
 
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
-      localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
+      try {
+          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
+      } catch (e) {}
     } catch (serverError: any) {
       const permissionError = new FirestorePermissionError({
         path: 'timeLogs',
@@ -90,7 +92,9 @@ export const useTimeLogs = (active: boolean = true) => {
         const created = { id: docRef.id, ...newLog } as TimeLog;
         setTimeLogs(prev => {
             const next = [created, ...prev];
-            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            try {
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            } catch (e) {}
             return next;
         });
         setTodaysTimeIn(created);
@@ -114,7 +118,9 @@ export const useTimeLogs = (active: boolean = true) => {
       .then(() => {
         setTimeLogs(prev => {
             const next = prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l);
-            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            try {
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            } catch (e) {}
             return next;
         });
         setTodaysTimeIn(null);

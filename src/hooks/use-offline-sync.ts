@@ -62,8 +62,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       allEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       setMasterEntries(allEntries);
       
-      // Persist to local storage for offline fallback
-      localStorage.setItem(getMasterKey(), JSON.stringify(allEntries));
+      // Persist a lightweight subset to local storage for offline fallback to avoid QuotaExceededError
+      try {
+          // Limit to 1000 items and strip heavy base64 strings (photos, signatures) for the storage cache
+          const minimalEntries = allEntries.slice(0, 1000).map(entry => {
+              const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
+              return rest;
+          });
+          localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
+      } catch (storageError) {
+          console.warn("Local storage quota exceeded for master entries cache.");
+      }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
         
@@ -99,7 +108,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
-      localStorage.setItem(getOfflineKey(), JSON.stringify(updatedEntries));
+      try {
+          localStorage.setItem(getOfflineKey(), JSON.stringify(updatedEntries));
+      } catch (e) {
+          console.error("Failed to save offline entry to storage:", e);
+      }
   }
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
@@ -120,7 +133,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
             setMasterEntries(prev => {
                 const next = [newEntryPayload as CoverageEntry, ...prev];
                 const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-                localStorage.setItem(getMasterKey(), JSON.stringify(sorted));
+                // Update local storage with minimal data
+                try {
+                    const minimalNext = sorted.slice(0, 1000).map(e => {
+                        const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
+                        return rest;
+                    });
+                    localStorage.setItem(getMasterKey(), JSON.stringify(minimalNext));
+                } catch (e) {}
                 return sorted;
             });
             toast({ title: "Entry Saved", description: "Report saved to server." });
@@ -196,7 +216,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       .then(() => {
         setMasterEntries(prev => {
             const filtered = prev.filter(e => e.id !== id);
-            localStorage.setItem(getMasterKey(), JSON.stringify(filtered));
+            try {
+                const minimalFiltered = filtered.slice(0, 1000).map(e => {
+                    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
+                    return rest;
+                });
+                localStorage.setItem(getMasterKey(), JSON.stringify(minimalFiltered));
+            } catch (e) {}
             return filtered;
         });
       })
@@ -216,7 +242,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       .then(() => {
         setMasterEntries(prev => {
             const updated = prev.map(item => item.id === e.id ? {...item, ...e} : item);
-            localStorage.setItem(getMasterKey(), JSON.stringify(updated));
+            try {
+                const minimalUpdated = updated.slice(0, 1000).map(item => {
+                    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = item;
+                    return rest;
+                });
+                localStorage.setItem(getMasterKey(), JSON.stringify(minimalUpdated));
+            } catch (err) {}
             return updated;
         });
       })

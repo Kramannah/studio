@@ -50,7 +50,9 @@ export const useNonCallDays = (active: boolean = true) => {
       });
 
       setNonCallDays(filtered);
-      localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
+      try {
+          localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
+      } catch (e) {}
     } catch (error) {
         console.error("Error fetching non-call days:", error);
     } finally {
@@ -72,7 +74,9 @@ export const useNonCallDays = (active: boolean = true) => {
         const docRef = await addDoc(colRef, newEntry);
         setNonCallDays(prev => {
             const next = [...prev, { id: docRef.id, ...newEntry }];
-            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            try {
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            } catch (e) {}
             return next;
         });
         toast({ title: "Request Submitted" });
