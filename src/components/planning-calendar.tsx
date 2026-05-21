@@ -173,38 +173,6 @@ export function PlanningCalendar({
         return counts;
     }, [allEntries]);
 
-    const territoryStats = useMemo(() => {
-        const stats = {
-            total: { completed: 0, target: 0 },
-            '1x': { completed: 0, target: 0 },
-            '2x': { completed: 0, target: 0 },
-            '3x': { completed: 0, target: 0 },
-            '4x': { completed: 0, target: 0 },
-        };
-
-        const uniqueDoctors = new Map<string, Doctor>();
-        (doctors || []).forEach(d => { if (d && d.id) uniqueDoctors.set(d.id, d); });
-
-        Array.from(uniqueDoctors.values()).forEach(d => {
-            const freq = (d.frequency || '1x').toString();
-            const target = parseInt(freq.replace('x', ''), 10) || 0;
-            const first = (d.firstName ?? "").toString().toLowerCase().trim();
-            const last = (d.lastName ?? "").toString().toLowerCase().trim();
-            const nameKey = `${first}|${last}`;
-            const actual = visitCountsThisMonth[nameKey] || 0;
-            const completed = Math.min(target, actual);
-
-            stats.total.target += target;
-            stats.total.completed += completed;
-            if (stats[freq as keyof typeof stats]) {
-                (stats[freq as keyof typeof stats] as any).target += target;
-                (stats[freq as keyof typeof stats] as any).completed += completed;
-            }
-        });
-
-        return stats;
-    }, [doctors, visitCountsThisMonth]);
-
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -368,10 +336,13 @@ export function PlanningCalendar({
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">
-                                    Visits: {selectedDayStats.total}
+                                    Total Visits: {selectedDayStats.total}
                                 </Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">
                                     Covered: {selectedDayStats.covered}
+                                </Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-destructive/30 text-destructive bg-destructive/10">
+                                    Not Covered: {selectedDayStats.notCovered}
                                 </Badge>
                             </div>
                         </div>
