@@ -128,7 +128,7 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
-const compressImage = (dataUrl: string, quality = 0.5, maxWidth = 800): Promise<string> => {
+const compressImage = (dataUrl: string, quality = 0.4, maxWidth = 600): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = dataUrl;
@@ -531,21 +531,22 @@ export function CoverageForm({
       const newCoverageDate = values.coverageDate || new Date();
 
       if (!isEditMode) {
-        const docFirstNameLower = (values.firstName || "").toLowerCase();
-        const docLastNameLower = (values.lastName || "").toLowerCase();
+        const docFirstNameLower = String(values.firstName ?? "").toLowerCase().trim();
+        const docLastNameLower = String(values.lastName ?? "").toLowerCase().trim();
         
         const doctorInMasterlist = doctors.find(
           (d) =>
-            d.firstName.toLowerCase() === docFirstNameLower &&
-            d.lastName.toLowerCase() === docLastNameLower
+            String(d.firstName ?? "").toLowerCase().trim() === docFirstNameLower &&
+            String(d.lastName ?? "").toLowerCase().trim() === docLastNameLower
         );
         
         let coveragesInMonth = 0;
         let alreadyCoveredToday = false;
 
         for (const entry of allEntries) {
-            if ((entry.firstName || "").toLowerCase() === docFirstNameLower && (entry.lastName || "").toLowerCase() === docLastNameLower) {
-                const entryDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
+            if (String(entry.firstName ?? "").toLowerCase().trim() === docFirstNameLower && String(entry.lastName ?? "").toLowerCase().trim() === docLastNameLower) {
+                const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
+                const entryDate = dateStr ? parseISO(dateStr) : null;
                 if (entryDate && isValid(entryDate)) {
                     if (isSameMonth(entryDate, newCoverageDate)) {
                         coveragesInMonth++;
@@ -564,7 +565,8 @@ export function CoverageForm({
         }
 
         if (doctorInMasterlist) {
-            const freqTarget = parseInt(doctorInMasterlist.frequency.replace('x', ''), 10);
+            const freqStr = String(doctorInMasterlist.frequency || "1x").replace('x', '');
+            const freqTarget = parseInt(freqStr, 10) || 1;
             if (coveragesInMonth >= freqTarget) {
               toast({ variant: "destructive", title: "Submission Limit Reached", description: `${values.firstName} ${values.lastName} has met the monthly frequency limit.` });
               setIsSubmitting(false);
@@ -577,7 +579,7 @@ export function CoverageForm({
           onUpdate({
               ...values,
               id: entryToEdit!.id,
-              coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
+              coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
           } as any);
           toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
@@ -590,7 +592,7 @@ export function CoverageForm({
 
       const savedOnline = await onSave({
         ...restOfValues,
-        coverageDate: values.coverageDate ? values.coverageDate.toISOString() : new Date().toISOString(),
+        coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
       } as any);
       resetForm();
       onFormSubmit?.(savedOnline);
@@ -788,7 +790,7 @@ export function CoverageForm({
                                                     !field.value && "text-muted-foreground"
                                                     )}
                                                 >
-                                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                                    {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                                     <CalendarIcon className="w-4 h-4 ml-auto opacity-50" />
                                                 </Button>
                                                 </FormControl>
