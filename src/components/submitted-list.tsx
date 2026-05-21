@@ -6,14 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -225,7 +225,6 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
         if (!doctorName || !db) return;
         setLoading(true);
         try {
-            // Simplified history query to avoid index errors
             const q = query(
                 collection(db, "coverageEntries"),
                 where("firstName", "==", doctorName.first),
@@ -233,7 +232,6 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             );
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-            // Sort client-side
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
             setHistory(fetched);
         } catch (error) {
@@ -384,13 +382,11 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
-        // Deduplicate using ID
         const uniqueMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
         
         let res = Array.from(uniqueMap.values());
 
-        // Targeted Month Filter
         res = res.filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
@@ -418,6 +414,10 @@ export function SubmittedList({
         }
         return res;
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedMonth, activeTab]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -472,7 +472,7 @@ export function SubmittedList({
         return selectedDate ? getHolidayName(selectedDate) : null;
     }, [selectedDate]);
 
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
     const paginatedEntries = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
         return filtered.slice(start, start + itemsPerPage);
@@ -575,6 +575,34 @@ export function SubmittedList({
                             )}
                         </TableBody>
                     </Table>
+                    
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between p-4 border-t bg-muted/20">
+                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                                Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                                    disabled={currentPage === 1}
+                                    className="h-9 border-2 rounded-xl px-4 font-headline"
+                                >
+                                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                                    disabled={currentPage === totalPages}
+                                    className="h-9 border-2 rounded-xl px-4 font-headline"
+                                >
+                                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </Card>
             </TabsContent>
 
