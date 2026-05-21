@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -17,15 +16,29 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  limit,
 } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+
+const DOCTORS_STORAGE_KEY = 'sfe-doctors-v4';
 
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const getStoreKey = () => `${DOCTORS_STORAGE_KEY}_${user?.uid}`;
+
+  useEffect(() => {
+    if (user?.uid) {
+        try {
+            const cached = localStorage.getItem(getStoreKey());
+            if (cached) setDoctors(JSON.parse(cached));
+        } catch (e) {}
+    }
+  }, [user?.uid]);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -37,7 +50,7 @@ export const useDoctors = (active: boolean = true) => {
   }, [user, profile]);
 
   const fetchDoctors = useCallback(async () => {
-    if (!user || !db || !active) {
+    if (!user || !db || !active || !navigator.onLine) {
       if (!active) setLoading(false);
       return;
     }
@@ -46,9 +59,9 @@ export const useDoctors = (active: boolean = true) => {
     try {
       let q;
       if (isUserAdmin) {
-        q = query(collection(db, "doctors"));
+        q = query(collection(db, "doctors"), limit(10000));
       } else {
-        q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+        q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(10000));
       }
 
       const querySnapshot = await getDocs(q);
@@ -58,6 +71,7 @@ export const useDoctors = (active: boolean = true) => {
       });
 
       setDoctors(fetchedDoctors);
+      localStorage.setItem(getStoreKey(), JSON.stringify(fetchedDoctors));
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
             path: 'doctors',
@@ -82,7 +96,12 @@ export const useDoctors = (active: boolean = true) => {
       const colRef = collection(db, "doctors");
       addDoc(colRef, newDoctorData)
         .then((docRef) => {
-            setDoctors((prev) => [...prev, { id: docRef.id, ...newDoctorData }]);
+            const created = { id: docRef.id, ...newDoctorData };
+            setDoctors((prev) => {
+                const next = [...prev, created];
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                return next;
+            });
             toast({
                 title: "Doctor Added",
                 description: `${doctorData.firstName} ${doctorData.lastName} has been added.`,
@@ -106,7 +125,7 @@ export const useDoctors = (active: boolean = true) => {
       setLoading(true);
 
       try {
-        const q = query(collection(db, "doctors"), where("userId", "==", user.uid));
+        const q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(10000));
         const querySnapshot = await getDocs(q);
         const existingDoctors = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Doctor[];
         const existingDoctorMap = new Map<string, Doctor>();
@@ -169,9 +188,11 @@ export const useDoctors = (active: boolean = true) => {
       const docRef = doc(db, "doctors", id);
       updateDoc(docRef, { ...dataToUpdate, userId: user.uid })
         .then(() => {
-            setDoctors((prev) =>
-              prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d))
-            );
+            setDoctors((prev) => {
+                const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                return next;
+            });
         })
         .catch(async (serverError) => {
             const permissionError = new FirestorePermissionError({
@@ -191,7 +212,11 @@ export const useDoctors = (active: boolean = true) => {
       const docRef = doc(db, "doctors", id);
       deleteDoc(docRef)
         .then(() => {
-            setDoctors((prev) => prev.filter((d) => d.id !== id));
+            setDoctors((prev) => {
+                const next = prev.filter((d) => d.id !== id);
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                return next;
+            });
             toast({ variant: "destructive", title: "Doctor Removed" });
         })
         .catch(async (serverError) => {
@@ -213,7 +238,11 @@ export const useDoctors = (active: boolean = true) => {
 
       batch.commit()
         .then(() => {
-            setDoctors((prev) => prev.filter((d) => !ids.includes(d.id)));
+            setDoctors((prev) => {
+                const next = prev.filter((d) => !ids.includes(d.id));
+                localStorage.setItem(getStoreKey(), JSON.stringify(next));
+                return next;
+            });
             toast({ variant: "destructive", title: "Doctors Deleted" });
         })
         .catch(async (serverError) => {

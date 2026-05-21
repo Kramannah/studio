@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -7,8 +6,10 @@ import { useToast } from "@/hooks/use-toast";
 import { parseISO, isValid } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { getQueryStartDateISO } from '@/lib/utils';
+
+const NCD_STORAGE_KEY = 'sfe-non-call-days-v4';
 
 export const useNonCallDays = (active: boolean = true) => {
   const { toast } = useToast();
@@ -16,14 +17,25 @@ export const useNonCallDays = (active: boolean = true) => {
   const [nonCallDays, setNonCallDays] = useState<NonCallDay[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const getStoreKey = () => `${NCD_STORAGE_KEY}_${user?.uid}`;
+
+  useEffect(() => {
+    if (user?.uid) {
+        try {
+            const cached = localStorage.getItem(getStoreKey());
+            if (cached) setNonCallDays(JSON.parse(cached));
+        } catch (e) {}
+    }
+  }, [user?.uid]);
+
   const fetchNonCallDays = useCallback(async () => {
-    if (!user || !db || !active) {
+    if (!user || !db || !active || !navigator.onLine) {
       if (!active) setLoading(false);
       return;
     };
     setLoading(true);
     try {
-      const q = query(collection(db, "nonCallDays"), where("userId", "==", user.uid));
+      const q = query(collection(db, "nonCallDays"), where("userId", "==", user.uid), limit(1000));
       const querySnapshot = await getDocs(q);
       const fetched: NonCallDay[] = [];
       querySnapshot.forEach((doc) => {
@@ -38,6 +50,7 @@ export const useNonCallDays = (active: boolean = true) => {
       });
 
       setNonCallDays(filtered);
+      localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
     } catch (error) {
         console.error("Error fetching non-call days:", error);
     } finally {
@@ -57,7 +70,11 @@ export const useNonCallDays = (active: boolean = true) => {
     const colRef = collection(db, "nonCallDays");
     try {
         const docRef = await addDoc(colRef, newEntry);
-        setNonCallDays(prev => [...prev, { id: docRef.id, ...newEntry }]);
+        setNonCallDays(prev => {
+            const next = [...prev, { id: docRef.id, ...newEntry }];
+            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            return next;
+        });
         toast({ title: "Request Submitted" });
     } catch (error) {
         console.error("Error adding non-call day:", error);

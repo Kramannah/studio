@@ -9,6 +9,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
+const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -23,6 +24,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const [loading, setLoading] = useState(false);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
+  const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -44,7 +46,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
 
     setLoading(true);
     try {
-      // Increased limit to 10,000 to ensure heavy users like Dimaala get all their records.
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -60,6 +61,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       
       allEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       setMasterEntries(allEntries);
+      
+      // Persist to local storage for offline fallback
+      localStorage.setItem(getMasterKey(), JSON.stringify(allEntries));
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
         
@@ -71,13 +75,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active]);
+  }, [userId, isOnline, active, getMasterKey]);
   
   useEffect(() => {
     if (userId) {
         try {
-            const localData = localStorage.getItem(getOfflineKey());
-            if (localData) setOfflineEntries(JSON.parse(localData));
+            const localOffline = localStorage.getItem(getOfflineKey());
+            if (localOffline) setOfflineEntries(JSON.parse(localOffline));
+            
+            const localMaster = localStorage.getItem(getMasterKey());
+            if (localMaster) setMasterEntries(JSON.parse(localMaster));
         } catch (error) {}
         
         if (active) {
@@ -88,7 +95,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       setMasterEntries([]);
       setLoading(false);
     }
-  }, [userId, getOfflineKey, fetchMasterEntries, active]);
+  }, [userId, getOfflineKey, getMasterKey, fetchMasterEntries, active]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
@@ -112,7 +119,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
           .then(() => {
             setMasterEntries(prev => {
                 const next = [newEntryPayload as CoverageEntry, ...prev];
-                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+                const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+                localStorage.setItem(getMasterKey(), JSON.stringify(sorted));
+                return sorted;
             });
             toast({ title: "Entry Saved", description: "Report saved to server." });
           })
@@ -185,7 +194,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
-        setMasterEntries(prev => prev.filter(e => e.id !== id));
+        setMasterEntries(prev => {
+            const filtered = prev.filter(e => e.id !== id);
+            localStorage.setItem(getMasterKey(), JSON.stringify(filtered));
+            return filtered;
+        });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -201,7 +214,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     const docRef = doc(db!, "coverageEntries", e.id);
     updateDoc(docRef, { ...e, userId: userId })
       .then(() => {
-        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...e} : item));
+        setMasterEntries(prev => {
+            const updated = prev.map(item => item.id === e.id ? {...item, ...e} : item);
+            localStorage.setItem(getMasterKey(), JSON.stringify(updated));
+            return updated;
+        });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({

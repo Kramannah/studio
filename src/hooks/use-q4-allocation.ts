@@ -13,12 +13,16 @@ import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
 const ALLOCATION_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v4';
+const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v4';
 
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(!cachedAllocations && active);
+
+  const getStoreKey = (base: string) => `${base}_${user?.uid}`;
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -28,6 +32,18 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
            profile?.role === 'Admin';
   }, [user, profile]);
 
+  // Load from local storage on mount
+  useEffect(() => {
+      if (user?.uid) {
+          try {
+              const localAlloc = localStorage.getItem(getStoreKey(ALLOCATIONS_STORAGE_KEY));
+              const localUsed = localStorage.getItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY));
+              if (localAlloc) setAllocations(JSON.parse(localAlloc));
+              if (localUsed) setUsedQuantities(JSON.parse(localUsed));
+          } catch (e) {}
+      }
+  }, [user?.uid]);
+
   const performFetch = useCallback(async (force = false) => {
     if (!db || !user || !active) {
         setLoading(false);
@@ -35,10 +51,17 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     }
 
     const now = Date.now();
+    const isOnline = navigator.onLine;
+
     if (!force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL)) {
         setAllocations(cachedAllocations);
         setLoading(false);
         if (!includeUsage) return;
+    }
+
+    if (!isOnline) {
+        setLoading(false);
+        return;
     }
 
     if (!cachedAllocations) setLoading(true);
@@ -71,19 +94,17 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         cachedAllocations = fetchedAllocations;
         lastAllocationFetch = now;
         setAllocations(fetchedAllocations);
-
-        const used: Record<string, number> = {};
+        localStorage.setItem(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
 
         if (includeUsage) {
+            const used: Record<string, number> = {};
             let entriesSnap;
             const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
 
             const baseQuery = collection(db!, "coverageEntries");
             if (canDoGlobalFetch) {
-                // Increased to 10,000 for accurate global summary
                 entriesSnap = await getDocs(query(baseQuery, limit(10000)));
             } else {
-                // Increased to 10,000 for accurate PMR balance tracking
                 entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
             }
 
@@ -110,6 +131,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                 }
             });
             setUsedQuantities(used);
+            localStorage.setItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
         }
 
     } catch (error) {

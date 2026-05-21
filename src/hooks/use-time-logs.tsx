@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,11 +5,13 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO } from 'date-fns';
 import { getQueryStartDateISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+
+const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v4';
 
 export const useTimeLogs = (active: boolean = true) => {
   const { toast } = useToast();
@@ -19,8 +20,23 @@ export const useTimeLogs = (active: boolean = true) => {
   const [loading, setLoading] = useState(false);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
 
+  const getStoreKey = () => `${TIME_LOGS_STORAGE_KEY}_${user?.uid}`;
+
+  useEffect(() => {
+    if (user?.uid) {
+        try {
+            const cached = localStorage.getItem(getStoreKey());
+            if (cached) {
+                const logs = JSON.parse(cached);
+                setTimeLogs(logs);
+                setTodaysTimeIn(logs.find((l: TimeLog) => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+            }
+        } catch (e) {}
+    }
+  }, [user?.uid]);
+
   const fetchTimeLogs = useCallback(async () => {
-    if (!user || !db || !active) {
+    if (!user || !db || !active || !navigator.onLine) {
       if (!active) setLoading(false);
       return;
     }
@@ -30,7 +46,8 @@ export const useTimeLogs = (active: boolean = true) => {
       
       const q = query(
         collection(db, "timeLogs"), 
-        where("userId", "==", user.uid)
+        where("userId", "==", user.uid),
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -46,6 +63,7 @@ export const useTimeLogs = (active: boolean = true) => {
 
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
+      localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
     } catch (serverError: any) {
       const permissionError = new FirestorePermissionError({
         path: 'timeLogs',
@@ -70,7 +88,11 @@ export const useTimeLogs = (active: boolean = true) => {
     addDoc(colRef, newLog)
       .then((docRef) => {
         const created = { id: docRef.id, ...newLog } as TimeLog;
-        setTimeLogs(prev => [created, ...prev]);
+        setTimeLogs(prev => {
+            const next = [created, ...prev];
+            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            return next;
+        });
         setTodaysTimeIn(created);
         toast({ title: "Time In Recorded" });
       })
@@ -90,7 +112,11 @@ export const useTimeLogs = (active: boolean = true) => {
     const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
     updateDoc(logRef, updateData)
       .then(() => {
-        setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
+        setTimeLogs(prev => {
+            const next = prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l);
+            localStorage.setItem(getStoreKey(), JSON.stringify(next));
+            return next;
+        });
         setTodaysTimeIn(null);
         toast({ title: "Time Out Recorded" });
       })
