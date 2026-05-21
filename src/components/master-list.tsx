@@ -526,7 +526,32 @@ export function MasterList({ doctors, entries, onAddDoctor, onUpdateDoctor, onDe
     };
 
     const handleDownloadExcel = () => {
-        const worksheet = XLSX.utils.json_to_sheet(filteredDoctors);
+        const dataToExport = filteredDoctors.map(doctor => ({
+            'First Name': doctor.firstName || "",
+            'Last Name': doctor.lastName || "",
+            'HCP Code': doctor.hcpCode || "",
+            'Specialty': doctor.specialty || "",
+            'Clinic': doctor.clinic || "",
+            'Province': doctor.province || "",
+            'Municipality': doctor.municipality || "",
+            'Place of Practice': doctor.placeOfPractice || "",
+            'Frequency': doctor.frequency || "",
+            'HACME': doctor.hacme || "",
+            'Coverage Type': doctor.coverageType || "",
+            'Dapavid': doctor.dapavid || "",
+            'Hofovir': doctor.hofovir || "",
+            'Inox': doctor.inox || "",
+            'Irinovid': doctor.irinovid || "",
+            'Ondavid': doctor.ondavid || "",
+            'Ricam Tablet': doctor.ricamTablet || "",
+            'Tocovid 100mg': doctor.tocovid100mg || "",
+            'Tocovid 200mg': doctor.tocovid200mg || "",
+            'Tocovid Vitality': doctor.tocovidVitality || "",
+            'Virest Cream': doctor.virestCream || "",
+            'Virest Tab': doctor.virestTab || "",
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Doctor Masterlist");
         XLSX.writeFile(workbook, `doctor_masterlist_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
