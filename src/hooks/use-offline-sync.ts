@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -13,6 +14,24 @@ const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+};
+
+/**
+ * Data Sanitization Utility
+ * Strip undefined values to prevent Firestore crashes.
+ */
+const sanitizePayload = (data: any): any => {
+  const cleaned: any = {};
+  Object.keys(data).forEach(key => {
+    const val = data[key];
+    if (val === undefined) return;
+    if (Array.isArray(val) && key === 'reminderProducts') {
+      cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
+      return;
+    }
+    cleaned[key] = val;
+  });
+  return cleaned;
 };
 
 export const useOfflineSync = (userId?: string, active: boolean = true, fullHistory: boolean = false) => {
@@ -39,7 +58,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     };
   }, []);
 
-  // 1. Initial Cache Load - Only runs once when userId is available
   useEffect(() => {
     if (userId) {
         try {
@@ -63,16 +81,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       if (!active) setLoading(false);
       return;
     }
-
-    // Only proceed with the heavy fetch if specifically requested (Submitted/Summary views)
     if (!fullHistory) return;
-
-    // Prevent redundant fetches if we already have the full history in state
     if (hasFullHistory) return;
 
     setLoading(true);
     try {
-      // High-volume fetch (for Submitted List and Summary Analytics)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -87,12 +100,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       });
       
       fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-      
-      // Update state with FULL data (including photos and signatures)
       setMasterEntries(fetchedEntries);
       setHasFullHistory(true);
       
-      // Update local storage with minimal data to stay within quota
       try {
           const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
@@ -114,7 +124,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     }
   }, [userId, isOnline, active, fullHistory, hasFullHistory, getMasterKey]);
   
-  // 2. Data Synchronization Effect - Triggers when views change or app comes online
   useEffect(() => {
     if (userId && active) {
         fetchMasterEntries();
@@ -134,19 +143,22 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     if (!userId || !db) return false;
     
     const entryId = generateUniqueId();
-    const newEntryPayload = {
+    const rawPayload = {
       ...entry,
       id: entryId,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
 
+    // Sanitize to prevent undefined fields from crashing Firestore write
+    const sanitizedPayload = sanitizePayload(rawPayload);
+
     if (isOnline) {
         const docRef = doc(db!, "coverageEntries", entryId);
-        setDoc(docRef, newEntryPayload)
+        setDoc(docRef, sanitizedPayload)
           .then(() => {
             setMasterEntries(prev => {
-                const next = [newEntryPayload as CoverageEntry, ...prev];
+                const next = [sanitizedPayload as CoverageEntry, ...prev];
                 const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
                 try {
                     const minimalNext = sorted.slice(0, 1000).map(e => {
@@ -164,14 +176,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
             const permissionError = new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'create',
-                requestResourceData: newEntryPayload,
+                requestResourceData: sanitizedPayload,
             } satisfies SecurityRuleContext);
             errorEmitter.emit('permission-error', permissionError);
-            saveEntryOffline(newEntryPayload);
+            saveEntryOffline(sanitizedPayload);
           });
         return true;
     } else {
-        saveEntryOffline(newEntryPayload);
+        saveEntryOffline(sanitizedPayload);
         return false;
     }
   };
@@ -185,7 +197,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
 
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || !db || offlineEntries.length === 0) return;
-    
     if (isSyncing) return;
     setIsSyncing(true);
 
@@ -194,14 +205,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
 
     for (const entry of entriesToSync) {
         const { id, isOffline, ...dataToSync } = entry;
+        const sanitizedData = sanitizePayload(dataToSync);
         const docRef = doc(collection(db!, "coverageEntries")); 
-        batch.set(docRef, { ...dataToSync, userId: userId, submittedAt: new Date().toISOString() });
+        batch.set(docRef, { ...sanitizedData, userId: userId, submittedAt: new Date().toISOString() });
     }
 
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        setHasFullHistory(false); // Reset to force a re-fetch of full master entries
+        setHasFullHistory(false);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
@@ -251,11 +263,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
+    const sanitizedPayload = sanitizePayload(e);
     const docRef = doc(db!, "coverageEntries", e.id);
-    updateDoc(docRef, { ...e, userId: userId })
+    updateDoc(docRef, { ...sanitizedPayload, userId: userId })
       .then(() => {
         setMasterEntries(prev => {
-            const updated = prev.map(item => item.id === e.id ? {...item, ...e} : item);
+            const updated = prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item);
             try {
                 const minimalUpdated = updated.slice(0, 1000).map(item => {
                     const { photos, signature, jointCallSignature, dsmSignature, ...rest } = item;
@@ -270,7 +283,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
         const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'update',
-          requestResourceData: e,
+          requestResourceData: sanitizedPayload,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
       });

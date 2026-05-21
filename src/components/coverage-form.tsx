@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -521,6 +522,44 @@ export function CoverageForm({
     }
   };
 
+  /**
+   * Data Sanitization Utility
+   * Strips undefined, null, or empty string values from a payload to ensure Firestore compatibility.
+   */
+  const cleanPayload = (data: any): any => {
+    const cleaned: any = {};
+    Object.keys(data).forEach(key => {
+        const val = data[key];
+        
+        // Skip null/undefined/empty
+        if (val === undefined || val === null || val === "") return;
+        
+        // Handle nested arrays (reminderProducts)
+        if (Array.isArray(val)) {
+            if (val.length === 0) return;
+            if (key === 'reminderProducts') {
+                cleaned[key] = val
+                    .map(p => cleanPayload(p))
+                    .filter(p => Object.keys(p).length > 0);
+                if (cleaned[key].length === 0) delete cleaned[key];
+                return;
+            }
+            cleaned[key] = val;
+            return;
+        }
+
+        // Handle numeric fields safely
+        if (typeof val === 'number') {
+            if (isNaN(val)) return;
+            cleaned[key] = val;
+            return;
+        }
+
+        cleaned[key] = val;
+    });
+    return cleaned;
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -575,11 +614,18 @@ export function CoverageForm({
         }
       }
 
+      // Prepare and sanitize payload
+      const basePayload = {
+          ...values,
+          coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
+      };
+
+      const sanitizedPayload = cleanPayload(basePayload);
+
       if (isEditMode) {
           onUpdate({
-              ...values,
+              ...sanitizedPayload,
               id: entryToEdit!.id,
-              coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
           } as any);
           toast({ title: "Update Successful", description: "Coverage report updated." });
           resetForm();
@@ -588,12 +634,10 @@ export function CoverageForm({
           return;
       }
       
-      const { plannedDoctorId: _pId, ...restOfValues } = values;
+      // Handle normal submission
+      const { plannedDoctorId: _pId, ...restOfValues } = sanitizedPayload;
 
-      const savedOnline = await onSave({
-        ...restOfValues,
-        coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
-      } as any);
+      const savedOnline = await onSave(restOfValues as any);
       resetForm();
       onFormSubmit?.(savedOnline);
     } catch (error) {
