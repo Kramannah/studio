@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -10,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, PackageCheck } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, isValid, format } from "date-fns";
+import { isToday, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
@@ -48,6 +47,13 @@ export default function Home() {
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState<View>('planning');
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
+  const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
+  const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
+  const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
+  const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
+  const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
   useEffect(() => {
     setMounted(true);
@@ -73,9 +79,22 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-  // OPTIMIZATION: Only fetch high-volume masterEntries when the user is specifically viewing reports or summary
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, refetch: refetchEntries } = useOfflineSync(
+  // DATA HOOKS
+  const { 
+    offlineEntries, 
+    masterEntries, 
+    saveEntry, 
+    deleteMasterEntry, 
+    isSyncing, 
+    syncAllOfflineEntries, 
+    isOnline, 
+    updateMasterEntry, 
+    updateOfflineEntry, 
+    loading: entriesLoading, 
+    refetch: refetchEntries 
+  } = useOfflineSync(
     user?.uid, 
+    ['submitted', 'summary', 'planning', 'coverage'].includes(activeView),
     activeView === 'submitted' || activeView === 'summary'
   );
   
@@ -84,21 +103,11 @@ export default function Home() {
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary' || activeView === 'submitted');
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
   
-  // includeUsage logic: needs reports for balances in coverage and allocation views, plus summary analytics
-  // Controlled to ensure coverageEntries are only scanned when relevant views are active
   const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(
     activeView === 'coverage' || activeView === 'allocation' || activeView === 'summary', 
     activeView === 'allocation' || activeView === 'coverage' || activeView === 'summary'
   );
   
-  const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
-  const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
-  const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
-  const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
-  const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
-  const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
-
   useEffect(() => {
     if (isOnline && syncAllOfflinePlans) syncAllOfflinePlans();
   }, [isOnline, syncAllOfflinePlans]);
@@ -167,6 +176,11 @@ export default function Home() {
         return isValid(plannedDate) && isToday(plannedDate);
     });
   },[plans, mounted]);
+
+  const handleCrmClick = () => {
+    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'allocation'];
+    if (!crmViews.includes(activeView)) setActiveView('planning');
+  };
   
   if (!mounted || authLoading) return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -176,43 +190,50 @@ export default function Home() {
   
   if (!user) return <LoginPage />;
 
-  const handleCrmClick = () => {
-    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'allocation'];
-    if (!crmViews.includes(activeView)) setActiveView('planning');
-  };
-  
   const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || allocationLoading;
 
   const renderContent = () => {
-    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && activeView !== 'coverage' && activeView !== 'master' && activeView !== 'allocation';
+    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && 
+                             activeView !== 'coverage' && 
+                             activeView !== 'master' && 
+                             activeView !== 'allocation';
+
     if (isContentLoading) return <DynamicSkeleton />;
 
     switch (activeView) {
-      case 'planning': return (
-        <PlanningCalendar 
-          doctors={doctors} 
-          plans={plans} 
-          planningRequests={planningRequests} 
-          onRequestUnlock={requestPlanningPermission} 
-          entries={masterEntries} 
-          offlineEntries={offlineEntries} 
-          onAddPlan={addPlan} 
-          onAddPlansBulk={addPlansBulk}
-          onRemovePlan={removePlan} 
-          onLogCall={handleLogPlannedCall} 
-          nonCallDays={nonCallDays} 
-          onAddNonCallDay={addNonCallDay} 
-        />
-      );
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
-      case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
-      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
-      case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
-      case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
-      case 'allocation': return <Q4AllocationView readOnly={true} />;
-      default: return null;
+      case 'planning': 
+        return (
+          <PlanningCalendar 
+            doctors={doctors} 
+            plans={plans} 
+            planningRequests={planningRequests} 
+            onRequestUnlock={requestPlanningPermission} 
+            entries={masterEntries} 
+            offlineEntries={offlineEntries} 
+            onAddPlan={addPlan} 
+            onAddPlansBulk={addPlansBulk}
+            onRemovePlan={removePlan} 
+            onLogCall={handleLogPlannedCall} 
+            nonCallDays={nonCallDays} 
+            onAddNonCallDay={addNonCallDay} 
+          />
+        );
+      case 'coverage': 
+        return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'offline': 
+        return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
+      case 'submitted': 
+        return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+      case 'summary': 
+        return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
+      case 'master': 
+        return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
+      case 'allocation': 
+        return <Q4AllocationView readOnly={true} />;
+      default: 
+        return null;
     }
-  }
+  };
 
   return (
     <SidebarProvider>
@@ -292,7 +313,9 @@ export default function Home() {
             </SidebarFooter>
           </Sidebar>
           <main className="flex-1 w-full overflow-x-hidden">
-            <div className="w-full h-full p-4 md:p-6 lg:p-8">{renderContent()}</div>
+            <div className="w-full h-full p-4 md:p-6 lg:p-8">
+              {renderContent()}
+            </div>
           </main>
         </div>
       </div>

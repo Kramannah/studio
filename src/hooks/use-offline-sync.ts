@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { getQueryStartDateISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -15,13 +16,14 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true) => {
+export const useOfflineSync = (userId?: string, active: boolean = true, fullHistory: boolean = false) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [hasFullHistory, setHasFullHistory] = useState(false);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
   const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
@@ -44,34 +46,55 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       return;
     }
 
+    // If we are currently in a view that only needs current month data (planning/coverage)
+    // but we have already loaded the full history in this session, we don't need to fetch again.
+    if (!fullHistory && hasFullHistory) return;
+
     setLoading(true);
     try {
-      const q = query(
-        collection(db!, "coverageEntries"), 
-        where("userId", "==", userId),
-        limit(10000)
-      );
+      let q;
+      if (fullHistory) {
+        // Full history fetch (for Submitted List and Summary Analytics)
+        q = query(
+          collection(db!, "coverageEntries"), 
+          where("userId", "==", userId),
+          limit(10000)
+        );
+      } else {
+        // Lightweight fetch (Current Month only) to support "Covered" checkmarks on startup
+        const startDate = getQueryStartDateISO();
+        q = query(
+          collection(db!, "coverageEntries"), 
+          where("userId", "==", userId),
+          where("coverageDate", ">=", startDate),
+          limit(1000)
+        );
+      }
       
       const querySnapshot = await getDocs(q);
-      const allEntries: CoverageEntry[] = [];
+      const fetchedEntries: CoverageEntry[] = [];
       
-      querySnapshot.forEach(doc => {
-        allEntries.push({ id: doc.id, ...doc.data() as CoverageEntry });
+      querySnapshot.forEach(docSnap => {
+        fetchedEntries.push({ id: docSnap.id, ...docSnap.data() as CoverageEntry });
       });
       
-      allEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-      setMasterEntries(allEntries);
+      fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      setMasterEntries(fetchedEntries);
       
-      // Persist a lightweight subset to local storage for offline fallback to avoid QuotaExceededError
+      if (fullHistory) {
+          setHasFullHistory(true);
+      }
+      
+      // Update local storage for offline access
       try {
-          // Limit to 1000 items and strip heavy base64 strings (photos, signatures) for the storage cache
-          const minimalEntries = allEntries.slice(0, 1000).map(entry => {
+          // Limit to 1000 items and strip heavy base64 strings to stay within quota
+          const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
           });
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
-          console.warn("Local storage quota exceeded for master entries cache.");
+          console.warn("Local storage cache limited due to size.");
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
@@ -84,7 +107,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey]);
+  }, [userId, isOnline, active, getMasterKey, fullHistory, hasFullHistory]);
   
   useEffect(() => {
     if (userId) {
@@ -133,7 +156,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
             setMasterEntries(prev => {
                 const next = [newEntryPayload as CoverageEntry, ...prev];
                 const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-                // Update local storage with minimal data
                 try {
                     const minimalNext = sorted.slice(0, 1000).map(e => {
                         const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
