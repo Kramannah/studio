@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -72,13 +73,23 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, refetch: refetchEntries } = useOfflineSync(user?.uid, activeView === 'offline' || activeView === 'submitted' || activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
+  // OPTIMIZATION: Only fetch high-volume masterEntries when the user is specifically viewing reports or summary
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, refetch: refetchEntries } = useOfflineSync(
+    user?.uid, 
+    activeView === 'submitted' || activeView === 'summary'
+  );
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary' || activeView === 'submitted');
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
-  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', true);
+  
+  // includeUsage logic: needs reports for balances in coverage and allocation views, plus summary analytics
+  // Controlled to ensure coverageEntries are only scanned when relevant views are active
+  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(
+    activeView === 'coverage' || activeView === 'allocation' || activeView === 'summary', 
+    activeView === 'allocation' || activeView === 'coverage' || activeView === 'summary'
+  );
   
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
