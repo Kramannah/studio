@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { getQueryStartDateISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -46,30 +45,21 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       return;
     }
 
-    // If we are currently in a view that only needs current month data (planning/coverage)
-    // but we have already loaded the full history in this session, we don't need to fetch again.
-    if (!fullHistory && hasFullHistory) return;
+    // Reverting to ONLY fetch if fullHistory is true.
+    // This prevents the automatic current-month fetch on startup for Planning/Reporting.
+    if (!fullHistory) return;
+
+    // If we have already loaded the full history in this session, we don't need to fetch again.
+    if (hasFullHistory) return;
 
     setLoading(true);
     try {
-      let q;
-      if (fullHistory) {
-        // Full history fetch (for Submitted List and Summary Analytics)
-        q = query(
-          collection(db!, "coverageEntries"), 
-          where("userId", "==", userId),
-          limit(10000)
-        );
-      } else {
-        // Lightweight fetch (Current Month only) to support "Covered" checkmarks on startup
-        const startDate = getQueryStartDateISO();
-        q = query(
-          collection(db!, "coverageEntries"), 
-          where("userId", "==", userId),
-          where("coverageDate", ">=", startDate),
-          limit(1000)
-        );
-      }
+      // High-volume fetch (for Submitted List and Summary Analytics)
+      const q = query(
+        collection(db!, "coverageEntries"), 
+        where("userId", "==", userId),
+        limit(10000)
+      );
       
       const querySnapshot = await getDocs(q);
       const fetchedEntries: CoverageEntry[] = [];
@@ -80,14 +70,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       
       fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       setMasterEntries(fetchedEntries);
+      setHasFullHistory(true);
       
-      if (fullHistory) {
-          setHasFullHistory(true);
-      }
-      
-      // Update local storage for offline access
+      // Update local storage for offline access (lightweight version)
       try {
-          // Limit to 1000 items and strip heavy base64 strings to stay within quota
           const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
@@ -98,7 +84,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
-        
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'list',
@@ -209,6 +194,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
+        setHasFullHistory(false); // Force a re-fetch of master entries
         await fetchMasterEntries();
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
@@ -298,6 +284,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
         updateOfflineInStorage(updated);
     },
     loading,
-    refetch: () => fetchMasterEntries()
+    refetch: () => {
+        setHasFullHistory(false);
+        fetchMasterEntries();
+    }
   };
 };
