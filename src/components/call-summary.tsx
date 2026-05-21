@@ -92,6 +92,27 @@ export function CallSummary({
         (entries || []).forEach(e => { if (e && e.id) uniqueEntriesMap.set(e.id, e); });
         const allUniqueEntries = Array.from(uniqueEntriesMap.values());
 
+        // Trend over ALL unique entries (for Monthly Performance chart)
+        const monthlyTrendMap: Record<string, number> = {};
+        allUniqueEntries.forEach(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return;
+            const d = parseISO(dateStr);
+            if (isValid(d)) {
+                const monthKey = format(d, 'yyyy-MM');
+                monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
+            }
+        });
+        
+        const monthlyPerformance = Object.entries(monthlyTrendMap)
+            .map(([month, count]) => ({
+                month,
+                label: format(parseISO(month + "-01"), "MMM yyyy"),
+                count
+            }))
+            .sort((a, b) => a.month.localeCompare(b.month))
+            .slice(-6); // Last 6 months
+
         const filteredEntries = allUniqueEntries.filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
@@ -182,6 +203,7 @@ export function CallSummary({
             totalWorkingDays: { actual: totalWorkingDays, total: totalBusinessDaysInMonth },
             inbaseCalls,
             outbaseCalls,
+            monthlyPerformance,
             topProducts: Object.entries(filteredEntries.reduce((acc, e) => {
                 if (e.primaryProduct) acc[e.primaryProduct] = (acc[e.primaryProduct] || 0) + 1;
                 return acc;
@@ -254,6 +276,28 @@ export function CallSummary({
                             <StatCard title="Outbase Calls" value={insights.outbaseCalls} description="Provincial submissions" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-2 shadow-lg overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b">
+                    <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><TrendingUp className="text-primary" /> Monthly Performance</CardTitle>
+                    <CardDescription>Total calls over the last few months.</CardDescription>
+                </CardHeader>
+                <CardContent className="h-80 p-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={insights.monthlyPerformance}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                            <XAxis dataKey="label" fontSize={10} fontWeight="bold" />
+                            <YAxis fontSize={10} fontWeight="bold" />
+                            <Tooltip 
+                                contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }}
+                                cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
+                            />
+                            <Legend verticalAlign="bottom" align="center" iconType="rect" />
+                            <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Total Calls" barSize={40} />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </CardContent>
             </Card>
 
