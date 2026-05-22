@@ -79,14 +79,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                         <span className="text-[10px] text-muted-foreground font-bold">{displayDate && isValid(displayDate) ? format(displayDate, "yyyy") : ''}</span>
                     </div>
                 </TableCell>
-                {!isAdminView && (
-                    <TableCell className="whitespace-nowrap hidden sm:table-cell">
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
-                            <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
-                        </div>
-                    </TableCell>
-                )}
+                <TableCell className="whitespace-nowrap hidden sm:table-cell">
+                    <div className="flex flex-col">
+                        <span className="text-sm font-bold">{submissionTime && isValid(submissionTime) ? format(submissionTime, "MMM do, p") : 'N/A'}</span>
+                        <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tight opacity-60">Submitted</span>
+                    </div>
+                </TableCell>
                 <TableCell className="hidden sm:table-cell text-center">
                     {doctor?.frequency && <Badge variant="outline" className="font-black border-2 h-7 w-10 flex items-center justify-center rounded-full text-xs">{doctor.frequency}</Badge>}
                 </TableCell>
@@ -156,7 +154,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
             </TableRow>
             {isOpen && (
                 <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
-                    <TableCell colSpan={isAdminView ? 6 : 7} className="p-0">
+                    <TableCell colSpan={7} className="p-0">
                         <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-6">
                                 <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Pre-call Plan</h4>
@@ -361,6 +359,7 @@ export function SubmittedList({
         setPreviewData({ src, title });
     };
 
+    // [QUERY_ON_DEMAND_LOGIC] - Re-enabled monthly filtering for both PMR and Admin views
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
@@ -369,15 +368,12 @@ export function SubmittedList({
         
         let res = Array.from(uniqueMap.values());
 
-        // Admin view disables Query-on-demand and month-based viewing logic
-        if (!isAdminView) {
-            res = res.filter(e => {
-                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-                if (!dateStr) return false;
-                const d = parseISO(dateStr);
-                return d && format(d, 'yyyy-MM') === selectedMonth;
-            });
-        }
+        res = res.filter(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return d && format(d, 'yyyy-MM') === selectedMonth;
+        });
 
         const q = (searchQuery || "").toLowerCase().trim();
         if (q) {
@@ -398,7 +394,7 @@ export function SubmittedList({
             });
         }
         return res;
-    }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth, isAdminView]);
+    }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -488,7 +484,7 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Submitted_Coverage_${isAdminView ? 'Full' : selectedMonth}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+        XLSX.writeFile(workbook, `Submitted_Coverage_${selectedMonth}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
     if (!mounted) return null;
@@ -498,20 +494,18 @@ export function SubmittedList({
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="space-y-1">
                 <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
-                {!isAdminView && (
-                    <div className="flex items-center gap-2">
-                        <Select value={selectedMonth} onValueChange={onMonthChange}>
-                            <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
-                                <SelectValue placeholder="Select Month" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {monthOptions.map(opt => (
-                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                        <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
+                            <SelectValue placeholder="Select Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {monthOptions.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
             <Button onClick={handleDownloadExcel} variant="outline" className="border-2 font-headline h-11 w-full md:w-auto">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
@@ -548,7 +542,7 @@ export function SubmittedList({
                                 <TableHead className="font-bold text-foreground">Provider</TableHead>
                                 <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
                                 <TableHead className="font-bold text-foreground">Date</TableHead>
-                                {!isAdminView && <TableHead className="hidden sm:table-cell font-bold text-foreground">Submitted</TableHead>}
+                                <TableHead className="hidden sm:table-cell font-bold text-foreground">Submitted</TableHead>
                                 <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
                                 <TableHead className="font-bold text-foreground">Proof</TableHead>
                                 <TableHead className="text-right font-bold text-foreground">Actions</TableHead>
@@ -558,7 +552,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">{isAdminView ? "No reports found in history." : "No reports found for this month."}</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -601,7 +595,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                defaultMonth={isAdminView ? undefined : parseISO(selectedMonth + "-01")}
+                                defaultMonth={parseISO(selectedMonth + "-01")}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

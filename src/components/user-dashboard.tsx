@@ -49,9 +49,8 @@ export function UserDashboard({
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     
-    // For PMR, month state is shared for Query-on-demand. 
-    // For Admin view, we fetch everything once to disable Query-on-demand logic.
-    const currentMonth = useMemo(() => format(new Date(), 'yyyy-MM'), []);
+    // [QUERY_ON_DEMAND_LOGIC] - Re-enabled monthly state for Admin Dashboard
+    const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
     useEffect(() => {
         if (isAdminView && onFetchUserData && userId) {
@@ -75,8 +74,8 @@ export function UserDashboard({
                 nonCallDays={allNonCallDays} 
                 timeLogs={allTimeLogs}
                 isAdminView={isAdminView}
-                selectedMonth={currentMonth}
-                onMonthChange={() => {}}
+                selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+                onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
@@ -89,8 +88,8 @@ export function UserDashboard({
                 readOnly={!isAdminView} 
                 isAdminView={isAdminView} 
                 userMap={userMap} 
-                selectedMonth={currentMonth}
-                onMonthChange={() => {}}
+                selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+                onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
               />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">

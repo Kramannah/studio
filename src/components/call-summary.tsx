@@ -68,9 +68,8 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // If Admin view, Query-on-demand is disabled and we use all provided entries.
-        // For PMR view, we filter by the selected month.
-        const filteredEntries = isAdminView ? (entries || []) : (entries || []).filter(e => {
+        // [QUERY_ON_DEMAND_LOGIC] - Re-enabled filtering for both PMR and Admin
+        const filteredEntries = (entries || []).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const d = parseISO(dateStr);
@@ -202,7 +201,7 @@ export function CallSummary({
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
-    }, [entries, doctors, nonCallDays, mounted, selectedMonth, isAdminView]);
+    }, [entries, doctors, nonCallDays, mounted, selectedMonth]);
 
     if (!mounted) return null;
 
@@ -220,30 +219,28 @@ export function CallSummary({
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
-                            <CardDescription>{isAdminView ? "Aggregated territory history for the selected PMR." : "Territory activity and productivity analytics."}</CardDescription>
-                            {!isAdminView && (
-                                <div className="mt-2">
-                                    <Select value={selectedMonth} onValueChange={onMonthChange}>
-                                        <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
-                                            <SelectValue placeholder="Select Month" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {monthOptions.map(opt => (
-                                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
+                            <CardDescription>Territory activity and productivity analytics for the selected period.</CardDescription>
+                            <div className="mt-2">
+                                <Select value={selectedMonth} onValueChange={onMonthChange}>
+                                    <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
+                                        <SelectValue placeholder="Select Month" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {monthOptions.map(opt => (
+                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <StatCard 
-                            title={isAdminView ? "Total Calls" : "Call Rate"} 
-                            value={isAdminView ? insights.callRate.actual : `${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
-                            description={isAdminView ? "All time submissions" : "Monthly activity target"} 
+                            title="Call Rate" 
+                            value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
+                            description="Monthly activity target" 
                             icon={Percent} 
                             color="text-orange-500" 
                             bgColor="bg-orange-500/10" 
