@@ -37,20 +37,7 @@ const sanitizePayload = (data: any): any => {
 export const useOfflineSync = (userId?: string, active: boolean = true, fullHistory: boolean = false) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
-  
-  // [CACHE_FIRST_LOGIC] - Initialize state directly from storage for instant UI markers on startup
-  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>(() => {
-    if (typeof window !== 'undefined' && userId) {
-        try {
-            const cached = localStorage.getItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`);
-            return cached ? JSON.parse(cached) : [];
-        } catch (e) {
-            console.warn("Failed to parse master entries from cache", e);
-            return [];
-        }
-    }
-    return [];
-  });
+  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -75,20 +62,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
   useEffect(() => {
     if (userId) {
         try {
-            // [CACHE_FIRST_LOGIC] - Keep offline entries sync separate
             const localOffline = localStorage.getItem(getOfflineKey());
             if (localOffline) setOfflineEntries(JSON.parse(localOffline));
             
-            // Note: masterEntries already initialized in useState constructor for speed
+            const localMaster = localStorage.getItem(getMasterKey());
+            if (localMaster) setMasterEntries(JSON.parse(localMaster));
         } catch (error) {
-            console.warn("Could not load offline entries cache:", error);
+            console.warn("Could not load entries cache:", error);
         }
     } else {
         setOfflineEntries([]);
         setMasterEntries([]);
         setHasFullHistory(false);
     }
-  }, [userId, getOfflineKey]);
+  }, [userId, getOfflineKey, getMasterKey]);
 
   const fetchMasterEntries = useCallback(async () => {
     if (!userId || !isOnline || !db || !active) {
@@ -96,7 +83,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       return;
     }
     
-    // Performance Optimization: Defer massive historical fetch until user specifically visits history/summary views
     if (!fullHistory) return;
     if (hasFullHistory) return;
 
@@ -119,7 +105,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       setMasterEntries(fetchedEntries);
       setHasFullHistory(true);
       
-      // [CACHE_FIRST_LOGIC] - Persist fetched data (lightweight) for next startup
       try {
           const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
@@ -167,7 +152,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       submittedAt: new Date().toISOString(),
     };
 
-    // Sanitize to prevent undefined fields from crashing Firestore write
     const sanitizedPayload = sanitizePayload(rawPayload);
 
     if (isOnline) {
@@ -176,17 +160,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
           .then(() => {
             setMasterEntries(prev => {
                 const next = [sanitizedPayload as CoverageEntry, ...prev];
-                const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-                
-                // [CACHE_FIRST_LOGIC] - Update cache immediately after successful save
-                try {
-                    const minimalNext = sorted.slice(0, 1000).map(e => {
-                        const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
-                        return rest;
-                    });
-                    localStorage.setItem(getMasterKey(), JSON.stringify(minimalNext));
-                } catch (e) {}
-                return sorted;
+                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
             });
             toast({ title: "Entry Saved", description: "Report saved to server." });
           })
@@ -232,7 +206,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        // Force refresh master history after sync
         setHasFullHistory(false);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
@@ -260,17 +233,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
-        setMasterEntries(prev => {
-            const filtered = prev.filter(e => e.id !== id);
-            try {
-                const minimalFiltered = filtered.slice(0, 1000).map(e => {
-                    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
-                    return rest;
-                });
-                localStorage.setItem(getMasterKey(), JSON.stringify(minimalFiltered));
-            } catch (e) {}
-            return filtered;
-        });
+        setMasterEntries(prev => prev.filter(e => e.id !== id));
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -287,17 +250,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     const docRef = doc(db!, "coverageEntries", e.id);
     updateDoc(docRef, { ...sanitizedPayload, userId: userId })
       .then(() => {
-        setMasterEntries(prev => {
-            const updated = prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item);
-            try {
-                const minimalUpdated = updated.slice(0, 1000).map(item => {
-                    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = item;
-                    return rest;
-                });
-                localStorage.setItem(getMasterKey(), JSON.stringify(minimalUpdated));
-            } catch (err) {}
-            return updated;
-        });
+        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
