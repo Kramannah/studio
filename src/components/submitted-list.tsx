@@ -3,7 +3,7 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, subMonths } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -228,7 +228,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             const q = query(
                 collection(db, "coverageEntries"),
                 where("firstName", "==", doctorName.first),
-                where("lastName", "==", doctorName.last)
+                where("lastName", "==", doctorName.last),
+                limit(50)
             );
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
@@ -308,7 +309,9 @@ export function SubmittedList({
     onEdit, 
     readOnly = false,
     isAdminView = false,
-    userMap
+    userMap,
+    selectedMonth, // [QUERY_ON_DEMAND_LOGIC]
+    onMonthChange  // [QUERY_ON_DEMAND_LOGIC]
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -317,7 +320,9 @@ export function SubmittedList({
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
     isAdminView?: boolean,
-    userMap?: Record<string, { code: string; firstName: string; lastName: string }>
+    userMap?: Record<string, { code: string; firstName: string; lastName: string }>,
+    selectedMonth: string,
+    onMonthChange: (m: string) => void
 }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
@@ -327,7 +332,6 @@ export function SubmittedList({
     const [mounted, setMounted] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
-    const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
     const itemsPerPage = 10;
 
     useEffect(() => {
@@ -335,40 +339,19 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
-    // Generate month options based on reports that actually have data
+    // [QUERY_ON_DEMAND_LOGIC] - Generate a static list of the last 12 months for the selector
     const monthOptions = useMemo(() => {
-        const months = new Set<string>();
-        entries.forEach(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (dateStr) {
-                const d = parseISO(dateStr);
-                if (isValid(d)) {
-                    months.add(format(d, 'yyyy-MM'));
-                }
-            }
-        });
-
-        if (months.size === 0) {
-            months.add(format(new Date(), 'yyyy-MM'));
-        }
-
-        return Array.from(months)
-            .sort()
-            .reverse()
-            .map(m => {
-                const d = parseISO(m + "-01");
-                return { label: format(d, 'MMMM yyyy'), value: m };
+        const options = [];
+        const now = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = subMonths(now, i);
+            options.push({
+                label: format(d, 'MMMM yyyy'),
+                value: format(d, 'yyyy-MM')
             });
-    }, [entries]);
-
-    useEffect(() => {
-        if (mounted && monthOptions.length > 0) {
-            const isValidSelection = monthOptions.some(opt => opt.value === selectedMonth);
-            if (!isValidSelection) {
-                setSelectedMonth(monthOptions[0].value);
-            }
         }
-    }, [monthOptions, selectedMonth, mounted]);
+        return options;
+    }, []);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -387,6 +370,7 @@ export function SubmittedList({
         
         let res = Array.from(uniqueMap.values());
 
+        // [QUERY_ON_DEMAND_LOGIC] - Ensure data matches the selected month range
         res = res.filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
@@ -503,7 +487,7 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Submitted_Coverage_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+        XLSX.writeFile(workbook, `Submitted_Coverage_${selectedMonth}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
     if (!mounted) return null;
@@ -514,8 +498,9 @@ export function SubmittedList({
             <div className="space-y-1">
                 <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
                 <div className="flex items-center gap-2">
-                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                        <SelectTrigger className="w-[180px] h-9 border-2 font-headline bg-muted/50">
+                    {/* [QUERY_ON_DEMAND_LOGIC] - Month selector triggers global state change */}
+                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                        <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
                             <SelectValue placeholder="Select Month" />
                         </SelectTrigger>
                         <SelectContent>
@@ -571,7 +556,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this month.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

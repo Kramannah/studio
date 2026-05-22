@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, PackageCheck } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, isValid } from "date-fns";
+import { isToday, parseISO, isValid, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
@@ -55,6 +55,9 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
+  // [QUERY_ON_DEMAND_LOGIC] - Global state for selected month to share across hooks and views
+  const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -95,7 +98,7 @@ export default function Home() {
   } = useOfflineSync(
     user?.uid, 
     ['submitted', 'summary', 'planning', 'coverage'].includes(activeView),
-    activeView === 'submitted' || activeView === 'summary'
+    selectedMonth // [QUERY_ON_DEMAND_LOGIC] - Pass current selected month for on-demand fetch
   );
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
@@ -223,9 +226,24 @@ export default function Home() {
       case 'offline': 
         return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': 
-        return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+        return <SubmittedList 
+          entries={masterEntries} 
+          doctors={doctors} 
+          nonCallDays={nonCallDays} 
+          onDelete={deleteMasterEntry} 
+          onEdit={(entry) => handleEditEntry(entry, false)} 
+          selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+          onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+        />;
       case 'summary': 
-        return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
+        return <CallSummary 
+          entries={masterEntries} 
+          doctors={doctors} 
+          nonCallDays={nonCallDays} 
+          timeLogs={timeLogs} 
+          selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+          onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+        />;
       case 'master': 
         return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': 

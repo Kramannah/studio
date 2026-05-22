@@ -5,7 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth } from "date-fns";
+import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase, Download } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -29,56 +29,38 @@ export function CallSummary({
     doctors = [], 
     nonCallDays = [], 
     timeLogs = [], 
-    isAdminView = false
+    isAdminView = false,
+    selectedMonth, // [QUERY_ON_DEMAND_LOGIC]
+    onMonthChange  // [QUERY_ON_DEMAND_LOGIC]
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
     nonCallDays: NonCallDay[], 
     timeLogs: TimeLog[], 
-    isAdminView?: boolean
+    isAdminView?: boolean,
+    selectedMonth: string,
+    onMonthChange: (m: string) => void
 }) {
     const summaryRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
-    const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // Generate month options based on months where reports actually exist
+    // [QUERY_ON_DEMAND_LOGIC] - Provide a fixed list of recent months for selection
     const monthOptions = useMemo(() => {
-        const months = new Set<string>();
-        entries.forEach(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (dateStr) {
-                const d = parseISO(dateStr);
-                if (isValid(d)) {
-                    months.add(format(d, 'yyyy-MM'));
-                }
-            }
-        });
-
-        if (months.size === 0) {
-            months.add(format(new Date(), 'yyyy-MM'));
-        }
-
-        return Array.from(months)
-            .sort()
-            .reverse()
-            .map(m => {
-                const d = parseISO(m + "-01");
-                return { label: format(d, 'MMMM yyyy'), value: m };
+        const options = [];
+        const now = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = subMonths(now, i);
+            options.push({
+                label: format(d, 'MMMM yyyy'),
+                value: format(d, 'yyyy-MM')
             });
-    }, [entries]);
-
-    useEffect(() => {
-        if (mounted && monthOptions.length > 0) {
-            const isValidSelection = monthOptions.some(opt => opt.value === selectedMonth);
-            if (!isValidSelection) {
-                setSelectedMonth(monthOptions[0].value);
-            }
         }
-    }, [monthOptions, selectedMonth, mounted]);
+        return options;
+    }, []);
 
     const insights = useMemo(() => {
         if (!mounted) return null;
@@ -87,14 +69,17 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // Deduplicate locally
-        const uniqueEntriesMap = new Map<string, CoverageEntry>();
-        (entries || []).forEach(e => { if (e && e.id) uniqueEntriesMap.set(e.id, e); });
-        const allUniqueEntries = Array.from(uniqueEntriesMap.values());
+        // [QUERY_ON_DEMAND_LOGIC] - Filter entries to exactly match the queried month
+        const filteredEntries = (entries || []).filter(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return isValid(d) && isWithinInterval(d, { start, end });
+        });
 
-        // Trend over ALL unique entries (for Monthly Performance chart)
+        // Trend logic now builds a "month-to-date" trend for the current month
         const monthlyTrendMap: Record<string, number> = {};
-        allUniqueEntries.forEach(e => {
+        filteredEntries.forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return;
             const d = parseISO(dateStr);
@@ -110,15 +95,7 @@ export function CallSummary({
                 label: format(parseISO(month + "-01"), "MMM yyyy"),
                 count
             }))
-            .sort((a, b) => a.month.localeCompare(b.month))
-            .slice(-6); // Last 6 months
-
-        const filteredEntries = allUniqueEntries.filter(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return isValid(d) && isWithinInterval(d, { start, end });
-        });
+            .sort((a, b) => a.month.localeCompare(b.month));
 
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const first = String(entry.firstName || "").toLowerCase().trim();
@@ -246,8 +223,9 @@ export function CallSummary({
                             <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
                             <CardDescription>Territory activity and productivity analytics.</CardDescription>
                             <div className="mt-2">
-                                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                    <SelectTrigger className="w-[180px] h-9 border-2 font-headline bg-muted/50">
+                                {/* [QUERY_ON_DEMAND_LOGIC] - Global month selector for performance dashboard */}
+                                <Select value={selectedMonth} onValueChange={onMonthChange}>
+                                    <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
                                         <SelectValue placeholder="Select Month" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -279,27 +257,29 @@ export function CallSummary({
                 </CardContent>
             </Card>
 
-            <Card className="border-2 shadow-lg overflow-hidden">
-                <CardHeader className="bg-muted/30 border-b">
-                    <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><TrendingUp className="text-primary" /> Monthly Performance</CardTitle>
-                    <CardDescription>Total calls over the last few months.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-80 p-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={insights.monthlyPerformance}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                            <XAxis dataKey="label" fontSize={10} fontWeight="bold" />
-                            <YAxis fontSize={10} fontWeight="bold" />
-                            <Tooltip 
-                                contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }}
-                                cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
-                            />
-                            <Legend verticalAlign="bottom" align="center" iconType="rect" />
-                            <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Total Calls" barSize={40} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </CardContent>
-            </Card>
+            {insights.monthlyPerformance.length > 0 && (
+                <Card className="border-2 shadow-lg overflow-hidden">
+                    <CardHeader className="bg-muted/30 border-b">
+                        <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><TrendingUp className="text-primary" /> Monthly Performance</CardTitle>
+                        <CardDescription>Activity status for the selected month.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-80 p-6">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={insights.monthlyPerformance}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                                <XAxis dataKey="label" fontSize={10} fontWeight="bold" />
+                                <YAxis fontSize={10} fontWeight="bold" />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }}
+                                    cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
+                                />
+                                <Legend verticalAlign="bottom" align="center" iconType="rect" />
+                                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Total Calls" barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                  <Card className="border-2 shadow-sm overflow-hidden">

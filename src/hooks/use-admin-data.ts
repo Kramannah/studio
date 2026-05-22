@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { getMonthRangeISO } from "@/lib/utils";
+import { format } from "date-fns";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -92,15 +94,26 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
+  // [QUERY_ON_DEMAND_LOGIC] - Updated fetchUserData to support targeted monthly loading
+  const fetchUserData = useCallback(async (uid: string, month?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
 
     setLoadingIndividual(true);
     try {
+        const targetMonth = month || format(new Date(), 'yyyy-MM');
+        const { start, end } = getMonthRangeISO(targetMonth);
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Increased limits to 10,000 for all user data to ensure Dimaala and others have full visibility
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
+        // Fetch only entries for the specific month to keep dashboard fast
+        const eSnap = await getDocs(query(
+            collection(db!, "coverageEntries"), 
+            where("userId", "==", uid),
+            where("coverageDate", ">=", start),
+            where("coverageDate", "<=", end),
+            limit(1000)
+        ));
+
+        // Other metadata remains broader for calendar overview
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
         const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(10000)));

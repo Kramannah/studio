@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,6 +7,8 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { format, parseISO, isValid } from 'date-fns';
+import { getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -34,7 +35,8 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true, fullHistory: boolean = false) => {
+// [QUERY_ON_DEMAND_LOGIC] - Added selectedMonth parameter to drive month-specific loading
+export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -42,7 +44,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [hasFullHistory, setHasFullHistory] = useState(false);
+  
+  // [QUERY_ON_DEMAND_LOGIC] - Track last fetched month to avoid redundant network calls
+  const lastFetchedMonthRef = useRef<string | null>(null);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
   const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
@@ -73,25 +77,34 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     } else {
         setOfflineEntries([]);
         setMasterEntries([]);
-        setHasFullHistory(false);
+        lastFetchedMonthRef.current = null;
     }
   }, [userId, getOfflineKey, getMasterKey]);
 
-  const fetchMasterEntries = useCallback(async () => {
+  // [QUERY_ON_DEMAND_LOGIC] - Replaces full history loading with targeted month loading
+  const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
     
-    if (!fullHistory) return;
-    if (hasFullHistory) return;
+    const targetMonth = selectedMonth || format(new Date(), 'yyyy-MM');
+
+    // Prevent redundant fetches for the same month unless manually forced
+    if (!force && lastFetchedMonthRef.current === targetMonth && masterEntries.length > 0) {
+        return;
+    }
 
     setLoading(true);
     try {
+      const { start, end } = getMonthRangeISO(targetMonth);
+
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -102,11 +115,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       });
       
       fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      
       setMasterEntries(fetchedEntries);
-      setHasFullHistory(true);
+      lastFetchedMonthRef.current = targetMonth;
       
       try {
-          const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
+          // Keep a small subset in local storage for offline continuity
+          const minimalEntries = fetchedEntries.slice(0, 100).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
           });
@@ -124,13 +139,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, fullHistory, hasFullHistory, getMasterKey]);
+  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length]);
   
   useEffect(() => {
     if (userId && active) {
         fetchMasterEntries();
     }
-  }, [userId, active, fetchMasterEntries]);
+  }, [userId, active, fetchMasterEntries, selectedMonth]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
@@ -206,7 +221,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        setHasFullHistory(false);
+        lastFetchedMonthRef.current = null; // Invalidate cache to force reload after sync
+        fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
@@ -220,7 +236,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       .finally(() => {
         setIsSyncing(false);
       });
-  }, [isOnline, userId, offlineEntries, toast, isSyncing]);
+  }, [isOnline, userId, offlineEntries, toast, isSyncing, fetchMasterEntries]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0) {
@@ -277,8 +293,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     },
     loading,
     refetch: () => {
-        setHasFullHistory(false);
-        fetchMasterEntries();
+        fetchMasterEntries(true);
     }
   };
 };

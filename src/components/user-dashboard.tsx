@@ -1,13 +1,13 @@
-
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
+import { format } from "date-fns";
 
 interface UserDashboardProps {
     userId: string;
@@ -26,6 +26,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
+    onFetchUserData?: (uid: string, month: string) => void;
 }
 
 export function UserDashboard({ 
@@ -44,8 +45,19 @@ export function UserDashboard({
     onUpdateDoctor = () => {},
     onDeleteDoctor = () => {},
     onDeleteDoctorsBulk = () => {},
+    onFetchUserData
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
+    
+    // [QUERY_ON_DEMAND_LOGIC] - Shared month state for admin drilling
+    const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+
+    // Trigger re-fetch when Admin changes the month for the selected PMR
+    useEffect(() => {
+        if (isAdminView && onFetchUserData && userId) {
+            onFetchUserData(userId, selectedMonth);
+        }
+    }, [selectedMonth, userId, isAdminView, onFetchUserData]);
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -63,6 +75,8 @@ export function UserDashboard({
                 nonCallDays={allNonCallDays} 
                 timeLogs={allTimeLogs}
                 isAdminView={isAdminView}
+                selectedMonth={selectedMonth}
+                onMonthChange={setSelectedMonth}
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
@@ -75,6 +89,8 @@ export function UserDashboard({
                 readOnly={!isAdminView} 
                 isAdminView={isAdminView} 
                 userMap={userMap} 
+                selectedMonth={selectedMonth}
+                onMonthChange={setSelectedMonth}
               />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">
