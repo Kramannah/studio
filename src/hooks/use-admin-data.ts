@@ -104,7 +104,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            limit(300) // [FETCH_LIMIT_OPTIMIZATION] - Reduced limit for mobile performance
+            limit(10000)
         ));
 
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
