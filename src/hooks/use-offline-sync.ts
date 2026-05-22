@@ -98,7 +98,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(5000) // Increased limit to ensure we have enough history to filter from
+        limit(300) // [FETCH_LIMIT_OPTIMIZATION] - Lowered limit to improve speed for high-volume users
       );
       
       const querySnapshot = await getDocs(q);
