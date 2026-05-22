@@ -35,7 +35,7 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-// [QUERY_ON_DEMAND_LOGIC] - Added selectedMonth parameter to drive month-specific loading
+// [QUERY_ON_DEMAND_LOGIC] - Month filtering is now applied client-side to prevent Index Errors
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -45,7 +45,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   
-  // [QUERY_ON_DEMAND_LOGIC] - Track last fetched month to avoid redundant network calls
   const lastFetchedMonthRef = useRef<string | null>(null);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
@@ -81,7 +80,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, getOfflineKey, getMasterKey]);
 
-  // [QUERY_ON_DEMAND_LOGIC] - Replaces full history loading with targeted month loading
+  // [QUERY_ON_DEMAND_LOGIC] - Query uses only userId to avoid Index Error; Filtering happens in JS
   const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
@@ -90,44 +89,46 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     const targetMonth = selectedMonth || format(new Date(), 'yyyy-MM');
 
-    // Prevent redundant fetches for the same month unless manually forced
     if (!force && lastFetchedMonthRef.current === targetMonth && masterEntries.length > 0) {
         return;
     }
 
     setLoading(true);
     try {
-      const { start, end } = getMonthRangeISO(targetMonth);
-
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", start),
-        where("coverageDate", "<=", end),
-        limit(1000)
+        limit(5000) // Increased limit to ensure we have enough history to filter from
       );
       
       const querySnapshot = await getDocs(q);
-      const fetchedEntries: CoverageEntry[] = [];
+      const allFetched: CoverageEntry[] = [];
       
       querySnapshot.forEach(docSnap => {
-        fetchedEntries.push({ id: docSnap.id, ...docSnap.data() as CoverageEntry });
+        allFetched.push({ id: docSnap.id, ...docSnap.data() as CoverageEntry });
       });
       
-      fetchedEntries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      // Perform month filtering client-side to prevent Index Error
+      const filtered = allFetched.filter(e => {
+          const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+          if (!dateStr) return false;
+          const d = parseISO(dateStr);
+          return d && format(d, 'yyyy-MM') === targetMonth;
+      });
+
+      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
-      setMasterEntries(fetchedEntries);
+      setMasterEntries(filtered);
       lastFetchedMonthRef.current = targetMonth;
       
       try {
-          // Keep a small subset in local storage for offline continuity
-          const minimalEntries = fetchedEntries.slice(0, 100).map(entry => {
+          const minimalEntries = filtered.slice(0, 100).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
           });
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
-          console.warn("Local storage cache limited due to size quota.");
+          console.warn("Local storage cache limited.");
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
@@ -221,7 +222,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        lastFetchedMonthRef.current = null; // Invalidate cache to force reload after sync
+        lastFetchedMonthRef.current = null;
         fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })

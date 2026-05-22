@@ -8,7 +8,7 @@ import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getMonthRangeISO } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -94,33 +94,38 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
 
-  // [QUERY_ON_DEMAND_LOGIC] - Updated fetchUserData to support targeted monthly loading
+  // [QUERY_ON_DEMAND_LOGIC] - Month filtering moved to client-side to resolve Index Error
   const fetchUserData = useCallback(async (uid: string, month?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
 
     setLoadingIndividual(true);
     try {
         const targetMonth = month || format(new Date(), 'yyyy-MM');
-        const { start, end } = getMonthRangeISO(targetMonth);
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Fetch only entries for the specific month to keep dashboard fast
+        // Fetch using only userId equality to prevent Composite Index requirement
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            where("coverageDate", ">=", start),
-            where("coverageDate", "<=", end),
-            limit(1000)
+            limit(5000)
         ));
 
-        // Other metadata remains broader for calendar overview
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
         const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(10000)));
         const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(10000)));
         const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(10000)));
 
-        const entries = mapDocs(eSnap) as CoverageEntry[];
+        const allEntries = mapDocs(eSnap) as CoverageEntry[];
+        
+        // Filter by month in memory
+        const entries = allEntries.filter(e => {
+            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return d && format(d, 'yyyy-MM') === targetMonth;
+        });
+
         const used: Record<string, number> = {};
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
