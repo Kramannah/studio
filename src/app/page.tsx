@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -86,6 +87,7 @@ export default function Home() {
   const { 
     offlineEntries, 
     masterEntries, 
+    availableMonths,
     saveEntry, 
     deleteMasterEntry, 
     isSyncing, 
@@ -228,6 +230,7 @@ export default function Home() {
       case 'submitted': 
         return <SubmittedList 
           entries={masterEntries} 
+          availableMonths={availableMonths}
           doctors={doctors} 
           nonCallDays={nonCallDays} 
           onDelete={deleteMasterEntry} 
@@ -238,6 +241,7 @@ export default function Home() {
       case 'summary': 
         return <CallSummary 
           entries={masterEntries} 
+          availableMonths={availableMonths}
           doctors={doctors} 
           nonCallDays={nonCallDays} 
           timeLogs={timeLogs} 

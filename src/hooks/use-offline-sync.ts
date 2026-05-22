@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -40,6 +41,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -76,6 +78,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } else {
         setOfflineEntries([]);
         setMasterEntries([]);
+        setAvailableMonths([]);
         lastFetchedMonthRef.current = null;
     }
   }, [userId, getOfflineKey, getMasterKey]);
@@ -103,11 +106,24 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = [];
+      const foundMonths = new Set<string>();
       
       querySnapshot.forEach(docSnap => {
-        allFetched.push({ id: docSnap.id, ...docSnap.data() as CoverageEntry });
+        const data = docSnap.data() as CoverageEntry;
+        allFetched.push({ id: docSnap.id, ...data });
+        
+        // Track unique months with data
+        const dateStr = (data.coverageDate || data.submittedAt || "").toString();
+        const d = parseISO(dateStr);
+        if (isValid(d)) {
+            foundMonths.add(format(d, 'yyyy-MM'));
+        }
       });
       
+      // Ensure the currently selected month is in the list even if no server data yet
+      foundMonths.add(targetMonth);
+      setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
+
       // Perform month filtering client-side to prevent Index Error
       const filtered = allFetched.filter(e => {
           const dateStr = (e.coverageDate || e.submittedAt || "").toString();
@@ -282,6 +298,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   return { 
     offlineEntries, 
     masterEntries, 
+    availableMonths,
     saveEntry, 
     deleteMasterEntry, 
     isSyncing, 

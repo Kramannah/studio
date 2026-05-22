@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -301,6 +302,7 @@ const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
 
 export function SubmittedList({ 
     entries = [], 
+    availableMonths = [],
     doctors = [], 
     nonCallDays = [],
     onDelete, 
@@ -312,6 +314,7 @@ export function SubmittedList({
     onMonthChange
 }: { 
     entries: CoverageEntry[], 
+    availableMonths?: string[],
     doctors: Doctor[], 
     nonCallDays?: NonCallDay[],
     onDelete: (id: string) => void, 
@@ -338,17 +341,34 @@ export function SubmittedList({
     }, []);
 
     const monthOptions = useMemo(() => {
-        const options = [];
-        const now = new Date();
-        for (let i = 0; i < 12; i++) {
-            const d = subMonths(now, i);
-            options.push({
-                label: format(d, 'MMMM yyyy'),
-                value: format(d, 'yyyy-MM')
+        let months: string[] = [];
+        
+        if (availableMonths && availableMonths.length > 0) {
+            months = availableMonths;
+        } else {
+            const monthsSet = new Set<string>();
+            (entries || []).forEach(e => {
+                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+                const d = parseISO(dateStr);
+                if (isValid(d)) monthsSet.add(format(d, 'yyyy-MM'));
             });
+            months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
         }
-        return options;
-    }, []);
+
+        if (selectedMonth && !months.includes(selectedMonth)) {
+            months.push(selectedMonth);
+            months.sort((a, b) => b.localeCompare(a));
+        }
+
+        if (months.length === 0) {
+            months.push(format(new Date(), 'yyyy-MM'));
+        }
+
+        return months.map(m => ({
+            label: format(parseISO(m + "-01"), 'MMMM yyyy'),
+            value: m
+        }));
+    }, [availableMonths, entries, selectedMonth]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
