@@ -26,7 +26,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string) => void;
+    onFetchUserData?: (uid: string) => void;
 }
 
 export function UserDashboard({ 
@@ -49,15 +49,15 @@ export function UserDashboard({
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     
-    // [QUERY_ON_DEMAND_LOGIC] - Shared month state for admin drilling
-    const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+    // For PMR, month state is shared for Query-on-demand. 
+    // For Admin view, we fetch everything once to disable Query-on-demand logic.
+    const currentMonth = useMemo(() => format(new Date(), 'yyyy-MM'), []);
 
-    // Trigger re-fetch when Admin changes the month for the selected PMR
     useEffect(() => {
         if (isAdminView && onFetchUserData && userId) {
-            onFetchUserData(userId, selectedMonth);
+            onFetchUserData(userId);
         }
-    }, [selectedMonth, userId, isAdminView, onFetchUserData]);
+    }, [userId, isAdminView, onFetchUserData]);
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -75,8 +75,8 @@ export function UserDashboard({
                 nonCallDays={allNonCallDays} 
                 timeLogs={allTimeLogs}
                 isAdminView={isAdminView}
-                selectedMonth={selectedMonth}
-                onMonthChange={setSelectedMonth}
+                selectedMonth={currentMonth}
+                onMonthChange={() => {}}
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
@@ -89,8 +89,8 @@ export function UserDashboard({
                 readOnly={!isAdminView} 
                 isAdminView={isAdminView} 
                 userMap={userMap} 
-                selectedMonth={selectedMonth}
-                onMonthChange={setSelectedMonth}
+                selectedMonth={currentMonth}
+                onMonthChange={() => {}}
               />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">

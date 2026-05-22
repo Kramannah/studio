@@ -310,8 +310,8 @@ export function SubmittedList({
     readOnly = false,
     isAdminView = false,
     userMap,
-    selectedMonth, // [QUERY_ON_DEMAND_LOGIC]
-    onMonthChange  // [QUERY_ON_DEMAND_LOGIC]
+    selectedMonth,
+    onMonthChange
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -339,7 +339,6 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
-    // [QUERY_ON_DEMAND_LOGIC] - Generate a static list of the last 12 months for the selector
     const monthOptions = useMemo(() => {
         const options = [];
         const now = new Date();
@@ -370,13 +369,15 @@ export function SubmittedList({
         
         let res = Array.from(uniqueMap.values());
 
-        // [QUERY_ON_DEMAND_LOGIC] - Ensure data matches the selected month range
-        res = res.filter(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return d && format(d, 'yyyy-MM') === selectedMonth;
-        });
+        // Admin view disables Query-on-demand and month-based viewing logic
+        if (!isAdminView) {
+            res = res.filter(e => {
+                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
+                if (!dateStr) return false;
+                const d = parseISO(dateStr);
+                return d && format(d, 'yyyy-MM') === selectedMonth;
+            });
+        }
 
         const q = (searchQuery || "").toLowerCase().trim();
         if (q) {
@@ -397,7 +398,7 @@ export function SubmittedList({
             });
         }
         return res;
-    }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
+    }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth, isAdminView]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -487,7 +488,7 @@ export function SubmittedList({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
-        XLSX.writeFile(workbook, `Submitted_Coverage_${selectedMonth}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+        XLSX.writeFile(workbook, `Submitted_Coverage_${isAdminView ? 'Full' : selectedMonth}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
     if (!mounted) return null;
@@ -497,19 +498,20 @@ export function SubmittedList({
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="space-y-1">
                 <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
-                <div className="flex items-center gap-2">
-                    {/* [QUERY_ON_DEMAND_LOGIC] - Month selector triggers global state change */}
-                    <Select value={selectedMonth} onValueChange={onMonthChange}>
-                        <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
-                            <SelectValue placeholder="Select Month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {monthOptions.map(opt => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                {!isAdminView && (
+                    <div className="flex items-center gap-2">
+                        <Select value={selectedMonth} onValueChange={onMonthChange}>
+                            <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
+                                <SelectValue placeholder="Select Month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {monthOptions.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
             </div>
             <Button onClick={handleDownloadExcel} variant="outline" className="border-2 font-headline h-11 w-full md:w-auto">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
@@ -556,7 +558,7 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this month.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={isAdminView ? 6 : 7} className="h-72 text-center text-muted-foreground text-lg italic">{isAdminView ? "No reports found in history." : "No reports found for this month."}</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -599,7 +601,7 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                defaultMonth={parseISO(selectedMonth + "-01")}
+                                defaultMonth={isAdminView ? undefined : parseISO(selectedMonth + "-01")}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

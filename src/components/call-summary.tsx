@@ -30,8 +30,8 @@ export function CallSummary({
     nonCallDays = [], 
     timeLogs = [], 
     isAdminView = false,
-    selectedMonth, // [QUERY_ON_DEMAND_LOGIC]
-    onMonthChange  // [QUERY_ON_DEMAND_LOGIC]
+    selectedMonth,
+    onMonthChange
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -48,7 +48,6 @@ export function CallSummary({
         setMounted(true);
     }, []);
 
-    // [QUERY_ON_DEMAND_LOGIC] - Provide a fixed list of recent months for selection
     const monthOptions = useMemo(() => {
         const options = [];
         const now = new Date();
@@ -69,15 +68,15 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // [QUERY_ON_DEMAND_LOGIC] - Filter entries to exactly match the queried month
-        const filteredEntries = (entries || []).filter(e => {
+        // If Admin view, Query-on-demand is disabled and we use all provided entries.
+        // For PMR view, we filter by the selected month.
+        const filteredEntries = isAdminView ? (entries || []) : (entries || []).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
             const d = parseISO(dateStr);
             return isValid(d) && isWithinInterval(d, { start, end });
         });
 
-        // Trend logic now builds a "month-to-date" trend for the current month
         const monthlyTrendMap: Record<string, number> = {};
         filteredEntries.forEach(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
@@ -203,7 +202,7 @@ export function CallSummary({
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
-    }, [entries, doctors, nonCallDays, mounted, selectedMonth]);
+    }, [entries, doctors, nonCallDays, mounted, selectedMonth, isAdminView]);
 
     if (!mounted) return null;
 
@@ -221,26 +220,34 @@ export function CallSummary({
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                         <div>
                             <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
-                            <CardDescription>Territory activity and productivity analytics.</CardDescription>
-                            <div className="mt-2">
-                                {/* [QUERY_ON_DEMAND_LOGIC] - Global month selector for performance dashboard */}
-                                <Select value={selectedMonth} onValueChange={onMonthChange}>
-                                    <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
-                                        <SelectValue placeholder="Select Month" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {monthOptions.map(opt => (
-                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <CardDescription>{isAdminView ? "Aggregated territory history for the selected PMR." : "Territory activity and productivity analytics."}</CardDescription>
+                            {!isAdminView && (
+                                <div className="mt-2">
+                                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                                        <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
+                                            <SelectValue placeholder="Select Month" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {monthOptions.map(opt => (
+                                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <StatCard title="Call Rate" value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} description="Monthly activity target" icon={Percent} color="text-orange-500" bgColor="bg-orange-500/10" />
+                        <StatCard 
+                            title={isAdminView ? "Total Calls" : "Call Rate"} 
+                            value={isAdminView ? insights.callRate.actual : `${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
+                            description={isAdminView ? "All time submissions" : "Monthly activity target"} 
+                            icon={Percent} 
+                            color="text-orange-500" 
+                            bgColor="bg-orange-500/10" 
+                        />
                         <StatCard title="Concentration (3x)" value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)`} description="High frequency retention" icon={Target} color="text-primary" bgColor="bg-primary/10" />
                         <StatCard title="Call Reach" value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} description="Territory penetration" icon={Users} color="text-teal-500" bgColor="bg-teal-500/10" />
                         <StatCard title="Efficiency" value={insights.avgCallsPerDay} description="Avg daily submissions" icon={TrendingUp} color="text-blue-500" bgColor="bg-blue-500/10" />
@@ -249,7 +256,7 @@ export function CallSummary({
                     <div className="mt-8 border-t-2 pt-8">
                         <CardTitle className="font-headline font-black mb-4">Field Activity Statistics</CardTitle>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                            <StatCard title="Working Days" value={`${insights.totalWorkingDays.actual}/${insights.totalWorkingDays.total}`} description="Active vs Business Days" icon={Calendar} color="text-green-500" bgColor="bg-green-500/10" />
+                            <StatCard title="Active Days" value={insights.totalWorkingDays.actual} description="Unique days with submissions" icon={Calendar} color="text-green-500" bgColor="bg-green-500/10" />
                             <StatCard title="Inbase Calls" value={insights.inbaseCalls} description="Metropolitan submissions" icon={Building} color="text-sky-500" bgColor="bg-sky-500/10" />
                             <StatCard title="Outbase Calls" value={insights.outbaseCalls} description="Provincial submissions" icon={PlaneTakeoff} color="text-rose-500" bgColor="bg-rose-500/10" />
                         </div>
@@ -261,7 +268,7 @@ export function CallSummary({
                 <Card className="border-2 shadow-lg overflow-hidden">
                     <CardHeader className="bg-muted/30 border-b">
                         <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><TrendingUp className="text-primary" /> Monthly Performance</CardTitle>
-                        <CardDescription>Activity status for the selected month.</CardDescription>
+                        <CardDescription>Activity status trend over time.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-80 p-6">
                         <ResponsiveContainer width="100%" height="100%">
