@@ -37,7 +37,21 @@ const sanitizePayload = (data: any): any => {
 export const useOfflineSync = (userId?: string, active: boolean = true, fullHistory: boolean = false) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
-  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
+  
+  // [CACHE_FIRST_LOGIC] - Initialize state directly from storage for instant UI markers on startup
+  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>(() => {
+    if (typeof window !== 'undefined' && userId) {
+        try {
+            const cached = localStorage.getItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`);
+            return cached ? JSON.parse(cached) : [];
+        } catch (e) {
+            console.warn("Failed to parse master entries from cache", e);
+            return [];
+        }
+    }
+    return [];
+  });
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -61,26 +75,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
   useEffect(() => {
     if (userId) {
         try {
+            // [CACHE_FIRST_LOGIC] - Keep offline entries sync separate
             const localOffline = localStorage.getItem(getOfflineKey());
             if (localOffline) setOfflineEntries(JSON.parse(localOffline));
             
-            const localMaster = localStorage.getItem(getMasterKey());
-            if (localMaster) setMasterEntries(JSON.parse(localMaster));
+            // Note: masterEntries already initialized in useState constructor for speed
         } catch (error) {
-            console.warn("Could not load initial cache:", error);
+            console.warn("Could not load offline entries cache:", error);
         }
     } else {
         setOfflineEntries([]);
         setMasterEntries([]);
         setHasFullHistory(false);
     }
-  }, [userId, getOfflineKey, getMasterKey]);
+  }, [userId, getOfflineKey]);
 
   const fetchMasterEntries = useCallback(async () => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
+    
+    // Performance Optimization: Defer massive historical fetch until user specifically visits history/summary views
     if (!fullHistory) return;
     if (hasFullHistory) return;
 
@@ -103,6 +119,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
       setMasterEntries(fetchedEntries);
       setHasFullHistory(true);
       
+      // [CACHE_FIRST_LOGIC] - Persist fetched data (lightweight) for next startup
       try {
           const minimalEntries = fetchedEntries.slice(0, 1000).map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
@@ -110,7 +127,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
           });
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
-          console.warn("Local storage cache limited due to size.");
+          console.warn("Local storage cache limited due to size quota.");
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
@@ -160,6 +177,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
             setMasterEntries(prev => {
                 const next = [sanitizedPayload as CoverageEntry, ...prev];
                 const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+                
+                // [CACHE_FIRST_LOGIC] - Update cache immediately after successful save
                 try {
                     const minimalNext = sorted.slice(0, 1000).map(e => {
                         const { photos, signature, jointCallSignature, dsmSignature, ...rest } = e;
@@ -213,6 +232,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, fullHist
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
+        // Force refresh master history after sync
         setHasFullHistory(false);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
