@@ -197,12 +197,13 @@ export default function Home() {
     // Reverted Summary loading logic: Show skeleton every time summary is refreshing
     if (activeView === 'summary' && (entriesLoading || timeLogsLoading)) return <DynamicSkeleton />;
 
-    const isMissingPlanningData = plans.length === 0 && doctors.length === 0;
+    // Planning loading logic: Show skeleton whenever plans or doctors are loading to prevent "blank calendar" panic
+    if (activeView === 'planning' && (plansLoading || doctorsLoading || nonCallDaysLoading)) return <DynamicSkeleton />;
+
     const isMissingSubmittedData = masterEntries.length === 0;
     const isMissingMasterData = doctors.length === 0;
 
     let shouldShowSkeleton = false;
-    if (activeView === 'planning' && isMissingPlanningData && (plansLoading || doctorsLoading)) shouldShowSkeleton = true;
     if (activeView === 'submitted' && isMissingSubmittedData && entriesLoading) shouldShowSkeleton = true;
     if (activeView === 'master' && isMissingMasterData && doctorsLoading) shouldShowSkeleton = true;
 

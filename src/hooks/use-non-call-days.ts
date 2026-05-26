@@ -34,10 +34,8 @@ export const useNonCallDays = (active: boolean = true) => {
       return;
     };
     
-    // [SILENT_REFRESH_LOGIC] - Only set loading if list is empty
-    if (nonCallDays.length === 0) {
-        setLoading(true);
-    }
+    // Always show loading for non-call days when active to prevent "blank" state panic
+    setLoading(true);
 
     try {
       const q = query(collection(db, "nonCallDays"), where("userId", "==", user.uid), limit(1000));
@@ -63,7 +61,7 @@ export const useNonCallDays = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, active, nonCallDays.length]);
+  }, [user, active]);
 
   useEffect(() => {
     if (active) {

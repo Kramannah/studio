@@ -39,10 +39,8 @@ export const usePlans = (active: boolean = true) => {
   const fetchData = useCallback(async () => {
     if (!user || !active) return;
     
-    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero plans in state
-    if (masterPlans.length === 0) {
-        setLoading(true);
-    }
+    // Reverted Silent Refresh: Always show loading for plans to prevent "blank calendar" panic on first load or refresh
+    setLoading(true);
 
     if (isOnline && db) {
       try {
@@ -92,7 +90,7 @@ export const usePlans = (active: boolean = true) => {
     } catch (error) {}
     
     setLoading(false);
-  }, [user, isOnline, getOfflineKey, active, masterPlans.length]);
+  }, [user, isOnline, getOfflineKey, active]);
   
   useEffect(() => {
     if (active) {
