@@ -9,7 +9,6 @@ import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { format, parseISO, eachMonthOfInterval, startOfMonth } from "date-fns";
-import { getMonthRangeISO } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -96,35 +95,22 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
 
-  const fetchUserData = useCallback(async (uid: string, month?: string) => {
+  const fetchUserData = useCallback(async (uid: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
 
     setLoadingIndividual(true);
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [QUERY_ON_DEMAND_LOGIC] - Perform targeted fetch if a month is specified, otherwise recent 600
-        let entriesQuery;
-        if (month) {
-            const { start, end } = getMonthRangeISO(month);
-            entriesQuery = query(
-                collection(db!, "coverageEntries"),
-                where("userId", "==", uid),
-                where("coverageDate", ">=", start),
-                where("coverageDate", "<=", end),
-                orderBy("coverageDate", "desc")
-            );
-        } else {
-            // [RECENT_WINDOW_SAFE_STRATEGY] - Limit individual view to 600 most recent records
-            entriesQuery = query(
-                collection(db!, "coverageEntries"), 
-                where("userId", "==", uid),
-                orderBy("coverageDate", "desc"),
-                limit(600)
-            );
-        }
+        // [RECENT_WINDOW_SAFE_STRATEGY] - Reverted to fixed 600-record fetch sorted by date
+        const entriesQuery = query(
+            collection(db!, "coverageEntries"), 
+            where("userId", "==", uid),
+            orderBy("coverageDate", "desc"),
+            limit(600)
+        );
 
-        // [RANGE_DISCOVERY_LOGIC] - Fetch oldest record to calculate full history range without downloading photos
+        // [RANGE_DISCOVERY_LOGIC] - Still fetch oldest record to calculate full history range for selector
         const rangeQuery = query(
             collection(db!, "coverageEntries"),
             where("userId", "==", uid),
@@ -139,7 +125,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         
-        // Calculate all available months from oldest record to today
+        // Calculate all available months from oldest record to today for the dropdown
         if (rangeSnap.docs.length > 0) {
             const oldestDate = parseISO(rangeSnap.docs[0].data().coverageDate || rangeSnap.docs[0].data().submittedAt);
             const months = eachMonthOfInterval({

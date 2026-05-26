@@ -109,13 +109,13 @@ export default function AdminPage() {
         
         if (activeTab === 'district-reports') {
             if (selectedUserId) {
-                // [QUERY_ON_DEMAND_LOGIC] - Pass selected month to fetcher in Admin Dashboard
-                fetchUserData(selectedUserId, selectedMonth);
+                // Reverted to standard fetch without month parameter to undo Targeted Fetching
+                fetchUserData(selectedUserId);
             }
         } else if (activeTab === 'approvals' && !isMarketingOrHR) {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedMonth, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
+    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };

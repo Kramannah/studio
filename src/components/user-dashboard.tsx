@@ -28,7 +28,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month?: string) => void;
+    onFetchUserData?: (uid: string) => void;
     selectedMonth: string;
     onMonthChange: (month: string) => void;
 }
@@ -58,10 +58,10 @@ export function UserDashboard({
     
     useEffect(() => {
         if (isAdminView && onFetchUserData && userId) {
-            // [QUERY_ON_DEMAND_LOGIC] - Re-fetch data for the selected month in individual view
-            onFetchUserData(userId, selectedMonth);
+            // Reverted: No longer refetching on month change to undo Targeted Fetching logic
+            onFetchUserData(userId);
         }
-    }, [userId, isAdminView, onFetchUserData, selectedMonth]);
+    }, [userId, isAdminView, onFetchUserData]);
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
