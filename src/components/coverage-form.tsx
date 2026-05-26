@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -159,7 +158,7 @@ const compressImage = (dataUrl: string, quality = 0.4, maxWidth = 600): Promise<
 };
 
 const SearchableSelect = ({ 
-    options, 
+    options = [], 
     value, 
     onValueChange, 
     placeholder, 
@@ -174,7 +173,7 @@ const SearchableSelect = ({
     showBalance?: boolean
 }) => {
     const [open, setOpen] = useState(false);
-    const validOptions = useMemo(() => options.filter(o => o.value && o.value.trim() !== ""), [options]);
+    const validOptions = useMemo(() => (options || []).filter(o => o.value && o.value.trim() !== ""), [options]);
     const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
@@ -194,10 +193,10 @@ const SearchableSelect = ({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
+                <Command shouldFilter={true}>
                     <CommandInput placeholder={`Search ${placeholder?.toLowerCase()}...`} />
                     <CommandList>
-                        <CommandEmpty>No results found.</CommandEmpty>
+                        <CommandEmpty>No items found.</CommandEmpty>
                         <CommandGroup>
                             {validOptions.map((option) => (
                                 <CommandItem
@@ -315,7 +314,7 @@ export function CoverageForm({
 
   const dynamicProductList = useMemo(() => {
     const categories = new Set(
-        allocations
+        (allocations || [])
             .map(a => a.prodGroupProdSubGroup)
             .filter(val => !!val && val.trim() !== "")
     );
@@ -323,7 +322,7 @@ export function CoverageForm({
   }, [allocations]);
 
   const primarySampleOptions = useMemo(() => {
-    if (!primaryProduct) return [];
+    if (!primaryProduct || !allocations) return [];
     return allocations
         .filter(s => s.prodGroupProdSubGroup === primaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
         .map(s => {
@@ -335,7 +334,7 @@ export function CoverageForm({
   }, [primaryProduct, allocations, usedQuantities]);
 
   const secondarySampleOptions = useMemo(() => {
-    if (!secondaryProduct) return [];
+    if (!secondaryProduct || !allocations) return [];
     return allocations
         .filter(s => s.prodGroupProdSubGroup === secondaryProduct && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
         .map(s => {
@@ -489,7 +488,7 @@ export function CoverageForm({
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
-        const doctor = doctors.find(d => d.id === plannedDoctorId);
+        const doctor = (doctors || []).find(d => d.id === plannedDoctorId);
         if (doctor) {
             form.setValue("firstName", doctor.firstName);
             form.setValue("lastName", doctor.lastName);
@@ -522,19 +521,11 @@ export function CoverageForm({
     }
   };
 
-  /**
-   * Data Sanitization Utility
-   * Strips undefined, null, or empty string values from a payload to ensure Firestore compatibility.
-   */
   const cleanPayload = (data: any): any => {
     const cleaned: any = {};
     Object.keys(data).forEach(key => {
         const val = data[key];
-        
-        // Skip null/undefined/empty
         if (val === undefined || val === null || val === "") return;
-        
-        // Handle nested arrays (reminderProducts)
         if (Array.isArray(val)) {
             if (val.length === 0) return;
             if (key === 'reminderProducts') {
@@ -547,14 +538,11 @@ export function CoverageForm({
             cleaned[key] = val;
             return;
         }
-
-        // Handle numeric fields safely
         if (typeof val === 'number') {
             if (isNaN(val)) return;
             cleaned[key] = val;
             return;
         }
-
         cleaned[key] = val;
     });
     return cleaned;
@@ -573,7 +561,7 @@ export function CoverageForm({
         const docFirstNameLower = String(values.firstName ?? "").toLowerCase().trim();
         const docLastNameLower = String(values.lastName ?? "").toLowerCase().trim();
         
-        const doctorInMasterlist = doctors.find(
+        const doctorInMasterlist = (doctors || []).find(
           (d) =>
             String(d.firstName ?? "").toLowerCase().trim() === docFirstNameLower &&
             String(d.lastName ?? "").toLowerCase().trim() === docLastNameLower
@@ -614,7 +602,6 @@ export function CoverageForm({
         }
       }
 
-      // Prepare and sanitize payload
       const basePayload = {
           ...values,
           coverageDate: values.coverageDate && isValid(values.coverageDate) ? values.coverageDate.toISOString() : new Date().toISOString(),
@@ -634,9 +621,7 @@ export function CoverageForm({
           return;
       }
       
-      // Handle normal submission
       const { plannedDoctorId: _pId, ...restOfValues } = sanitizedPayload;
-
       const savedOnline = await onSave(restOfValues as any);
       resetForm();
       onFormSubmit?.(savedOnline);
@@ -745,7 +730,7 @@ export function CoverageForm({
                               <FormItem>
                                   <FormLabel className="font-headline">Search Doctor</FormLabel>
                                   <Autocomplete
-                                      doctors={doctors}
+                                      doctors={doctors || []}
                                       value={autocompleteValue}
                                       onChange={handleAutocompleteChange}
                                       onSelect={handleAutocompleteSelect}
@@ -1025,7 +1010,7 @@ export function CoverageForm({
                                                         <FormLabel className="text-xs">Sample</FormLabel>
                                                         <FormControl>
                                                             <SearchableSelect 
-                                                                options={allocations
+                                                                options={(allocations || [])
                                                                     .filter(s => s.prodGroupProdSubGroup === reminderProducts?.[index]?.productName && !!s.displayMaterialName && s.displayMaterialName.trim() !== "")
                                                                     .map(s => {
                                                                         const used = Math.round(usedQuantities[s.displayMaterialName] || 0);

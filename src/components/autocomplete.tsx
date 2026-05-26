@@ -1,15 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, Search } from "lucide-react"
 import { Doctor } from "@/lib/types"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Command,
   CommandEmpty,
-  CommandInput,
   CommandGroup,
   CommandItem,
   CommandList,
@@ -38,57 +38,63 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
   }, [onSelect]);
 
   const filteredDoctors = React.useMemo(() => {
-    const lowercasedValue = (value || "").toLowerCase();
+    const lowercasedValue = (value || "").toLowerCase().trim();
     
     // Deduplicate doctors by ID before filtering
     const uniqueMap = new Map<string, Doctor>();
     (doctors || []).forEach(d => { if (d && d.id) uniqueMap.set(d.id, d); });
     const doctorList = Array.from(uniqueMap.values());
 
-    if (!lowercasedValue) return doctorList;
+    if (!lowercasedValue) return doctorList.slice(0, 50); // Show top 50 if empty
     
     return doctorList.filter(doctor => {
       const firstName = String(doctor.firstName || "").toLowerCase();
       const lastName = String(doctor.lastName || "").toLowerCase();
       const fullName = `${firstName} ${lastName}`;
-      const province = String(doctor.province || "").toLowerCase();
-      const municipality = String(doctor.municipality || "").toLowerCase();
+      const specialty = String(doctor.specialty || "").toLowerCase();
+      const clinic = String(doctor.clinic || "").toLowerCase();
       
       return firstName.includes(lowercasedValue) ||
              lastName.includes(lowercasedValue) ||
              fullName.includes(lowercasedValue) ||
-             province.includes(lowercasedValue) ||
-             municipality.includes(lowercasedValue);
-    });
+             specialty.includes(lowercasedValue) ||
+             clinic.includes(lowercasedValue);
+    }).slice(0, 50); // Limit results for performance
   }, [doctors, value]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Command
-        shouldFilter={false}
-        className="w-full overflow-visible"
-      >
-        <PopoverTrigger asChild>
-            <CommandInput
+      <PopoverTrigger asChild>
+          <div className="relative w-full">
+            <Input
               value={value}
-              onValueChange={onChange}
+              onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
               disabled={disabled}
-              className="w-full"
-              onFocus={() => setOpen(true)}
+              className="w-full pr-10"
+              onFocus={() => !disabled && setOpen(true)}
             />
-        </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50">
+              <Search className="h-4 w-4" />
+            </div>
+          </div>
+      </PopoverTrigger>
+      <PopoverContent 
+        className="w-[--radix-popover-trigger-width] p-0" 
+        align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <Command shouldFilter={false}>
           <CommandList>
-            {filteredDoctors.length === 0 && value.length > 0 ? (
-                <CommandEmpty>No doctor found. You can add them manually.</CommandEmpty>
+            {filteredDoctors.length === 0 ? (
+                <CommandEmpty>No doctor found in masterlist.</CommandEmpty>
             ) : (
                 <CommandGroup>
                 {filteredDoctors.map((doctor) => (
                     <CommandItem
-                    key={doctor.id}
-                    value={`${doctor.firstName} ${doctor.lastName}`}
-                    onSelect={() => handleSelect(doctor)}
+                      key={doctor.id}
+                      value={doctor.id}
+                      onSelect={() => handleSelect(doctor)}
                     >
                     <Check
                       className={cn(
@@ -96,14 +102,17 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
                         `${doctor.firstName} ${doctor.lastName}` === value ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    {doctor.firstName} {doctor.lastName}
+                    <div className="flex flex-col">
+                      <span className="font-bold">{doctor.firstName} {doctor.lastName}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{doctor.specialty} • {doctor.clinic}</span>
+                    </div>
                     </CommandItem>
                 ))}
                 </CommandGroup>
             )}
           </CommandList>
-        </PopoverContent>
-      </Command>
+        </Command>
+      </PopoverContent>
     </Popover>
   )
 });
