@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -56,7 +55,6 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
-  // [QUERY_ON_DEMAND_LOGIC] - Global state for selected month to share across hooks and views
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
   useEffect(() => {
@@ -196,16 +194,14 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const renderContent = () => {
-    // [SILENT_REFRESH_LOGIC] - Enhanced Loading Strategy
-    // Only show the skeleton if we are loading AND we have zero data for the current view.
-    // This prevents the UI from flickering when navigating between pages.
-    const isMissingSummaryData = masterEntries.length === 0 || timeLogs.length === 0;
+    // Reverted Summary loading logic: Show skeleton every time summary is refreshing
+    if (activeView === 'summary' && (entriesLoading || timeLogsLoading)) return <DynamicSkeleton />;
+
     const isMissingPlanningData = plans.length === 0 && doctors.length === 0;
     const isMissingSubmittedData = masterEntries.length === 0;
     const isMissingMasterData = doctors.length === 0;
 
     let shouldShowSkeleton = false;
-    if (activeView === 'summary' && isMissingSummaryData && (entriesLoading || timeLogsLoading)) shouldShowSkeleton = true;
     if (activeView === 'planning' && isMissingPlanningData && (plansLoading || doctorsLoading)) shouldShowSkeleton = true;
     if (activeView === 'submitted' && isMissingSubmittedData && entriesLoading) shouldShowSkeleton = true;
     if (activeView === 'master' && isMissingMasterData && doctorsLoading) shouldShowSkeleton = true;

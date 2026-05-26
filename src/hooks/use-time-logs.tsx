@@ -41,10 +41,8 @@ export const useTimeLogs = (active: boolean = true) => {
       return;
     }
     
-    // [SILENT_REFRESH_LOGIC] - Only show loading if state is empty
-    if (timeLogs.length === 0) {
-        setLoading(true);
-    }
+    // Reverted Silent Refresh: Always show loading for time logs
+    setLoading(true);
 
     try {
       const startDate = getQueryStartDateISO();
@@ -80,7 +78,7 @@ export const useTimeLogs = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, active, timeLogs.length]);
+  }, [user, active]);
 
   useEffect(() => {
     if (active) {
