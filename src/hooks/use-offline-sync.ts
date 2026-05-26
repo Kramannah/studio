@@ -93,16 +93,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     try {
-      /**
-       * [SORT_AND_LIMIT_STRATEGY]
-       * Fetch only the most recent 600 records. 
-       * This captures ~2.5 months for high-volume users, drastically reducing initial download time.
-       */
+      // Reverted to full fetch capacity after undoing sort-and-limit strategy
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        orderBy("coverageDate", "desc"),
-        limit(600) 
+        limit(10000) 
       );
       
       const querySnapshot = await getDocs(q);

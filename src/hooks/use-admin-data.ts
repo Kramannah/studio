@@ -100,16 +100,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        /**
-         * [SORT_AND_LIMIT_STRATEGY]
-         * Fetch only the most recent 600 records for the representative.
-         * Prevents device lag and browser crashes for high-volume accounts.
-         */
+        // Reverted from sort-and-limit strategy to full fetch capacity
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            orderBy("coverageDate", "desc"),
-            limit(600)
+            limit(10000)
         ));
 
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
