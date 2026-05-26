@@ -8,7 +8,7 @@ import Image from "next/image";
 import React, { useState } from "react";
 import { Button } from "./ui/button";
 import { RefreshCw, Hourglass, Edit, Maximize2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +118,10 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: O
 
         <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90">
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{previewData?.title || "Offline Proof Preview"}</DialogTitle>
+                    <DialogDescription>Full-screen preview of a photo or signature captured while offline.</DialogDescription>
+                </DialogHeader>
                 <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
                     {previewData?.src && (
                         <Image 

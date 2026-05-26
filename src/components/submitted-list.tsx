@@ -9,11 +9,11 @@ import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
+import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -379,7 +379,6 @@ export function SubmittedList({
         setPreviewData({ src, title });
     };
 
-    // [QUERY_ON_DEMAND_LOGIC] - Re-enabled monthly filtering for both PMR and Admin views
     const filtered = useMemo(() => {
         if (!mounted) return [];
         
@@ -722,6 +721,10 @@ export function SubmittedList({
         
         <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90">
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{previewData?.title || "Proof Preview"}</DialogTitle>
+                    <DialogDescription>A full-screen preview of the proof photo or signature.</DialogDescription>
+                </DialogHeader>
                 <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
                     {previewData?.src && (
                         <Image 
