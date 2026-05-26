@@ -87,13 +87,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0) {
-        return;
+    // [SILENT_REFRESH_LOGIC] - Only show the global loader if we have zero data in state
+    if (masterEntries.length === 0) {
+        setLoading(true);
     }
 
-    setLoading(true);
     try {
-      // [RECENT_WINDOW_SAFE_STRATEGY] - Limit fetch to 600 records sorted by date to optimize speed for Carmina and other high-volume users
+      // [RECENT_WINDOW_SAFE_STRATEGY] - Limit fetch to 600 records sorted by date
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -138,6 +138,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       lastFetchedUserIdRef.current = userId;
       
       try {
+          // [SILENT_REFRESH_LOGIC] - Strip photos before saving to localStorage to stay within 5MB limit
           const minimalEntries = allFetched.map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;

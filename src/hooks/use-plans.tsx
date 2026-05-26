@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -39,7 +38,11 @@ export const usePlans = (active: boolean = true) => {
 
   const fetchData = useCallback(async () => {
     if (!user || !active) return;
-    setLoading(true);
+    
+    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero plans in state
+    if (masterPlans.length === 0) {
+        setLoading(true);
+    }
 
     if (isOnline && db) {
       try {
@@ -89,7 +92,7 @@ export const usePlans = (active: boolean = true) => {
     } catch (error) {}
     
     setLoading(false);
-  }, [user, isOnline, getOfflineKey, active]);
+  }, [user, isOnline, getOfflineKey, active, masterPlans.length]);
   
   useEffect(() => {
     if (active) {

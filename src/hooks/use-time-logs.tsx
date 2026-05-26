@@ -40,7 +40,12 @@ export const useTimeLogs = (active: boolean = true) => {
       if (!active) setLoading(false);
       return;
     }
-    setLoading(true);
+    
+    // [SILENT_REFRESH_LOGIC] - Only show loading if state is empty
+    if (timeLogs.length === 0) {
+        setLoading(true);
+    }
+
     try {
       const startDate = getQueryStartDateISO();
       
@@ -75,7 +80,7 @@ export const useTimeLogs = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, active]);
+  }, [user, active, timeLogs.length]);
 
   useEffect(() => {
     if (active) {

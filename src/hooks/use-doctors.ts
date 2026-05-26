@@ -55,7 +55,11 @@ export const useDoctors = (active: boolean = true) => {
       return;
     }
 
-    setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loading if doctors list is currently empty
+    if (doctors.length === 0) {
+        setLoading(true);
+    }
+
     try {
       let q;
       if (isUserAdmin) {
@@ -83,7 +87,7 @@ export const useDoctors = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, active]);
+  }, [user, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
     if (active) {

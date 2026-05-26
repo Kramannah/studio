@@ -64,7 +64,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         return;
     }
 
-    if (!cachedAllocations) setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loader if allocations list is empty
+    if (allocations.length === 0) {
+        setLoading(true);
+    }
 
     try {
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(10000)))
@@ -144,7 +147,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, isUserAdmin, profile, active, includeUsage]);
+  }, [user, isUserAdmin, profile, active, includeUsage, allocations.length]);
 
   useEffect(() => {
     if (active) {
