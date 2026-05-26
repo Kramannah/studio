@@ -43,6 +43,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
 
+  // [RECENT_3_MONTHS_LOAD_LOGIC] - Tiered fetch limits
+  const [fetchLimit, setFetchLimit] = useState(400); 
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -87,14 +90,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
    * Main Data Fetcher
    * Optimized to handle massive histories by separating metadata from heavy content.
    */
-  const fetchMasterEntries = useCallback(async (force = false) => {
+  const fetchMasterEntries = useCallback(async (force = false, currentLimit = fetchLimit) => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
     
-    // Prevent redundant fetching if user hasn't changed
-    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0) {
+    // Prevent redundant fetching if user hasn't changed unless forcing or limit changed
+    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0 && currentLimit <= fetchLimit) {
         return;
     }
 
@@ -103,7 +106,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000) 
+        limit(currentLimit) // [RECENT_3_MONTHS_LOAD_LOGIC] - Controlled limit
       );
       
       const querySnapshot = await getDocs(q);
@@ -168,14 +171,25 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length]);
-  
+  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length, fetchLimit]);
+
+  // [RECENT_3_MONTHS_LOAD_LOGIC] - Expansion Trigger
   // Re-fetch when user or month changes to ensure we have the photos for the active month
   useEffect(() => {
     if (userId && active) {
+        // If the selected month is older than the data we have, expand the search limit
+        if (selectedMonth && availableMonths.length > 0) {
+            const hasDataForSelectedMonth = availableMonths.includes(selectedMonth);
+            const isOlderThanDiscovery = selectedMonth < availableMonths[availableMonths.length - 1];
+            
+            if (!hasDataForSelectedMonth && isOlderThanDiscovery && fetchLimit < 2000) {
+                setFetchLimit(2000); // Expand to 2000 records
+                return;
+            }
+        }
         fetchMasterEntries();
     }
-  }, [userId, active, fetchMasterEntries, selectedMonth]);
+  }, [userId, active, fetchMasterEntries, selectedMonth, availableMonths, fetchLimit]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);

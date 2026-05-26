@@ -4,7 +4,7 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay, subMonths } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, subMonths, startOfMonth } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
@@ -340,35 +340,27 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
+    // [RECENT_3_MONTHS_LOAD_LOGIC] - Generate a rolling list of the last 12 months for discovery
     const monthOptions = useMemo(() => {
-        let months: string[] = [];
+        const months: Record<string, string> = {};
         
-        if (availableMonths && availableMonths.length > 0) {
-            months = availableMonths;
-        } else {
-            const monthsSet = new Set<string>();
-            (entries || []).forEach(e => {
-                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-                const d = parseISO(dateStr);
-                if (isValid(d)) monthsSet.add(format(d, 'yyyy-MM'));
-            });
-            months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+        // Add discovered months
+        availableMonths.forEach(m => {
+            months[m] = format(parseISO(m + "-01"), 'MMMM yyyy');
+        });
+
+        // Ensure current month and last 12 months are present for selection
+        const today = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = subMonths(today, i);
+            const key = format(d, 'yyyy-MM');
+            months[key] = format(d, 'MMMM yyyy');
         }
 
-        if (selectedMonth && !months.includes(selectedMonth)) {
-            months.push(selectedMonth);
-            months.sort((a, b) => b.localeCompare(a));
-        }
-
-        if (months.length === 0) {
-            months.push(format(new Date(), 'yyyy-MM'));
-        }
-
-        return months.map(m => ({
-            label: format(parseISO(m + "-01"), 'MMMM yyyy'),
-            value: m
-        }));
-    }, [availableMonths, entries, selectedMonth]);
+        return Object.entries(months)
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => b.value.localeCompare(a.value));
+    }, [availableMonths]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -571,7 +563,12 @@ export function SubmittedList({
                             {paginatedEntries.length > 0 ? (
                                 paginatedEntries.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={handleShowHistory} onPreview={handlePreview} isAdminView={isAdminView} />)
                             ) : (
-                                <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this period.</TableCell></TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">
+                                        No reports found for {format(parseISO(selectedMonth + "-01"), "MMMM")}.
+                                        <p className="text-sm mt-2 font-normal">Data might still be loading from server...</p>
+                                    </TableCell>
+                                </TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -614,7 +611,8 @@ export function SubmittedList({
                                 mode="single"
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
-                                defaultMonth={parseISO(selectedMonth + "-01")}
+                                month={parseISO(selectedMonth + "-01")}
+                                onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
                                 modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

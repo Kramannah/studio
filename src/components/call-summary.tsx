@@ -51,39 +51,25 @@ export function CallSummary({
         setMounted(true);
     }, []);
 
+    // [RECENT_3_MONTHS_LOAD_LOGIC] - rolling months list
     const monthOptions = useMemo(() => {
-        let months: string[] = [];
+        const months: Record<string, string> = {};
         
-        // Use discovered months from hook if available (PMR view)
-        if (availableMonths && availableMonths.length > 0) {
-            months = availableMonths;
-        } else {
-            // Compute from provided entries (Admin view where all entries are provided)
-            const monthsSet = new Set<string>();
-            (entries || []).forEach(e => {
-                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-                const d = parseISO(dateStr);
-                if (isValid(d)) monthsSet.add(format(d, 'yyyy-MM'));
-            });
-            months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+        availableMonths.forEach(m => {
+            months[m] = format(parseISO(m + "-01"), 'MMMM yyyy');
+        });
+
+        const today = new Date();
+        for (let i = 0; i < 12; i++) {
+            const d = subMonths(today, i);
+            const key = format(d, 'yyyy-MM');
+            months[key] = format(d, 'MMMM yyyy');
         }
 
-        // Always ensure selectedMonth is in the list
-        if (selectedMonth && !months.includes(selectedMonth)) {
-            months.push(selectedMonth);
-            months.sort((a, b) => b.localeCompare(a));
-        }
-
-        // Fallback to current month if everything is empty
-        if (months.length === 0) {
-            months.push(format(new Date(), 'yyyy-MM'));
-        }
-
-        return months.map(m => ({
-            label: format(parseISO(m + "-01"), 'MMMM yyyy'),
-            value: m
-        }));
-    }, [availableMonths, entries, selectedMonth]);
+        return Object.entries(months)
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => b.value.localeCompare(a.value));
+    }, [availableMonths]);
 
     const insights = useMemo(() => {
         if (!mounted) return null;

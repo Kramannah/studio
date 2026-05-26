@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -73,12 +74,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
             if (!filter) {
-                return (await getDocs(query(colRef, limit(10000)))).docs.map(d => ({id: d.id, ...d.data()}));
+                return (await getDocs(query(colRef, limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
             }
             
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(10000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
@@ -100,18 +101,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Admins fetch individual records for the PMR
+        // [RECENT_3_MONTHS_LOAD_LOGIC] - Admins get a balanced limit initially
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            limit(10000)
+            limit(1000) // Lowered from 10k to improve speed
         ));
 
-        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(10000)));
-        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(10000)));
-        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(10000)));
-        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(10000)));
-        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(10000)));
+        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
+        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)));
+        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000)));
+        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)));
+        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)));
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         
