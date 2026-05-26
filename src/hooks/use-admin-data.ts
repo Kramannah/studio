@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -100,10 +100,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
+        /**
+         * [SORT_AND_LIMIT_STRATEGY]
+         * Fetch only the most recent 600 records for the representative.
+         * Prevents device lag and browser crashes for high-volume accounts.
+         */
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            limit(10000)
+            orderBy("coverageDate", "desc"),
+            limit(600)
         ));
 
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
