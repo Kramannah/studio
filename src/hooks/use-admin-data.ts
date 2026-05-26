@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -101,11 +100,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [RECENT_3_MONTHS_LOAD_LOGIC] - Admins get a balanced limit initially
         const eSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
-            limit(1000) // Lowered from 10k to improve speed
+            limit(10000)
         ));
 
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));

@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -340,21 +339,17 @@ export function SubmittedList({
         setSelectedDate(new Date());
     }, []);
 
-    // [RECENT_3_MONTHS_LOAD_LOGIC] - Generate a rolling list of the last 12 months for discovery
     const monthOptions = useMemo(() => {
         const months: Record<string, string> = {};
         
-        // Add discovered months
         availableMonths.forEach(m => {
             months[m] = format(parseISO(m + "-01"), 'MMMM yyyy');
         });
 
-        // Ensure current month and last 12 months are present for selection
-        const today = new Date();
-        for (let i = 0; i < 12; i++) {
-            const d = subMonths(today, i);
-            const key = format(d, 'yyyy-MM');
-            months[key] = format(d, 'MMMM yyyy');
+        // Ensure current month is always an option
+        const current = format(new Date(), 'yyyy-MM');
+        if (!months[current]) {
+            months[current] = format(new Date(), 'MMMM yyyy');
         }
 
         return Object.entries(months)

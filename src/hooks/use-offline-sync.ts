@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -9,7 +8,6 @@ import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatc
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { format, parseISO, isValid } from 'date-fns';
-import { getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -36,15 +34,11 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-// [QUERY_ON_DEMAND_LOGIC] - Optimized for speed by stripping heavy proof data from historical records
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-
-  // [RECENT_3_MONTHS_LOAD_LOGIC] - Tiered fetch limits
-  const [fetchLimit, setFetchLimit] = useState(400); 
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -86,18 +80,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, getOfflineKey, getMasterKey]);
 
-  /**
-   * Main Data Fetcher
-   * Optimized to handle massive histories by separating metadata from heavy content.
-   */
-  const fetchMasterEntries = useCallback(async (force = false, currentLimit = fetchLimit) => {
+  const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
     
-    // Prevent redundant fetching if user hasn't changed unless forcing or limit changed
-    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0 && currentLimit <= fetchLimit) {
+    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0) {
         return;
     }
 
@@ -106,7 +95,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(currentLimit) // [RECENT_3_MONTHS_LOAD_LOGIC] - Controlled limit
+        limit(10000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -118,7 +107,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const data = docSnap.data() as CoverageEntry;
         const entry = { id: docSnap.id, ...data };
         
-        // Track unique months with data for the Month Selector
         const dateStr = (data.coverageDate || data.submittedAt || "").toString();
         const d = parseISO(dateStr);
         const entryMonth = isValid(d) ? format(d, 'yyyy-MM') : null;
@@ -128,9 +116,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         }
 
         /**
-         * [MEMORY_OPTIMIZATION]
-         * If the record is NOT for the currently viewed month, we strip the heavy photos/signatures.
-         * This keeps the 'masterEntries' state lightweight while keeping 'Covered' markers accurate.
+         * MEMORY OPTIMIZATION:
+         * To keep the app fast for high-volume users, we strip heavy photos/signatures
+         * from all records EXCEPT those in the currently viewed month.
+         * Planning markers remain 100% accurate because metadata is preserved.
          */
         if (entryMonth !== currentMonthKey) {
             delete entry.photos;
@@ -145,18 +134,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       foundMonths.add(currentMonthKey);
       setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
 
-      // Sort by date before setting state
       allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
       setMasterEntries(allFetched);
       lastFetchedUserIdRef.current = userId;
       
-      // Cache metadata only to prevent QuotaExceededError in LocalStorage
       try {
           const minimalEntries = allFetched.map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
-          }).slice(0, 500); // Only cache recent metadata
+          }).slice(0, 500); 
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
           console.warn("Local storage cache limited.");
@@ -171,25 +158,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length, fetchLimit]);
+  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length]);
 
-  // [RECENT_3_MONTHS_LOAD_LOGIC] - Expansion Trigger
-  // Re-fetch when user or month changes to ensure we have the photos for the active month
   useEffect(() => {
     if (userId && active) {
-        // If the selected month is older than the data we have, expand the search limit
-        if (selectedMonth && availableMonths.length > 0) {
-            const hasDataForSelectedMonth = availableMonths.includes(selectedMonth);
-            const isOlderThanDiscovery = selectedMonth < availableMonths[availableMonths.length - 1];
-            
-            if (!hasDataForSelectedMonth && isOlderThanDiscovery && fetchLimit < 2000) {
-                setFetchLimit(2000); // Expand to 2000 records
-                return;
-            }
-        }
         fetchMasterEntries();
     }
-  }, [userId, active, fetchMasterEntries, selectedMonth, availableMonths, fetchLimit]);
+  }, [userId, active, fetchMasterEntries, selectedMonth]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);

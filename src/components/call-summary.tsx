@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -51,7 +50,6 @@ export function CallSummary({
         setMounted(true);
     }, []);
 
-    // [RECENT_3_MONTHS_LOAD_LOGIC] - rolling months list
     const monthOptions = useMemo(() => {
         const months: Record<string, string> = {};
         
@@ -59,11 +57,10 @@ export function CallSummary({
             months[m] = format(parseISO(m + "-01"), 'MMMM yyyy');
         });
 
-        const today = new Date();
-        for (let i = 0; i < 12; i++) {
-            const d = subMonths(today, i);
-            const key = format(d, 'yyyy-MM');
-            months[key] = format(d, 'MMMM yyyy');
+        // Ensure current month is always an option
+        const current = format(new Date(), 'yyyy-MM');
+        if (!months[current]) {
+            months[current] = format(new Date(), 'MMMM yyyy');
         }
 
         return Object.entries(months)
@@ -78,7 +75,7 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // [QUERY_ON_DEMAND_LOGIC] - Re-enabled filtering for both PMR and Admin
+        // [QUERY_ON_DEMAND_LOGIC] - Filtered statistics for the selected month
         const filteredEntries = (entries || []).filter(e => {
             const dateStr = (e.coverageDate || e.submittedAt || "").toString();
             if (!dateStr) return false;
