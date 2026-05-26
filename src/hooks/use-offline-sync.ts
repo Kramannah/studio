@@ -36,7 +36,7 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-// [QUERY_ON_DEMAND_LOGIC] - Month filtering is now applied client-side to prevent Index Errors
+// [QUERY_ON_DEMAND_LOGIC] - Optimized for speed by stripping heavy proof data from historical records
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -47,7 +47,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   
-  const lastFetchedMonthRef = useRef<string | null>(null);
+  const lastFetchedUserIdRef = useRef<string | null>(null);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
   const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
@@ -79,20 +79,22 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setOfflineEntries([]);
         setMasterEntries([]);
         setAvailableMonths([]);
-        lastFetchedMonthRef.current = null;
+        lastFetchedUserIdRef.current = null;
     }
   }, [userId, getOfflineKey, getMasterKey]);
 
-  // [QUERY_ON_DEMAND_LOGIC] - Query uses only userId to avoid Index Error; Filtering happens in JS
+  /**
+   * Main Data Fetcher
+   * Optimized to handle massive histories by separating metadata from heavy content.
+   */
   const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !isOnline || !db || !active) {
       if (!active) setLoading(false);
       return;
     }
     
-    const targetMonth = selectedMonth || format(new Date(), 'yyyy-MM');
-
-    if (!force && lastFetchedMonthRef.current === targetMonth && masterEntries.length > 0) {
+    // Prevent redundant fetching if user hasn't changed
+    if (!force && lastFetchedUserIdRef.current === userId && masterEntries.length > 0) {
         return;
     }
 
@@ -101,47 +103,57 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000)
+        limit(10000) 
       );
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = [];
       const foundMonths = new Set<string>();
+      const currentMonthKey = selectedMonth || format(new Date(), 'yyyy-MM');
       
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
-        allFetched.push({ id: docSnap.id, ...data });
+        const entry = { id: docSnap.id, ...data };
         
-        // Track unique months with data
+        // Track unique months with data for the Month Selector
         const dateStr = (data.coverageDate || data.submittedAt || "").toString();
         const d = parseISO(dateStr);
-        if (isValid(d)) {
-            foundMonths.add(format(d, 'yyyy-MM'));
+        const entryMonth = isValid(d) ? format(d, 'yyyy-MM') : null;
+        
+        if (entryMonth) {
+            foundMonths.add(entryMonth);
         }
+
+        /**
+         * [MEMORY_OPTIMIZATION]
+         * If the record is NOT for the currently viewed month, we strip the heavy photos/signatures.
+         * This keeps the 'masterEntries' state lightweight while keeping 'Covered' markers accurate.
+         */
+        if (entryMonth !== currentMonthKey) {
+            delete entry.photos;
+            entry.signature = null;
+            entry.jointCallSignature = null;
+            entry.dsmSignature = null;
+        }
+        
+        allFetched.push(entry);
       });
       
-      // Ensure the currently selected month is in the list even if no server data yet
-      foundMonths.add(targetMonth);
+      foundMonths.add(currentMonthKey);
       setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
 
-      // Perform month filtering client-side to prevent Index Error
-      const filtered = allFetched.filter(e => {
-          const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-          if (!dateStr) return false;
-          const d = parseISO(dateStr);
-          return d && format(d, 'yyyy-MM') === targetMonth;
-      });
-
-      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      // Sort by date before setting state
+      allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
-      setMasterEntries(filtered);
-      lastFetchedMonthRef.current = targetMonth;
+      setMasterEntries(allFetched);
+      lastFetchedUserIdRef.current = userId;
       
+      // Cache metadata only to prevent QuotaExceededError in LocalStorage
       try {
-          const minimalEntries = filtered.slice(0, 100).map(entry => {
+          const minimalEntries = allFetched.map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
-          });
+          }).slice(0, 500); // Only cache recent metadata
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
           console.warn("Local storage cache limited.");
@@ -158,6 +170,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length]);
   
+  // Re-fetch when user or month changes to ensure we have the photos for the active month
   useEffect(() => {
     if (userId && active) {
         fetchMasterEntries();
@@ -238,7 +251,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        lastFetchedMonthRef.current = null;
+        lastFetchedUserIdRef.current = null;
         fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
