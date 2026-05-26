@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -55,10 +56,8 @@ export const useDoctors = (active: boolean = true) => {
       return;
     }
 
-    // [SILENT_REFRESH_LOGIC] - Only show loading if doctors list is currently empty
-    if (doctors.length === 0) {
-        setLoading(true);
-    }
+    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading for doctors
+    setLoading(true);
 
     try {
       let q;
@@ -87,7 +86,7 @@ export const useDoctors = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, active, doctors.length]);
+  }, [user, isUserAdmin, active]);
 
   useEffect(() => {
     if (active) {

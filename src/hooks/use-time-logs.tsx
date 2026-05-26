@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -41,7 +42,7 @@ export const useTimeLogs = (active: boolean = true) => {
       return;
     }
     
-    // Reverted Silent Refresh: Always show loading for time logs
+    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading
     setLoading(true);
 
     try {

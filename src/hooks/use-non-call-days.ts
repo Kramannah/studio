@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -34,7 +35,7 @@ export const useNonCallDays = (active: boolean = true) => {
       return;
     };
     
-    // Always show loading for non-call days when active to prevent "blank" state panic
+    // [ROLLBACK_TO_PUBLISHED] - Restored standard loading
     setLoading(true);
 
     try {

@@ -1,13 +1,14 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { format, parseISO, isValid, subMonths } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -17,8 +18,8 @@ const generateUniqueId = () => {
 };
 
 /**
+ * [ROLLBACK_TO_PUBLISHED]
  * Data Sanitization Utility
- * Strip undefined values to prevent Firestore crashes.
  */
 const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
@@ -87,27 +88,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    // [SILENT_REFRESH_LOGIC] - Only show the global loader if we have zero data in state
-    if (masterEntries.length === 0) {
-        setLoading(true);
-    }
+    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading
+    setLoading(true);
 
     try {
-      // [RECENT_WINDOW_SAFE_STRATEGY] - Limit fetch to 600 records sorted by date
+      // [ROLLBACK_TO_PUBLISHED] - Restored 2000 record fetch without explicit sorting
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        orderBy("coverageDate", "desc"),
-        limit(600) 
+        limit(2000) 
       );
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = [];
       const foundMonths = new Set<string>();
-      
-      const now = new Date();
-      const currentMonthKey = format(now, 'yyyy-MM');
-      const prevMonthKey = format(subMonths(now, 1), 'yyyy-MM');
       
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
@@ -118,18 +112,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const entryMonth = isValid(d) ? format(d, 'yyyy-MM') : null;
 
         if (entryMonth) foundMonths.add(entryMonth);
-
-        // FILTER: Only keep heavy proof data for Current and Previous month
-        if (entryMonth === currentMonthKey || entryMonth === prevMonthKey) {
-            allFetched.push(entry);
-        } else {
-            // Memory Optimization: Strip heavy photos for older months to keep the UI snappy
-            const { photos, signature, jointCallSignature, ...lightData } = entry;
-            allFetched.push(lightData as CoverageEntry);
-        }
+        allFetched.push(entry);
       });
       
-      foundMonths.add(currentMonthKey);
       setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
 
       allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
@@ -138,14 +123,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       lastFetchedUserIdRef.current = userId;
       
       try {
-          // [SILENT_REFRESH_LOGIC] - Strip photos before saving to localStorage to stay within 5MB limit
-          const minimalEntries = allFetched.map(entry => {
-              const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
-              return rest;
-          }).slice(0, 300); 
-          localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
+          // [ROLLBACK_TO_PUBLISHED] - Storing full records in cache
+          localStorage.setItem(getMasterKey(), JSON.stringify(allFetched));
       } catch (storageError) {
-          console.warn("Local storage cache limited.");
+          console.warn("Local storage cache failed.");
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
@@ -157,13 +138,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey, masterEntries.length]);
+  }, [userId, isOnline, active, getMasterKey]);
 
   useEffect(() => {
     if (userId && active) {
         fetchMasterEntries();
     }
-  }, [userId, active, fetchMasterEntries, selectedMonth]);
+  }, [userId, active, fetchMasterEntries]);
 
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);

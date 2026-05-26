@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -39,7 +40,7 @@ export const usePlans = (active: boolean = true) => {
   const fetchData = useCallback(async () => {
     if (!user || !active) return;
     
-    // Reverted Silent Refresh: Always show loading for plans to prevent "blank calendar" panic on first load or refresh
+    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading for plans
     setLoading(true);
 
     if (isOnline && db) {
@@ -101,7 +102,6 @@ export const usePlans = (active: boolean = true) => {
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
     
-    // If planned for today or any past date, it should be marked as unplanned
     const callType = (isToday(plannedDate) || isBefore(plannedDate, startOfToday())) ? 'unplanned' : 'planned';
     
     const newPlanData = {

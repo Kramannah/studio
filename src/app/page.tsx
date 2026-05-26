@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -194,20 +195,11 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const renderContent = () => {
-    // Reverted Summary loading logic: Show skeleton every time summary is refreshing
+    // [ROLLBACK_TO_PUBLISHED] - Restored standard loading skeleton checks
     if (activeView === 'summary' && (entriesLoading || timeLogsLoading)) return <DynamicSkeleton />;
-
-    // Planning loading logic: Show skeleton whenever plans or doctors are loading to prevent "blank calendar" panic
     if (activeView === 'planning' && (plansLoading || doctorsLoading || nonCallDaysLoading)) return <DynamicSkeleton />;
-
-    const isMissingSubmittedData = masterEntries.length === 0;
-    const isMissingMasterData = doctors.length === 0;
-
-    let shouldShowSkeleton = false;
-    if (activeView === 'submitted' && isMissingSubmittedData && entriesLoading) shouldShowSkeleton = true;
-    if (activeView === 'master' && isMissingMasterData && doctorsLoading) shouldShowSkeleton = true;
-
-    if (shouldShowSkeleton) return <DynamicSkeleton />;
+    if (activeView === 'submitted' && entriesLoading) return <DynamicSkeleton />;
+    if (activeView === 'master' && doctorsLoading) return <DynamicSkeleton />;
 
     switch (activeView) {
       case 'planning': 

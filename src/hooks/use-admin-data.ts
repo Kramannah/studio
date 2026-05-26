@@ -2,13 +2,12 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { format, parseISO, eachMonthOfInterval, startOfMonth } from "date-fns";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -21,7 +20,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
   const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
-  const [individualAvailableMonths, setIndividualAvailableMonths] = useState<string[]>([]);
 
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -102,47 +100,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [RECENT_WINDOW_SAFE_STRATEGY] - Reverted to fixed 600-record fetch sorted by date
-        const entriesQuery = query(
-            collection(db!, "coverageEntries"), 
-            where("userId", "==", uid),
-            orderBy("coverageDate", "desc"),
-            limit(600)
-        );
-
-        // [RANGE_DISCOVERY_LOGIC] - Still fetch oldest record to calculate full history range for selector
-        const rangeQuery = query(
-            collection(db!, "coverageEntries"),
-            where("userId", "==", uid),
-            orderBy("coverageDate", "asc"),
-            limit(1)
-        );
-
-        const [eSnap, rangeSnap] = await Promise.all([
-            getDocs(entriesQuery),
-            getDocs(rangeQuery)
-        ]);
-
-        const entries = mapDocs(eSnap) as CoverageEntry[];
-        
-        // Calculate all available months from oldest record to today for the dropdown
-        if (rangeSnap.docs.length > 0) {
-            const oldestDate = parseISO(rangeSnap.docs[0].data().coverageDate || rangeSnap.docs[0].data().submittedAt);
-            const months = eachMonthOfInterval({
-                start: startOfMonth(oldestDate),
-                end: startOfMonth(new Date())
-            }).map(m => format(m, 'yyyy-MM')).reverse();
-            setIndividualAvailableMonths(months);
-        } else {
-            setIndividualAvailableMonths([format(new Date(), 'yyyy-MM')]);
-        }
-
+        // [ROLLBACK_TO_PUBLISHED] - Fetching standard historical window
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)));
         const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000)));
         const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)));
         const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)));
 
+        const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
@@ -174,7 +140,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
-    individualPlanningRequests, individualUsedQuantities, individualAvailableMonths, allNonCallDays, allPlanningRequests, 
+    individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
     loadingIndividual, loadingApprovals,
     fetchUserData, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
