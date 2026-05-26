@@ -93,11 +93,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     try {
-      // Reverted to full fetch capacity after undoing sort-and-limit strategy
+      // [RECENT_WINDOW_SAFE_STRATEGY] - Limit fetch to 600 records sorted by date to optimize speed for Carmina and other high-volume users
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000) 
+        orderBy("coverageDate", "desc"),
+        limit(600) 
       );
       
       const querySnapshot = await getDocs(q);
@@ -118,11 +119,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
         if (entryMonth) foundMonths.add(entryMonth);
 
-        // FILTER: Only keep Current and Previous month data for the PMR View
+        // FILTER: Only keep heavy proof data for Current and Previous month
         if (entryMonth === currentMonthKey || entryMonth === prevMonthKey) {
             allFetched.push(entry);
         } else {
-            // Memory Optimization: Strip heavy photos for older months in the PMR view cache
+            // Memory Optimization: Strip heavy photos for older months to keep the UI snappy
             const { photos, signature, jointCallSignature, ...lightData } = entry;
             allFetched.push(lightData as CoverageEntry);
         }
