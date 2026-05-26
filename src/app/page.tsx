@@ -100,7 +100,7 @@ export default function Home() {
   } = useOfflineSync(
     user?.uid, 
     ['submitted', 'summary', 'planning', 'coverage'].includes(activeView),
-    selectedMonth // [QUERY_ON_DEMAND_LOGIC] - Pass current selected month for on-demand fetch
+    selectedMonth 
   );
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
@@ -195,15 +195,22 @@ export default function Home() {
   
   if (!user) return <LoginPage />;
 
-  const anyLoading = entriesLoading || doctorsLoading || plansLoading || nonCallDaysLoading || allocationLoading;
-
   const renderContent = () => {
-    const isContentLoading = (anyLoading || (activeView === 'summary' && timeLogsLoading)) && 
-                             activeView !== 'coverage' && 
-                             activeView !== 'master' && 
-                             activeView !== 'allocation';
+    // [SILENT_REFRESH_LOGIC] - Enhanced Loading Strategy
+    // Only show the skeleton if we are loading AND we have zero data for the current view.
+    // This prevents the UI from flickering when navigating between pages.
+    const isMissingSummaryData = masterEntries.length === 0 || timeLogs.length === 0;
+    const isMissingPlanningData = plans.length === 0 && doctors.length === 0;
+    const isMissingSubmittedData = masterEntries.length === 0;
+    const isMissingMasterData = doctors.length === 0;
 
-    if (isContentLoading) return <DynamicSkeleton />;
+    let shouldShowSkeleton = false;
+    if (activeView === 'summary' && isMissingSummaryData && (entriesLoading || timeLogsLoading)) shouldShowSkeleton = true;
+    if (activeView === 'planning' && isMissingPlanningData && (plansLoading || doctorsLoading)) shouldShowSkeleton = true;
+    if (activeView === 'submitted' && isMissingSubmittedData && entriesLoading) shouldShowSkeleton = true;
+    if (activeView === 'master' && isMissingMasterData && doctorsLoading) shouldShowSkeleton = true;
+
+    if (shouldShowSkeleton) return <DynamicSkeleton />;
 
     switch (activeView) {
       case 'planning': 
@@ -235,8 +242,8 @@ export default function Home() {
           nonCallDays={nonCallDays} 
           onDelete={deleteMasterEntry} 
           onEdit={(entry) => handleEditEntry(entry, false)} 
-          selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
-          onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+          selectedMonth={selectedMonth} 
+          onMonthChange={setSelectedMonth} 
         />;
       case 'summary': 
         return <CallSummary 
@@ -245,8 +252,8 @@ export default function Home() {
           doctors={doctors} 
           nonCallDays={nonCallDays} 
           timeLogs={timeLogs} 
-          selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
-          onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+          selectedMonth={selectedMonth} 
+          onMonthChange={setSelectedMonth} 
         />;
       case 'master': 
         return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
@@ -274,7 +281,7 @@ export default function Home() {
                     {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                     <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
                 </Badge>
-                {timeLogsLoading ? (
+                {timeLogsLoading && timeLogs.length === 0 ? (
                     <Button size="sm" variant="outline" className="font-headline" disabled><RefreshCw className="mr-2 animate-spin"/> Loading...</Button>
                 ) : !todaysTimeIn ? (
                   <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}><LogIn className="mr-2"/>Time In</Button>
