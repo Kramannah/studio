@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, MarketingSample, PlanningPermissionRequest } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -17,6 +18,7 @@ interface UserDashboardProps {
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
     individualPlanningRequests?: PlanningPermissionRequest[];
+    individualAvailableMonths?: string[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
@@ -26,7 +28,9 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string) => void;
+    onFetchUserData?: (uid: string, month?: string) => void;
+    selectedMonth: string;
+    onMonthChange: (month: string) => void;
 }
 
 export function UserDashboard({ 
@@ -37,6 +41,7 @@ export function UserDashboard({
     allNonCallDays, 
     allTimeLogs, 
     individualPlanningRequests = [],
+    individualAvailableMonths = [],
     onDeleteEntry = () => {},
     isAdminView = false,
     userMap,
@@ -45,18 +50,18 @@ export function UserDashboard({
     onUpdateDoctor = () => {},
     onDeleteDoctor = () => {},
     onDeleteDoctorsBulk = () => {},
-    onFetchUserData
+    onFetchUserData,
+    selectedMonth,
+    onMonthChange
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     
-    // [QUERY_ON_DEMAND_LOGIC] - Re-enabled monthly state for Admin Dashboard
-    const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-
     useEffect(() => {
         if (isAdminView && onFetchUserData && userId) {
-            onFetchUserData(userId);
+            // [QUERY_ON_DEMAND_LOGIC] - Re-fetch data for the selected month in individual view
+            onFetchUserData(userId, selectedMonth);
         }
-    }, [userId, isAdminView, onFetchUserData]);
+    }, [userId, isAdminView, onFetchUserData, selectedMonth]);
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -70,17 +75,19 @@ export function UserDashboard({
             <TabsContent value="summary" className="mt-6">
               <CallSummary 
                 entries={allEntries} 
+                availableMonths={individualAvailableMonths}
                 doctors={allDoctors} 
                 nonCallDays={allNonCallDays} 
                 timeLogs={allTimeLogs}
                 isAdminView={isAdminView}
-                selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
-                onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+                selectedMonth={selectedMonth} 
+                onMonthChange={onMonthChange} 
               />
             </TabsContent>
             <TabsContent value="submitted" className="mt-6">
               <SubmittedList 
                 entries={allEntries} 
+                availableMonths={individualAvailableMonths}
                 doctors={allDoctors} 
                 nonCallDays={allNonCallDays}
                 onDelete={onDeleteEntry} 
@@ -88,8 +95,8 @@ export function UserDashboard({
                 readOnly={!isAdminView} 
                 isAdminView={isAdminView} 
                 userMap={userMap} 
-                selectedMonth={selectedMonth} // [QUERY_ON_DEMAND_LOGIC]
-                onMonthChange={setSelectedMonth} // [QUERY_ON_DEMAND_LOGIC]
+                selectedMonth={selectedMonth} 
+                onMonthChange={onMonthChange} 
               />
             </TabsContent>
             <TabsContent value="planning" className="mt-6">

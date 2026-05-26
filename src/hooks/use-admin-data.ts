@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -7,7 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, eachMonthOfInterval, startOfMonth } from "date-fns";
+import { getMonthRangeISO } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -20,6 +22,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
   const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
+  const [individualAvailableMonths, setIndividualAvailableMonths] = useState<string[]>([]);
 
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -93,20 +96,60 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
+  const fetchUserData = useCallback(async (uid: string, month?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
 
     setLoadingIndividual(true);
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [RECENT_WINDOW_SAFE_STRATEGY] - Limit individual view to 600 most recent records to prevent browser crash on heavy accounts
-        const eSnap = await getDocs(query(
-            collection(db!, "coverageEntries"), 
+        // [QUERY_ON_DEMAND_LOGIC] - Perform targeted fetch if a month is specified, otherwise recent 600
+        let entriesQuery;
+        if (month) {
+            const { start, end } = getMonthRangeISO(month);
+            entriesQuery = query(
+                collection(db!, "coverageEntries"),
+                where("userId", "==", uid),
+                where("coverageDate", ">=", start),
+                where("coverageDate", "<=", end),
+                orderBy("coverageDate", "desc")
+            );
+        } else {
+            // [RECENT_WINDOW_SAFE_STRATEGY] - Limit individual view to 600 most recent records
+            entriesQuery = query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", uid),
+                orderBy("coverageDate", "desc"),
+                limit(600)
+            );
+        }
+
+        // [RANGE_DISCOVERY_LOGIC] - Fetch oldest record to calculate full history range without downloading photos
+        const rangeQuery = query(
+            collection(db!, "coverageEntries"),
             where("userId", "==", uid),
-            orderBy("coverageDate", "desc"),
-            limit(600)
-        ));
+            orderBy("coverageDate", "asc"),
+            limit(1)
+        );
+
+        const [eSnap, rangeSnap] = await Promise.all([
+            getDocs(entriesQuery),
+            getDocs(rangeQuery)
+        ]);
+
+        const entries = mapDocs(eSnap) as CoverageEntry[];
+        
+        // Calculate all available months from oldest record to today
+        if (rangeSnap.docs.length > 0) {
+            const oldestDate = parseISO(rangeSnap.docs[0].data().coverageDate || rangeSnap.docs[0].data().submittedAt);
+            const months = eachMonthOfInterval({
+                start: startOfMonth(oldestDate),
+                end: startOfMonth(new Date())
+            }).map(m => format(m, 'yyyy-MM')).reverse();
+            setIndividualAvailableMonths(months);
+        } else {
+            setIndividualAvailableMonths([format(new Date(), 'yyyy-MM')]);
+        }
 
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)));
@@ -114,8 +157,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)));
         const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)));
 
-        const entries = mapDocs(eSnap) as CoverageEntry[];
-        
         const used: Record<string, number> = {};
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
@@ -147,7 +188,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
-    individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
+    individualPlanningRequests, individualUsedQuantities, individualAvailableMonths, allNonCallDays, allPlanningRequests, 
     loadingIndividual, loadingApprovals,
     fetchUserData, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
