@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, subMonths } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -22,6 +23,7 @@ const generateUniqueId = () => {
  */
 const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
+  if (!data) return cleaned;
   Object.keys(data).forEach(key => {
     const val = data[key];
     if (val === undefined) return;
@@ -92,16 +94,21 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     try {
+      // Use a reasonable limit to capture recent months without downloading thousands of old records
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(10000)
+        limit(2000) 
       );
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = [];
       const foundMonths = new Set<string>();
-      const currentMonthKey = selectedMonth || format(new Date(), 'yyyy-MM');
+      
+      // Calculate valid months for PMR View (Current and Previous only)
+      const now = new Date();
+      const currentMonthKey = format(now, 'yyyy-MM');
+      const prevMonthKey = format(subMonths(now, 1), 'yyyy-MM');
       
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
@@ -110,27 +117,21 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const dateStr = (data.coverageDate || data.submittedAt || "").toString();
         const d = parseISO(dateStr);
         const entryMonth = isValid(d) ? format(d, 'yyyy-MM') : null;
-        
-        if (entryMonth) {
-            foundMonths.add(entryMonth);
-        }
 
-        /**
-         * MEMORY OPTIMIZATION:
-         * To keep the app fast for high-volume users, we strip heavy photos/signatures
-         * from all records EXCEPT those in the currently viewed month.
-         * Planning markers remain 100% accurate because metadata is preserved.
-         */
-        if (entryMonth !== currentMonthKey) {
-            delete entry.photos;
-            entry.signature = null;
-            entry.jointCallSignature = null;
-            entry.dsmSignature = null;
+        // FILTER: Only keep Current and Previous month data for the PMR View
+        if (entryMonth === currentMonthKey || entryMonth === prevMonthKey) {
+            if (entryMonth) foundMonths.add(entryMonth);
+            
+            /**
+             * MEMORY OPTIMIZATION:
+             * We keep the full data (photos/signatures) for the current and previous months.
+             * This satisfies the "whole" coverage requirement for active work.
+             */
+            allFetched.push(entry);
         }
-        
-        allFetched.push(entry);
       });
       
+      // Ensure the selectors always have at least the current month
       foundMonths.add(currentMonthKey);
       setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
 
@@ -140,10 +141,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       lastFetchedUserIdRef.current = userId;
       
       try {
+          // Local storage cache should be kept light
           const minimalEntries = allFetched.map(entry => {
               const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
               return rest;
-          }).slice(0, 500); 
+          }).slice(0, 300); 
           localStorage.setItem(getMasterKey(), JSON.stringify(minimalEntries));
       } catch (storageError) {
           console.warn("Local storage cache limited.");
@@ -158,7 +160,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, selectedMonth, getMasterKey, masterEntries.length]);
+  }, [userId, isOnline, active, getMasterKey, masterEntries.length]);
 
   useEffect(() => {
     if (userId && active) {
