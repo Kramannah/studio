@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { format, parseISO, isValid } from "date-fns";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -20,6 +21,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
   const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
+  const [individualAvailableMonths, setIndividualAvailableMonths] = useState<string[]>([]);
 
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -100,7 +102,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [ROLLBACK_TO_PUBLISHED] - Fetching standard historical window
+        // Fetching standard historical window
         const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
         const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)));
@@ -110,6 +112,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};
+        const months = new Set<string>();
+
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
@@ -119,6 +123,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             process(item.secondarySampleName, item.secondaryProductQty);
             if (item.reminderProducts) {
                 item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            }
+
+            const dateStr = (item.coverageDate || item.submittedAt || "").toString();
+            const d = parseISO(dateStr);
+            if (isValid(d)) {
+                months.add(format(d, 'yyyy-MM'));
             }
         });
 
@@ -131,6 +141,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllNonCallDaysIndividual(mapDocs(ncdSnap) as any);
         setIndividualPlanningRequests(mapDocs(rSnap) as any); 
         setIndividualUsedQuantities(used);
+        setIndividualAvailableMonths(Array.from(months).sort((a, b) => b.localeCompare(a)));
     } catch (e) {
         console.error("Individual data fetch failed:", e);
     } finally {
@@ -140,7 +151,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
-    individualPlanningRequests, individualUsedQuantities, allNonCallDays, allPlanningRequests, 
+    individualPlanningRequests, individualUsedQuantities, individualAvailableMonths, allNonCallDays, allPlanningRequests, 
     loadingIndividual, loadingApprovals,
     fetchUserData, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
