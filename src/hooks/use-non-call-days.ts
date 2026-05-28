@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -35,8 +34,10 @@ export const useNonCallDays = (active: boolean = true) => {
       return;
     };
     
-    // [ROLLBACK_TO_PUBLISHED] - Restored standard loading
-    setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    if (nonCallDays.length === 0) {
+        setLoading(true);
+    }
 
     try {
       const q = query(collection(db, "nonCallDays"), where("userId", "==", user.uid), limit(1000));
@@ -62,7 +63,7 @@ export const useNonCallDays = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, active]);
+  }, [user, active, nonCallDays.length]);
 
   useEffect(() => {
     if (active) {

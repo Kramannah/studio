@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -56,8 +55,10 @@ export const useDoctors = (active: boolean = true) => {
       return;
     }
 
-    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading for doctors
-    setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    if (doctors.length === 0) {
+        setLoading(true);
+    }
 
     try {
       let q;
@@ -86,7 +87,7 @@ export const useDoctors = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, active]);
+  }, [user, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
     if (active) {

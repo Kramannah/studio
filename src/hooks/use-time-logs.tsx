@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -42,8 +41,10 @@ export const useTimeLogs = (active: boolean = true) => {
       return;
     }
     
-    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading
-    setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    if (timeLogs.length === 0) {
+        setLoading(true);
+    }
 
     try {
       const startDate = getQueryStartDateISO();
@@ -79,7 +80,7 @@ export const useTimeLogs = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, active]);
+  }, [user, active, timeLogs.length]);
 
   useEffect(() => {
     if (active) {

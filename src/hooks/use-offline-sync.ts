@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -95,7 +94,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    setLoading(true);
+    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    if (masterEntries.length === 0 || force) {
+        setLoading(true);
+    }
 
     try {
       const q = query(
@@ -143,7 +145,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey]);
+  }, [userId, isOnline, active, getMasterKey, masterEntries.length]);
 
   useEffect(() => {
     if (userId && active) {

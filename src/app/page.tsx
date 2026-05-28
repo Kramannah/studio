@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -195,11 +194,12 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const renderContent = () => {
-    // [ROLLBACK_TO_PUBLISHED] - Restored standard loading skeleton checks
-    if (activeView === 'summary' && (entriesLoading || timeLogsLoading)) return <DynamicSkeleton />;
-    if (activeView === 'planning' && (plansLoading || doctorsLoading || nonCallDaysLoading)) return <DynamicSkeleton />;
-    if (activeView === 'submitted' && entriesLoading) return <DynamicSkeleton />;
-    if (activeView === 'master' && doctorsLoading) return <DynamicSkeleton />;
+    // [SILENT_REFRESH_LOGIC] - Only show skeleton if we have NO data. 
+    // If data exists, show it while refresh happens in BG for a fast feel.
+    if (activeView === 'summary' && (entriesLoading && masterEntries.length === 0)) return <DynamicSkeleton />;
+    if (activeView === 'planning' && (plansLoading && plans.length === 0)) return <DynamicSkeleton />;
+    if (activeView === 'submitted' && (entriesLoading && masterEntries.length === 0)) return <DynamicSkeleton />;
+    if (activeView === 'master' && (doctorsLoading && doctors.length === 0)) return <DynamicSkeleton />;
 
     switch (activeView) {
       case 'planning': 
