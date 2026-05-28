@@ -18,9 +18,16 @@ const generateUniqueId = () => {
 };
 
 /**
- * [ROLLBACK_TO_PUBLISHED]
- * Data Sanitization Utility
+ * [PERSISTENCE_OPTIMIZATION]
+ * Removes heavy base64 strings (photos/signatures) before saving to localStorage.
+ * This prevents the 5MB browser quota from being exceeded.
  */
+const sanitizeForStorage = (entry: any): any => {
+    if (!entry) return entry;
+    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
+    return rest;
+};
+
 const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
   if (!data) return cleaned;
@@ -88,11 +95,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    // [ROLLBACK_TO_PUBLISHED] - Restored hard loading
     setLoading(true);
 
     try {
-      // [ROLLBACK_TO_PUBLISHED] - Restored 2000 record fetch without explicit sorting
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -116,17 +121,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       });
       
       setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
-
       allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
       setMasterEntries(allFetched);
       lastFetchedUserIdRef.current = userId;
       
       try {
-          // [ROLLBACK_TO_PUBLISHED] - Storing full records in cache
-          localStorage.setItem(getMasterKey(), JSON.stringify(allFetched));
+          // [PERSISTENCE_OPTIMIZATION] Cache without heavy photos
+          const storageData = allFetched.map(e => sanitizeForStorage(e));
+          localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {
-          console.warn("Local storage cache failed.");
+          console.warn("Local storage cache failed (Storage might be full).");
       }
     } catch (serverError: any) {
         console.error("Fetch coverage entries failed:", serverError);
@@ -149,7 +154,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
       try {
-          localStorage.setItem(getOfflineKey(), JSON.stringify(updatedEntries));
+          // [PERSISTENCE_OPTIMIZATION]
+          const storageData = updatedEntries.map(e => sanitizeForStorage(e));
+          localStorage.setItem(getOfflineKey(), JSON.stringify(storageData));
       } catch (e) {
           console.error("Failed to save offline entry to storage:", e);
       }
@@ -174,7 +181,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           .then(() => {
             setMasterEntries(prev => {
                 const next = [sanitizedPayload as CoverageEntry, ...prev];
-                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+                const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+                
+                // [DATA_ACCURACY_FIX] Update localStorage immediately to prevent disappearing reports
+                try {
+                    const storageData = sorted.map(e => sanitizeForStorage(e));
+                    localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
+                } catch(e) {}
+                
+                return sorted;
             });
             toast({ title: "Entry Saved", description: "Report saved to server." });
           })
@@ -248,7 +263,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
-        setMasterEntries(prev => prev.filter(e => e.id !== id));
+        setMasterEntries(prev => {
+            const next = prev.filter(e => e.id !== id);
+            try {
+                const storageData = next.map(e => sanitizeForStorage(e));
+                localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
+            } catch(e) {}
+            return next;
+        });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -265,7 +287,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", e.id);
     updateDoc(docRef, { ...sanitizedPayload, userId: userId })
       .then(() => {
-        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
+        setMasterEntries(prev => {
+            const next = prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item);
+            try {
+                const storageData = next.map(e => sanitizeForStorage(e));
+                localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
+            } catch(e) {}
+            return next;
+        });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({

@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -102,18 +102,29 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Fetching standard historical window
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(10000)));
+        // [ADMIN_PERFORMANCE_FIX] Range Discovery Query (Fast metadata only)
+        // Find oldest and newest records to populate months selector without crashing browser
+        const oldestQuery = query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("submittedAt", "asc"), limit(1));
+        const newestQuery = query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(1));
+        
+        // Primary Data Fetch (Limited to 2,000 recent records for safety)
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000)));
         const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
-        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)));
+        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000)));
         const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000)));
         const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)));
         const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)));
+
+        const [oldestSnap, newestSnap] = await Promise.all([
+            getDocs(oldestQuery).catch(() => null), // Fallback if no index exists yet
+            getDocs(newestQuery).catch(() => null)
+        ]);
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};
         const months = new Set<string>();
 
+        // Build month range from full data if discovery queries failed or if data is smaller
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
@@ -129,6 +140,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             const d = parseISO(dateStr);
             if (isValid(d)) {
                 months.add(format(d, 'yyyy-MM'));
+            }
+        });
+
+        // Add edge months from discovery
+        [oldestSnap, newestSnap].forEach(snap => {
+            if (snap && !snap.empty) {
+                const data = snap.docs[0].data();
+                const d = parseISO(data.coverageDate || data.submittedAt);
+                if (isValid(d)) months.add(format(d, 'yyyy-MM'));
             }
         });
 
