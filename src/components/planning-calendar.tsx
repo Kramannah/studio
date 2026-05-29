@@ -155,14 +155,16 @@ export function PlanningCalendar({
         return !approvedWeekMondays.has(mondayStr);
     }, [selectedDate, approvedWeekMondays]);
 
-    const visitCountsThisMonth = useMemo(() => {
+    // [DATA_ACCURACY_FIX] - LEFT calculation now resets every month based on the calendar selection
+    const visitCountsForSelectedMonth = useMemo(() => {
         const counts: Record<string, number> = {};
-        const today = new Date();
+        const referenceDate = selectedDate || new Date();
+        
         allEntries.forEach(e => {
             const dateStr = (e.coverageDate ?? "").toString();
             if (dateStr) {
                 const date = parseISO(dateStr);
-                if (isValid(date) && isSameMonth(date, today)) {
+                if (isValid(date) && isSameMonth(date, referenceDate)) {
                     const first = (e.firstName ?? "").toString().toLowerCase().trim();
                     const last = (e.lastName ?? "").toString().toLowerCase().trim();
                     const nameKey = `${first}|${last}`;
@@ -171,7 +173,7 @@ export function PlanningCalendar({
             }
         });
         return counts;
-    }, [allEntries]);
+    }, [allEntries, selectedDate]);
 
     const selectedDayPlans = useMemo(() => {
         if (!selectedDate) return [];
@@ -487,7 +489,7 @@ export function PlanningCalendar({
                                             const first = (doctor.firstName ?? "").toString().toLowerCase().trim();
                                             const last = (doctor.lastName ?? "").toString().toLowerCase().trim();
                                             const nameKey = `${first}|${last}`;
-                                            const actualCount = visitCountsThisMonth[nameKey] || 0;
+                                            const actualCount = visitCountsForSelectedMonth[nameKey] || 0;
                                             const freq = (doctor.frequency || '1x').toString();
                                             const targetCount = parseInt(freq.replace('x', ''), 10) || 0;
                                             const remaining = Math.max(0, targetCount - actualCount);
