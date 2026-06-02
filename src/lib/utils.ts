@@ -62,15 +62,15 @@ export function getMonthRangeISO(monthStr?: string): { start: string, end: strin
 
 /**
  * Returns the ISO string for the start of the current period.
- * Defaulting to current month to prevent massive data fetch.
+ * Defaulting to start of year to allow historical context in calendars.
  */
 export function getQueryStartDateISO(forceAllWeek?: boolean): string {
   const now = new Date();
   if (forceAllWeek) {
       return subDays(now, 7).toISOString();
   }
-  // Default to start of current month for performance
-  return startOfMonth(now).toISOString();
+  // Updated to start of year so PMRs can see their plotted calls/leaves from previous months
+  return getStartOfYearISO();
 }
 
 /**
