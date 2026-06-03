@@ -5,7 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, subMonths, isSameDay } from "date-fns";
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase, Download } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -147,9 +147,20 @@ export function CallSummary({
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
         
-        const totalWorkingDays = Object.keys(callsByDay).length;
+        // Revised Active Days calculation: Count as 0.5 if day has calls but is also marked as Half Day Approved Leave
+        const activeDaysActual = Object.keys(callsByDay).reduce((sum, dayStr) => {
+            const dayDate = parseISO(dayStr);
+            const isHalfDayLeave = (nonCallDays || []).some(ncd => {
+                const ncdDate = typeof ncd.date === 'string' ? parseISO(ncd.date) : ncd.date;
+                return ncd.status === 'approved' && 
+                       (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') &&
+                       isValid(ncdDate) && 
+                       isSameDay(ncdDate, dayDate);
+            });
+            return sum + (isHalfDayLeave ? 0.5 : 1.0);
+        }, 0);
+
         const totalCalls = filteredEntries.length;
-        const avgCallsPerDay = totalWorkingDays > 0 ? (totalCalls / totalWorkingDays).toFixed(2) : 0;
         
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
@@ -181,8 +192,8 @@ export function CallSummary({
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
             callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
-            avgCallsPerDay,
-            totalWorkingDays: { actual: totalWorkingDays, total: totalBusinessDaysInMonth },
+            avgCallsPerDay: activeDaysActual > 0 ? (totalCalls / activeDaysActual).toFixed(2) : 0,
+            totalWorkingDays: { actual: activeDaysActual, total: totalBusinessDaysInMonth },
             inbaseCalls,
             outbaseCalls,
             monthlyPerformance,
