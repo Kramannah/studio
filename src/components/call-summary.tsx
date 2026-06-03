@@ -165,11 +165,6 @@ export function CallSummary({
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        const originalMonthlyTarget = (doctors || []).reduce((acc, doc) => {
-            const freqStr = String(doc.frequency || "1x").replace('x', '');
-            return acc + (parseInt(freqStr, 10) || 0);
-        }, 0);
-        
         const allDaysInMonth = eachDayOfInterval({ start, end });
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
             if (isWeekend(day)) return false;
@@ -177,21 +172,14 @@ export function CallSummary({
             return !PH_HOLIDAYS_2026[dateStr];
         }).length;
         
-        const dailyTarget = totalBusinessDaysInMonth > 0 ? originalMonthlyTarget / totalBusinessDaysInMonth : 0;
-        const approvedNonCallDaysCount = (nonCallDays || [])
-            .filter(ncd => {
-                const d = typeof ncd.date === 'string' ? parseISO(ncd.date) : ncd.date;
-                return ncd.status === 'approved' && isWithinInterval(d, { start, end });
-            })
-            .reduce((acc, ncd) => ncd.dayType === 'wholeday' ? acc + 1 : acc + 0.5, 0);
-        
-        const adjustedTarget = (totalBusinessDaysInMonth - approvedNonCallDaysCount) * dailyTarget;
-        const callRatePercentage = adjustedTarget > 0 ? Math.round((totalCalls / adjustedTarget) * 100) : 0;
+        // Denominator Calculation as requested: 12 x Active Days
+        const dynamicTarget = Math.round(activeDaysActual * 12);
+        const callRatePercentage = dynamicTarget > 0 ? Math.round((totalCalls / dynamicTarget) * 100) : 0;
 
         return {
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
-            callRate: { actual: totalCalls, total: Math.round(adjustedTarget), percentage: callRatePercentage },
+            callRate: { actual: totalCalls, total: dynamicTarget, percentage: callRatePercentage },
             avgCallsPerDay: activeDaysActual > 0 ? (totalCalls / activeDaysActual).toFixed(2) : 0,
             totalWorkingDays: { actual: activeDaysActual, total: totalBusinessDaysInMonth },
             inbaseCalls,
@@ -258,7 +246,7 @@ export function CallSummary({
                         <StatCard 
                             title="Call Rate" 
                             value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
-                            description="Monthly activity target" 
+                            description="Calculated as 12x Active Days" 
                             icon={Percent} 
                             color="text-orange-500" 
                             bgColor="bg-orange-500/10" 
