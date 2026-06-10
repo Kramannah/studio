@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -89,12 +88,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
    * [LOW_COST_UPDATE] 
    * surgical fetching for Admin: Reads only the target month for the selected PMR.
    * [INDEX_FIX] Fetches recent records by userId and filters by date in memory to avoid index requirements.
+   * [FETCH_CONTROL] Added force parameter to allow manual refreshes.
    */
-  const fetchUserData = useCallback(async (uid: string, monthStr?: string) => {
+  const fetchUserData = useCallback(async (uid: string, monthStr?: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
 
     const fetchKey = `${uid}_${monthStr || 'current'}`;
-    if (lastFetchedKeyRef.current === fetchKey && allEntries.length > 0) return;
+    if (!force && lastFetchedKeyRef.current === fetchKey && allEntries.length > 0) return;
 
     setLoadingIndividual(true);
     try {

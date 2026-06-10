@@ -1,14 +1,15 @@
-
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
-import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface UserDashboardProps {
     userId: string;
@@ -28,7 +29,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string) => void;
+    onFetchUserData?: (uid: string, month: string, force?: boolean) => void;
     selectedMonth: string;
     onMonthChange: (month: string) => void;
 }
@@ -55,6 +56,7 @@ export function UserDashboard({
     onMonthChange
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
+    const [isRefreshing, setIsRefreshing] = useState(false);
     
     // [LOW_COST_UPDATE] Trigger fetch when userId OR selectedMonth changes in Admin view
     useEffect(() => {
@@ -63,16 +65,42 @@ export function UserDashboard({
         }
     }, [userId, isAdminView, onFetchUserData, selectedMonth]);
 
+    const handleManualRefresh = useCallback(async () => {
+        if (isAdminView && onFetchUserData && userId) {
+            setIsRefreshing(true);
+            try {
+                await onFetchUserData(userId, selectedMonth, true);
+            } finally {
+                // Short delay for visual feedback
+                setTimeout(() => setIsRefreshing(false), 800);
+            }
+        }
+    }, [userId, selectedMonth, isAdminView, onFetchUserData]);
+
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="summary" className="font-headline">Call Summary</TabsTrigger>
-              <TabsTrigger value="submitted" className="font-headline">Submitted Coverage</TabsTrigger>
-              <TabsTrigger value="planning" className="font-headline">Call Planning</TabsTrigger>
-              <TabsTrigger value="master" className="font-headline">Doctor Masterlist</TabsTrigger>
-            </TabsList>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 md:grid-cols-4 w-full md:w-fit h-auto">
+                    <TabsTrigger value="summary" className="font-headline py-2">Call Summary</TabsTrigger>
+                    <TabsTrigger value="submitted" className="font-headline py-2">Reports</TabsTrigger>
+                    <TabsTrigger value="planning" className="font-headline py-2">Planning</TabsTrigger>
+                    <TabsTrigger value="master" className="font-headline py-2">Masterlist</TabsTrigger>
+                </TabsList>
+                {isAdminView && (
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="font-headline h-10 border-2 gap-2" 
+                        onClick={handleManualRefresh}
+                        disabled={isRefreshing}
+                    >
+                        <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+                        {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+                    </Button>
+                )}
+            </div>
             
-            <TabsContent value="summary" className="mt-6">
+            <TabsContent value="summary" className="mt-0">
               <CallSummary 
                 entries={allEntries} 
                 availableMonths={individualAvailableMonths}
@@ -84,7 +112,7 @@ export function UserDashboard({
                 onMonthChange={onMonthChange} 
               />
             </TabsContent>
-            <TabsContent value="submitted" className="mt-6">
+            <TabsContent value="submitted" className="mt-0">
               <SubmittedList 
                 entries={allEntries} 
                 availableMonths={individualAvailableMonths}
@@ -99,7 +127,7 @@ export function UserDashboard({
                 onMonthChange={onMonthChange} 
               />
             </TabsContent>
-            <TabsContent value="planning" className="mt-6">
+            <TabsContent value="planning" className="mt-0">
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans}
@@ -116,7 +144,7 @@ export function UserDashboard({
                     readOnly={true}
                 />
             </TabsContent>
-            <TabsContent value="master" className="mt-6">
+            <TabsContent value="master" className="mt-0">
                 <MasterList 
                     doctors={allDoctors}
                     entries={allEntries}

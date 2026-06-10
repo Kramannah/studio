@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -104,18 +103,19 @@ export default function AdminPage() {
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
+    // [LOW_COST_UPDATE] Effect to handle surgical data fetching based on PMR selection and Month selection
     useEffect(() => {
         if (!mounted || !hasAdminAccess) return;
         
         if (activeTab === 'district-reports') {
             if (selectedUserId) {
-                // Reverted to standard fetch without month parameter to undo Targeted Fetching
-                fetchUserData(selectedUserId);
+                // Targeted monthly fetch triggered by UI changes
+                fetchUserData(selectedUserId, selectedMonth);
             }
         } else if (activeTab === 'approvals' && !isMarketingOrHR) {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
+    }, [activeTab, selectedUserId, selectedMonth, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -339,7 +339,7 @@ export default function AdminPage() {
                         </Card>
                         
                         {selectedUserId ? (
-                            loadingIndividual ? <DynamicSkeleton message="Loading Individual Representative Data..." /> : (
+                            loadingIndividual ? <DynamicSkeleton message={`Loading Representative History for ${format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}...`} /> : (
                              <UserDashboard 
                                 key={selectedUserId}
                                 userId={selectedUserId}
@@ -357,6 +357,7 @@ export default function AdminPage() {
                                 onAddDoctor={() => {}}
                                 onUpdateDoctor={() => {}}
                                 onDeleteDoctor={() => {}}
+                                onFetchUserData={fetchUserData}
                                 selectedMonth={selectedMonth}
                                 onMonthChange={setSelectedMonth}
                             />
