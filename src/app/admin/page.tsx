@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, ArrowRight } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -28,9 +28,8 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
-// Static import for offline availability
 import { UserDashboard } from '@/components/user-dashboard';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
@@ -103,13 +102,11 @@ export default function AdminPage() {
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
-    // [LOW_COST_UPDATE] Effect to handle surgical data fetching based on PMR selection and Month selection
     useEffect(() => {
         if (!mounted || !hasAdminAccess) return;
         
         if (activeTab === 'district-reports') {
             if (selectedUserId) {
-                // Targeted monthly fetch triggered by UI changes
                 fetchUserData(selectedUserId, selectedMonth);
             }
         } else if (activeTab === 'approvals' && !isMarketingOrHR) {
@@ -339,7 +336,6 @@ export default function AdminPage() {
                         </Card>
                         
                         {selectedUserId ? (
-                            loadingIndividual ? <DynamicSkeleton message={`Loading Representative History for ${format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}...`} /> : (
                              <UserDashboard 
                                 key={selectedUserId}
                                 userId={selectedUserId}
@@ -361,7 +357,6 @@ export default function AdminPage() {
                                 selectedMonth={selectedMonth}
                                 onMonthChange={setSelectedMonth}
                             />
-                            )
                         ) : selectedManagerId ? (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
                                 <Search className="w-10 h-10 text-primary mb-4" />
