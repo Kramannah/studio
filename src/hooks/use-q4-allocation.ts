@@ -1,26 +1,33 @@
+
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc, orderBy } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
+import { getStartOfYearISO } from '@/lib/utils';
 
-// SINGLETON CACHE
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
-const ALLOCATION_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+const ALLOCATION_CACHE_TTL = 30 * 60 * 1000;
 const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v4';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v4';
 
+/**
+ * [LOW_COST_UPDATE] 
+ * Optimized to reduce reads by caching allocations and capping usage scans to the current year.
+ */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(!cachedAllocations && active);
+  
+  const usageFetchedRef = useRef(false);
 
   const getStoreKey = (base: string) => `${base}_${user?.uid}`;
 
@@ -32,7 +39,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  // Load from local storage on mount
   useEffect(() => {
       if (user?.uid) {
           try {
@@ -53,10 +59,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const now = Date.now();
     const isOnline = navigator.onLine;
 
+    // Use singleton cache for the material list (shared across app)
     if (!force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL)) {
         setAllocations(cachedAllocations);
-        setLoading(false);
-        if (!includeUsage) return;
+        if (!includeUsage || usageFetchedRef.current) {
+            setLoading(false);
+            return;
+        }
     }
 
     if (!isOnline) {
@@ -64,20 +73,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         return;
     }
 
-    // [SILENT_REFRESH_LOGIC] - Only show loader if allocations list is empty
-    if (allocations.length === 0) {
-        setLoading(true);
-    }
+    if (allocations.length === 0) setLoading(true);
 
     try {
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(10000)))
-            .catch(async (e) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: 'marketingSamples',
-                    operation: 'list'
-                }));
-                throw e;
-            });
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(5000)));
 
         const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
@@ -102,16 +101,23 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             localStorage.setItem(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
         } catch (e) {}
 
-        if (includeUsage) {
+        if (includeUsage && !usageFetchedRef.current) {
             const used: Record<string, number> = {};
-            let entriesSnap;
-            const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin'].includes(profile.role));
+            const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role));
 
-            const baseQuery = collection(db!, "coverageEntries");
+            // [LOW_COST_UPDATE] Cap usage scan to current year only
+            const startOfYear = getStartOfYearISO();
+            const baseQuery = query(
+                collection(db!, "coverageEntries"), 
+                where("coverageDate", ">=", startOfYear),
+                limit(5000) 
+            );
+
+            let entriesSnap;
             if (canDoGlobalFetch) {
-                entriesSnap = await getDocs(query(baseQuery, limit(10000)));
+                entriesSnap = await getDocs(baseQuery);
             } else {
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid), limit(10000)));
+                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid)));
             }
 
             entriesSnap.docs.forEach(d => {
@@ -124,26 +130,21 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                         used[key] = (used[key] || 0) + q;
                     }
                 };
-
                 process(data.primarySampleName, data.primaryProductQty);
                 process(data.secondarySampleName, data.secondaryProductQty);
-                
-                if (data.reminderProducts && Array.isArray(data.reminderProducts)) {
-                    data.reminderProducts.forEach(rp => {
-                        if (rp && rp.sampleName) {
-                            process(rp.sampleName, rp.quantity);
-                        }
-                    });
+                if (data.reminderProducts) {
+                    data.reminderProducts.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
                 }
             });
             setUsedQuantities(used);
+            usageFetchedRef.current = true;
             try {
                 localStorage.setItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
             } catch (e) {}
         }
 
     } catch (error) {
-        console.error("Inventory fetch failed:", error);
+        console.error("Inventory fetch limited:", error);
     } finally {
         setLoading(false);
     }
@@ -158,21 +159,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
-    data.forEach(item => {
-        const ref = doc(collection(db!, "marketingSamples"));
-        batch.set(ref, item);
-    });
+    data.forEach(item => batch.set(doc(collection(db!, "marketingSamples")), item));
     try {
         await batch.commit();
         await performFetch(true);
         return true;
-    } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples',
-            operation: 'write'
-        }));
-        return false;
-    }
+    } catch (e) { return false; }
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
@@ -183,20 +175,17 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         await batch.commit();
         await performFetch(true);
         return true;
-    } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples',
-            operation: 'delete'
-        }));
-        return false;
-    }
+    } catch (e) { return false; }
   };
 
   return { 
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: () => performFetch(true),
+    refetch: () => {
+        usageFetchedRef.current = false;
+        performFetch(true);
+    },
     addAllocationsBulk,
     deleteAllocationsBulk
   };

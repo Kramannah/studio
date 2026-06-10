@@ -1,13 +1,15 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { format, parseISO, isValid } from 'date-fns';
+import { getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -16,11 +18,6 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-/**
- * [PERSISTENCE_OPTIMIZATION]
- * Removes heavy base64 strings (photos/signatures) before saving to localStorage.
- * This prevents the 5MB browser quota from being exceeded.
- */
 const sanitizeForStorage = (entry: any): any => {
     if (!entry) return entry;
     const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
@@ -42,6 +39,10 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
+/**
+ * [LOW_COST_UPDATE] 
+ * Modified to prioritize targeted monthly fetching to reduce Firestore reads.
+ */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -52,7 +53,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   
-  const lastFetchedUserIdRef = useRef<string | null>(null);
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
   const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
@@ -84,7 +85,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setOfflineEntries([]);
         setMasterEntries([]);
         setAvailableMonths([]);
-        lastFetchedUserIdRef.current = null;
+        lastFetchedKeyRef.current = null;
     }
   }, [userId, getOfflineKey, getMasterKey]);
 
@@ -94,49 +95,50 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    // [LOW_COST_UPDATE] Only fetch if the user+month combination changed or if forced.
+    const fetchKey = `${userId}_${selectedMonth}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
+        return;
+    }
+
     if (masterEntries.length === 0 || force) {
         setLoading(true);
     }
 
     try {
+      const { start, end } = getMonthRangeISO(selectedMonth);
+      
+      // [LOW_COST_UPDATE] Targeted Monthly Query
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(2000) 
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(500) // Lower limit for targeted fetch
       );
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = [];
-      const foundMonths = new Set<string>();
       
       querySnapshot.forEach(docSnap => {
-        const data = docSnap.data() as CoverageEntry;
-        const entry = { id: docSnap.id, ...data };
-        
-        const dateStr = (data.coverageDate || data.submittedAt || "").toString();
-        const d = parseISO(dateStr);
-        const entryMonth = isValid(d) ? format(d, 'yyyy-MM') : null;
-
-        if (entryMonth) foundMonths.add(entryMonth);
-        allFetched.push(entry);
+        allFetched.push({ id: docSnap.id, ...(docSnap.data() as CoverageEntry) });
       });
+
+      // Always allow discovery of months PMR has data in, but limit this read to metadata only if possible
+      // For now, we update availableMonths based on session history
+      const currentMonth = selectedMonth || format(new Date(), 'yyyy-MM');
+      setAvailableMonths(prev => Array.from(new Set([...prev, currentMonth])).sort((a,b) => b.localeCompare(a)));
       
-      setAvailableMonths(Array.from(foundMonths).sort((a, b) => b.localeCompare(a)));
       allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
       setMasterEntries(allFetched);
-      lastFetchedUserIdRef.current = userId;
+      lastFetchedKeyRef.current = fetchKey;
       
       try {
-          // [PERSISTENCE_OPTIMIZATION] Cache without heavy photos
           const storageData = allFetched.map(e => sanitizeForStorage(e));
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
-      } catch (storageError) {
-          console.warn("Local storage cache failed (Storage might be full).");
-      }
+      } catch (storageError) {}
     } catch (serverError: any) {
-        console.error("Fetch coverage entries failed:", serverError);
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'list',
@@ -145,7 +147,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey, masterEntries.length]);
+  }, [userId, isOnline, active, getMasterKey, masterEntries.length, selectedMonth]);
 
   useEffect(() => {
     if (userId && active) {
@@ -156,12 +158,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
       setOfflineEntries(updatedEntries);
       try {
-          // [PERSISTENCE_OPTIMIZATION]
           const storageData = updatedEntries.map(e => sanitizeForStorage(e));
           localStorage.setItem(getOfflineKey(), JSON.stringify(storageData));
-      } catch (e) {
-          console.error("Failed to save offline entry to storage:", e);
-      }
+      } catch (e) {}
   }
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
@@ -183,20 +182,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           .then(() => {
             setMasterEntries(prev => {
                 const next = [sanitizedPayload as CoverageEntry, ...prev];
-                const sorted = next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-                
-                // [DATA_ACCURACY_FIX] Update localStorage immediately to prevent disappearing reports
-                try {
-                    const storageData = sorted.map(e => sanitizeForStorage(e));
-                    localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
-                } catch(e) {}
-                
-                return sorted;
+                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
             });
-            toast({ title: "Entry Saved", description: "Report saved to server." });
+            toast({ title: "Entry Saved" });
           })
           .catch(async (serverError) => {
-            console.error("Save entry failed:", serverError);
             const permissionError = new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'create',
@@ -216,7 +206,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const entryWithId = { ...newEntry, id: generateUniqueId() };
     const updatedEntries = [entryWithId, ...offlineEntries];
     updateOfflineInStorage(updatedEntries);
-    toast({ title: "Saved Locally", description: "Offline mode active." });
+    toast({ title: "Saved Locally" });
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
@@ -237,12 +227,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     batch.commit()
       .then(async () => {
         updateOfflineInStorage([]);
-        lastFetchedUserIdRef.current = null;
+        lastFetchedKeyRef.current = null;
         fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
-        console.error("Sync failed:", serverError);
         const permissionError = new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'create',
@@ -265,14 +254,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
-        setMasterEntries(prev => {
-            const next = prev.filter(e => e.id !== id);
-            try {
-                const storageData = next.map(e => sanitizeForStorage(e));
-                localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
-            } catch(e) {}
-            return next;
-        });
+        setMasterEntries(prev => prev.filter(e => e.id !== id));
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -289,14 +271,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", e.id);
     updateDoc(docRef, { ...sanitizedPayload, userId: userId })
       .then(() => {
-        setMasterEntries(prev => {
-            const next = prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item);
-            try {
-                const storageData = next.map(e => sanitizeForStorage(e));
-                localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
-            } catch(e) {}
-            return next;
-        });
+        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -323,8 +298,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         updateOfflineInStorage(updated);
     },
     loading,
-    refetch: () => {
-        fetchMasterEntries(true);
-    }
+    refetch: () => fetchMasterEntries(true)
   };
 };

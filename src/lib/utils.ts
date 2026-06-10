@@ -43,7 +43,6 @@ export function getHolidayName(date: Date): string | null {
 
 /**
  * Returns the ISO string for the start of the current calendar year.
- * Used for high-performance inventory and summary scans.
  */
 export function getStartOfYearISO(): string {
   const now = new Date();
@@ -51,7 +50,7 @@ export function getStartOfYearISO(): string {
 }
 
 /**
- * Returns the ISO strings for the start and end of a given month string (YYYY-MM).
+ * [LOW_COST_UPDATE] Returns the ISO range for a specific month YYYY-MM
  */
 export function getMonthRangeISO(monthStr?: string): { start: string, end: string } {
     const date = monthStr ? new Date(monthStr + "-01") : new Date();
@@ -61,16 +60,13 @@ export function getMonthRangeISO(monthStr?: string): { start: string, end: strin
 }
 
 /**
- * Returns the ISO string for the start of the current period.
- * Defaulting to start of year to allow historical context in calendars.
+ * [LOW_COST_UPDATE] Default query start date (Monthly Targeted)
  */
-export function getQueryStartDateISO(forceAllWeek?: boolean): string {
-  const now = new Date();
-  if (forceAllWeek) {
-      return subDays(now, 7).toISOString();
+export function getQueryStartDateISO(monthStr?: string): string {
+  if (monthStr) {
+      return getMonthRangeISO(monthStr).start;
   }
-  // Updated to start of year so PMRs can see their plotted calls/leaves from previous months
-  return getStartOfYearISO();
+  return startOfMonth(new Date()).toISOString();
 }
 
 /**

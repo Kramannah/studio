@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -22,7 +23,6 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PlanningCalendar } from '@/components/planning-calendar';
 
-// Static imports for offline availability
 import { CoverageForm } from '@/components/coverage-form';
 import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
@@ -55,6 +55,7 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
+  // [LOW_COST_UPDATE] Shared month state for targeted fetching
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-  // DATA HOOKS
+  // [LOW_COST_UPDATE] Pass selectedMonth to all data hooks for targeted fetching
   const { 
     offlineEntries, 
     masterEntries, 
@@ -102,9 +103,9 @@ export default function Home() {
   );
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
-  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
-  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary' || activeView === 'submitted');
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage');
+  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary' || activeView === 'submitted', selectedMonth);
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage', selectedMonth);
   
   const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(
     activeView === 'coverage' || activeView === 'allocation' || activeView === 'summary', 
@@ -121,14 +122,14 @@ export default function Home() {
           await Promise.all([
               syncAllOfflineEntries(),
               syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
-              refreshPlans(),
-              fetchTimeLogs(),
-              fetchNonCallDays(),
+              refreshPlans(true),
+              fetchTimeLogs(true),
+              fetchNonCallDays(true),
               refetchEntries()
           ]);
-          toast({ title: "Sync Finished", description: "All records updated." });
+          toast({ title: "Sync Finished" });
       } catch (e) {
-          toast({ variant: "destructive", title: "Sync Error", description: "Connection issue detected." });
+          toast({ variant: "destructive", title: "Sync Error" });
       } finally {
           setIsManualSyncing(false);
       }
@@ -162,9 +163,7 @@ export default function Home() {
             const safeName = (name ?? "").toLowerCase().trim();
             if (!safeName) return;
             const safeQty = Math.round(Number(qty || 0));
-            if (!isNaN(safeQty) && safeQty !== 0) {
-                quantities[safeName] = (quantities[safeName] || 0) + safeQty;
-            }
+            if (!isNaN(safeQty) && safeQty !== 0) quantities[safeName] = (quantities[safeName] || 0) + safeQty;
         };
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
@@ -194,8 +193,6 @@ export default function Home() {
   if (!user) return <LoginPage />;
 
   const renderContent = () => {
-    // [SILENT_REFRESH_LOGIC] - Only show skeleton if we have NO data. 
-    // If data exists, show it while refresh happens in BG for a fast feel.
     if (activeView === 'summary' && (entriesLoading && masterEntries.length === 0)) return <DynamicSkeleton />;
     if (activeView === 'planning' && (plansLoading && plans.length === 0)) return <DynamicSkeleton />;
     if (activeView === 'submitted' && (entriesLoading && masterEntries.length === 0)) return <DynamicSkeleton />;
@@ -315,12 +312,6 @@ export default function Home() {
                             <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
                                 <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
                                 {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'Manager Dashboard'}
-                            </Button>
-                        </Link>
-                        <Link href="/admin/inventory" className="w-full block">
-                            <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10 border-primary/30 text-primary">
-                                <PackageCheck className="mr-2 h-4 w-4" />
-                                Marketing Samples List
                             </Button>
                         </Link>
                     </div>

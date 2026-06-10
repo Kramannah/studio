@@ -1,24 +1,27 @@
+
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO } from 'date-fns';
-import { getQueryStartDateISO } from '@/lib/utils';
+import { getMonthRangeISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v4';
 
-export const useTimeLogs = (active: boolean = true) => {
+export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [todaysTimeIn, setTodaysTimeIn] = useState<TimeLog | null>(null);
+  
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   const getStoreKey = () => `${TIME_LOGS_STORAGE_KEY}_${user?.uid}`;
 
@@ -35,52 +38,54 @@ export const useTimeLogs = (active: boolean = true) => {
     }
   }, [user?.uid]);
 
-  const fetchTimeLogs = useCallback(async () => {
+  const fetchTimeLogs = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) {
       if (!active) setLoading(false);
       return;
     }
     
-    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
-    if (timeLogs.length === 0) {
+    // [LOW_COST_UPDATE] Prevent redundant server reads
+    const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
+
+    if (timeLogs.length === 0 || force) {
         setLoading(true);
     }
 
     try {
-      const startDate = getQueryStartDateISO();
+      const { start, end } = getMonthRangeISO(selectedMonth);
       
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
-        limit(1000)
+        where("timeIn", ">=", start),
+        where("timeIn", "<=", end),
+        limit(200)
       );
       
       const querySnapshot = await getDocs(q);
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
-        const data = doc.data() as TimeLog;
-        if (data.timeIn && data.timeIn >= startDate) {
-            fetchedLogs.push({ id: doc.id, ...data });
-        }
+        fetchedLogs.push({ id: doc.id, ...(doc.data() as TimeLog) });
       });
 
       fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
 
       setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
+      lastFetchedKeyRef.current = fetchKey;
       try {
           localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
       } catch (e) {}
     } catch (serverError: any) {
-      const permissionError = new FirestorePermissionError({
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: 'timeLogs',
         operation: 'list',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
+      } satisfies SecurityRuleContext));
     } finally {
       setLoading(false);
     }
-  }, [user, active, timeLogs.length]);
+  }, [user, active, timeLogs.length, selectedMonth]);
 
   useEffect(() => {
     if (active) {
@@ -91,53 +96,37 @@ export const useTimeLogs = (active: boolean = true) => {
   const addTimeIn = async (photo: string, loc: 'inbase' | 'outbase') => {
     if (!user || !db) return;
     const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
-    const colRef = collection(db, "timeLogs");
-    addDoc(colRef, newLog)
+    addDoc(collection(db, "timeLogs"), newLog)
       .then((docRef) => {
         const created = { id: docRef.id, ...newLog } as TimeLog;
-        setTimeLogs(prev => {
-            const next = [created, ...prev];
-            try {
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
-            } catch (e) {}
-            return next;
-        });
+        setTimeLogs(prev => [created, ...prev]);
         setTodaysTimeIn(created);
         toast({ title: "Time In Recorded" });
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'timeLogs',
           operation: 'create',
           requestResourceData: newLog,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
       });
   };
 
   const addTimeOut = async (photo: string) => {
     if (!user || !db || !todaysTimeIn) return;
-    const logRef = doc(db, "timeLogs", todaysTimeIn.id);
     const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
-    updateDoc(logRef, updateData)
+    updateDoc(doc(db, "timeLogs", todaysTimeIn.id), updateData)
       .then(() => {
-        setTimeLogs(prev => {
-            const next = prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l);
-            try {
-                localStorage.setItem(getStoreKey(), JSON.stringify(next));
-            } catch (e) {}
-            return next;
-        });
+        setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
         setTodaysTimeIn(null);
         toast({ title: "Time Out Recorded" });
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: logRef.path,
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'timeLogs',
           operation: 'update',
           requestResourceData: updateData,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
       });
   };
 

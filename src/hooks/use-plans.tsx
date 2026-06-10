@@ -1,11 +1,12 @@
+
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch } from 'firebase/firestore';
-import { getQueryStartDateISO } from '@/lib/utils';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
+import { getMonthRangeISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -13,7 +14,7 @@ import { isToday, isBefore, startOfToday } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
-export const usePlans = (active: boolean = true) => {
+export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [offlinePlans, setOfflinePlans] = useState<Plan[]>([]);
@@ -21,6 +22,8 @@ export const usePlans = (active: boolean = true) => {
   const [planningRequests, setPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   const getOfflineKey = useCallback(() => `${OFFLINE_PLANS_KEY}_${user?.uid}`, [user]);
 
@@ -39,21 +42,32 @@ export const usePlans = (active: boolean = true) => {
   const fetchData = useCallback(async (force = false) => {
     if (!user || !active) return;
     
-    // [SILENT_REFRESH_LOGIC] - Only show loader if we have zero data in memory.
+    // [LOW_COST_UPDATE] Prevent redundant server reads
+    const fetchKey = `${user.uid}_${selectedMonth}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
+
     if (masterPlans.length === 0 || force) {
         setLoading(true);
     }
 
     if (isOnline && db) {
       try {
-        const startDate = getQueryStartDateISO();
+        const { start, end } = getMonthRangeISO(selectedMonth);
         
+        // [LOW_COST_UPDATE] Targeted Monthly Query
         const plansQuery = query(
           collection(db, "plans"), 
-          where("userId", "==", user.uid)
+          where("userId", "==", user.uid),
+          where("plannedDate", ">=", start),
+          where("plannedDate", "<=", end),
+          limit(500)
         );
         
-        const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
+        const requestsQuery = query(
+            collection(db, "planningRequests"), 
+            where("userId", "==", user.uid),
+            limit(100)
+        );
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
           getDocs(plansQuery),
@@ -62,18 +76,16 @@ export const usePlans = (active: boolean = true) => {
 
         const allPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
-          const data = doc.data() as Plan;
-          if (data.plannedDate && data.plannedDate >= startDate) {
-              allPlans.push({ id: doc.id, ...data });
-          }
+          allPlans.push({ id: doc.id, ...(doc.data() as Plan) });
         });
 
         allPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
         setMasterPlans(allPlans);
+        lastFetchedKeyRef.current = fetchKey;
         
         const fetchedRequests: PlanningPermissionRequest[] = [];
         requestsSnapshot.forEach((doc) => {
-            fetchedRequests.push({ id: doc.id, ...doc.data() } as PlanningPermissionRequest);
+            fetchedRequests.push({ id: doc.id, ...(doc.data() as PlanningPermissionRequest) });
         });
         setPlanningRequests(fetchedRequests);
 
@@ -92,7 +104,7 @@ export const usePlans = (active: boolean = true) => {
     } catch (error) {}
     
     setLoading(false);
-  }, [user, isOnline, getOfflineKey, active, masterPlans.length]);
+  }, [user, isOnline, getOfflineKey, active, masterPlans.length, selectedMonth]);
   
   useEffect(() => {
     if (active) {
@@ -118,7 +130,7 @@ export const usePlans = (active: boolean = true) => {
     addDoc(colRef, newPlanData)
       .then((docRef) => {
         setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
-        toast({ title: "Visit Scheduled" });
+        toast({ title: "Scheduled" });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -157,14 +169,13 @@ export const usePlans = (active: boolean = true) => {
     try {
         await batch.commit();
         setMasterPlans(prev => [...prev, ...newPlans]);
-        toast({ title: "Visits Scheduled", description: `Added ${doctors.length} doctors to your plan.` });
+        toast({ title: "Visits Scheduled", description: `Added ${doctors.length} doctors.` });
         return true;
     } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'plans',
           operation: 'write',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
         return false;
     }
   }, [user, toast]);
@@ -177,11 +188,10 @@ export const usePlans = (active: boolean = true) => {
         setMasterPlans(prev => prev.filter(p => p.id !== id));
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: docRef.path,
           operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
       });
   };
 
@@ -194,17 +204,15 @@ export const usePlans = (active: boolean = true) => {
         status: 'pending',
         requestedAt: new Date().toISOString()
     };
-    const colRef = collection(db, 'planningRequests');
     try {
-        await addDoc(colRef, newRequest);
+        await addDoc(collection(db, 'planningRequests'), newRequest);
         return true;
     } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
-          path: colRef.path,
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'planningRequests',
           operation: 'create',
           requestResourceData: newRequest,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        }));
         return false;
     }
   };
@@ -224,11 +232,10 @@ export const usePlans = (active: boolean = true) => {
         await fetchData(true);
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'plans',
           operation: 'create',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        }));
       });
   }, [isOnline, user, offlinePlans, fetchData, getOfflineKey]);
 

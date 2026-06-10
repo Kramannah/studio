@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
@@ -9,7 +9,12 @@ import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { format, parseISO, isValid } from "date-fns";
+import { getMonthRangeISO } from "@/lib/utils";
 
+/**
+ * [LOW_COST_UPDATE] 
+ * Modified to support targeted monthly fetching in Admin view to reduce read costs.
+ */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -29,25 +34,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
+  const lastFetchedKeyRef = useRef<string | null>(null);
+
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
            email === 'mbustamante@hovidinc.com' || 
-           email === 'admin@hovidinc.com' ||
            ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  const hasFullAdminAccess = useMemo(() => {
-    return isUserAdmin || profile?.role === 'Manager' || Object.keys(MANAGER_TEAMS).includes(user?.uid || '');
-  }, [isUserAdmin, profile, user]);
-
-  const hasLimitedAdminAccess = useMemo(() => {
-    return profile?.role === 'Marketing' || profile?.role === 'HR';
-  }, [profile]);
-
-  const isAuthorized = hasFullAdminAccess || hasLimitedAdminAccess;
+  const isAuthorized = isUserAdmin || profile?.role === 'Manager' || Object.keys(MANAGER_TEAMS).includes(user?.uid || '') || profile?.role === 'Marketing' || profile?.role === 'HR';
 
   const getManagedUserIds = useCallback((mgrId?: string) => {
     if (!mgrId) return [];
@@ -59,8 +57,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !hasFullAdminAccess) return;
-    
+    if (!user || !db || !active || !isAuthorized) return;
     setLoadingApprovals(true);
     try {
         let userFilter: string[] | null = null;
@@ -71,60 +68,51 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 return;
             }
         }
-
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) {
-                return (await getDocs(query(colRef, limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
-            }
-            
+            if (!filter) return (await getDocs(query(colRef, limit(500)))).docs.map(d => ({id: d.id, ...d.data()}));
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(500)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
-
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
-        
         setAllNonCallDays(ncd as any);
         setAllPlanningRequests(pr as any);
-    } catch (e) {
-        console.error("Approvals fetch error:", e);
-    } finally {
-        setLoadingApprovals(false);
-    }
-  }, [user, managerId, getManagedUserIds, active, hasFullAdminAccess]);
+    } catch (e) {} finally { setLoadingApprovals(false); }
+  }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
+  /**
+   * [LOW_COST_UPDATE] 
+   * surgical fetching for Admin: Reads only the target month for the selected PMR.
+   */
+  const fetchUserData = useCallback(async (uid: string, monthStr?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
+
+    const fetchKey = `${uid}_${monthStr || 'current'}`;
+    if (lastFetchedKeyRef.current === fetchKey && allEntries.length > 0) return;
 
     setLoadingIndividual(true);
     try {
+        const { start, end } = getMonthRangeISO(monthStr);
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [ADMIN_PERFORMANCE_FIX] Range Discovery Query (Fast metadata only)
-        // Find oldest and newest records to populate months selector without crashing browser
-        const oldestQuery = query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("submittedAt", "asc"), limit(1));
-        const newestQuery = query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(1));
+        // Targeted Queries (Monthly)
+        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000)));
+        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000)));
+        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", start), where("timeIn", "<=", end), limit(500)));
+        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", start), where("date", "<=", end), limit(500)));
         
-        // Primary Data Fetch (Limited to 2,000 recent records for safety)
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000)));
-        const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
-        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000)));
-        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000)));
-        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)));
-        const rSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)));
-
-        const [oldestSnap, newestSnap] = await Promise.all([
-            getDocs(oldestQuery).catch(() => null), // Fallback if no index exists yet
-            getDocs(newestQuery).catch(() => null)
-        ]);
+        // Masterlist is fetched once and cached in session
+        let dData = allDoctors;
+        if (allDoctors.length === 0 || lastFetchedKeyRef.current?.split('_')[0] !== uid) {
+            const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
+            dData = mapDocs(dSnap) as any;
+        }
 
         const entries = mapDocs(eSnap) as CoverageEntry[];
         const used: Record<string, number> = {};
-        const months = new Set<string>();
-
-        // Build month range from full data if discovery queries failed or if data is smaller
+        
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
@@ -132,42 +120,28 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             };
             process(item.primarySampleName, item.primaryProductQty);
             process(item.secondarySampleName, item.secondaryProductQty);
-            if (item.reminderProducts) {
-                item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
-            }
-
-            const dateStr = (item.coverageDate || item.submittedAt || "").toString();
-            const d = parseISO(dateStr);
-            if (isValid(d)) {
-                months.add(format(d, 'yyyy-MM'));
-            }
+            if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
         });
 
-        // Add edge months from discovery
-        [oldestSnap, newestSnap].forEach(snap => {
-            if (snap && !snap.empty) {
-                const data = snap.docs[0].data();
-                const d = parseISO(data.coverageDate || data.submittedAt);
-                if (isValid(d)) months.add(format(d, 'yyyy-MM'));
-            }
-        });
-
-        entries.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+        // Simplified month discovery: assume current and selected are valid
+        const months = new Set(individualAvailableMonths);
+        months.add(monthStr || format(new Date(), 'yyyy-MM'));
 
         setAllEntries(entries); 
-        setAllDoctors(mapDocs(dSnap) as any); 
+        setAllDoctors(dData); 
         setAllPlans(mapDocs(pSnap) as any);
         setAllTimeLogs(mapDocs(lSnap) as any); 
         setAllNonCallDaysIndividual(mapDocs(ncdSnap) as any);
-        setIndividualPlanningRequests(mapDocs(rSnap) as any); 
         setIndividualUsedQuantities(used);
         setIndividualAvailableMonths(Array.from(months).sort((a, b) => b.localeCompare(a)));
+        
+        lastFetchedKeyRef.current = fetchKey;
     } catch (e) {
-        console.error("Individual data fetch failed:", e);
+        console.error("Admin PMR fetch failed:", e);
     } finally {
         setLoadingIndividual(false);
     }
-  }, [active, isAuthorized]);
+  }, [active, isAuthorized, allDoctors, individualAvailableMonths, allEntries.length]);
 
   return { 
     allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
@@ -175,14 +149,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     loadingIndividual, loadingApprovals,
     fetchUserData, fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
-        const ref = firestoreDoc(db!, 'nonCallDays', id);
-        await updateDoc(ref, { status });
+        await updateDoc(firestoreDoc(db!, 'nonCallDays', id), { status });
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
         toast({ title: `Request ${status}` });
     },
     updatePlanningRequestStatus: async (id: string, status: 'approved' | 'rejected') => {
-        const ref = firestoreDoc(db!, 'planningRequests', id);
-        await updateDoc(ref, { status });
+        await updateDoc(firestoreDoc(db!, 'planningRequests', id), { status });
         setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
         toast({ title: `Request ${status}` });
     }
