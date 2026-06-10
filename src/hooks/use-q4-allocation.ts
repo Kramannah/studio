@@ -20,6 +20,7 @@ const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v4';
 /**
  * [LOW_COST_UPDATE] 
  * Optimized to reduce reads by caching allocations and capping usage scans to the current year.
+ * [INDEX_FIX] Removed server-side date filtering when combined with userId to avoid composite index requirement.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
@@ -107,21 +108,33 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             // [LOW_COST_UPDATE] Cap usage scan to current year only
             const startOfYear = getStartOfYearISO();
-            const baseQuery = query(
-                collection(db!, "coverageEntries"), 
-                where("coverageDate", ">=", startOfYear),
-                limit(5000) 
-            );
-
+            
             let entriesSnap;
             if (canDoGlobalFetch) {
-                entriesSnap = await getDocs(baseQuery);
+                // [INDEX_SAFE] Querying only by date works with a single-field index
+                entriesSnap = await getDocs(query(
+                    collection(db!, "coverageEntries"), 
+                    where("coverageDate", ">=", startOfYear),
+                    limit(5000) 
+                ));
             } else {
-                entriesSnap = await getDocs(query(baseQuery, where("userId", "==", user.uid)));
+                // [INDEX_FIX] To avoid composite index error, query by userId only and filter by date in memory
+                entriesSnap = await getDocs(query(
+                    collection(db!, "coverageEntries"), 
+                    where("userId", "==", user.uid),
+                    limit(2000)
+                ));
             }
 
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
+                
+                // [CLIENT_SIDE_FILTER] Ensure we only count current year usage if we fetched by userId only
+                if (!canDoGlobalFetch) {
+                    const coverageDate = data.coverageDate || data.submittedAt;
+                    if (!coverageDate || coverageDate < startOfYear) return;
+                }
+
                 const process = (name?: string, qty?: number) => {
                     const key = String(name ?? "").toLowerCase().trim();
                     if (!key) return;
@@ -144,7 +157,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
     } catch (error) {
-        console.error("Inventory fetch limited:", error);
+        // [INDEX_FIX] Silent reporting to the global emitter
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'marketingSamples-usage',
+            operation: 'list',
+        }));
     } finally {
         setLoading(false);
     }
