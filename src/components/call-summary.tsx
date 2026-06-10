@@ -51,22 +51,18 @@ export function CallSummary({
     }, []);
 
     const monthOptions = useMemo(() => {
-        const months: Record<string, string> = {};
-        
-        availableMonths.forEach(m => {
-            months[m] = format(parseISO(m + "-01"), 'MMMM yyyy');
-        });
-
-        // Ensure current month is always an option
-        const current = format(new Date(), 'yyyy-MM');
-        if (!months[current]) {
-            months[current] = format(new Date(), 'MMMM yyyy');
+        // [LOW_COST_UPDATE] - Hardcoded 2026 months for targeted fetching
+        const options = [];
+        const currentYear = 2026;
+        for (let i = 0; i < 12; i++) {
+            const date = new Date(currentYear, i, 1);
+            const value = format(date, 'yyyy-MM');
+            const label = format(date, 'MMMM yyyy');
+            options.push({ value, label });
         }
-
-        return Object.entries(months)
-            .map(([value, label]) => ({ value, label }))
-            .sort((a, b) => b.value.localeCompare(a.value));
-    }, [availableMonths]);
+        // Reverse to show December at the top, or keep standard chronological
+        return options.reverse();
+    }, []);
 
     const insights = useMemo(() => {
         if (!mounted) return null;
