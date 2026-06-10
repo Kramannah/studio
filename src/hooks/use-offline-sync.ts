@@ -8,7 +8,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
@@ -42,6 +42,7 @@ const sanitizePayload = (data: any): any => {
 /**
  * [LOW_COST_UPDATE] 
  * Modified to prioritize targeted monthly fetching to reduce Firestore reads.
+ * [INDEX_FIX] Avoids composite index by filtering dates in memory.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -95,7 +96,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       return;
     }
     
-    // [LOW_COST_UPDATE] Only fetch if the user+month combination changed or if forced.
     const fetchKey = `${userId}_${selectedMonth}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
         return;
@@ -107,14 +107,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
+      const interval = { start: parseISO(start), end: parseISO(end) };
       
-      // [LOW_COST_UPDATE] Targeted Monthly Query
+      // [INDEX_FIX] Fetch by userId only to avoid index error
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", start),
-        where("coverageDate", "<=", end),
-        limit(500) // Lower limit for targeted fetch
+        limit(2000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -124,18 +123,22 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         allFetched.push({ id: docSnap.id, ...(docSnap.data() as CoverageEntry) });
       });
 
-      // Always allow discovery of months PMR has data in, but limit this read to metadata only if possible
-      // For now, we update availableMonths based on session history
+      // [CLIENT_SIDE_FILTER]
+      const filtered = allFetched.filter(e => {
+          const d = parseISO(e.coverageDate || e.submittedAt);
+          return isValid(d) && isWithinInterval(d, interval);
+      });
+
       const currentMonth = selectedMonth || format(new Date(), 'yyyy-MM');
       setAvailableMonths(prev => Array.from(new Set([...prev, currentMonth])).sort((a,b) => b.localeCompare(a)));
       
-      allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
-      setMasterEntries(allFetched);
+      setMasterEntries(filtered);
       lastFetchedKeyRef.current = fetchKey;
       
       try {
-          const storageData = allFetched.map(e => sanitizeForStorage(e));
+          const storageData = filtered.map(e => sanitizeForStorage(e));
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {

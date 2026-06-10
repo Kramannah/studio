@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { NonCallDay } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { parseISO, isValid } from 'date-fns';
+import { parseISO, isValid, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
@@ -37,7 +37,6 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
       return;
     };
     
-    // [LOW_COST_UPDATE] Prevent redundant server reads
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && nonCallDays.length > 0) return;
 
@@ -47,13 +46,13 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
+      const interval = { start: parseISO(start), end: parseISO(end) };
       
+      // [INDEX_FIX] Single index query
       const q = query(
         collection(db, "nonCallDays"), 
         where("userId", "==", user.uid),
-        where("date", ">=", start),
-        where("date", "<=", end),
-        limit(200)
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -62,10 +61,16 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
         fetched.push({ id: doc.id, ...(doc.data() as NonCallDay) });
       });
 
-      setNonCallDays(fetched);
+      // [CLIENT_SIDE_FILTER]
+      const filtered = fetched.filter(n => {
+          const d = parseISO(n.date);
+          return isValid(d) && isWithinInterval(d, interval);
+      });
+
+      setNonCallDays(filtered);
       lastFetchedKeyRef.current = fetchKey;
       try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(fetched));
+          localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
       } catch (e) {}
     } catch (error) {
         console.error("Error fetching non-call days:", error);

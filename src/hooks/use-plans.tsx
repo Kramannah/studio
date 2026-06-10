@@ -10,7 +10,7 @@ import { getMonthRangeISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import { isToday, isBefore, startOfToday } from 'date-fns';
+import { isToday, isBefore, startOfToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -42,7 +42,6 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const fetchData = useCallback(async (force = false) => {
     if (!user || !active) return;
     
-    // [LOW_COST_UPDATE] Prevent redundant server reads
     const fetchKey = `${user.uid}_${selectedMonth}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
 
@@ -53,14 +52,13 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     if (isOnline && db) {
       try {
         const { start, end } = getMonthRangeISO(selectedMonth);
+        const interval = { start: parseISO(start), end: parseISO(end) };
         
-        // [LOW_COST_UPDATE] Targeted Monthly Query
+        // [INDEX_FIX] Single index query
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          where("plannedDate", ">=", start),
-          where("plannedDate", "<=", end),
-          limit(500)
+          limit(2000)
         );
         
         const requestsQuery = query(
@@ -74,13 +72,19 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
           getDocs(requestsQuery),
         ]);
 
-        const allPlans: Plan[] = [];
+        const allPlansFetched: Plan[] = [];
         plansSnapshot.forEach((doc) => {
-          allPlans.push({ id: doc.id, ...(doc.data() as Plan) });
+          allPlansFetched.push({ id: doc.id, ...(doc.data() as Plan) });
         });
 
-        allPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
-        setMasterPlans(allPlans);
+        // [CLIENT_SIDE_FILTER]
+        const filteredPlans = allPlansFetched.filter(p => {
+            const d = parseISO(p.plannedDate);
+            return isValid(d) && isWithinInterval(d, interval);
+        });
+
+        filteredPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
+        setMasterPlans(filteredPlans);
         lastFetchedKeyRef.current = fetchKey;
         
         const fetchedRequests: PlanningPermissionRequest[] = [];
@@ -134,9 +138,9 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
-          path: colRef.path,
-          operation: 'create',
-          requestResourceData: newPlanData,
+            path: colRef.path,
+            operation: 'create',
+            requestResourceData: newPlanData,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
         setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);

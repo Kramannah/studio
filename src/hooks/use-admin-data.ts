@@ -8,12 +8,15 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { format, parseISO, isValid } from "date-fns";
+import { format, parseISO, isValid, isWithinInterval } from "date-fns";
 import { getMonthRangeISO } from "@/lib/utils";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 /**
  * [LOW_COST_UPDATE] 
  * Modified to support targeted monthly fetching in Admin view to reduce read costs.
+ * [INDEX_FIX] Removed server-side date filtering to avoid composite index requirements.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -85,6 +88,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   /**
    * [LOW_COST_UPDATE] 
    * surgical fetching for Admin: Reads only the target month for the selected PMR.
+   * [INDEX_FIX] Fetches recent records by userId and filters by date in memory to avoid index requirements.
    */
   const fetchUserData = useCallback(async (uid: string, monthStr?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
@@ -95,13 +99,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const { start, end } = getMonthRangeISO(monthStr);
+        const interval = { start: parseISO(start), end: parseISO(end) };
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Targeted Queries (Monthly)
-        const eSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000)));
-        const pSnap = await getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000)));
-        const lSnap = await getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", start), where("timeIn", "<=", end), limit(500)));
-        const ncdSnap = await getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", start), where("date", "<=", end), limit(500)));
+        // [INDEX_FIX] Fetch by userId only (single index) to avoid composite index error
+        const [eSnap, pSnap, lSnap, ncdSnap] = await Promise.all([
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)))
+        ]);
         
         // Masterlist is fetched once and cached in session
         let dData = allDoctors;
@@ -110,9 +117,28 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             dData = mapDocs(dSnap) as any;
         }
 
-        const entries = mapDocs(eSnap) as CoverageEntry[];
+        // [CLIENT_SIDE_FILTER] Apply date windowing in JS
+        const entries = (mapDocs(eSnap) as CoverageEntry[]).filter(e => {
+            const d = parseISO(e.coverageDate || e.submittedAt);
+            return isValid(d) && isWithinInterval(d, interval);
+        });
+
+        const plans = (mapDocs(pSnap) as Plan[]).filter(p => {
+            const d = parseISO(p.plannedDate);
+            return isValid(d) && isWithinInterval(d, interval);
+        });
+
+        const logs = (mapDocs(lSnap) as TimeLog[]).filter(l => {
+            const d = parseISO(l.timeIn);
+            return isValid(d) && isWithinInterval(d, interval);
+        });
+
+        const ncds = (mapDocs(ncdSnap) as NonCallDay[]).filter(n => {
+            const d = parseISO(n.date);
+            return isValid(d) && isWithinInterval(d, interval);
+        });
+
         const used: Record<string, number> = {};
-        
         entries.forEach((item) => {
             const process = (n?: string, q?: number) => {
                 const key = String(n ?? "").toLowerCase().trim();
@@ -123,21 +149,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
         });
 
-        // Simplified month discovery: assume current and selected are valid
         const months = new Set(individualAvailableMonths);
         months.add(monthStr || format(new Date(), 'yyyy-MM'));
 
         setAllEntries(entries); 
         setAllDoctors(dData); 
-        setAllPlans(mapDocs(pSnap) as any);
-        setAllTimeLogs(mapDocs(lSnap) as any); 
-        setAllNonCallDaysIndividual(mapDocs(ncdSnap) as any);
+        setAllPlans(plans);
+        setAllTimeLogs(logs); 
+        setAllNonCallDaysIndividual(ncds);
         setIndividualUsedQuantities(used);
         setIndividualAvailableMonths(Array.from(months).sort((a, b) => b.localeCompare(a)));
         
         lastFetchedKeyRef.current = fetchKey;
-    } catch (e) {
-        console.error("Admin PMR fetch failed:", e);
+    } catch (e: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'user-data-targeted',
+            operation: 'list',
+        } satisfies SecurityRuleContext));
     } finally {
         setLoadingIndividual(false);
     }

@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
-import { isToday, parseISO } from 'date-fns';
+import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
@@ -44,7 +44,6 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
       return;
     }
     
-    // [LOW_COST_UPDATE] Prevent redundant server reads
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
 
@@ -54,13 +53,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
+      const interval = { start: parseISO(start), end: parseISO(end) };
       
+      // [INDEX_FIX] Single index query
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
-        where("timeIn", ">=", start),
-        where("timeIn", "<=", end),
-        limit(200)
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -69,13 +68,19 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
         fetchedLogs.push({ id: doc.id, ...(doc.data() as TimeLog) });
       });
 
-      fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
+      // [CLIENT_SIDE_FILTER]
+      const filtered = fetchedLogs.filter(l => {
+          const d = parseISO(l.timeIn);
+          return isValid(d) && isWithinInterval(d, interval);
+      });
 
-      setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
-      setTimeLogs(fetchedLogs);
+      filtered.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
+
+      setTodaysTimeIn(filtered.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+      setTimeLogs(filtered);
       lastFetchedKeyRef.current = fetchKey;
       try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
+          localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
       } catch (e) {}
     } catch (serverError: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
