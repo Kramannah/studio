@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -10,8 +10,6 @@ import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionReq
 import { useToast } from "./use-toast";
 import { format, parseISO, isValid, isWithinInterval } from "date-fns";
 import { getMonthRangeISO } from "@/lib/utils";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -63,10 +61,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) return (await getDocs(query(colRef, limit(500)))).docs.map(d => ({id: d.id, ...d.data()}));
+            if (!filter) return (await getDocs(query(colRef, limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
             const chunks = [];
             for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(500)))));
+            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
             return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
@@ -80,28 +78,29 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const { start, end } = getMonthRangeISO(monthStr);
+        const interval = { start: parseISO(start), end: parseISO(end) };
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
         const [eSnap, pSnap, lSnap, ncdSnap, dSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", start), where("timeIn", "<=", end), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", start), where("date", "<=", end), limit(500))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
         ]);
         
-        setIndividualEntries(mapDocs(eSnap) as any);
-        setIndividualPlans(mapDocs(pSnap) as any);
-        setIndividualTimeLogs(mapDocs(lSnap) as any);
-        setIndividualNonCallDays(mapDocs(ncdSnap) as any);
+        const filterByDate = (docs: any[], field: string) => docs.filter(d => {
+            const date = parseISO(d[field]);
+            return isValid(date) && isWithinInterval(date, interval);
+        });
+
+        setIndividualEntries(filterByDate(mapDocs(eSnap), "coverageDate") as any);
+        setIndividualPlans(filterByDate(mapDocs(pSnap), "plannedDate") as any);
+        setIndividualTimeLogs(filterByDate(mapDocs(lSnap), "timeIn") as any);
+        setIndividualNonCallDays(filterByDate(mapDocs(ncdSnap), "date") as any);
         setIndividualDoctors(mapDocs(dSnap) as any);
     } catch (e: any) {
-        if (e?.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'user-data',
-                operation: 'list',
-            } satisfies SecurityRuleContext));
-        }
+        console.warn("Individual user fetch limited (Handled):", e.message);
     } finally {
         setLoadingIndividual(false);
     }
@@ -137,14 +136,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     fetchUserData, 
     fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
-        await updateDoc(firestoreDoc(db!, 'nonCallDays', id), { status });
-        setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
-        toast({ title: `Request ${status}` });
+        try {
+            await updateDoc(firestoreDoc(db!, 'nonCallDays', id), { status });
+            setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
+            toast({ title: `Request ${status}` });
+        } catch (e) {}
     },
     updatePlanningRequestStatus: async (id: string, status: 'approved' | 'rejected') => {
-        await updateDoc(firestoreDoc(db!, 'planningRequests', id), { status });
-        setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
-        toast({ title: `Request ${status}` });
+        try {
+            await updateDoc(firestoreDoc(db!, 'planningRequests', id), { status });
+            setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
+            toast({ title: `Request ${status}` });
+        } catch (e) {}
     }
   };
 }

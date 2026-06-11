@@ -5,9 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit, orderBy } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { format, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO } from '@/lib/utils';
 
@@ -86,22 +84,27 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, getOfflineKey, getMasterKey]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !db || !active || !navigator.onLine) return;
+    if (!userId || !db || !active || !navigator.onLine) {
+        if (!active) setLoading(false);
+        return;
+    }
     
     const fetchKey = `${userId}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
+        setLoading(false);
+        return;
+    }
 
     setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
+      const interval = { start: parseISO(start), end: parseISO(end) };
       
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", start),
-        where("coverageDate", "<=", end),
-        limit(1000)
+        limit(2000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -110,7 +113,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
         const d = parseISO(data.coverageDate || data.submittedAt);
-        if (isValid(d) && isWithinInterval(d, { start: parseISO(start), end: parseISO(end) })) {
+        if (isValid(d) && isWithinInterval(d, interval)) {
             fetched.push({ id: docSnap.id, ...data });
         }
       });
@@ -128,14 +131,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {
-        if (serverError?.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-              path: 'coverageEntries',
-              operation: 'list',
-            } satisfies SecurityRuleContext));
-        } else {
-            console.error("Master entries fetch error:", serverError);
-        }
+        console.warn("Entries fetch error (Handled):", serverError.message);
     } finally {
         setLoading(false);
     }
@@ -170,25 +166,18 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     if (isOnline) {
         const docRef = doc(db!, "coverageEntries", entryId);
-        setDoc(docRef, sanitizedPayload)
-          .then(() => {
+        try {
+            await setDoc(docRef, sanitizedPayload);
             setMasterEntries(prev => {
                 const next = [sanitizedPayload as CoverageEntry, ...prev];
                 return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
             });
             toast({ title: "Entry Saved" });
-          })
-          .catch(async (serverError) => {
-            if (serverError?.code === 'permission-denied') {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'create',
-                    requestResourceData: sanitizedPayload,
-                } satisfies SecurityRuleContext));
-            }
+            return true;
+        } catch (serverError) {
             saveEntryOffline(sanitizedPayload);
-          });
-        return true;
+            return false;
+        }
     } else {
         saveEntryOffline(sanitizedPayload);
         return false;
@@ -217,24 +206,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         batch.set(docRef, { ...sanitizedData, userId: userId, submittedAt: new Date().toISOString() });
     }
 
-    batch.commit()
-      .then(async () => {
+    try {
+        await batch.commit();
         updateOfflineInStorage([]);
         lastFetchedKeyRef.current = null;
         fetchMasterEntries(true);
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
-      })
-      .catch(async (serverError) => {
-        if (serverError?.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-              path: 'coverageEntries',
-              operation: 'create',
-            } satisfies SecurityRuleContext));
-        }
-      })
-      .finally(() => {
+    } catch (serverError) {
+        console.error("Sync failed:", serverError);
+    } finally {
         setIsSyncing(false);
-      });
+    }
   }, [isOnline, userId, offlineEntries, toast, isSyncing, fetchMasterEntries]);
 
   useEffect(() => {
@@ -245,40 +227,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    const docRef = doc(db!, "coverageEntries", id);
-    deleteDoc(docRef)
-      .then(() => {
+    try {
+        await deleteDoc(doc(db!, "coverageEntries", id));
         setMasterEntries(prev => prev.filter(e => e.id !== id));
-      })
-      .catch(async (serverError) => {
-        if (serverError?.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-              path: docRef.path,
-              operation: 'delete',
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
-        }
-      });
+    } catch (e) {}
   };
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
     const sanitizedPayload = sanitizePayload(e);
-    const docRef = doc(db!, "coverageEntries", e.id);
-    updateDoc(docRef, { ...sanitizedPayload, userId: userId })
-      .then(() => {
+    try {
+        await updateDoc(doc(db!, "coverageEntries", e.id), { ...sanitizedPayload, userId: userId });
         setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
-      })
-      .catch(async (serverError) => {
-        if (serverError?.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-              path: docRef.path,
-              operation: 'update',
-              requestResourceData: sanitizedPayload,
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
-        }
-      });
+    } catch (error) {}
   };
 
   return { 

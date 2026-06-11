@@ -52,10 +52,6 @@ service cloud.firestore {
     }
 
     // --- Collection Rules ---
-    // Optimization: Always check isOwner(resource.data.userId) FIRST.
-    // This uses direct UID comparison (request.auth.uid) and DOES NOT 
-    // require a document lookup (getUserData()), saving quota and 
-    // preventing permission-denied errors when quota is exceeded during role lookups.
 
     match /coverageEntries/{id} {
       allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();

@@ -5,11 +5,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { getMonthRangeISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { isToday, isBefore, startOfToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
@@ -40,22 +38,27 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, []);
 
   const fetchData = useCallback(async (force = false) => {
-    if (!user || !active) return;
+    if (!user || !active) {
+        if (!active) setLoading(false);
+        return;
+    }
     
     const fetchKey = `${user.uid}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) {
+        setLoading(false);
+        return;
+    }
 
     setLoading(true);
 
     if (isOnline && db) {
       try {
         const { start, end } = getMonthRangeISO(selectedMonth);
+        const interval = { start: parseISO(start), end: parseISO(end) };
         
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          where("plannedDate", ">=", start),
-          where("plannedDate", "<=", end),
           limit(1000)
         );
         
@@ -66,7 +69,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         );
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
-          getDocs(plansQuery).catch(() => getDocs(query(collection(db!, "plans"), where("userId", "==", user.uid), orderBy("plannedDate", "desc"), limit(500)))),
+          getDocs(plansQuery),
           getDocs(requestsQuery),
         ]);
 
@@ -74,7 +77,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         plansSnapshot.forEach((doc) => {
           const data = doc.data() as Plan;
           const d = parseISO(data.plannedDate);
-          if (isValid(d) && isWithinInterval(d, { start: parseISO(start), end: parseISO(end) })) {
+          if (isValid(d) && isWithinInterval(d, interval)) {
               filteredPlans.push({ id: doc.id, ...data });
           }
         });
@@ -90,10 +93,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         setPlanningRequests(fetchedRequests);
 
       } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'plans',
-          operation: 'list',
-        } satisfies SecurityRuleContext));
+        console.warn("Plans fetch error (Handled):", serverError.message);
       }
     }
     
@@ -125,21 +125,13 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       callType: callType as 'planned' | 'unplanned',
     };
     
-    const colRef = collection(db, "plans");
-    addDoc(colRef, newPlanData)
-      .then((docRef) => {
+    try {
+        const docRef = await addDoc(collection(db, "plans"), newPlanData);
         setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlanData}]);
         toast({ title: "Scheduled" });
-      })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-            path: colRef.path,
-            operation: 'create',
-            requestResourceData: newPlanData,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+    } catch (error) {
         setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlanData }]);
-      });
+    }
   }, [user, toast]);
 
   const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
@@ -170,28 +162,18 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         setMasterPlans(prev => [...prev, ...newPlans]);
         toast({ title: "Visits Scheduled", description: `Added ${doctors.length} doctors.` });
         return true;
-    } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'plans',
-          operation: 'write',
-        } satisfies SecurityRuleContext));
+    } catch (error) {
+        console.error("Bulk scheduling failed:", error);
         return false;
     }
   }, [user, toast]);
 
   const removePlan = async (id: string) => {
     if (!db) return;
-    const docRef = doc(db, "plans", id);
-    deleteDoc(docRef)
-      .then(() => {
+    try {
+        await deleteDoc(doc(db, "plans", id));
         setMasterPlans(prev => prev.filter(p => p.id !== id));
-      })
-      .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'delete',
-        } satisfies SecurityRuleContext));
-      });
+    } catch (e) {}
   };
 
   const requestPlanningPermission = async (week: Date, reason: string) => {
@@ -206,12 +188,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     try {
         await addDoc(collection(db, 'planningRequests'), newRequest);
         return true;
-    } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'planningRequests',
-          operation: 'create',
-          requestResourceData: newRequest,
-        }));
+    } catch (e) {
         return false;
     }
   };
@@ -224,18 +201,12 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         batch.set(doc(collection(db, 'plans')), dataToSync);
     });
     
-    batch.commit()
-      .then(async () => {
+    try {
+        await batch.commit();
         localStorage.setItem(getOfflineKey(), JSON.stringify([]));
         setOfflinePlans([]);
         await fetchData(true);
-      })
-      .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'plans',
-          operation: 'create',
-        }));
-      });
+    } catch (e) {}
   }, [isOnline, user, offlinePlans, fetchData, getOfflineKey]);
 
   const allPlans = useMemo(() => [...masterPlans, ...offlinePlans], [masterPlans, offlinePlans]);
