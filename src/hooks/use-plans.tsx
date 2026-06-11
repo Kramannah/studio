@@ -40,10 +40,16 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, []);
 
   const fetchData = useCallback(async (force = false) => {
-    if (!user || !active) return;
+    if (!user || !active) {
+        setLoading(false);
+        return;
+    }
     
     const fetchKey = `${user.uid}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) {
+        setLoading(false);
+        return;
+    }
 
     if (masterPlans.length === 0 || force) {
         setLoading(true);
@@ -54,7 +60,6 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const { start, end } = getMonthRangeISO(selectedMonth);
         const interval = { start: parseISO(start), end: parseISO(end) };
         
-        // [INDEX_FIX] Single index query
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
@@ -77,9 +82,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
           allPlansFetched.push({ id: doc.id, ...(doc.data() as Plan) });
         });
 
-        // [CLIENT_SIDE_FILTER]
         const filteredPlans = allPlansFetched.filter(p => {
-            const d = parseISO(p.plannedDate);
+            const dateStr = p.plannedDate;
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
             return isValid(d) && isWithinInterval(d, interval);
         });
 

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
@@ -12,23 +13,18 @@ import { getMonthRangeISO } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-/**
- * [LOW_COST_UPDATE] 
- * Modified to support targeted monthly fetching in Admin view to reduce read costs.
- * [INDEX_FIX] Removed server-side date filtering to avoid composite index requirements.
- */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   
-  const [allEntries, setAllEntries] = useState<CoverageEntry[]>([]);
-  const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
-  const [allPlans, setAllPlans] = useState<Plan[]>([]);
-  const [allTimeLogs, setAllTimeLogs] = useState<TimeLog[]>([]);
-  const [allNonCallDaysIndividual, setAllNonCallDaysIndividual] = useState<NonCallDay[]>([]);
-  const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
-  const [individualUsedQuantities, setIndividualUsedQuantities] = useState<Record<string, number>>({});
-  const [individualAvailableMonths, setIndividualAvailableMonths] = useState<string[]>([]);
+  // Storage for all fetched data for the selected user (the "Fetch Once" bucket)
+  const [rawData, setRawData] = useState<{
+      entries: CoverageEntry[];
+      doctors: Doctor[];
+      plans: Plan[];
+      logs: TimeLog[];
+      ncds: NonCallDay[];
+  }>({ entries: [], doctors: [], plans: [], logs: [], ncds: [] });
 
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -36,7 +32,30 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
 
-  const lastFetchedKeyRef = useRef<string | null>(null);
+  const lastFetchedUserRef = useRef<string | null>(null);
+  const [currentSelectedMonth, setCurrentSelectedMonth] = useState<string>('');
+
+  // Derived filtered data based on current month (the "Filter Locally" logic)
+  const monthlyData = useMemo(() => {
+    if (!currentSelectedMonth) return rawData;
+    const { start, end } = getMonthRangeISO(currentSelectedMonth);
+    const interval = { start: parseISO(start), end: parseISO(end) };
+
+    const filterByDate = (list: any[], dateKey: string) => list.filter(item => {
+        const dStr = item[dateKey] || item.submittedAt || item.timeIn || item.date;
+        if (!dStr) return false;
+        const d = parseISO(dStr);
+        return isValid(d) && isWithinInterval(d, interval);
+    });
+
+    return {
+        entries: filterByDate(rawData.entries, 'coverageDate'),
+        doctors: rawData.doctors,
+        plans: filterByDate(rawData.plans, 'plannedDate'),
+        logs: filterByDate(rawData.logs, 'timeIn'),
+        ncds: filterByDate(rawData.ncds, 'date')
+    };
+  }, [rawData, currentSelectedMonth]);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -84,98 +103,79 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } catch (e) {} finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  /**
-   * [LOW_COST_UPDATE] 
-   * surgical fetching for Admin: Reads only the target month for the selected PMR.
-   * [INDEX_FIX] Fetches recent records by userId and filters by date in memory to avoid index requirements.
-   * [FETCH_CONTROL] Added force parameter to allow manual refreshes.
-   */
   const fetchUserData = useCallback(async (uid: string, monthStr?: string, force = false) => {
-    if (!uid || !db || !active || !isAuthorized) return;
+    if (!uid || !db || !active || !isAuthorized) {
+        setLoadingIndividual(false);
+        return;
+    }
 
-    const fetchKey = `${uid}_${monthStr || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && allEntries.length > 0) return;
+    setCurrentSelectedMonth(monthStr || format(new Date(), 'yyyy-MM'));
+
+    // If we already have the user's base data and aren't forcing, just switch the month filter
+    if (!force && lastFetchedUserRef.current === uid && rawData.entries.length > 0) {
+        setLoadingIndividual(false);
+        return;
+    }
 
     setLoadingIndividual(true);
     try {
-        const { start, end } = getMonthRangeISO(monthStr);
-        const interval = { start: parseISO(start), end: parseISO(end) };
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // [INDEX_FIX] Fetch by userId only (single index) to avoid composite index error
-        const [eSnap, pSnap, lSnap, ncdSnap] = await Promise.all([
+        const [eSnap, pSnap, lSnap, ncdSnap, dSnap] = await Promise.all([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000)))
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
         ]);
         
-        // Masterlist is fetched once and cached in session
-        let dData = allDoctors;
-        if (allDoctors.length === 0 || lastFetchedKeyRef.current?.split('_')[0] !== uid) {
-            const dSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)));
-            dData = mapDocs(dSnap) as any;
-        }
+        const entries = mapDocs(eSnap) as CoverageEntry[];
+        const plans = mapDocs(pSnap) as Plan[];
+        const logs = mapDocs(lSnap) as TimeLog[];
+        const ncds = mapDocs(ncdSnap) as NonCallDay[];
+        const doctors = mapDocs(dSnap) as Doctor[];
 
-        // [CLIENT_SIDE_FILTER] Apply date windowing in JS
-        const entries = (mapDocs(eSnap) as CoverageEntry[]).filter(e => {
-            const d = parseISO(e.coverageDate || e.submittedAt);
-            return isValid(d) && isWithinInterval(d, interval);
-        });
-
-        const plans = (mapDocs(pSnap) as Plan[]).filter(p => {
-            const d = parseISO(p.plannedDate);
-            return isValid(d) && isWithinInterval(d, interval);
-        });
-
-        const logs = (mapDocs(lSnap) as TimeLog[]).filter(l => {
-            const d = parseISO(l.timeIn);
-            return isValid(d) && isWithinInterval(d, interval);
-        });
-
-        const ncds = (mapDocs(ncdSnap) as NonCallDay[]).filter(n => {
-            const d = parseISO(n.date);
-            return isValid(d) && isWithinInterval(d, interval);
-        });
-
-        const used: Record<string, number> = {};
-        entries.forEach((item) => {
-            const process = (n?: string, q?: number) => {
-                const key = String(n ?? "").toLowerCase().trim();
-                if (key) used[key] = (used[key] || 0) + (Number(q || 0));
-            };
-            process(item.primarySampleName, item.primaryProductQty);
-            process(item.secondarySampleName, item.secondaryProductQty);
-            if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
-        });
-
-        const months = new Set(individualAvailableMonths);
-        months.add(monthStr || format(new Date(), 'yyyy-MM'));
-
-        setAllEntries(entries); 
-        setAllDoctors(dData); 
-        setAllPlans(plans);
-        setAllTimeLogs(logs); 
-        setAllNonCallDaysIndividual(ncds);
-        setIndividualUsedQuantities(used);
-        setIndividualAvailableMonths(Array.from(months).sort((a, b) => b.localeCompare(a)));
-        
-        lastFetchedKeyRef.current = fetchKey;
+        setRawData({ entries, plans, logs, ncds, doctors });
+        lastFetchedUserRef.current = uid;
     } catch (e: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'user-data-targeted',
+            path: 'user-data-batch',
             operation: 'list',
         } satisfies SecurityRuleContext));
     } finally {
         setLoadingIndividual(false);
     }
-  }, [active, isAuthorized, allDoctors, individualAvailableMonths, allEntries.length]);
+  }, [active, isAuthorized, rawData.entries.length]);
+
+  const usedQuantities = useMemo(() => {
+    const used: Record<string, number> = {};
+    monthlyData.entries.forEach((item) => {
+        const process = (n?: string, q?: number) => {
+            const key = String(n ?? "").toLowerCase().trim();
+            if (key) used[key] = (used[key] || 0) + (Number(q || 0));
+        };
+        process(item.primarySampleName, item.primaryProductQty);
+        process(item.secondarySampleName, item.secondaryProductQty);
+        if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+    });
+    return used;
+  }, [monthlyData.entries]);
 
   return { 
-    allEntries, allDoctors, allPlans, allTimeLogs, allNonCallDaysIndividual, 
-    individualPlanningRequests, individualUsedQuantities, individualAvailableMonths, allNonCallDays, allPlanningRequests, 
-    loadingIndividual, loadingApprovals,
-    fetchUserData, fetchTeamApprovals,
+    allEntries: monthlyData.entries, 
+    allDoctors: monthlyData.doctors, 
+    allPlans: monthlyData.plans, 
+    allTimeLogs: monthlyData.logs, 
+    allNonCallDaysIndividual: monthlyData.ncds, 
+    individualPlanningRequests: [],
+    individualUsedQuantities: usedQuantities, 
+    individualAvailableMonths: [],
+    allNonCallDays, 
+    allPlanningRequests, 
+    loadingIndividual, 
+    loadingApprovals,
+    fetchUserData, 
+    fetchTeamApprovals,
     updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
         await updateDoc(firestoreDoc(db!, 'nonCallDays', id), { status });
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));

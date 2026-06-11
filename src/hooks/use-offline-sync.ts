@@ -39,11 +39,6 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-/**
- * [LOW_COST_UPDATE] 
- * Modified to prioritize targeted monthly fetching to reduce Firestore reads.
- * [INDEX_FIX] Avoids composite index by filtering dates in memory.
- */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -91,13 +86,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, getOfflineKey, getMasterKey]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !isOnline || !db || !active) {
-      if (!active) setLoading(false);
+    // [UI_FIX] Ensure loading is cleared if returning early
+    if (!userId || !db || !active) {
+      setLoading(false);
       return;
+    }
+
+    if (!isOnline) {
+        setLoading(false);
+        return;
     }
     
     const fetchKey = `${userId}_${selectedMonth}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
+        setLoading(false);
         return;
     }
 
@@ -109,7 +111,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const { start, end } = getMonthRangeISO(selectedMonth);
       const interval = { start: parseISO(start), end: parseISO(end) };
       
-      // [INDEX_FIX] Fetch by userId only to avoid index error
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -123,9 +124,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         allFetched.push({ id: docSnap.id, ...(docSnap.data() as CoverageEntry) });
       });
 
-      // [CLIENT_SIDE_FILTER]
       const filtered = allFetched.filter(e => {
-          const d = parseISO(e.coverageDate || e.submittedAt);
+          const dateStr = e.coverageDate || e.submittedAt;
+          if (!dateStr) return false;
+          const d = parseISO(dateStr);
           return isValid(d) && isWithinInterval(d, interval);
       });
 
@@ -142,11 +144,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
     } finally {
         setLoading(false);
     }
@@ -235,11 +236,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'coverageEntries',
           operation: 'create',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
       })
       .finally(() => {
         setIsSyncing(false);
