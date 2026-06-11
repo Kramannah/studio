@@ -17,45 +17,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const { user, profile } = useAuth();
   const { toast } = useToast();
   
-  // Storage for all fetched data for the selected user (the "Fetch Once" bucket)
-  const [rawData, setRawData] = useState<{
-      entries: CoverageEntry[];
-      doctors: Doctor[];
-      plans: Plan[];
-      logs: TimeLog[];
-      ncds: NonCallDay[];
-  }>({ entries: [], doctors: [], plans: [], logs: [], ncds: [] });
-
+  const [individualEntries, setIndividualEntries] = useState<CoverageEntry[]>([]);
+  const [individualDoctors, setIndividualDoctors] = useState<Doctor[]>([]);
+  const [individualPlans, setIndividualPlans] = useState<Plan[]>([]);
+  const [individualTimeLogs, setIndividualTimeLogs] = useState<TimeLog[]>([]);
+  const [individualNonCallDays, setIndividualNonCallDays] = useState<NonCallDay[]>([]);
+  
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
-
-  const lastFetchedUserRef = useRef<string | null>(null);
-  const [currentSelectedMonth, setCurrentSelectedMonth] = useState<string>('');
-
-  // Derived filtered data based on current month (the "Filter Locally" logic)
-  const monthlyData = useMemo(() => {
-    if (!currentSelectedMonth) return rawData;
-    const { start, end } = getMonthRangeISO(currentSelectedMonth);
-    const interval = { start: parseISO(start), end: parseISO(end) };
-
-    const filterByDate = (list: any[], dateKey: string) => list.filter(item => {
-        const dStr = item[dateKey] || item.submittedAt || item.timeIn || item.date;
-        if (!dStr) return false;
-        const d = parseISO(dStr);
-        return isValid(d) && isWithinInterval(d, interval);
-    });
-
-    return {
-        entries: filterByDate(rawData.entries, 'coverageDate'),
-        doctors: rawData.doctors,
-        plans: filterByDate(rawData.plans, 'plannedDate'),
-        logs: filterByDate(rawData.logs, 'timeIn'),
-        ncds: filterByDate(rawData.ncds, 'date')
-    };
-  }, [rawData, currentSelectedMonth]);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -78,10 +50,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !isAuthorized) {
-        setLoadingApprovals(false);
-        return;
-    }
+    if (!user || !db || !active || !isAuthorized) return;
     setLoadingApprovals(true);
     try {
         let userFilter: string[] | null = null;
@@ -107,52 +76,38 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
   const fetchUserData = useCallback(async (uid: string, monthStr?: string, force = false) => {
-    if (!uid || !db || !active || !isAuthorized) {
-        setLoadingIndividual(false);
-        return;
-    }
-
-    setCurrentSelectedMonth(monthStr || format(new Date(), 'yyyy-MM'));
-
-    if (!force && lastFetchedUserRef.current === uid && rawData.entries.length > 0) {
-        setLoadingIndividual(false);
-        return;
-    }
-
+    if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
     try {
+        const { start, end } = getMonthRangeISO(monthStr);
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        // Fetch up to 2000 recent records once per user selection
         const [eSnap, pSnap, lSnap, ncdSnap, dSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("coverageDate", "desc"), limit(2000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), orderBy("plannedDate", "desc"), limit(2000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), orderBy("timeIn", "desc"), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), orderBy("date", "desc"), limit(1000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), where("timeIn", ">=", start), where("timeIn", "<=", end), limit(500))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", start), where("date", "<=", end), limit(500))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
         ]);
         
-        const entries = mapDocs(eSnap) as CoverageEntry[];
-        const plans = mapDocs(pSnap) as Plan[];
-        const logs = mapDocs(lSnap) as TimeLog[];
-        const ncds = mapDocs(ncdSnap) as NonCallDay[];
-        const doctors = mapDocs(dSnap) as Doctor[];
-
-        setRawData({ entries, plans, logs, ncds, doctors });
-        lastFetchedUserRef.current = uid;
+        setIndividualEntries(mapDocs(eSnap) as any);
+        setIndividualPlans(mapDocs(pSnap) as any);
+        setIndividualTimeLogs(mapDocs(lSnap) as any);
+        setIndividualNonCallDays(mapDocs(ncdSnap) as any);
+        setIndividualDoctors(mapDocs(dSnap) as any);
     } catch (e: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'user-data-batch',
+            path: 'user-data',
             operation: 'list',
         } satisfies SecurityRuleContext));
     } finally {
         setLoadingIndividual(false);
     }
-  }, [active, isAuthorized, rawData.entries.length]);
+  }, [active, isAuthorized]);
 
   const usedQuantities = useMemo(() => {
     const used: Record<string, number> = {};
-    monthlyData.entries.forEach((item) => {
+    individualEntries.forEach((item) => {
         const process = (n?: string, q?: number) => {
             const key = String(n ?? "").toLowerCase().trim();
             if (key) used[key] = (used[key] || 0) + (Number(q || 0));
@@ -162,14 +117,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
     });
     return used;
-  }, [monthlyData.entries]);
+  }, [individualEntries]);
 
   return { 
-    allEntries: monthlyData.entries, 
-    allDoctors: monthlyData.doctors, 
-    allPlans: monthlyData.plans, 
-    allTimeLogs: monthlyData.logs, 
-    allNonCallDaysIndividual: monthlyData.ncds, 
+    allEntries: individualEntries, 
+    allDoctors: individualDoctors, 
+    allPlans: individualPlans, 
+    allTimeLogs: individualTimeLogs, 
+    allNonCallDaysIndividual: individualNonCallDays, 
     individualPlanningRequests: [],
     individualUsedQuantities: usedQuantities, 
     individualAvailableMonths: [],

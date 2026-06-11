@@ -86,29 +86,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, getOfflineKey, getMasterKey]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !db || !active) {
-      setLoading(false);
-      return;
-    }
-
-    if (!isOnline) {
-        setLoading(false);
-        return;
-    }
+    if (!userId || !db || !active || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
-        setLoading(false);
-        return;
-    }
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
 
     setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
       
-      // OPTIMIZATION: Query by range to minimize data transfer
-      // Requires composite index: userId + coverageDate. If it fails, fallback to simple query with limit
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -118,7 +105,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       );
       
       const querySnapshot = await getDocs(q).catch(async (err) => {
-          // Fallback if index is missing: Fetch recent and filter client-side
           const fallbackQ = query(
             collection(db!, "coverageEntries"),
             where("userId", "==", userId),
@@ -157,7 +143,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, isOnline, active, getMasterKey, masterEntries.length, selectedMonth]);
+  }, [userId, active, getMasterKey, masterEntries.length, selectedMonth]);
 
   useEffect(() => {
     if (userId && active) {

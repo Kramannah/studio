@@ -39,28 +39,16 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user?.uid]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
-    if (!user || !db || !active) {
-      setLoading(false);
-      return;
-    }
-    
-    if (!navigator.onLine) {
-        setLoading(false);
-        return;
-    }
+    if (!user || !db || !active || !navigator.onLine) return;
 
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) {
-        setLoading(false);
-        return;
-    }
+    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
 
     setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
       
-      // OPTIMIZATION: Use month range to reduce log data (logs contain base64)
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),

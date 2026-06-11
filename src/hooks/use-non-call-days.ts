@@ -32,10 +32,7 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
   }, [user?.uid]);
 
   const fetchNonCallDays = useCallback(async (force = false) => {
-    if (!user || !db || !active || !navigator.onLine) {
-      if (!active) setLoading(false);
-      return;
-    };
+    if (!user || !db || !active || !navigator.onLine) return;
     
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && nonCallDays.length > 0) return;
@@ -48,7 +45,6 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
       const { start, end } = getMonthRangeISO(selectedMonth);
       const interval = { start: parseISO(start), end: parseISO(end) };
       
-      // [INDEX_FIX] Single index query
       const q = query(
         collection(db, "nonCallDays"), 
         where("userId", "==", user.uid),
@@ -61,7 +57,6 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
         fetched.push({ id: doc.id, ...(doc.data() as NonCallDay) });
       });
 
-      // [CLIENT_SIDE_FILTER]
       const filtered = fetched.filter(n => {
           const d = parseISO(n.date);
           return isValid(d) && isWithinInterval(d, interval);

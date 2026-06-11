@@ -40,16 +40,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, []);
 
   const fetchData = useCallback(async (force = false) => {
-    if (!user || !active) {
-        setLoading(false);
-        return;
-    }
+    if (!user || !active) return;
     
     const fetchKey = `${user.uid}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) {
-        setLoading(false);
-        return;
-    }
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
 
     setLoading(true);
 
@@ -57,7 +51,6 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       try {
         const { start, end } = getMonthRangeISO(selectedMonth);
         
-        // OPTIMIZATION: Fetch monthly plans directly
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
