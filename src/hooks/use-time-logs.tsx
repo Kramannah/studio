@@ -6,7 +6,7 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit, orderBy } from 'firebase/firestore';
 import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -39,48 +39,54 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user?.uid]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
-    if (!user || !db || !active || !navigator.onLine) {
-      if (!active) setLoading(false);
+    if (!user || !db || !active) {
+      setLoading(false);
       return;
     }
     
-    const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
-
-    if (timeLogs.length === 0 || force) {
-        setLoading(true);
+    if (!navigator.onLine) {
+        setLoading(false);
+        return;
     }
+
+    const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) {
+        setLoading(false);
+        return;
+    }
+
+    setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
-      const interval = { start: parseISO(start), end: parseISO(end) };
       
-      // [INDEX_FIX] Single index query
+      // OPTIMIZATION: Use month range to reduce log data (logs contain base64)
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
-        limit(1000)
+        where("timeIn", ">=", start),
+        where("timeIn", "<=", end),
+        limit(500)
       );
       
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(q).catch(() => getDocs(query(collection(db!, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"), limit(100))));
+      
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
-        fetchedLogs.push({ id: doc.id, ...(doc.data() as TimeLog) });
+        const data = doc.data() as TimeLog;
+        const d = parseISO(data.timeIn);
+        if (isValid(d) && isWithinInterval(d, { start: parseISO(start), end: parseISO(end) })) {
+            fetchedLogs.push({ id: doc.id, ...data });
+        }
       });
 
-      // [CLIENT_SIDE_FILTER]
-      const filtered = fetchedLogs.filter(l => {
-          const d = parseISO(l.timeIn);
-          return isValid(d) && isWithinInterval(d, interval);
-      });
+      fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
 
-      filtered.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
-
-      setTodaysTimeIn(filtered.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
-      setTimeLogs(filtered);
+      setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+      setTimeLogs(fetchedLogs);
       lastFetchedKeyRef.current = fetchKey;
       try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
+          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
       } catch (e) {}
     } catch (serverError: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({

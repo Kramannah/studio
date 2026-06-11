@@ -78,7 +78,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [userProfiles]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !isAuthorized) return;
+    if (!user || !db || !active || !isAuthorized) {
+        setLoadingApprovals(false);
+        return;
+    }
     setLoadingApprovals(true);
     try {
         let userFilter: string[] | null = null;
@@ -111,7 +114,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setCurrentSelectedMonth(monthStr || format(new Date(), 'yyyy-MM'));
 
-    // If we already have the user's base data and aren't forcing, just switch the month filter
     if (!force && lastFetchedUserRef.current === uid && rawData.entries.length > 0) {
         setLoadingIndividual(false);
         return;
@@ -121,11 +123,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
+        // Fetch up to 2000 recent records once per user selection
         const [eSnap, pSnap, lSnap, ncdSnap, dSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), orderBy("coverageDate", "desc"), limit(2000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), orderBy("plannedDate", "desc"), limit(2000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), orderBy("timeIn", "desc"), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), orderBy("date", "desc"), limit(1000))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
         ]);
         

@@ -86,7 +86,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, getOfflineKey, getMasterKey]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    // [UI_FIX] Ensure loading is cleared if returning early
     if (!userId || !db || !active) {
       setLoading(false);
       return;
@@ -103,44 +102,51 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         return;
     }
 
-    if (masterEntries.length === 0 || force) {
-        setLoading(true);
-    }
+    setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
-      const interval = { start: parseISO(start), end: parseISO(end) };
       
+      // OPTIMIZATION: Query by range to minimize data transfer
+      // Requires composite index: userId + coverageDate. If it fails, fallback to simple query with limit
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(2000)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(1000)
       );
       
-      const querySnapshot = await getDocs(q);
-      const allFetched: CoverageEntry[] = [];
-      
-      querySnapshot.forEach(docSnap => {
-        allFetched.push({ id: docSnap.id, ...(docSnap.data() as CoverageEntry) });
+      const querySnapshot = await getDocs(q).catch(async (err) => {
+          // Fallback if index is missing: Fetch recent and filter client-side
+          const fallbackQ = query(
+            collection(db!, "coverageEntries"),
+            where("userId", "==", userId),
+            orderBy("coverageDate", "desc"),
+            limit(500)
+          );
+          return getDocs(fallbackQ);
       });
 
-      const filtered = allFetched.filter(e => {
-          const dateStr = e.coverageDate || e.submittedAt;
-          if (!dateStr) return false;
-          const d = parseISO(dateStr);
-          return isValid(d) && isWithinInterval(d, interval);
+      const fetched: CoverageEntry[] = [];
+      querySnapshot.forEach(docSnap => {
+        const data = docSnap.data() as CoverageEntry;
+        const d = parseISO(data.coverageDate || data.submittedAt);
+        if (isValid(d) && isWithinInterval(d, { start: parseISO(start), end: parseISO(end) })) {
+            fetched.push({ id: docSnap.id, ...data });
+        }
       });
 
       const currentMonth = selectedMonth || format(new Date(), 'yyyy-MM');
       setAvailableMonths(prev => Array.from(new Set([...prev, currentMonth])).sort((a,b) => b.localeCompare(a)));
       
-      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+      fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       
-      setMasterEntries(filtered);
+      setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
       try {
-          const storageData = filtered.map(e => sanitizeForStorage(e));
+          const storageData = fetched.map(e => sanitizeForStorage(e));
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {

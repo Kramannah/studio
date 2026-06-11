@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, orderBy } from 'firebase/firestore';
 import { getMonthRangeISO } from '@/lib/utils';
 import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -51,19 +51,19 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         return;
     }
 
-    if (masterPlans.length === 0 || force) {
-        setLoading(true);
-    }
+    setLoading(true);
 
     if (isOnline && db) {
       try {
         const { start, end } = getMonthRangeISO(selectedMonth);
-        const interval = { start: parseISO(start), end: parseISO(end) };
         
+        // OPTIMIZATION: Fetch monthly plans directly
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          limit(2000)
+          where("plannedDate", ">=", start),
+          where("plannedDate", "<=", end),
+          limit(1000)
         );
         
         const requestsQuery = query(
@@ -73,20 +73,17 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         );
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
-          getDocs(plansQuery),
+          getDocs(plansQuery).catch(() => getDocs(query(collection(db!, "plans"), where("userId", "==", user.uid), orderBy("plannedDate", "desc"), limit(500)))),
           getDocs(requestsQuery),
         ]);
 
-        const allPlansFetched: Plan[] = [];
+        const filteredPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
-          allPlansFetched.push({ id: doc.id, ...(doc.data() as Plan) });
-        });
-
-        const filteredPlans = allPlansFetched.filter(p => {
-            const dateStr = p.plannedDate;
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return isValid(d) && isWithinInterval(d, interval);
+          const data = doc.data() as Plan;
+          const d = parseISO(data.plannedDate);
+          if (isValid(d) && isWithinInterval(d, { start: parseISO(start), end: parseISO(end) })) {
+              filteredPlans.push({ id: doc.id, ...data });
+          }
         });
 
         filteredPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
@@ -100,11 +97,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         setPlanningRequests(fetchedRequests);
 
       } catch (serverError: any) {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'plans',
           operation: 'list',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        } satisfies SecurityRuleContext));
       }
     }
     
