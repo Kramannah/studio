@@ -57,7 +57,8 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
         limit(500)
       );
       
-      const querySnapshot = await getDocs(q).catch(() => getDocs(query(collection(db!, "timeLogs"), where("userId", "==", user.uid), orderBy("timeIn", "desc"), limit(100))));
+      // Removed the problematic fallback query that was missing an index and potentially misreporting errors
+      const querySnapshot = await getDocs(q);
       
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
@@ -77,10 +78,14 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
           localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
       } catch (e) {}
     } catch (serverError: any) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'timeLogs',
-        operation: 'list',
-      } satisfies SecurityRuleContext));
+      if (serverError?.code === 'permission-denied') {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'timeLogs',
+            operation: 'list',
+          } satisfies SecurityRuleContext));
+      } else {
+          console.error("Time logs fetch error:", serverError);
+      }
     } finally {
       setLoading(false);
     }
@@ -103,11 +108,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
         toast({ title: "Time In Recorded" });
       })
       .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'timeLogs',
-          operation: 'create',
-          requestResourceData: newLog,
-        } satisfies SecurityRuleContext));
+        if (serverError?.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'timeLogs',
+                operation: 'create',
+                requestResourceData: newLog,
+            } satisfies SecurityRuleContext));
+        }
       });
   };
 
@@ -121,11 +128,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
         toast({ title: "Time Out Recorded" });
       })
       .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'timeLogs',
-          operation: 'update',
-          requestResourceData: updateData,
-        } satisfies SecurityRuleContext));
+        if (serverError?.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'timeLogs',
+                operation: 'update',
+                requestResourceData: updateData,
+            } satisfies SecurityRuleContext));
+        }
       });
   };
 

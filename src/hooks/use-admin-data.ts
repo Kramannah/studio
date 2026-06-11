@@ -96,10 +96,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualNonCallDays(mapDocs(ncdSnap) as any);
         setIndividualDoctors(mapDocs(dSnap) as any);
     } catch (e: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'user-data',
-            operation: 'list',
-        } satisfies SecurityRuleContext));
+        if (e?.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'user-data',
+                operation: 'list',
+            } satisfies SecurityRuleContext));
+        }
     } finally {
         setLoadingIndividual(false);
     }

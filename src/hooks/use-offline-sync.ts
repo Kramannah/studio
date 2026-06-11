@@ -104,15 +104,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         limit(1000)
       );
       
-      const querySnapshot = await getDocs(q).catch(async (err) => {
-          const fallbackQ = query(
-            collection(db!, "coverageEntries"),
-            where("userId", "==", userId),
-            orderBy("coverageDate", "desc"),
-            limit(500)
-          );
-          return getDocs(fallbackQ);
-      });
+      const querySnapshot = await getDocs(q);
 
       const fetched: CoverageEntry[] = [];
       querySnapshot.forEach(docSnap => {
@@ -136,10 +128,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'coverageEntries',
-          operation: 'list',
-        } satisfies SecurityRuleContext));
+        if (serverError?.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+              path: 'coverageEntries',
+              operation: 'list',
+            } satisfies SecurityRuleContext));
+        } else {
+            console.error("Master entries fetch error:", serverError);
+        }
     } finally {
         setLoading(false);
     }
@@ -183,12 +179,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             toast({ title: "Entry Saved" });
           })
           .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: docRef.path,
-                operation: 'create',
-                requestResourceData: sanitizedPayload,
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+            if (serverError?.code === 'permission-denied') {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'create',
+                    requestResourceData: sanitizedPayload,
+                } satisfies SecurityRuleContext));
+            }
             saveEntryOffline(sanitizedPayload);
           });
         return true;
@@ -228,10 +225,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
       })
       .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'coverageEntries',
-          operation: 'create',
-        } satisfies SecurityRuleContext));
+        if (serverError?.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+              path: 'coverageEntries',
+              operation: 'create',
+            } satisfies SecurityRuleContext));
+        }
       })
       .finally(() => {
         setIsSyncing(false);
@@ -252,11 +251,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setMasterEntries(prev => prev.filter(e => e.id !== id));
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'delete',
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        if (serverError?.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+              path: docRef.path,
+              operation: 'delete',
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+        }
       });
   };
 
@@ -269,12 +270,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
       })
       .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'update',
-          requestResourceData: sanitizedPayload,
-        } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        if (serverError?.code === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+              path: docRef.path,
+              operation: 'update',
+              requestResourceData: sanitizedPayload,
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+        }
       });
   };
 
