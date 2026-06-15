@@ -3,7 +3,7 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay, subMonths, startOfMonth } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
@@ -18,18 +18,16 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName, toDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => {
-    return (
-        <div className="space-y-1">
-            <p className="text-[11px] font-bold text-muted-foreground leading-none">{label}</p>
-            <p className="text-sm font-medium text-foreground leading-tight">{value || "—"}</p>
-        </div>
-    )
-}
+const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
+    <div className="space-y-1">
+        <p className="text-[11px] font-bold text-muted-foreground leading-none">{label}</p>
+        <p className="text-sm font-medium text-foreground leading-tight">{value || "—"}</p>
+    </div>
+)
 
 const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, onPreview, isAdminView }: { 
     entry: CoverageEntry, 
@@ -54,12 +52,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
-        const subDate = entry.submittedAt ? parseISO(entry.submittedAt) : null;
-        return subDate && isValid(subDate) && isToday(subDate);
+        const subDate = toDate(entry.submittedAt);
+        return subDate && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
-    const displayDate = entry.coverageDate ? parseISO(entry.coverageDate) : (entry.submittedAt ? parseISO(entry.submittedAt) : null);
-    const submissionTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+    const displayDate = toDate(entry.coverageDate || entry.submittedAt);
+    const submissionTime = toDate(entry.submittedAt);
 
     return (
         <React.Fragment>
@@ -231,7 +229,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             );
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-            fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
+            fetched.sort((a, b) => (toDate(b.coverageDate || b.submittedAt)?.toISOString() || "").localeCompare(toDate(a.coverageDate || a.submittedAt)?.toISOString() || ""));
             setHistory(fetched);
         } catch (error) {
             console.error("History fetch error:", error);
@@ -262,26 +260,29 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                     ) : history.length > 0 ? (
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
-                                {history.map((entry) => (
-                                    <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
-                                        <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
-                                            <CardTitle className="text-base font-black font-headline text-primary">
-                                                {entry.coverageDate ? format(parseISO(entry.coverageDate), "MMMM d, yyyy") : "N/A"}
-                                            </CardTitle>
-                                            <Badge variant="secondary" className="capitalize">{entry.coverageType}</Badge>
-                                        </CardHeader>
-                                        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="space-y-3">
-                                                <DetailField label="Objective" value={entry.callObjective} />
-                                                <DetailField label="Product" value={entry.primaryProduct} />
-                                            </div>
-                                            <div className="space-y-3">
-                                                <DetailField label="Issues" value={entry.doctorsIssue} />
-                                                <DetailField label="Plan" value={entry.planOfAction} />
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
+                                {history.map((entry) => {
+                                    const d = toDate(entry.coverageDate);
+                                    return (
+                                        <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
+                                            <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
+                                                <CardTitle className="text-base font-black font-headline text-primary">
+                                                    {d && isValid(d) ? format(d, "MMMM d, yyyy") : "N/A"}
+                                                </CardTitle>
+                                                <Badge variant="secondary" className="capitalize">{entry.coverageType}</Badge>
+                                            </CardHeader>
+                                            <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-3">
+                                                    <DetailField label="Objective" value={entry.callObjective} />
+                                                    <DetailField label="Product" value={entry.primaryProduct} />
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <DetailField label="Issues" value={entry.doctorsIssue} />
+                                                    <DetailField label="Plan" value={entry.planOfAction} />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })}
                             </div>
                         </ScrollArea>
                     ) : (
@@ -293,15 +294,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     );
 }
 
-const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
-    'wholeday': 'Whole Day',
-    'halfday-am': 'Half Day (AM)',
-    'halfday-pm': 'Half Day (PM)',
-};
-
 export function SubmittedList({ 
     entries = [], 
-    availableMonths = [],
     doctors = [], 
     nonCallDays = [],
     onDelete, 
@@ -313,7 +307,6 @@ export function SubmittedList({
     onMonthChange
 }: { 
     entries: CoverageEntry[], 
-    availableMonths?: string[],
     doctors: Doctor[], 
     nonCallDays?: NonCallDay[],
     onDelete: (id: string) => void, 
@@ -340,7 +333,6 @@ export function SubmittedList({
     }, []);
 
     const monthOptions = useMemo(() => {
-        // [LOW_COST_UPDATE] - Hardcoded 2026 months for targeted fetching
         const options = [];
         const currentYear = 2026;
         for (let i = 0; i < 12; i++) {
@@ -363,38 +355,25 @@ export function SubmittedList({
 
     const filtered = useMemo(() => {
         if (!mounted) return [];
-        
-        const uniqueMap = new Map<string, CoverageEntry>();
-        (entries || []).forEach(e => { if (e && e.id) uniqueMap.set(e.id, e); });
-        
-        let res = Array.from(uniqueMap.values());
-
-        res = res.filter(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return d && format(d, 'yyyy-MM') === selectedMonth;
-        });
-
-        const q = (searchQuery || "").toLowerCase().trim();
-        if (q) {
-            res = res.filter(e => {
+        const res = (entries || []).filter(e => {
+            const d = toDate(e.coverageDate || e.submittedAt);
+            if (!d) return false;
+            if (format(d, 'yyyy-MM') !== selectedMonth) return false;
+            
+            const q = (searchQuery || "").toLowerCase().trim();
+            if (q) {
                 const first = (e.firstName || "").toLowerCase();
                 const last = (e.lastName || "").toLowerCase();
                 const clinic = (e.clinic || "").toLowerCase();
-                return first.includes(q) || last.includes(q) || clinic.includes(q);
-            });
-        }
-
-        if (activeTab === 'calendar' && selectedDate) {
-            res = res.filter(e => {
-                const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-                if (!dateStr) return false;
-                const d = parseISO(dateStr);
-                return d && isSameDay(d, selectedDate);
-            });
-        }
-        return res;
+                if (!first.includes(q) && !last.includes(q) && !clinic.includes(q)) return false;
+            }
+            
+            if (activeTab === 'calendar' && selectedDate) {
+                if (!isSameDay(d, selectedDate)) return false;
+            }
+            return true;
+        });
+        return res.sort((a,b) => (toDate(b.coverageDate || b.submittedAt)?.toISOString() || "").localeCompare(toDate(a.coverageDate || a.submittedAt)?.toISOString() || ""));
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
     useEffect(() => {
@@ -404,55 +383,33 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         (entries || []).forEach(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (date && isValid(date)) {
-                    const key = format(date, 'yyyy-MM-dd');
-                    counts[key] = (counts[key] || 0) + 1;
-                }
+            const d = toDate(e.coverageDate || e.submittedAt);
+            if (d && isValid(d)) {
+                const key = format(d, 'yyyy-MM-dd');
+                counts[key] = (counts[key] || 0) + 1;
             }
         });
         return counts;
     }, [entries]);
 
-    const entryDates = useMemo(() => {
-        return Object.keys(entriesCountByDate).map(d => parseISO(d));
-    }, [entriesCountByDate]);
+    const entryDates = useMemo(() => Object.keys(entriesCountByDate).map(d => parseISO(d)), [entriesCountByDate]);
 
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            const dateStr = (day.date || "").toString();
-            if (dateStr) {
-                const date = parseISO(dateStr);
-                if (isValid(date)) {
-                    const dateKey = format(date, 'yyyy-MM-dd');
-                    if (!groups[dateKey]) groups[dateKey] = [];
-                    groups[dateKey].push(day);
-                }
+            const d = toDate(day.date);
+            if (d && isValid(d)) {
+                const dateKey = format(d, 'yyyy-MM-dd');
+                if (!groups[dateKey]) groups[dateKey] = [];
+                groups[dateKey].push(day);
             }
         });
         return groups;
     }, [nonCallDays]);
 
-    const nonCallDates = useMemo(() => {
-        return Object.keys(nonCallDaysByDate).map(d => parseISO(d));
-    }, [nonCallDaysByDate]);
+    const nonCallDates = useMemo(() => Object.keys(nonCallDaysByDate).map(d => parseISO(d)), [nonCallDaysByDate]);
 
-    const selectedDateNonCallDays = useMemo(() => {
-        if (!selectedDate) return [];
-        const dateKey = format(selectedDate, 'yyyy-MM-dd');
-        return nonCallDaysByDate[dateKey] || [];
-    }, [selectedDate, nonCallDaysByDate]);
-
-    const holidayDates = useMemo(() => {
-        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
-    }, []);
-
-    const selectedHoliday = useMemo(() => {
-        return selectedDate ? getHolidayName(selectedDate) : null;
-    }, [selectedDate]);
+    const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
     const paginatedEntries = useMemo(() => {
@@ -462,9 +419,8 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-            const covDate = dateStr ? parseISO(dateStr) : null;
-            const subTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+            const covDate = toDate(entry.coverageDate);
+            const subTime = toDate(entry.submittedAt);
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {
                 const u = userMap[entry.userId];
@@ -603,7 +559,7 @@ export function SubmittedList({
                                 onSelect={setSelectedDate}
                                 month={parseISO(selectedMonth + "-01")}
                                 onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
-                                modifiers={{ hasEntry: entryDates, holiday: holidayDates, nonCall: nonCallDates }}
+                                modifiers={{ hasEntry: entryDates, holiday: Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d)), nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },
                                     holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' },
@@ -645,44 +601,6 @@ export function SubmittedList({
                                 </Badge>
                             </div>
                         )}
-
-                        {selectedDateNonCallDays.length > 0 && (
-                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-                                {selectedDateNonCallDays.map((day) => (
-                                    <div key={day.id} className="flex items-center justify-between gap-4 bg-orange-500/5 border-2 border-orange-500/20 p-3 rounded-xl shadow-sm">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2 rounded-full bg-black/40">
-                                                <Clock className="w-5 h-5 text-yellow-500" />
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-black font-headline text-lg text-orange-500 leading-none">
-                                                        {day.reason}
-                                                    </p>
-                                                    <Badge variant="secondary" className="text-[10px] h-5 px-2 bg-orange-500/10 text-orange-500 border-none font-bold uppercase">
-                                                        {dayTypeLabels[day.dayType]}
-                                                    </Badge>
-                                                </div>
-                                                {day.remarks && (
-                                                    <p className="text-[10px] text-muted-foreground mt-1 font-medium italic leading-none">
-                                                        "{day.remarks}"
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <Badge variant="outline" className={cn(
-                                            "h-8 px-4 rounded-full capitalize font-black text-xs border-2 shadow-sm",
-                                            day.status === 'approved' && "bg-primary/10 text-primary border-primary/30",
-                                            day.status === 'pending' && "bg-yellow-500/10 text-yellow-600 border-yellow-500/30",
-                                            day.status === 'rejected' && "bg-destructive/10 text-destructive border-destructive/30"
-                                        )}>
-                                            {day.status}
-                                        </Badge>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
                         <Card className="shadow-lg border-2 rounded-xl overflow-hidden bg-card">
                             <Table>
                                 <TableHeader>

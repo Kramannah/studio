@@ -1,10 +1,46 @@
-
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths, format, endOfMonth } from "date-fns"
+import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths, format, endOfMonth, parseISO, isValid } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/**
+ * Safely converts any date-like value (String, Timestamp, Date) to a JS Date object.
+ * Prevents runtime crashes when data types are inconsistent in Firestore.
+ */
+export function toDate(dateValue: any): Date | null {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date) return isValid(dateValue) ? dateValue : null;
+  
+  // Handle Firestore Timestamps
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const d = dateValue.toDate();
+      return isValid(d) ? d : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Handle ISO Strings
+  if (typeof dateValue === 'string') {
+    try {
+      const parsed = parseISO(dateValue);
+      return isValid(parsed) ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Handle numeric timestamps
+  if (typeof dateValue === 'number') {
+    const d = new Date(dateValue);
+    return isValid(d) ? d : null;
+  }
+
+  return null;
 }
 
 /**
@@ -50,7 +86,7 @@ export function getStartOfYearISO(): string {
 }
 
 /**
- * [LOW_COST_UPDATE] Returns the ISO range for a specific month YYYY-MM
+ * Returns the ISO range for a specific month YYYY-MM
  */
 export function getMonthRangeISO(monthStr?: string): { start: string, end: string } {
     const date = monthStr ? new Date(monthStr + "-01") : new Date();
@@ -60,35 +96,18 @@ export function getMonthRangeISO(monthStr?: string): { start: string, end: strin
 }
 
 /**
- * [LOW_COST_UPDATE] Default query start date (Monthly Targeted)
- */
-export function getQueryStartDateISO(monthStr?: string): string {
-  if (monthStr) {
-      return getMonthRangeISO(monthStr).start;
-  }
-  return startOfMonth(new Date()).toISOString();
-}
-
-/**
- * Returns true if the provided date is within the current week.
- * Week starts on Monday.
- */
-export function isCurrentWeek(date: Date): boolean {
-  return isSameWeek(date, new Date(), { weekStartsOn: 1 });
-}
-
-/**
- * Returns true if the provided date is before the current week.
- */
-export function isPastWeek(date: Date): boolean {
-  const startOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 1 });
-  const startOfTargetWeek = startOfWeek(date, { weekStartsOn: 1 });
-  return isBefore(startOfTargetWeek, startOfThisWeek);
-}
-
-/**
  * Gets the Monday of the week for a given date.
  */
 export function getWeekMonday(date: Date): Date {
   return startOfWeek(date, { weekStartsOn: 1 });
+}
+
+export function isCurrentWeek(date: Date): boolean {
+  return isSameWeek(date, new Date(), { weekStartsOn: 1 });
+}
+
+export function isPastWeek(date: Date): boolean {
+  const startOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const startOfTargetWeek = startOfWeek(date, { weekStartsOn: 1 });
+  return isBefore(startOfTargetWeek, startOfThisWeek);
 }

@@ -5,9 +5,9 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, subMonths, isSameDay } from "date-fns";
-import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase, Download } from "lucide-react";
-import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
+import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfOfMonth, endOfMonth, isSameDay } from "date-fns";
+import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
+import { cn, PH_HOLIDAYS_2026, toDate } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -26,24 +26,19 @@ const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { t
 
 export function CallSummary({ 
     entries = [], 
-    availableMonths = [],
     doctors = [], 
     nonCallDays = [], 
     timeLogs = [], 
-    isAdminView = false,
     selectedMonth,
     onMonthChange
 }: { 
     entries: CoverageEntry[], 
-    availableMonths?: string[],
     doctors: Doctor[], 
     nonCallDays: NonCallDay[], 
     timeLogs: TimeLog[], 
-    isAdminView?: boolean,
     selectedMonth: string,
     onMonthChange: (m: string) => void
 }) {
-    const summaryRef = useRef<HTMLDivElement>(null);
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -51,7 +46,6 @@ export function CallSummary({
     }, []);
 
     const monthOptions = useMemo(() => {
-        // [LOW_COST_UPDATE] - Hardcoded 2026 months for targeted fetching
         const options = [];
         const currentYear = 2026;
         for (let i = 0; i < 12; i++) {
@@ -60,7 +54,6 @@ export function CallSummary({
             const label = format(date, 'MMMM yyyy');
             options.push({ value, label });
         }
-        // Reverse to show December at the top, or keep standard chronological
         return options.reverse();
     }, []);
 
@@ -68,23 +61,19 @@ export function CallSummary({
         if (!mounted) return null;
         
         const referenceDate = parseISO(selectedMonth + "-01");
-        const start = startOfMonth(referenceDate);
+        const start = startOfOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // [QUERY_ON_DEMAND_LOGIC] - Filtered statistics for the selected month
         const filteredEntries = (entries || []).filter(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return isValid(d) && isWithinInterval(d, { start, end });
+            if (!e) return false;
+            const d = toDate(e.coverageDate || e.submittedAt);
+            return d && isValid(d) && isWithinInterval(d, { start, end });
         });
 
         const monthlyTrendMap: Record<string, number> = {};
         filteredEntries.forEach(e => {
-            const dateStr = (e.coverageDate || e.submittedAt || "").toString();
-            if (!dateStr) return;
-            const d = parseISO(dateStr);
-            if (isValid(d)) {
+            const d = toDate(e.coverageDate || e.submittedAt);
+            if (d && isValid(d)) {
                 const monthKey = format(d, 'yyyy-MM');
                 monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
             }
@@ -99,76 +88,57 @@ export function CallSummary({
             .sort((a, b) => a.month.localeCompare(b.month));
 
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const first = String(entry.firstName || "").toLowerCase().trim();
-            const last = String(entry.lastName || "").toLowerCase().trim();
-            const providerName = `${first} ${last}`;
+            const providerName = `${String(entry.firstName || "").trim()} ${String(entry.lastName || "").trim()}`.toLowerCase();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
         const highFreqDoctors = (doctors || []).filter(d => {
-            const freqStr = String(d.frequency || "1x").replace('x', '');
-            const freq = parseInt(freqStr, 10) || 0;
+            const freq = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 0;
             return freq >= 3;
         });
         
         const totalHighFreqTarget = highFreqDoctors.length;
         const actualHighFreqAchieved = highFreqDoctors.filter(d => {
-            const first = String(d.firstName || "").toLowerCase().trim();
-            const last = String(d.lastName || "").toLowerCase().trim();
-            const key = `${first} ${last}`;
-            const visitCount = providerVisits[key] || 0;
-            return visitCount >= 3;
+            const key = `${String(d.firstName || "").trim()} ${String(d.lastName || "").trim()}`.toLowerCase();
+            return (providerVisits[key] || 0) >= 3;
         }).length;
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
-        
         const totalDoctorsInList = (doctors || []).length;
-        const visitedDoctorNames = new Set(filteredEntries.map(e => {
-            const first = String(e.firstName || "").toLowerCase().trim();
-            const last = String(e.lastName || "").toLowerCase().trim();
-            return `${first} ${last}`;
-        }));
-        
-        const actualVisitedCount = Array.from(visitedDoctorNames).length;
+        const actualVisitedCount = Object.keys(providerVisits).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-            const d = dateStr ? parseISO(dateStr) : null;
-            if (!isValid(d)) return acc;
-            const day = format(d!, 'yyyy-MM-dd');
+            const d = toDate(entry.coverageDate || entry.submittedAt);
+            if (!d || !isValid(d)) return acc;
+            const day = format(d, 'yyyy-MM-dd');
             if(!acc[day]) acc[day] = [];
             acc[day].push(entry);
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
         
-        // Revised Active Days calculation: Count as 0.5 if day has calls but is also marked as Half Day Approved Leave
         const activeDaysActual = Object.keys(callsByDay).reduce((sum, dayStr) => {
             const dayDate = parseISO(dayStr);
             const isHalfDayLeave = (nonCallDays || []).some(ncd => {
-                const ncdDate = typeof ncd.date === 'string' ? parseISO(ncd.date) : ncd.date;
+                const ncdDate = toDate(ncd.date);
                 return ncd.status === 'approved' && 
                        (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') &&
-                       isValid(ncdDate) && 
-                       isSameDay(ncdDate, dayDate);
+                       ncdDate && isSameDay(ncdDate, dayDate);
             });
             return sum + (isHalfDayLeave ? 0.5 : 1.0);
         }, 0);
 
         const totalCalls = filteredEntries.length;
-        
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
         const allDaysInMonth = eachDayOfInterval({ start, end });
         const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
             if (isWeekend(day)) return false;
-            const dateStr = format(day, 'yyyy-MM-dd');
-            return !PH_HOLIDAYS_2026[dateStr];
+            return !PH_HOLIDAYS_2026[format(day, 'yyyy-MM-dd')];
         }).length;
         
-        // Denominator Calculation as requested: 12 x Active Days
         const dynamicTarget = Math.round(activeDaysActual * 12);
         const callRatePercentage = dynamicTarget > 0 ? Math.round((totalCalls / dynamicTarget) * 100) : 0;
 
@@ -197,8 +167,8 @@ export function CallSummary({
                 };
                 process(e.primarySampleName, e.primaryProductQty);
                 process(e.secondarySampleName, e.secondaryProductQty);
-                if (e.reminderProducts) {
-                    e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+                if (Array.isArray(e.reminderProducts)) {
+                    e.reminderProducts.forEach(rp => rp && process(rp.sampleName, rp.quantity));
                 }
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
@@ -215,7 +185,7 @@ export function CallSummary({
     );
     
     return (
-        <div className="space-y-6" ref={summaryRef}>
+        <div className="space-y-6">
              <Card>
                 <CardHeader>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">

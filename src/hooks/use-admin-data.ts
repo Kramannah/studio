@@ -1,15 +1,14 @@
-
 "use client"
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, doc, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { format, parseISO, isValid, isWithinInterval } from "date-fns";
-import { getMonthRangeISO } from "@/lib/utils";
+import { parseISO, isValid, isWithinInterval } from "date-fns";
+import { getMonthRangeISO, toDate } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -61,11 +60,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) return (await getDocs(query(colRef, limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
-            const chunks = [];
-            for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
-            return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
+            try {
+                if (!filter) return (await getDocs(query(colRef, limit(1000)))).docs.map(d => ({id: d.id, ...d.data()}));
+                const chunks = [];
+                for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
+                const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
+                return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
+            } catch (e) {
+                console.warn(`Fetch failed for ${name}:`, e);
+                return [];
+            }
         };
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
         setAllNonCallDays(ncd as any);
@@ -81,17 +85,27 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const interval = { start: parseISO(start), end: parseISO(end) };
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
+        // Use independent fetches to prevent a single permission failure from blocking all data
+        const fetchWithLimit = async (coll: string, lim: number = 1000) => {
+            try {
+                return await getDocs(query(collection(db!, coll), where("userId", "==", uid), limit(lim)));
+            } catch (err) {
+                console.warn(`Silent failure fetching ${coll} for user ${uid}:`, err);
+                return { docs: [] };
+            }
+        };
+
         const [eSnap, pSnap, lSnap, ncdSnap, dSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
+            fetchWithLimit("coverageEntries", 1000),
+            fetchWithLimit("plans", 1000),
+            fetchWithLimit("timeLogs", 1000),
+            fetchWithLimit("nonCallDays", 500),
+            fetchWithLimit("doctors", 1000)
         ]);
         
         const filterByDate = (docs: any[], field: string) => docs.filter(d => {
-            const date = parseISO(d[field]);
-            return isValid(date) && isWithinInterval(date, interval);
+            const date = toDate(d[field]);
+            return date && isValid(date) && isWithinInterval(date, interval);
         });
 
         setIndividualEntries(filterByDate(mapDocs(eSnap), "coverageDate") as any);
@@ -109,13 +123,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const usedQuantities = useMemo(() => {
     const used: Record<string, number> = {};
     individualEntries.forEach((item) => {
+        if (!item) return;
         const process = (n?: string, q?: number) => {
             const key = String(n ?? "").toLowerCase().trim();
             if (key) used[key] = (used[key] || 0) + (Number(q || 0));
         };
         process(item.primarySampleName, item.primaryProductQty);
         process(item.secondarySampleName, item.secondaryProductQty);
-        if (item.reminderProducts) item.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+        if (Array.isArray(item.reminderProducts)) {
+            item.reminderProducts.forEach(rp => {
+                if (rp && rp.sampleName) process(rp.sampleName, rp.quantity);
+            });
+        }
     });
     return used;
   }, [individualEntries]);
