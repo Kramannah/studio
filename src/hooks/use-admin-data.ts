@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -7,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { isValid, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
+import { isValid, format } from "date-fns";
 import { parseAnyDate } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
@@ -88,19 +89,20 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, monthStr?: string) => {
+  const fetchUserData = useCallback(async (uid: string, monthStr?: string, force: boolean = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
+    
+    // Low-cost optimization: If we already have data for this UID and aren't forcing a refresh, skip
+    if (!force && individualEntries.length > 0 && individualEntries[0].userId === uid) {
+        return;
+    }
+
     setLoadingIndividual(true);
     
     try {
-        const referenceDate = monthStr ? new Date(monthStr + "-01") : new Date();
-        const start = startOfMonth(referenceDate);
-        const end = endOfMonth(referenceDate);
-        const interval = { start, end };
-        
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Fetch independently using targeted UID (Tajceo3bwwcH9ac9Mw4tEtj2Z952 for CL-01)
+        // Fetch using the specific PMR UID (e.g. Tajceo3bwwcH9ac9Mw4tEtj2Z952 for CL-01)
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000))),
@@ -109,28 +111,18 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)))
         ]);
 
-        const filterByInterval = (items: any[]) => {
-            return items.filter((d: any) => {
-                // Aggressive legacy field detection
-                const date = parseAnyDate(d.coverageDate) || 
-                             parseAnyDate(d.submittedAt) || 
-                             parseAnyDate(d.date) || 
-                             parseAnyDate(d.plannedDate) || 
-                             parseAnyDate(d.timeIn) ||
-                             parseAnyDate(d.timestamp) ||
-                             parseAnyDate(d.dateSubmitted);
-                return date && isValid(date) && isWithinInterval(date, interval);
-            });
-        };
-
         if (eSnap.status === 'fulfilled') {
             const allEntries = mapDocs(eSnap.value);
-            setIndividualEntries(filterByInterval(allEntries) as any);
+            setIndividualEntries(allEntries as any);
             
             // Build dynamic month list from all historical records found for this UID
             const months = new Set<string>();
             allEntries.forEach((d: any) => {
-                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt) || parseAnyDate(d.date) || parseAnyDate(d.timestamp);
+                const date = parseAnyDate(d.coverageDate) || 
+                             parseAnyDate(d.submittedAt) || 
+                             parseAnyDate(d.date) || 
+                             parseAnyDate(d.timestamp) || 
+                             parseAnyDate(d.dateSubmitted);
                 if (date && isValid(date)) {
                     months.add(format(date, 'yyyy-MM'));
                 }
@@ -140,15 +132,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
 
         if (pSnap.status === 'fulfilled') {
-            setIndividualPlans(filterByInterval(mapDocs(pSnap.value)) as any);
+            setIndividualPlans(mapDocs(pSnap.value) as any);
         }
 
         if (lSnap.status === 'fulfilled') {
-            setIndividualTimeLogs(filterByInterval(mapDocs(lSnap.value)) as any);
+            setIndividualTimeLogs(mapDocs(lSnap.value) as any);
         }
 
         if (nSnap.status === 'fulfilled') {
-            setIndividualNonCallDays(filterByInterval(mapDocs(nSnap.value)) as any);
+            setIndividualNonCallDays(mapDocs(nSnap.value) as any);
         }
         
         if (dSnap.status === 'fulfilled') {
@@ -160,7 +152,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally {
         setLoadingIndividual(false);
     }
-  }, [active, isAuthorized]);
+  }, [active, isAuthorized, individualEntries]);
 
   const usedQuantities = useMemo(() => {
     const used: Record<string, number> = {};

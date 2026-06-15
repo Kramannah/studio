@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -20,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { cn, PH_HOLIDAYS_2026, getHolidayName, parseAnyDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
     <div className="space-y-1">
@@ -56,8 +57,8 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
         return subDate && isValid(subDate) && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
-    const displayDate = parseAnyDate(entry.coverageDate || entry.submittedAt);
-    const submissionTime = parseAnyDate(entry.submittedAt);
+    const displayDate = parseAnyDate(entry.coverageDate || entry.submittedAt || entry.date || entry.timestamp);
+    const submissionTime = parseAnyDate(entry.submittedAt || entry.timestamp || entry.dateSubmitted);
 
     return (
         <React.Fragment>
@@ -126,7 +127,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
                                     </DropdownMenuItem>
                                     {!readOnly && (
                                         <DropdownMenuItem className="text-destructive focus:text-destructive gap-2 py-3">
-                                            <AlertDialogTrigger className="flex items-center gap-2 w-full">
+                                            <AlertDialogTrigger className="flex items-center gap-2 w-full text-left">
                                                 <Trash2 className="w-4 h-4"/> Delete Entry
                                             </AlertDialogTrigger>
                                         </DropdownMenuItem>
@@ -230,8 +231,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
             fetched.sort((a, b) => {
-                const dateA = parseAnyDate(a.coverageDate || a.submittedAt)?.getTime() || 0;
-                const dateB = parseAnyDate(b.coverageDate || b.submittedAt)?.getTime() || 0;
+                const dateA = parseAnyDate(a.coverageDate || a.submittedAt || a.date || a.timestamp)?.getTime() || 0;
+                const dateB = parseAnyDate(b.coverageDate || b.submittedAt || b.date || b.timestamp)?.getTime() || 0;
                 return dateB - dateA;
             });
             setHistory(fetched);
@@ -265,7 +266,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => {
-                                    const d = parseAnyDate(entry.coverageDate || entry.submittedAt);
+                                    const d = parseAnyDate(entry.coverageDate || entry.submittedAt || entry.date || entry.timestamp);
                                     return (
                                         <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
                                             <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
@@ -368,7 +369,7 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         const res = (entries || []).filter(e => {
-            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            const d = parseAnyDate(e.coverageDate || e.submittedAt || e.date || e.timestamp);
             if (!d || !isValid(d)) return false;
 
             // Strict but resilient month comparison
@@ -388,8 +389,8 @@ export function SubmittedList({
             return true;
         });
         return res.sort((a,b) => {
-            const dateA = parseAnyDate(a.coverageDate || a.submittedAt)?.getTime() || 0;
-            const dateB = parseAnyDate(b.coverageDate || b.submittedAt)?.getTime() || 0;
+            const dateA = parseAnyDate(a.coverageDate || a.submittedAt || a.date || a.timestamp)?.getTime() || 0;
+            const dateB = parseAnyDate(b.coverageDate || b.submittedAt || b.date || b.timestamp)?.getTime() || 0;
             return dateB - dateA;
         });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
@@ -401,7 +402,7 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         (entries || []).forEach(e => {
-            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            const d = parseAnyDate(e.coverageDate || e.submittedAt || e.date || e.timestamp);
             if (d && isValid(d)) {
                 const key = format(d, 'yyyy-MM-dd');
                 counts[key] = (counts[key] || 0) + 1;
@@ -488,7 +489,7 @@ export function SubmittedList({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
                 <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[320px] h-12">
-                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-gap-2">
+                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-center gap-2">
                         <ListIcon size={16} /> List
                     </TabsTrigger>
                     <TabsTrigger value="calendar" className="rounded-lg font-headline flex items-center gap-2">
