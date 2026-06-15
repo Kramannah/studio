@@ -340,10 +340,10 @@ export function SubmittedList({
 
     const monthOptions = useMemo(() => {
         const months = new Set<string>();
-        // Add all available months from PMR history
         (availableMonths || []).forEach(m => months.add(m));
-        // Add current 2026 months as baseline
-        const currentYear = 2026;
+        
+        // Ensure standard 2026 months are always available if needed
+        const currentYear = new Date().getFullYear();
         for (let i = 0; i < 12; i++) {
             months.add(format(new Date(currentYear, i, 1), 'yyyy-MM'));
         }
@@ -371,6 +371,7 @@ export function SubmittedList({
             const d = parseAnyDate(e.coverageDate || e.submittedAt);
             if (!d || !isValid(d)) return false;
 
+            // Strict but resilient month comparison
             if (format(d, 'yyyy-MM') !== selectedMonth) return false;
             
             const q = (searchQuery || "").toLowerCase().trim();
@@ -526,8 +527,8 @@ export function SubmittedList({
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">
-                                        No reports found for {format(parseISO(selectedMonth + "-01"), "MMMM")}.
-                                        <p className="text-sm mt-2 font-normal">Data might still be loading from server...</p>
+                                        No reports found for the selected period.
+                                        <p className="text-sm mt-2 font-normal">Please select a different month from the dropdown if needed.</p>
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -573,7 +574,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={parseISO(selectedMonth + "-01")}
-                                onValueChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
+                                onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
                                 modifiers={{ hasEntry: entryDates, holiday: Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d)), nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

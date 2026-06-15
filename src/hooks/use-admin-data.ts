@@ -84,6 +84,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllNonCallDays(ncd as any);
         setAllPlanningRequests(pr as any);
     } catch (e) {
+        console.warn("Approval fetch error", e);
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
@@ -99,46 +100,59 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Fetch each category independently to prevent collective failure
+        // Fetch independently using targeted UID (Tajceo3bwwcH9ac9Mw4tEtj2Z952 for CL-01)
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)))
         ]);
 
-        const filterDocs = (snapResult: any) => {
-            if (snapResult.status !== 'fulfilled') return [];
-            const docs = mapDocs(snapResult.value);
-            return docs.filter((d: any) => {
-                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt) || parseAnyDate(d.date) || parseAnyDate(d.plannedDate) || parseAnyDate(d.timeIn);
+        const filterByInterval = (items: any[]) => {
+            return items.filter((d: any) => {
+                // Aggressive legacy field detection
+                const date = parseAnyDate(d.coverageDate) || 
+                             parseAnyDate(d.submittedAt) || 
+                             parseAnyDate(d.date) || 
+                             parseAnyDate(d.plannedDate) || 
+                             parseAnyDate(d.timeIn) ||
+                             parseAnyDate(d.timestamp) ||
+                             parseAnyDate(d.dateSubmitted);
                 return date && isValid(date) && isWithinInterval(date, interval);
             });
         };
 
-        setIndividualEntries(filterDocs(eSnap) as any);
-        setIndividualPlans(filterDocs(pSnap) as any);
-        setIndividualTimeLogs(filterDocs(lSnap) as any);
-        setIndividualNonCallDays(filterDocs(nSnap) as any);
-        
-        if (dSnap.status === 'fulfilled') {
-            setIndividualDoctors(mapDocs(dSnap.value) as any);
-        }
-
-        // Build list of months where this user has actual data for historical navigation
         if (eSnap.status === 'fulfilled') {
+            const allEntries = mapDocs(eSnap.value);
+            setIndividualEntries(filterByInterval(allEntries) as any);
+            
+            // Build dynamic month list from all historical records found for this UID
             const months = new Set<string>();
-            const allEntriesFound = mapDocs(eSnap.value);
-            allEntriesFound.forEach((d: any) => {
-                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt);
+            allEntries.forEach((d: any) => {
+                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt) || parseAnyDate(d.date) || parseAnyDate(d.timestamp);
                 if (date && isValid(date)) {
                     months.add(format(date, 'yyyy-MM'));
                 }
             });
-            // Ensure current month is always present
-            months.add(format(new Date(), 'yyyy-MM'));
+            months.add(format(new Date(), 'yyyy-MM')); // Always allow current month
             setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
+        }
+
+        if (pSnap.status === 'fulfilled') {
+            setIndividualPlans(filterByInterval(mapDocs(pSnap.value)) as any);
+        }
+
+        if (lSnap.status === 'fulfilled') {
+            setIndividualTimeLogs(filterByInterval(mapDocs(lSnap.value)) as any);
+        }
+
+        if (nSnap.status === 'fulfilled') {
+            setIndividualNonCallDays(filterByInterval(mapDocs(nSnap.value)) as any);
+        }
+        
+        if (dSnap.status === 'fulfilled') {
+            setIndividualDoctors(mapDocs(dSnap.value) as any);
         }
         
     } catch (e: any) {
