@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName, parseAnyDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -52,14 +52,12 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
-        if (!entry.submittedAt) return false;
-        const subDate = parseISO(entry.submittedAt);
-        return isValid(subDate) && isToday(subDate);
+        const subDate = parseAnyDate(entry.submittedAt);
+        return subDate && isValid(subDate) && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
-    const displayDateStr = entry.coverageDate || entry.submittedAt;
-    const displayDate = displayDateStr ? parseISO(displayDateStr) : null;
-    const submissionTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+    const displayDate = parseAnyDate(entry.coverageDate || entry.submittedAt);
+    const submissionTime = parseAnyDate(entry.submittedAt);
 
     return (
         <React.Fragment>
@@ -232,13 +230,13 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
             fetched.sort((a, b) => {
-                const dateA = a.coverageDate || a.submittedAt || '';
-                const dateB = b.coverageDate || b.submittedAt || '';
-                return dateB.localeCompare(dateA);
+                const dateA = parseAnyDate(a.coverageDate || a.submittedAt)?.getTime() || 0;
+                const dateB = parseAnyDate(b.coverageDate || b.submittedAt)?.getTime() || 0;
+                return dateB - dateA;
             });
             setHistory(fetched);
         } catch (error) {
-            console.error("History fetch error:", error);
+            console.warn("History fetch error:", error);
         } finally {
             setLoading(false);
         }
@@ -267,8 +265,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => {
-                                    const dateStr = entry.coverageDate || '';
-                                    const d = dateStr ? parseISO(dateStr) : null;
+                                    const d = parseAnyDate(entry.coverageDate || entry.submittedAt);
                                     return (
                                         <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
                                             <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
@@ -304,6 +301,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
 export function SubmittedList({ 
     entries = [], 
     doctors = [], 
+    availableMonths = [],
     nonCallDays = [],
     onDelete, 
     onEdit, 
@@ -315,6 +313,7 @@ export function SubmittedList({
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
+    availableMonths?: string[],
     nonCallDays?: NonCallDay[],
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
@@ -340,16 +339,22 @@ export function SubmittedList({
     }, []);
 
     const monthOptions = useMemo(() => {
-        const options = [];
+        const months = new Set<string>();
+        // Add all available months from PMR history
+        (availableMonths || []).forEach(m => months.add(m));
+        // Add current 2026 months as baseline
         const currentYear = 2026;
         for (let i = 0; i < 12; i++) {
-            const date = new Date(currentYear, i, 1);
-            const value = format(date, 'yyyy-MM');
-            const label = format(date, 'MMMM yyyy');
-            options.push({ value, label });
+            months.add(format(new Date(currentYear, i, 1), 'yyyy-MM'));
         }
-        return options.reverse();
-    }, []);
+        
+        return Array.from(months)
+            .map(value => ({
+                value,
+                label: format(parseISO(value + "-01"), 'MMMM yyyy')
+            }))
+            .sort((a, b) => b.value.localeCompare(a.value));
+    }, [availableMonths]);
 
     const handleShowHistory = (firstName: string, lastName: string) => {
         setHistoryDoctor({ first: firstName, last: lastName });
@@ -363,10 +368,8 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         const res = (entries || []).filter(e => {
-            const dateStr = e.coverageDate || e.submittedAt;
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            if (!isValid(d)) return false;
+            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            if (!d || !isValid(d)) return false;
 
             if (format(d, 'yyyy-MM') !== selectedMonth) return false;
             
@@ -384,9 +387,9 @@ export function SubmittedList({
             return true;
         });
         return res.sort((a,b) => {
-            const dateA = a.coverageDate || a.submittedAt || '';
-            const dateB = b.coverageDate || b.submittedAt || '';
-            return dateB.localeCompare(dateA);
+            const dateA = parseAnyDate(a.coverageDate || a.submittedAt)?.getTime() || 0;
+            const dateB = parseAnyDate(b.coverageDate || b.submittedAt)?.getTime() || 0;
+            return dateB - dateA;
         });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
@@ -397,13 +400,10 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         (entries || []).forEach(e => {
-            const dateStr = e.coverageDate || e.submittedAt;
-            if (dateStr) {
-                const d = parseISO(dateStr);
-                if (isValid(d)) {
-                    const key = format(d, 'yyyy-MM-dd');
-                    counts[key] = (counts[key] || 0) + 1;
-                }
+            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            if (d && isValid(d)) {
+                const key = format(d, 'yyyy-MM-dd');
+                counts[key] = (counts[key] || 0) + 1;
             }
         });
         return counts;
@@ -414,13 +414,11 @@ export function SubmittedList({
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            if (day.date) {
-                const d = parseISO(day.date);
-                if (isValid(d)) {
-                    const dateKey = format(d, 'yyyy-MM-dd');
-                    if (!groups[dateKey]) groups[dateKey] = [];
-                    groups[dateKey].push(day);
-                }
+            const d = parseAnyDate(day.date);
+            if (d && isValid(d)) {
+                const dateKey = format(d, 'yyyy-MM-dd');
+                if (!groups[dateKey]) groups[dateKey] = [];
+                groups[dateKey].push(day);
             }
         });
         return groups;
@@ -575,7 +573,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={parseISO(selectedMonth + "-01")}
-                                onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
+                                onValueChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
                                 modifiers={{ hasEntry: entryDates, holiday: Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d)), nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

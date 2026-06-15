@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -100,7 +99,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Increased limits and decoupled fetching for veteran users like CL-01
+        // Fetch each category independently to prevent collective failure
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(5000))),
@@ -113,14 +112,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             if (snapResult.status !== 'fulfilled') return [];
             const docs = mapDocs(snapResult.value);
             return docs.filter((d: any) => {
-                // Check all possible date fields for legacy data support
                 const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt) || parseAnyDate(d.date) || parseAnyDate(d.plannedDate) || parseAnyDate(d.timeIn);
                 return date && isValid(date) && isWithinInterval(date, interval);
             });
         };
 
-        const entries = filterDocs(eSnap);
-        setIndividualEntries(entries as any);
+        setIndividualEntries(filterDocs(eSnap) as any);
         setIndividualPlans(filterDocs(pSnap) as any);
         setIndividualTimeLogs(filterDocs(lSnap) as any);
         setIndividualNonCallDays(filterDocs(nSnap) as any);
@@ -129,7 +126,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             setIndividualDoctors(mapDocs(dSnap.value) as any);
         }
 
-        // Build Available Months list from the fetched coverage entries
+        // Build list of months where this user has actual data for historical navigation
         if (eSnap.status === 'fulfilled') {
             const months = new Set<string>();
             const allEntriesFound = mapDocs(eSnap.value);
@@ -139,12 +136,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     months.add(format(date, 'yyyy-MM'));
                 }
             });
-            const currentMonth = format(new Date(), 'yyyy-MM');
-            months.add(currentMonth);
+            // Ensure current month is always present
+            months.add(format(new Date(), 'yyyy-MM'));
             setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
         }
         
     } catch (e: any) {
+        console.warn("Individual user fetch error:", e);
     } finally {
         setLoadingIndividual(false);
     }
