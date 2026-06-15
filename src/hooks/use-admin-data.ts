@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -92,7 +91,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string, monthStr?: string, force: boolean = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    // Low-cost optimization: If we already have data for this UID and aren't forcing a refresh, skip
     if (!force && individualEntries.length > 0 && individualEntries[0].userId === uid) {
         return;
     }
@@ -102,53 +100,47 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Fetch using the specific PMR UID (e.g. Tajceo3bwwcH9ac9Mw4tEtj2Z952 for CL-01)
-        const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)))
+        // Fetch using the specific PMR UID with fallback for legacy identifier fields
+        const fetchWithFallback = async (collectionName: string) => {
+            const colRef = collection(db!, collectionName);
+            // Try standard 'userId'
+            let snap = await getDocs(query(colRef, where("userId", "==", uid), limit(5000)));
+            // If nothing found, try legacy 'uid' field
+            if (snap.empty) {
+                snap = await getDocs(query(colRef, where("uid", "==", uid), limit(5000)));
+            }
+            return snap;
+        };
+
+        const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.all([
+            fetchWithFallback("coverageEntries"),
+            fetchWithFallback("plans"),
+            fetchWithFallback("timeLogs"),
+            fetchWithFallback("nonCallDays"),
+            fetchWithFallback("doctors")
         ]);
 
-        if (eSnap.status === 'fulfilled') {
-            const allEntries = mapDocs(eSnap.value);
-            setIndividualEntries(allEntries as any);
-            
-            // Build dynamic month list from all historical records found for this UID
-            const months = new Set<string>();
-            allEntries.forEach((d: any) => {
-                const date = parseAnyDate(d.coverageDate) || 
-                             parseAnyDate(d.submittedAt) || 
-                             parseAnyDate(d.date) || 
-                             parseAnyDate(d.timestamp) || 
-                             parseAnyDate(d.dateSubmitted);
-                if (date && isValid(date)) {
-                    months.add(format(date, 'yyyy-MM'));
-                }
-            });
-            months.add(format(new Date(), 'yyyy-MM')); // Always allow current month
-            setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
-        }
-
-        if (pSnap.status === 'fulfilled') {
-            setIndividualPlans(mapDocs(pSnap.value) as any);
-        }
-
-        if (lSnap.status === 'fulfilled') {
-            setIndividualTimeLogs(mapDocs(lSnap.value) as any);
-        }
-
-        if (nSnap.status === 'fulfilled') {
-            setIndividualNonCallDays(mapDocs(nSnap.value) as any);
-        }
+        const allEntries = mapDocs(eSnap);
+        setIndividualEntries(allEntries as any);
         
-        if (dSnap.status === 'fulfilled') {
-            setIndividualDoctors(mapDocs(dSnap.value) as any);
-        }
+        // Build dynamic month list from all historical records found for this UID
+        const months = new Set<string>();
+        allEntries.forEach((d: any) => {
+            const date = parseAnyDate(d); // Uses the hunt logic in utils
+            if (date && isValid(date)) {
+                months.add(format(date, 'yyyy-MM'));
+            }
+        });
+        months.add(format(new Date(), 'yyyy-MM'));
+        setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
+
+        setIndividualPlans(mapDocs(pSnap) as any);
+        setIndividualTimeLogs(mapDocs(lSnap) as any);
+        setIndividualNonCallDays(mapDocs(nSnap) as any);
+        setIndividualDoctors(mapDocs(dSnap) as any);
         
     } catch (e: any) {
-        console.warn("Individual user fetch error:", e);
+        console.warn("Individual user fetch error handled:", e);
     } finally {
         setLoadingIndividual(false);
     }

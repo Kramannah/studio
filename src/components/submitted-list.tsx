@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -53,11 +52,11 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
-        const subDate = parseAnyDate(entry.submittedAt);
+        const subDate = parseAnyDate(entry);
         return subDate && isValid(subDate) && isToday(subDate);
-    }, [entry.submittedAt, readOnly]);
+    }, [entry, readOnly]);
 
-    const displayDate = parseAnyDate(entry.coverageDate || entry.submittedAt || entry.date || entry.timestamp);
+    const displayDate = parseAnyDate(entry);
     const submissionTime = parseAnyDate(entry.submittedAt || entry.timestamp || entry.dateSubmitted);
 
     return (
@@ -231,8 +230,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
             fetched.sort((a, b) => {
-                const dateA = parseAnyDate(a.coverageDate || a.submittedAt || a.date || a.timestamp)?.getTime() || 0;
-                const dateB = parseAnyDate(b.coverageDate || b.submittedAt || b.date || b.timestamp)?.getTime() || 0;
+                const dateA = parseAnyDate(a)?.getTime() || 0;
+                const dateB = parseAnyDate(b)?.getTime() || 0;
                 return dateB - dateA;
             });
             setHistory(fetched);
@@ -266,7 +265,7 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => {
-                                    const d = parseAnyDate(entry.coverageDate || entry.submittedAt || entry.date || entry.timestamp);
+                                    const d = parseAnyDate(entry);
                                     return (
                                         <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
                                             <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
@@ -343,17 +342,17 @@ export function SubmittedList({
         const months = new Set<string>();
         (availableMonths || []).forEach(m => months.add(m));
         
-        // Ensure standard 2026 months are always available if needed
-        const currentYear = new Date().getFullYear();
-        for (let i = 0; i < 12; i++) {
-            months.add(format(new Date(currentYear, i, 1), 'yyyy-MM'));
-        }
+        // Ensure dropdown has current month at minimum
+        months.add(format(new Date(), 'yyyy-MM'));
         
         return Array.from(months)
-            .map(value => ({
-                value,
-                label: format(parseISO(value + "-01"), 'MMMM yyyy')
-            }))
+            .map(value => {
+                const date = parseISO(value + "-01");
+                return {
+                    value,
+                    label: isValid(date) ? format(date, 'MMMM yyyy') : value
+                };
+            })
             .sort((a, b) => b.value.localeCompare(a.value));
     }, [availableMonths]);
 
@@ -369,7 +368,7 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         const res = (entries || []).filter(e => {
-            const d = parseAnyDate(e.coverageDate || e.submittedAt || e.date || e.timestamp);
+            const d = parseAnyDate(e);
             if (!d || !isValid(d)) return false;
 
             // Strict but resilient month comparison
@@ -389,8 +388,8 @@ export function SubmittedList({
             return true;
         });
         return res.sort((a,b) => {
-            const dateA = parseAnyDate(a.coverageDate || a.submittedAt || a.date || a.timestamp)?.getTime() || 0;
-            const dateB = parseAnyDate(b.coverageDate || b.submittedAt || b.date || b.timestamp)?.getTime() || 0;
+            const dateA = parseAnyDate(a)?.getTime() || 0;
+            const dateB = parseAnyDate(b)?.getTime() || 0;
             return dateB - dateA;
         });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
@@ -402,7 +401,7 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         (entries || []).forEach(e => {
-            const d = parseAnyDate(e.coverageDate || e.submittedAt || e.date || e.timestamp);
+            const d = parseAnyDate(e);
             if (d && isValid(d)) {
                 const key = format(d, 'yyyy-MM-dd');
                 counts[key] = (counts[key] || 0) + 1;
@@ -416,7 +415,7 @@ export function SubmittedList({
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            const d = parseAnyDate(day.date);
+            const d = parseAnyDate(day);
             if (d && isValid(d)) {
                 const dateKey = format(d, 'yyyy-MM-dd');
                 if (!groups[dateKey]) groups[dateKey] = [];
@@ -575,7 +574,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={parseISO(selectedMonth + "-01")}
-                                onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
+                                onOpenChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
                                 modifiers={{ hasEntry: entryDates, holiday: Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d)), nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

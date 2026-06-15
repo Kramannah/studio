@@ -8,11 +8,30 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Robust date parser that handles ISO strings, Firestore Timestamps, and Date objects.
- * Prevents runtime crashes when dealing with legacy data formats.
+ * Checks multiple possible field names to support legacy data formats.
  */
 export function parseAnyDate(date: any): Date | null {
   if (!date) return null;
   
+  // If we were passed an object that might be a record, hunt for common date fields
+  if (typeof date === 'object' && !(date instanceof Date) && typeof date.toDate !== 'function') {
+      const candidates = [
+          date.coverageDate, 
+          date.submittedAt, 
+          date.date, 
+          date.timestamp, 
+          date.dateSubmitted, 
+          date.plannedDate,
+          date.timeIn,
+          date.timeOut
+      ];
+      for (const c of candidates) {
+          const parsed = parseAnyDate(c);
+          if (parsed) return parsed;
+      }
+      return null;
+  }
+
   // Handle ISO Strings
   if (typeof date === 'string') {
     const d = parseISO(date);
