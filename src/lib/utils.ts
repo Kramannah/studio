@@ -7,43 +7,6 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Safely converts any date-like value (String, Timestamp, Date) to a JS Date object.
- * Prevents runtime crashes when data types are inconsistent in Firestore.
- */
-export function toDate(dateValue: any): Date | null {
-  if (!dateValue) return null;
-  if (dateValue instanceof Date) return isValid(dateValue) ? dateValue : null;
-  
-  // Handle Firestore Timestamps
-  if (dateValue && typeof dateValue.toDate === 'function') {
-    try {
-      const d = dateValue.toDate();
-      return isValid(d) ? d : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Handle ISO Strings
-  if (typeof dateValue === 'string') {
-    try {
-      const parsed = parseISO(dateValue);
-      return isValid(parsed) ? parsed : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Handle numeric timestamps
-  if (typeof dateValue === 'number') {
-    const d = new Date(dateValue);
-    return isValid(d) ? d : null;
-  }
-
-  return null;
-}
-
-/**
  * Philippine Holidays for 2026
  */
 export const PH_HOLIDAYS_2026: Record<string, string> = {

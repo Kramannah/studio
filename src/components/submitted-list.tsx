@@ -18,7 +18,7 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { cn, PH_HOLIDAYS_2026, getHolidayName, toDate } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -52,12 +52,14 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
 
     const isEditable = useMemo(() => {
         if (readOnly) return false;
-        const subDate = toDate(entry.submittedAt);
-        return subDate && isToday(subDate);
+        if (!entry.submittedAt) return false;
+        const subDate = parseISO(entry.submittedAt);
+        return isValid(subDate) && isToday(subDate);
     }, [entry.submittedAt, readOnly]);
 
-    const displayDate = toDate(entry.coverageDate || entry.submittedAt);
-    const submissionTime = toDate(entry.submittedAt);
+    const displayDateStr = entry.coverageDate || entry.submittedAt;
+    const displayDate = displayDateStr ? parseISO(displayDateStr) : null;
+    const submissionTime = entry.submittedAt ? parseISO(entry.submittedAt) : null;
 
     return (
         <React.Fragment>
@@ -229,7 +231,11 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
             );
             const snapshot = await getDocs(q);
             const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CoverageEntry));
-            fetched.sort((a, b) => (toDate(b.coverageDate || b.submittedAt)?.toISOString() || "").localeCompare(toDate(a.coverageDate || a.submittedAt)?.toISOString() || ""));
+            fetched.sort((a, b) => {
+                const dateA = a.coverageDate || a.submittedAt || '';
+                const dateB = b.coverageDate || b.submittedAt || '';
+                return dateB.localeCompare(dateA);
+            });
             setHistory(fetched);
         } catch (error) {
             console.error("History fetch error:", error);
@@ -261,7 +267,8 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
                         <ScrollArea className="h-[60vh] p-6">
                             <div className="space-y-4">
                                 {history.map((entry) => {
-                                    const d = toDate(entry.coverageDate);
+                                    const dateStr = entry.coverageDate || '';
+                                    const d = dateStr ? parseISO(dateStr) : null;
                                     return (
                                         <Card key={entry.id} className="overflow-hidden border-2 shadow-sm">
                                             <CardHeader className="bg-muted/30 py-3 px-4 flex-row items-center justify-between space-y-0">
@@ -356,8 +363,11 @@ export function SubmittedList({
     const filtered = useMemo(() => {
         if (!mounted) return [];
         const res = (entries || []).filter(e => {
-            const d = toDate(e.coverageDate || e.submittedAt);
-            if (!d) return false;
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            if (!isValid(d)) return false;
+
             if (format(d, 'yyyy-MM') !== selectedMonth) return false;
             
             const q = (searchQuery || "").toLowerCase().trim();
@@ -373,7 +383,11 @@ export function SubmittedList({
             }
             return true;
         });
-        return res.sort((a,b) => (toDate(b.coverageDate || b.submittedAt)?.toISOString() || "").localeCompare(toDate(a.coverageDate || a.submittedAt)?.toISOString() || ""));
+        return res.sort((a,b) => {
+            const dateA = a.coverageDate || a.submittedAt || '';
+            const dateB = b.coverageDate || b.submittedAt || '';
+            return dateB.compare(dateA);
+        });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
     useEffect(() => {
@@ -383,10 +397,13 @@ export function SubmittedList({
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
         (entries || []).forEach(e => {
-            const d = toDate(e.coverageDate || e.submittedAt);
-            if (d && isValid(d)) {
-                const key = format(d, 'yyyy-MM-dd');
-                counts[key] = (counts[key] || 0) + 1;
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d)) {
+                    const key = format(d, 'yyyy-MM-dd');
+                    counts[key] = (counts[key] || 0) + 1;
+                }
             }
         });
         return counts;
@@ -397,11 +414,13 @@ export function SubmittedList({
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            const d = toDate(day.date);
-            if (d && isValid(d)) {
-                const dateKey = format(d, 'yyyy-MM-dd');
-                if (!groups[dateKey]) groups[dateKey] = [];
-                groups[dateKey].push(day);
+            if (day.date) {
+                const d = parseISO(day.date);
+                if (isValid(d)) {
+                    const dateKey = format(d, 'yyyy-MM-dd');
+                    if (!groups[dateKey]) groups[dateKey] = [];
+                    groups[dateKey].push(day);
+                }
             }
         });
         return groups;
@@ -419,8 +438,6 @@ export function SubmittedList({
 
     const handleDownloadExcel = () => {
         const dataToExport = filtered.map(entry => {
-            const covDate = toDate(entry.coverageDate);
-            const subTime = toDate(entry.submittedAt);
             let userName = entry.userId;
             if (userMap?.[entry.userId]) {
                 const u = userMap[entry.userId];
@@ -431,8 +448,8 @@ export function SubmittedList({
                 "Doctor": `${entry.firstName} ${entry.lastName}`,
                 "Specialty": entry.specialty || "N/A",
                 "Clinic": entry.clinic || "N/A",
-                "Coverage Date": covDate && isValid(covDate) ? format(covDate, "yyyy-MM-dd") : "N/A",
-                "Submitted At": subTime && isValid(subTime) ? format(subTime, "yyyy-MM-dd HH:mm") : "N/A",
+                "Coverage Date": entry.coverageDate ? entry.coverageDate.split('T')[0] : "N/A",
+                "Submitted At": entry.submittedAt ? entry.submittedAt.replace('T', ' ').split('.')[0] : "N/A",
                 "Type": entry.coverageType,
                 "Product": entry.primaryProduct || "N/A",
                 "Qty": entry.primaryProductQty || 0

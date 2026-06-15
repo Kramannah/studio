@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -112,9 +111,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const fetched: CoverageEntry[] = [];
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
-        const d = parseISO(data.coverageDate || data.submittedAt);
-        if (isValid(d) && isWithinInterval(d, interval)) {
-            fetched.push({ id: docSnap.id, ...data });
+        const dateStr = data.coverageDate || data.submittedAt;
+        if (dateStr) {
+            const d = parseISO(dateStr);
+            if (isValid(d) && isWithinInterval(d, interval)) {
+                fetched.push({ id: docSnap.id, ...data });
+            }
         }
       });
 
@@ -131,7 +133,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
       } catch (storageError) {}
     } catch (serverError: any) {
-        console.warn("Entries fetch error (Handled):", serverError.message);
+        console.error("Entries fetch error:", serverError);
     } finally {
         setLoading(false);
     }

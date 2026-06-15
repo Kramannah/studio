@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -58,6 +57,7 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
       });
 
       const filtered = fetched.filter(n => {
+          if (!n.date) return false;
           const d = parseISO(n.date);
           return isValid(d) && isWithinInterval(d, interval);
       });

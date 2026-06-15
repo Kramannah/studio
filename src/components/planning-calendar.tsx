@@ -20,7 +20,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
-import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS_2026, getHolidayName, toDate } from "@/lib/utils";
+import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
@@ -92,11 +92,14 @@ export function PlanningCalendar({
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
         allEntries.forEach(e => {
-            const d = toDate(e.coverageDate || e.submittedAt);
-            if (d && isValid(d)) {
-                const key = format(d, 'yyyy-MM-dd');
-                if (!groups[key]) groups[key] = [];
-                groups[key].push(e);
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d)) {
+                    const key = format(d, 'yyyy-MM-dd');
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(e);
+                }
             }
         });
         return groups;
@@ -105,11 +108,13 @@ export function PlanningCalendar({
     const plansByDate = useMemo(() => {
         const groups: Record<string, Plan[]> = {};
         (plans || []).forEach(plan => {
-            const d = toDate(plan.plannedDate);
-            if(d && isValid(d)) {
-                const dateStr = format(d, 'yyyy-MM-dd');
-                if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateStr].push(plan);
+            if (plan.plannedDate) {
+                const d = parseISO(plan.plannedDate);
+                if(isValid(d)) {
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    if (!groups[dateStr]) groups[dateStr] = [];
+                    groups[dateStr].push(plan);
+                }
             }
         });
         return groups;
@@ -118,11 +123,13 @@ export function PlanningCalendar({
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
         (nonCallDays || []).forEach(day => {
-            const d = toDate(day.date);
-            if(d && isValid(d)) {
-                const dateStr = format(d, 'yyyy-MM-dd');
-                if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateStr].push(day);
+            if (day.date) {
+                const d = parseISO(day.date);
+                if(isValid(d)) {
+                    const dateStr = format(d, 'yyyy-MM-dd');
+                    if (!groups[dateStr]) groups[dateStr] = [];
+                    groups[dateStr].push(day);
+                }
             }
         });
         return groups;
@@ -133,8 +140,9 @@ export function PlanningCalendar({
             planningRequests
                 .filter(r => r.status === 'approved')
                 .map(r => {
-                    const d = toDate(r.weekStartDate);
-                    return d ? format(d, 'yyyy-MM-dd') : '';
+                    if (!r.weekStartDate) return '';
+                    const d = parseISO(r.weekStartDate);
+                    return isValid(d) ? format(d, 'yyyy-MM-dd') : '';
                 })
                 .filter(Boolean)
         );
@@ -155,12 +163,15 @@ export function PlanningCalendar({
         const referenceDate = selectedDate || new Date();
         
         allEntries.forEach(e => {
-            const d = toDate(e.coverageDate || e.submittedAt);
-            if (d && isValid(d) && isSameMonth(d, referenceDate)) {
-                const first = String(e.firstName || "").toLowerCase().trim();
-                const last = String(e.lastName || "").toLowerCase().trim();
-                const nameKey = `${first}|${last}`;
-                counts[nameKey] = (counts[nameKey] || 0) + 1;
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d) && isSameMonth(d, referenceDate)) {
+                    const first = String(e.firstName || "").toLowerCase().trim();
+                    const last = String(e.lastName || "").toLowerCase().trim();
+                    const nameKey = `${first}|${last}`;
+                    counts[nameKey] = (counts[nameKey] || 0) + 1;
+                }
             }
         });
         return counts;
@@ -223,9 +234,8 @@ export function PlanningCalendar({
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = (doctors || []).find(d => d.id === plan.doctorId);
-        const d = toDate(plan.plannedDate);
-        if (doctor && d && isValid(d)) {
-            onLogCall(doctor, d);
+        if (doctor && plan.plannedDate) {
+            onLogCall(doctor, parseISO(plan.plannedDate));
         }
     }
 

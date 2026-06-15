@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -30,7 +29,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
             if (cached) {
                 const logs = JSON.parse(cached);
                 setTimeLogs(logs);
-                setTodaysTimeIn(logs.find((l: TimeLog) => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+                setTodaysTimeIn(logs.find((l: TimeLog) => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
             }
         } catch (e) {}
     }
@@ -65,22 +64,24 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
       const fetchedLogs: TimeLog[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data() as TimeLog;
-        const d = parseISO(data.timeIn);
-        if (isValid(d) && isWithinInterval(d, interval)) {
-            fetchedLogs.push({ id: doc.id, ...data });
+        if (data.timeIn) {
+            const d = parseISO(data.timeIn);
+            if (isValid(d) && isWithinInterval(d, interval)) {
+                fetchedLogs.push({ id: doc.id, ...data });
+            }
         }
       });
 
       fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
 
-      setTodaysTimeIn(fetchedLogs.find(l => isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+      setTodaysTimeIn(fetchedLogs.find(l => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
       lastFetchedKeyRef.current = fetchKey;
       try {
           localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
       } catch (e) {}
     } catch (serverError: any) {
-        console.warn("Time logs fetch error (Handled):", serverError.message);
+        console.error("Time logs fetch error:", serverError);
     } finally {
       setLoading(false);
     }

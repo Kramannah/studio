@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -76,9 +75,11 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const filteredPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
           const data = doc.data() as Plan;
-          const d = parseISO(data.plannedDate);
-          if (isValid(d) && isWithinInterval(d, interval)) {
-              filteredPlans.push({ id: doc.id, ...data });
+          if (data.plannedDate) {
+              const d = parseISO(data.plannedDate);
+              if (isValid(d) && isWithinInterval(d, interval)) {
+                  filteredPlans.push({ id: doc.id, ...data });
+              }
           }
         });
 
@@ -93,7 +94,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         setPlanningRequests(fetchedRequests);
 
       } catch (serverError: any) {
-        console.warn("Plans fetch error (Handled):", serverError.message);
+        console.error("Plans fetch error:", serverError);
       }
     }
     

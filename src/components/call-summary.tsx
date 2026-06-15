@@ -1,13 +1,13 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfOfMonth, endOfMonth, isSameDay } from "date-fns";
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
-import { cn, PH_HOLIDAYS_2026, toDate } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -66,16 +66,21 @@ export function CallSummary({
 
         const filteredEntries = (entries || []).filter(e => {
             if (!e) return false;
-            const d = toDate(e.coverageDate || e.submittedAt);
-            return d && isValid(d) && isWithinInterval(d, { start, end });
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (!dateStr) return false;
+            const d = parseISO(dateStr);
+            return isValid(d) && isWithinInterval(d, { start, end });
         });
 
         const monthlyTrendMap: Record<string, number> = {};
         filteredEntries.forEach(e => {
-            const d = toDate(e.coverageDate || e.submittedAt);
-            if (d && isValid(d)) {
-                const monthKey = format(d, 'yyyy-MM');
-                monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
+            const dateStr = e.coverageDate || e.submittedAt;
+            if (dateStr) {
+                const d = parseISO(dateStr);
+                if (isValid(d)) {
+                    const monthKey = format(d, 'yyyy-MM');
+                    monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
+                }
             }
         });
         
@@ -110,8 +115,10 @@ export function CallSummary({
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const d = toDate(entry.coverageDate || entry.submittedAt);
-            if (!d || !isValid(d)) return acc;
+            const dateStr = entry.coverageDate || entry.submittedAt;
+            if (!dateStr) return acc;
+            const d = parseISO(dateStr);
+            if (!isValid(d)) return acc;
             const day = format(d, 'yyyy-MM-dd');
             if(!acc[day]) acc[day] = [];
             acc[day].push(entry);
@@ -121,10 +128,11 @@ export function CallSummary({
         const activeDaysActual = Object.keys(callsByDay).reduce((sum, dayStr) => {
             const dayDate = parseISO(dayStr);
             const isHalfDayLeave = (nonCallDays || []).some(ncd => {
-                const ncdDate = toDate(ncd.date);
+                if (!ncd.date) return false;
+                const ncdDate = parseISO(ncd.date);
                 return ncd.status === 'approved' && 
                        (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') &&
-                       ncdDate && isSameDay(ncdDate, dayDate);
+                       isValid(ncdDate) && isSameDay(ncdDate, dayDate);
             });
             return sum + (isHalfDayLeave ? 0.5 : 1.0);
         }, 0);
