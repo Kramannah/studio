@@ -1,9 +1,46 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, startOfMonth, isBefore, subDays, subMonths, format, endOfMonth, parseISO, isValid } from "date-fns"
+import { startOfWeek, isSameWeek, startOfMonth, isBefore, format, endOfMonth, parseISO, isValid } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/**
+ * Robust date parser that handles ISO strings, Firestore Timestamps, and Date objects.
+ * Prevents runtime crashes when dealing with legacy data formats.
+ */
+export function parseAnyDate(date: any): Date | null {
+  if (!date) return null;
+  
+  // Handle ISO Strings
+  if (typeof date === 'string') {
+    const d = parseISO(date);
+    return isValid(d) ? d : null;
+  }
+  
+  // Handle Firestore Timestamps
+  if (date && typeof date.toDate === 'function') {
+    try {
+      const d = date.toDate();
+      return isValid(d) ? d : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  // Handle Date Objects
+  if (date instanceof Date) {
+    return isValid(date) ? date : null;
+  }
+
+  // Fallback for number (timestamp)
+  if (typeof date === 'number') {
+    const d = new Date(date);
+    return isValid(d) ? d : null;
+  }
+  
+  return null;
 }
 
 /**

@@ -1,15 +1,14 @@
-
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
-import { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, UserProfile } from "@/lib/types";
+import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { parseISO, isValid, isWithinInterval } from "date-fns";
-import { getMonthRangeISO } from "@/lib/utils";
+import { isValid, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
+import { parseAnyDate } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -18,7 +17,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [individualEntries, setIndividualEntries] = useState<CoverageEntry[]>([]);
   const [individualDoctors, setIndividualDoctors] = useState<Doctor[]>([]);
   const [individualPlans, setIndividualPlans] = useState<Plan[]>([]);
-  const [individualTimeLogs, setIndividualTimeLogs] = useState<TimeLog[]>([]);
+  const [individualTimeLogs, setIndividualTimeLogs] = useState<any[]>([]);
   const [individualNonCallDays, setIndividualNonCallDays] = useState<NonCallDay[]>([]);
   
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
@@ -89,48 +88,47 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, monthStr?: string, force = false) => {
+  const fetchUserData = useCallback(async (uid: string, monthStr?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
+    
     try {
-        const { start, end } = getMonthRangeISO(monthStr);
-        const interval = { start: parseISO(start), end: parseISO(end) };
+        const referenceDate = monthStr ? new Date(monthStr + "-01") : new Date();
+        const start = startOfMonth(referenceDate);
+        const end = endOfMonth(referenceDate);
+        const interval = { start, end };
+        
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
-        
-        const filterByDate = (docs: any[], field: string) => docs.filter(d => {
-            const dateStr = d[field];
-            if (!dateStr) return false;
-            const date = parseISO(dateStr);
-            return isValid(date) && isWithinInterval(date, interval);
-        });
 
-        // Wrapper to handle individual query timeouts/errors without failing the whole load
-        const getSafeDocs = async (name: string, qLimit: number = 1000) => {
-            try {
-                const q = query(collection(db!, name), where("userId", "==", uid), limit(qLimit));
-                const snap = await getDocs(q);
-                return mapDocs(snap);
-            } catch (err) {
-                console.warn(`Individual fetch timed out or failed for ${name}:`, err);
-                return [];
-            }
-        };
-        
-        const [eDocs, pDocs, lDocs, ncdDocs, dDocs] = await Promise.all([
-            getSafeDocs("coverageEntries", 1000),
-            getSafeDocs("plans", 1000),
-            getSafeDocs("timeLogs", 1000),
-            getSafeDocs("nonCallDays", 500),
-            getSafeDocs("doctors", 1000)
+        // Fetch each collection independently to avoid global Promise.all timeouts
+        // and ensure data for specific UIDs like CL-01 is isolated.
+        const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
         ]);
+
+        const filterDocs = (snapResult: any, dateField: string) => {
+            if (snapResult.status !== 'fulfilled') return [];
+            return mapDocs(snapResult.value).filter((d: any) => {
+                const date = parseAnyDate(d[dateField]);
+                return date && isValid(date) && isWithinInterval(date, interval);
+            });
+        };
+
+        setIndividualEntries(filterDocs(eSnap, "coverageDate") as any);
+        setIndividualPlans(filterDocs(pSnap, "plannedDate") as any);
+        setIndividualTimeLogs(filterDocs(lSnap, "timeIn") as any);
+        setIndividualNonCallDays(filterDocs(nSnap, "date") as any);
         
-        setIndividualEntries(filterByDate(eDocs, "coverageDate") as any);
-        setIndividualPlans(filterByDate(pDocs, "plannedDate") as any);
-        setIndividualTimeLogs(filterByDate(lDocs, "timeIn") as any);
-        setIndividualNonCallDays(filterByDate(ncdDocs, "date") as any);
-        setIndividualDoctors(dDocs as any);
+        if (dSnap.status === 'fulfilled') {
+            setIndividualDoctors(mapDocs(dSnap.value) as any);
+        }
+        
     } catch (e: any) {
-        console.warn("Individual user fetch failure:", e);
+        console.warn("Resilient fetch warning:", e);
     } finally {
         setLoadingIndividual(false);
     }

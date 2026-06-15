@@ -5,9 +5,9 @@ import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, isSameDay } from "date-fns";
+import { format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, isSameDay } from "date-fns";
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
-import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -60,41 +60,36 @@ export function CallSummary({
     const insights = useMemo(() => {
         if (!mounted) return null;
         
-        const referenceDate = parseISO(selectedMonth + "-01");
+        const referenceDate = new Date(selectedMonth + "-01");
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
         const filteredEntries = (entries || []).filter(e => {
             if (!e) return false;
-            const dateStr = e.coverageDate || e.submittedAt;
-            if (!dateStr) return false;
-            const d = parseISO(dateStr);
-            return isValid(d) && isWithinInterval(d, { start, end });
+            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            return d && isValid(d) && isWithinInterval(d, { start, end });
         });
 
         const monthlyTrendMap: Record<string, number> = {};
         filteredEntries.forEach(e => {
-            const dateStr = e.coverageDate || e.submittedAt;
-            if (dateStr) {
-                const d = parseISO(dateStr);
-                if (isValid(d)) {
-                    const monthKey = format(d, 'yyyy-MM');
-                    monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
-                }
+            const d = parseAnyDate(e.coverageDate || e.submittedAt);
+            if (d && isValid(d)) {
+                const monthKey = format(d, 'yyyy-MM');
+                monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
             }
         });
         
         const monthlyPerformance = Object.entries(monthlyTrendMap)
             .map(([month, count]) => ({
                 month,
-                label: format(parseISO(month + "-01"), "MMM yyyy"),
+                label: format(new Date(month + "-01"), "MMM yyyy"),
                 count
             }))
             .sort((a, b) => a.month.localeCompare(b.month));
 
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${String(entry.firstName || "").trim()} ${String(entry.lastName || "").trim()}`.toLowerCase();
-            acc[providerName] = (acc[providerName] || 0) + 1;
+            acc[providerName] = (providerName ? (acc[providerName] || 0) + 1 : 0);
             return acc;
         }, {} as Record<string, number>);
         
@@ -115,10 +110,8 @@ export function CallSummary({
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const dateStr = entry.coverageDate || entry.submittedAt;
-            if (!dateStr) return acc;
-            const d = parseISO(dateStr);
-            if (!isValid(d)) return acc;
+            const d = parseAnyDate(entry.coverageDate || entry.submittedAt);
+            if (!d || !isValid(d)) return acc;
             const day = format(d, 'yyyy-MM-dd');
             if(!acc[day]) acc[day] = [];
             acc[day].push(entry);
@@ -126,13 +119,12 @@ export function CallSummary({
         }, {} as Record<string, CoverageEntry[]>);
         
         const activeDaysActual = Object.keys(callsByDay).reduce((sum, dayStr) => {
-            const dayDate = parseISO(dayStr);
+            const dayDate = new Date(dayStr);
             const isHalfDayLeave = (nonCallDays || []).some(ncd => {
-                if (!ncd.date) return false;
-                const ncdDate = parseISO(ncd.date);
+                const ncdDate = parseAnyDate(ncd.date);
                 return ncd.status === 'approved' && 
                        (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') &&
-                       isValid(ncdDate) && isSameDay(ncdDate, dayDate);
+                       ncdDate && isValid(ncdDate) && isSameDay(ncdDate, dayDate);
             });
             return sum + (isHalfDayLeave ? 0.5 : 1.0);
         }, 0);
