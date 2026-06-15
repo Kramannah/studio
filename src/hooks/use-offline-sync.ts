@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -6,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
 import { format, parseISO, isValid, isWithinInterval } from 'date-fns';
-import { getMonthRangeISO } from '@/lib/utils';
+import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -103,25 +104,30 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(2000)
+        limit(5000)
       );
       
       const querySnapshot = await getDocs(q);
 
       const fetched: CoverageEntry[] = [];
+      const months = new Set<string>();
+
       querySnapshot.forEach(docSnap => {
         const data = docSnap.data() as CoverageEntry;
-        const dateStr = data.coverageDate || data.submittedAt;
-        if (dateStr) {
-            const d = parseISO(dateStr);
-            if (isValid(d) && isWithinInterval(d, interval)) {
+        const date = parseAnyDate(data.coverageDate) || parseAnyDate(data.submittedAt);
+        
+        if (date && isValid(date)) {
+            const mKey = format(date, 'yyyy-MM');
+            months.add(mKey);
+            if (isWithinInterval(date, interval)) {
                 fetched.push({ id: docSnap.id, ...data });
             }
         }
       });
 
       const currentMonth = selectedMonth || format(new Date(), 'yyyy-MM');
-      setAvailableMonths(prev => Array.from(new Set([...prev, currentMonth])).sort((a,b) => b.localeCompare(a)));
+      months.add(currentMonth);
+      setAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
       
       fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
       

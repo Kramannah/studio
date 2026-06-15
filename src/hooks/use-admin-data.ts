@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -7,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { isValid, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
+import { isValid, isWithinInterval, startOfMonth, endOfMonth, format } from "date-fns";
 import { parseAnyDate } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
@@ -19,6 +20,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [individualPlans, setIndividualPlans] = useState<Plan[]>([]);
   const [individualTimeLogs, setIndividualTimeLogs] = useState<any[]>([]);
   const [individualNonCallDays, setIndividualNonCallDays] = useState<NonCallDay[]>([]);
+  const [individualAvailableMonths, setIndividualAvailableMonths] = useState<string[]>([]);
   
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -71,7 +73,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
                 return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
             } catch (err) {
-                console.warn(`Approvals fetch timed out or failed for ${name}:`, err);
                 return [];
             }
         };
@@ -84,7 +85,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllNonCallDays(ncd as any);
         setAllPlanningRequests(pr as any);
     } catch (e) {
-        console.warn("Team approvals process error:", e);
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
@@ -100,35 +100,51 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Fetch each collection independently to avoid global Promise.all timeouts
-        // and ensure data for specific UIDs like CL-01 is isolated.
+        // Increased limits and decoupled fetching for veteran users like CL-01
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.allSettled([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)))
         ]);
 
-        const filterDocs = (snapResult: any, dateField: string) => {
+        const filterDocs = (snapResult: any) => {
             if (snapResult.status !== 'fulfilled') return [];
-            return mapDocs(snapResult.value).filter((d: any) => {
-                const date = parseAnyDate(d[dateField]);
+            const docs = mapDocs(snapResult.value);
+            return docs.filter((d: any) => {
+                // Check all possible date fields for legacy data support
+                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt) || parseAnyDate(d.date) || parseAnyDate(d.plannedDate) || parseAnyDate(d.timeIn);
                 return date && isValid(date) && isWithinInterval(date, interval);
             });
         };
 
-        setIndividualEntries(filterDocs(eSnap, "coverageDate") as any);
-        setIndividualPlans(filterDocs(pSnap, "plannedDate") as any);
-        setIndividualTimeLogs(filterDocs(lSnap, "timeIn") as any);
-        setIndividualNonCallDays(filterDocs(nSnap, "date") as any);
+        const entries = filterDocs(eSnap);
+        setIndividualEntries(entries as any);
+        setIndividualPlans(filterDocs(pSnap) as any);
+        setIndividualTimeLogs(filterDocs(lSnap) as any);
+        setIndividualNonCallDays(filterDocs(nSnap) as any);
         
         if (dSnap.status === 'fulfilled') {
             setIndividualDoctors(mapDocs(dSnap.value) as any);
         }
+
+        // Build Available Months list from the fetched coverage entries
+        if (eSnap.status === 'fulfilled') {
+            const months = new Set<string>();
+            const allEntriesFound = mapDocs(eSnap.value);
+            allEntriesFound.forEach((d: any) => {
+                const date = parseAnyDate(d.coverageDate) || parseAnyDate(d.submittedAt);
+                if (date && isValid(date)) {
+                    months.add(format(date, 'yyyy-MM'));
+                }
+            });
+            const currentMonth = format(new Date(), 'yyyy-MM');
+            months.add(currentMonth);
+            setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
+        }
         
     } catch (e: any) {
-        console.warn("Resilient fetch warning:", e);
     } finally {
         setLoadingIndividual(false);
     }
@@ -161,7 +177,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     allNonCallDaysIndividual: individualNonCallDays, 
     individualPlanningRequests: [],
     individualUsedQuantities: usedQuantities, 
-    individualAvailableMonths: [],
+    individualAvailableMonths,
     allNonCallDays, 
     allPlanningRequests, 
     loadingIndividual, 

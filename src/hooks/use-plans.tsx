@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -5,7 +6,7 @@ import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
-import { getMonthRangeISO } from '@/lib/utils';
+import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 import { useAuth } from './use-auth';
 import { isToday, isBefore, startOfToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 
@@ -58,13 +59,13 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          limit(1000)
+          limit(2000)
         );
         
         const requestsQuery = query(
             collection(db, "planningRequests"), 
             where("userId", "==", user.uid),
-            limit(100)
+            limit(200)
         );
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
@@ -75,11 +76,9 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const filteredPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
           const data = doc.data() as Plan;
-          if (data.plannedDate) {
-              const d = parseISO(data.plannedDate);
-              if (isValid(d) && isWithinInterval(d, interval)) {
-                  filteredPlans.push({ id: doc.id, ...data });
-              }
+          const date = parseAnyDate(data.plannedDate);
+          if (date && isValid(date) && isWithinInterval(date, interval)) {
+              filteredPlans.push({ id: doc.id, ...data });
           }
         });
 
