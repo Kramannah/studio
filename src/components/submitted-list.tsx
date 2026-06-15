@@ -386,7 +386,7 @@ export function SubmittedList({
         return res.sort((a,b) => {
             const dateA = a.coverageDate || a.submittedAt || '';
             const dateB = b.coverageDate || b.submittedAt || '';
-            return dateB.compare(dateA);
+            return dateB.localeCompare(dateA);
         });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 

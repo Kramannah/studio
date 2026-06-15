@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfOfMonth, endOfMonth, isSameDay } from "date-fns";
+import { parseISO, format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, isSameDay } from "date-fns";
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -61,7 +61,7 @@ export function CallSummary({
         if (!mounted) return null;
         
         const referenceDate = parseISO(selectedMonth + "-01");
-        const start = startOfOfMonth(referenceDate);
+        const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
         const filteredEntries = (entries || []).filter(e => {
