@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useCallback } from "react";
@@ -58,7 +59,6 @@ export function UserDashboard({
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
     
-    // [LOW_COST_UPDATE] Trigger fetch when userId OR selectedMonth changes in Admin view
     useEffect(() => {
         if (isAdminView && onFetchUserData && userId) {
             onFetchUserData(userId, selectedMonth);
@@ -69,9 +69,11 @@ export function UserDashboard({
         if (isAdminView && onFetchUserData && userId) {
             setIsRefreshing(true);
             try {
+                // Defensive await to catch any unexpected rejection that might escape the hook
                 await onFetchUserData(userId, selectedMonth, true);
+            } catch (err) {
+                console.warn("Manual data refresh timed out or failed:", err);
             } finally {
-                // Short delay for visual feedback
                 setTimeout(() => setIsRefreshing(false), 800);
             }
         }
