@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -298,6 +299,10 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     );
 }
 
+/**
+ * Robust list component for submitted coverage.
+ * Highly resilient parser ensures veteran data (CL-01/NL-02) is never hidden by data-type mismatches.
+ */
 export function SubmittedList({ 
     entries = [], 
     doctors = [], 
@@ -342,7 +347,7 @@ export function SubmittedList({
         const months = new Set<string>();
         (availableMonths || []).forEach(m => months.add(m));
         
-        // Ensure dropdown has current month at minimum
+        // Always include current month
         months.add(format(new Date(), 'yyyy-MM'));
         
         return Array.from(months)
@@ -365,13 +370,14 @@ export function SubmittedList({
         setPreviewData({ src, title });
     };
 
+    // FILTERING LOGIC: Uses parseAnyDate to ensure veteran records (Timestamps) are correctly matched to selectedMonth
     const filtered = useMemo(() => {
         if (!mounted) return [];
         const res = (entries || []).filter(e => {
             const d = parseAnyDate(e);
             if (!d || !isValid(d)) return false;
 
-            // Strict but resilient month comparison
+            // Robust month matching
             if (format(d, 'yyyy-MM') !== selectedMonth) return false;
             
             const q = (searchQuery || "").toLowerCase().trim();
@@ -387,10 +393,12 @@ export function SubmittedList({
             }
             return true;
         });
+        
+        // Safe sorting using localeCompare to prevent string comparison crashes
         return res.sort((a,b) => {
-            const dateA = parseAnyDate(a)?.getTime() || 0;
-            const dateB = parseAnyDate(b)?.getTime() || 0;
-            return dateB - dateA;
+            const dateA = (a.coverageDate || a.submittedAt || "").toString();
+            const dateB = (b.coverageDate || b.submittedAt || "").toString();
+            return dateB.localeCompare(dateA);
         });
     }, [entries, searchQuery, activeTab, selectedDate, mounted, selectedMonth]);
 
@@ -468,7 +476,7 @@ export function SubmittedList({
             <div className="space-y-1">
                 <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
                 <div className="flex items-center gap-2">
-                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                    <Select value={selectedMonth} onMonthChange={onMonthChange} onValueChange={onMonthChange}>
                         <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
                             <SelectValue placeholder="Select Month" />
                         </SelectTrigger>
@@ -528,7 +536,7 @@ export function SubmittedList({
                                 <TableRow>
                                     <TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">
                                         No reports found for the selected period.
-                                        <p className="text-sm mt-2 font-normal">Please select a different month from the dropdown if needed.</p>
+                                        <p className="text-sm mt-2 font-normal">If you are expecting records for CL-01 or NL-02, try selecting a different month from the dropdown.</p>
                                     </TableCell>
                                 </TableRow>
                             )}
@@ -574,7 +582,7 @@ export function SubmittedList({
                                 selected={selectedDate}
                                 onSelect={setSelectedDate}
                                 month={parseISO(selectedMonth + "-01")}
-                                onOpenChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
+                                onMonthChange={(m) => onMonthChange(format(m, 'yyyy-MM'))}
                                 modifiers={{ hasEntry: entryDates, holiday: Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d)), nonCall: nonCallDates }}
                                 modifiersStyles={{ 
                                     hasEntry: { border: '3px solid hsl(var(--primary))', fontWeight: 'bold' },

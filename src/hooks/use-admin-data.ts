@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -10,6 +11,10 @@ import { useToast } from "./use-toast";
 import { isValid, format } from "date-fns";
 import { parseAnyDate } from "@/lib/utils";
 
+/**
+ * Hook for Admin/Manager dashboard data.
+ * Optimized to fetch individual PMR history and provide aggregate district oversight.
+ */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -88,9 +93,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
+  /**
+   * Fetches full history for a specific PMR.
+   * This is the "VIS-06 Way" - direct, robust collection-based fetching.
+   */
   const fetchUserData = useCallback(async (uid: string, monthStr?: string, force: boolean = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
+    // Skip if already loaded and UID hasn't changed (unless forced)
     if (!force && individualEntries.length > 0 && individualEntries[0].userId === uid) {
         return;
     }
@@ -100,37 +110,45 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // Fetch using the specific PMR UID with fallback for legacy identifier fields
-        const fetchWithFallback = async (collectionName: string) => {
-            const colRef = collection(db!, collectionName);
-            // Try standard 'userId'
-            let snap = await getDocs(query(colRef, where("userId", "==", uid), limit(5000)));
-            // If nothing found, try legacy 'uid' field
-            if (snap.empty) {
-                snap = await getDocs(query(colRef, where("uid", "==", uid), limit(5000)));
-            }
-            return snap;
-        };
+        // DIRECT FETCH: Querying each collection by userId, just like VIS-06
+        const fetchCol = (name: string) => getDocs(query(collection(db!, name), where("userId", "==", uid), limit(5000)));
 
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.all([
-            fetchWithFallback("coverageEntries"),
-            fetchWithFallback("plans"),
-            fetchWithFallback("timeLogs"),
-            fetchWithFallback("nonCallDays"),
-            fetchWithFallback("doctors")
+            fetchCol("coverageEntries"),
+            fetchCol("plans"),
+            fetchCol("timeLogs"),
+            fetchCol("nonCallDays"),
+            fetchCol("doctors")
         ]);
 
-        const allEntries = mapDocs(eSnap);
-        setIndividualEntries(allEntries as any);
+        const allEntries = mapDocs(eSnap) as CoverageEntry[];
         
-        // Build dynamic month list from all historical records found for this UID
+        // Dynamic Month List: Scans all historical records to ensure veteran data (like CL-01) is selectable
         const months = new Set<string>();
-        allEntries.forEach((d: any) => {
-            const date = parseAnyDate(d); // Uses the hunt logic in utils
+        allEntries.forEach((entry) => {
+            const date = parseAnyDate(entry);
             if (date && isValid(date)) {
                 months.add(format(date, 'yyyy-MM'));
             }
         });
+        
+        // Fallback for veteran users who might have records stored under legacy 'uid' field
+        if (allEntries.length === 0) {
+            const legacySnap = await getDocs(query(collection(db!, "coverageEntries"), where("uid", "==", uid), limit(5000)));
+            const legacyEntries = mapDocs(legacySnap) as CoverageEntry[];
+            if (legacyEntries.length > 0) {
+                legacyEntries.forEach(entry => {
+                    const d = parseAnyDate(entry);
+                    if (d && isValid(d)) months.add(format(d, 'yyyy-MM'));
+                });
+                setIndividualEntries(legacyEntries as any);
+            } else {
+                setIndividualEntries([]);
+            }
+        } else {
+            setIndividualEntries(allEntries as any);
+        }
+
         months.add(format(new Date(), 'yyyy-MM'));
         setIndividualAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
 
