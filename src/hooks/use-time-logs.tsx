@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +8,7 @@ import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
-import { getMonthRangeISO } from '@/lib/utils';
+import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 
 const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v4';
 
@@ -77,9 +78,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
       setTodaysTimeIn(fetchedLogs.find(l => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
       setTimeLogs(fetchedLogs);
       lastFetchedKeyRef.current = fetchKey;
-      try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedLogs));
-      } catch (e) {}
+      safeStorageSet(getStoreKey(), JSON.stringify(fetchedLogs));
     } catch (serverError: any) {
         console.error("Time logs fetch error:", serverError);
     } finally {
@@ -99,8 +98,10 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
     try {
         const docRef = await addDoc(collection(db, "timeLogs"), newLog);
         const created = { id: docRef.id, ...newLog } as TimeLog;
-        setTimeLogs(prev => [created, ...prev]);
+        const nextLogs = [created, ...timeLogs];
+        setTimeLogs(nextLogs);
         setTodaysTimeIn(created);
+        safeStorageSet(getStoreKey(), JSON.stringify(nextLogs));
         toast({ title: "Time In Recorded" });
     } catch (error) {
         console.error("Time in failed:", error);
@@ -112,8 +113,10 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
     const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
     try {
         await updateDoc(doc(db, "timeLogs", todaysTimeIn.id), updateData);
-        setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
+        const nextLogs = timeLogs.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l);
+        setTimeLogs(nextLogs);
         setTodaysTimeIn(null);
+        safeStorageSet(getStoreKey(), JSON.stringify(nextLogs));
         toast({ title: "Time Out Recorded" });
     } catch (error) {
         console.error("Time out failed:", error);

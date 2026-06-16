@@ -46,6 +46,44 @@ export function parseAnyDate(date: any): Date | null {
   return null;
 }
 
+/**
+ * Safely sets an item in localStorage, handling QuotaExceededError.
+ * If quota is exceeded, it attempts to clear old SFE-related cache items.
+ */
+export function safeStorageSet(key: string, value: string) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (e: any) {
+        if (
+            e instanceof DOMException &&
+            (e.code === 22 ||
+                e.code === 1014 ||
+                e.name === 'QuotaExceededError' ||
+                e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+        ) {
+            console.warn("Storage quota exceeded. Purging old cache to free space.");
+            try {
+                // Purge old SFE cache items (excluding critical auth or offline-pending items)
+                const keysToRemove: string[] = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('sfe-') && !k.includes('offline-coverage')) {
+                        keysToRemove.push(k);
+                    }
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+                
+                // Retry once
+                localStorage.setItem(key, value);
+            } catch (retryError) {
+                console.warn("Could not save to localStorage even after purge. App will remain functional but cache is disabled for this item.");
+            }
+        } else {
+            console.error("LocalStorage error:", e);
+        }
+    }
+}
+
 export const PH_HOLIDAYS_2026: Record<string, string> = {
   "2026-01-01": "New Year's Day",
   "2026-02-17": "Chinese New Year",

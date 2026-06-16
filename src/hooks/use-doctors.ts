@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -20,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { safeStorageSet } from "@/lib/utils";
 
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v4';
 
@@ -75,9 +77,7 @@ export const useDoctors = (active: boolean = true) => {
       });
 
       setDoctors(fetchedDoctors);
-      try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(fetchedDoctors));
-      } catch (e) {}
+      safeStorageSet(getStoreKey(), JSON.stringify(fetchedDoctors));
     } catch (serverError: any) {
         const permissionError = new FirestorePermissionError({
             path: 'doctors',
@@ -105,9 +105,7 @@ export const useDoctors = (active: boolean = true) => {
             const created = { id: docRef.id, ...newDoctorData };
             setDoctors((prev) => {
                 const next = [...prev, created];
-                try {
-                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
-                } catch (e) {}
+                safeStorageSet(getStoreKey(), JSON.stringify(next));
                 return next;
             });
             toast({
@@ -198,9 +196,7 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
-                try {
-                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
-                } catch (e) {}
+                safeStorageSet(getStoreKey(), JSON.stringify(next));
                 return next;
             });
         })
@@ -224,9 +220,7 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.filter((d) => d.id !== id);
-                try {
-                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
-                } catch (e) {}
+                safeStorageSet(getStoreKey(), JSON.stringify(next));
                 return next;
             });
             toast({ variant: "destructive", title: "Doctor Removed" });
@@ -252,9 +246,7 @@ export const useDoctors = (active: boolean = true) => {
         .then(() => {
             setDoctors((prev) => {
                 const next = prev.filter((d) => !ids.includes(d.id));
-                try {
-                    localStorage.setItem(getStoreKey(), JSON.stringify(next));
-                } catch (e) {}
+                safeStorageSet(getStoreKey(), JSON.stringify(next));
                 return next;
             });
             toast({ variant: "destructive", title: "Doctors Deleted" });

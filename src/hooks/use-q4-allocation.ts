@@ -9,7 +9,7 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
-import { getStartOfYearISO } from '@/lib/utils';
+import { getStartOfYearISO, safeStorageSet } from '@/lib/utils';
 import { isValid, parseISO } from 'date-fns';
 
 let cachedAllocations: Q4Allocation[] | null = null;
@@ -93,9 +93,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         lastAllocationFetch = now;
         setAllocations(fetchedAllocations);
         
-        try {
-            localStorage.setItem(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
-        } catch (e) {}
+        safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
 
         if (includeUsage && !usageFetchedRef.current) {
             const used: Record<string, number> = {};
@@ -142,9 +140,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             });
             setUsedQuantities(used);
             usageFetchedRef.current = true;
-            try {
-                localStorage.setItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
-            } catch (e) {}
+            safeStorageSet(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
         }
 
     } catch (error) {

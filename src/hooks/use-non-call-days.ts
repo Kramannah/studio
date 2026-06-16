@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +8,7 @@ import { parseISO, isValid, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
-import { getMonthRangeISO } from '@/lib/utils';
+import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 
 const NCD_STORAGE_KEY = 'sfe-non-call-days-v4';
 
@@ -64,9 +65,7 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
 
       setNonCallDays(filtered);
       lastFetchedKeyRef.current = fetchKey;
-      try {
-          localStorage.setItem(getStoreKey(), JSON.stringify(filtered));
-      } catch (e) {}
+      safeStorageSet(getStoreKey(), JSON.stringify(filtered));
     } catch (error) {
         console.error("Error fetching non-call days:", error);
     } finally {
