@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -16,19 +15,6 @@ export const usePlans = (active: boolean = true) => {
   const [masterPlans, setMasterPlans] = useState<Plan[]>([]);
   const [planningRequests, setPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   const fetchData = useCallback(async () => {
     if (!user || !db || !active) return;

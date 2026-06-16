@@ -1,12 +1,10 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
-import { safeStorageSet } from '@/lib/utils';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -76,7 +74,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       });
       fetched.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(fetched);
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(fetched));
+      localStorage.setItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(fetched));
     } catch (error) {
         console.error("Fetch entries error:", error);
     } finally {
@@ -121,7 +119,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     const entryWithId = { ...newEntry, id: generateUniqueId() };
     const updatedEntries = [entryWithId, ...offlineEntries];
     setOfflineEntries(updatedEntries);
-    safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updatedEntries));
+    localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updatedEntries));
     toast({ title: "Saved Locally" });
   }
 
@@ -139,7 +137,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     try {
         await batch.commit();
         setOfflineEntries([]);
-        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
+        localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
         fetchMasterEntries();
         toast({ title: 'Sync Complete' });
     } catch (error) {
@@ -180,10 +178,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     updateOfflineEntry: (e: any) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
         setOfflineEntries(updated);
-        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
+        localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
     },
     loading,
     refetch: fetchMasterEntries
   };
 };
-
