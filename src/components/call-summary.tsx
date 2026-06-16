@@ -2,17 +2,15 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, isSameDay } from "date-fns";
-import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
-import { cn, PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
-import { Button } from "./ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format, parseISO, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startOfMonth, endOfMonth, isSameDay } from "date-fns";
+import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
+const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: any, color: string, bgColor?: string }) => (
     <Card className={cn(bgColor)}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardDescription className="font-black text-[10px] uppercase tracking-widest">{title}</CardDescription>
@@ -25,204 +23,86 @@ const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { t
     </Card>
 )
 
-export function CallSummary({ 
-    entries = [], 
-    doctors = [], 
-    nonCallDays = [], 
-    timeLogs = [], 
-    selectedMonth,
-    onMonthChange
-}: { 
-    entries: CoverageEntry[], 
-    doctors: Doctor[], 
-    nonCallDays: NonCallDay[], 
-    timeLogs: TimeLog[], 
-    selectedMonth: string,
-    onMonthChange: (m: string) => void
-}) {
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    const monthOptions = useMemo(() => {
-        const options = [];
-        const currentYear = new Date().getFullYear();
-        for (let i = 0; i < 12; i++) {
-            const date = new Date(currentYear, i, 1);
-            const value = format(date, 'yyyy-MM');
-            const label = format(date, 'MMMM yyyy');
-            options.push({ value, label });
-        }
-        return options.reverse();
-    }, []);
-
+export function CallSummary({ entries = [], doctors = [], nonCallDays = [], timeLogs = [] }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays: NonCallDay[], timeLogs: TimeLog[] }) {
     const insights = useMemo(() => {
-        if (!mounted) return null;
-        
-        const referenceDate = new Date(selectedMonth + "-01");
-        const start = startOfMonth(referenceDate);
-        const end = endOfMonth(referenceDate);
+        if (!entries) return null;
+        const today = new Date();
+        const start = startOfMonth(today);
+        const end = endOfMonth(today);
 
-        const filteredEntries = (entries || []).filter(e => {
-            if (!e) return false;
-            const d = parseAnyDate(e.coverageDate || e.submittedAt);
-            return d && isValid(d) && isWithinInterval(d, { start, end });
+        const filteredEntries = entries.filter(e => {
+            try { const d = parseISO(e.submittedAt); return isValid(d) && isWithinInterval(d, { start, end }); } catch { return false; }
         });
-
-        const monthlyTrendMap: Record<string, number> = {};
-        filteredEntries.forEach(e => {
-            const d = parseAnyDate(e.coverageDate || e.submittedAt);
-            if (d && isValid(d)) {
-                const monthKey = format(d, 'yyyy-MM');
-                monthlyTrendMap[monthKey] = (monthlyTrendMap[monthKey] || 0) + 1;
-            }
-        });
-        
-        const monthlyPerformance = Object.entries(monthlyTrendMap)
-            .map(([month, count]) => ({
-                month,
-                label: format(new Date(month + "-01"), "MMM yyyy"),
-                count
-            }))
-            .sort((a, b) => a.month.localeCompare(b.month));
 
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${String(entry.firstName || "").trim()} ${String(entry.lastName || "").trim()}`.toLowerCase();
-            acc[providerName] = (providerName ? (acc[providerName] || 0) + 1 : 0);
+            const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
+            acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        const highFreqDoctors = (doctors || []).filter(d => {
-            const freq = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 0;
-            return freq >= 3;
-        });
-        
-        const totalHighFreqTarget = highFreqDoctors.length;
-        const actualHighFreqAchieved = highFreqDoctors.filter(d => {
-            const key = `${String(d.firstName || "").trim()} ${String(d.lastName || "").trim()}`.toLowerCase();
-            return (providerVisits[key] || 0) >= 3;
+        const totalHighFreqTarget = doctors.filter(d => parseInt(String(d.frequency || "1x").replace('x', ''), 10) >= 3).length;
+        const actualHighFreqAchieved = doctors.filter(d => {
+            const freq = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
+            if (freq < 3) return false;
+            return (providerVisits[`${d.firstName} ${d.lastName}`.toLowerCase()] || 0) >= 3;
         }).length;
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
-        const totalDoctorsInList = (doctors || []).length;
+        const totalDoctorsInList = doctors.length;
         const actualVisitedCount = Object.keys(providerVisits).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
         const callsByDay = filteredEntries.reduce((acc, entry) => {
-            const d = parseAnyDate(entry.coverageDate || entry.submittedAt);
-            if (!d || !isValid(d)) return acc;
-            const day = format(d, 'yyyy-MM-dd');
-            if(!acc[day]) acc[day] = [];
-            acc[day].push(entry);
+            try {
+                const day = format(parseISO(entry.submittedAt), 'yyyy-MM-dd');
+                if(!acc[day]) acc[day] = [];
+                acc[day].push(entry);
+            } catch (e) {}
             return acc;
         }, {} as Record<string, CoverageEntry[]>);
         
         const activeDaysActual = Object.keys(callsByDay).reduce((sum, dayStr) => {
-            const dayDate = new Date(dayStr);
-            const isHalfDayLeave = (nonCallDays || []).some(ncd => {
-                const ncdDate = parseAnyDate(ncd.date);
-                return ncd.status === 'approved' && 
-                       (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') &&
-                       ncdDate && isValid(ncdDate) && isSameDay(ncdDate, dayDate);
-            });
+            const isHalfDayLeave = nonCallDays.some(ncd => ncd.status === 'approved' && (ncd.dayType === 'halfday-am' || ncd.dayType === 'halfday-pm') && isSameDay(parseISO(ncd.date), parseISO(dayStr)));
             return sum + (isHalfDayLeave ? 0.5 : 1.0);
         }, 0);
 
         const totalCalls = filteredEntries.length;
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
-
-        const allDaysInMonth = eachDayOfInterval({ start, end });
-        const totalBusinessDaysInMonth = allDaysInMonth.filter(day => {
-            if (isWeekend(day)) return false;
-            return !PH_HOLIDAYS_2026[format(day, 'yyyy-MM-dd')];
-        }).length;
         
-        const dynamicTarget = Math.round(activeDaysActual * 12);
-        const callRatePercentage = dynamicTarget > 0 ? Math.round((totalCalls / dynamicTarget) * 100) : 0;
+        const totalBusinessDaysInMonth = eachDayOfInterval({ start, end }).filter(day => !isWeekend(day)).length;
+        const callRatePercentage = activeDaysActual > 0 ? Math.round((totalCalls / (activeDaysActual * 12)) * 100) : 0;
 
         return {
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
-            callRate: { actual: totalCalls, total: dynamicTarget, percentage: callRatePercentage },
+            callRate: { percentage: callRatePercentage },
             avgCallsPerDay: activeDaysActual > 0 ? (totalCalls / activeDaysActual).toFixed(2) : 0,
             totalWorkingDays: { actual: activeDaysActual, total: totalBusinessDaysInMonth },
             inbaseCalls,
             outbaseCalls,
-            monthlyPerformance,
-            topProducts: Object.entries(filteredEntries.reduce((acc, e) => {
-                if (e.primaryProduct) acc[e.primaryProduct] = (acc[e.primaryProduct] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
-            topSpecialties: Object.entries(filteredEntries.reduce((acc, e) => {
-                if (e.specialty) acc[e.specialty] = (acc[e.specialty] || 0) + 1;
-                return acc;
-            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5),
             topSamples: Object.entries(filteredEntries.reduce((acc, e) => {
-                const process = (name?: string, qty?: number) => {
-                    if (!name) return;
-                    const cleanName = name.trim();
-                    acc[cleanName] = (acc[cleanName] || 0) + (qty || 0);
-                };
+                const process = (name?: string, qty?: number) => { if (name) acc[name] = (acc[name] || 0) + (qty || 0); };
                 process(e.primarySampleName, e.primaryProductQty);
                 process(e.secondarySampleName, e.secondaryProductQty);
-                if (Array.isArray(e.reminderProducts)) {
-                    e.reminderProducts.forEach(rp => rp && process(rp.sampleName, rp.quantity));
-                }
+                if (e.reminderProducts) e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
                 return acc;
             }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
         };
-    }, [entries, doctors, nonCallDays, mounted, selectedMonth]);
+    }, [entries, doctors, nonCallDays]);
 
-    if (!mounted) return null;
-
-    if (!insights) return (
-        <div className="flex flex-col items-center justify-center p-20 gap-4">
-            <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Aggregating Performance...</p>
-        </div>
-    );
+    if (!insights) return <div className="flex items-center justify-center p-20"><RefreshCw className="animate-spin text-primary" /></div>;
     
     return (
         <div className="space-y-6">
-             <Card>
-                <CardHeader>
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle>
-                            <CardDescription>Territory activity and productivity analytics for the selected period.</CardDescription>
-                            <div className="mt-2">
-                                <Select value={selectedMonth} onValueChange={onMonthChange}>
-                                    <SelectTrigger className="w-[220px] h-10 border-2 font-headline bg-muted/50">
-                                        <SelectValue placeholder="Select Month" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {monthOptions.map(opt => (
-                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </div>
-                </CardHeader>
+             <Card><CardHeader><CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle><CardDescription>Real-time analytics for the current active month.</CardDescription></CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <StatCard 
-                            title="Call Rate" 
-                            value={`${insights.callRate.actual}/${insights.callRate.total} (${insights.callRate.percentage}%)`} 
-                            description="Calculated as 12x Active Days" 
-                            icon={Percent} 
-                            color="text-orange-500" 
-                            bgColor="bg-orange-500/10" 
-                        />
+                        <StatCard title="Call Rate" value={`${insights.callRate.percentage}%`} description="Target achievement vs active days" icon={Percent} color="text-orange-500" bgColor="bg-orange-500/10" />
                         <StatCard title="Concentration (3x)" value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)`} description="High frequency retention" icon={Target} color="text-primary" bgColor="bg-primary/10" />
                         <StatCard title="Call Reach" value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} description="Territory penetration" icon={Users} color="text-teal-500" bgColor="bg-teal-500/10" />
                         <StatCard title="Efficiency" value={insights.avgCallsPerDay} description="Avg daily submissions" icon={TrendingUp} color="text-blue-500" bgColor="bg-blue-500/10" />
                     </div>
-
                     <div className="mt-8 border-t-2 pt-8">
                         <CardTitle className="font-headline font-black mb-4">Field Activity Statistics</CardTitle>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -234,95 +114,14 @@ export function CallSummary({
                 </CardContent>
             </Card>
 
-            {insights.monthlyPerformance.length > 0 && (
-                <Card className="border-2 shadow-lg overflow-hidden">
-                    <CardHeader className="bg-muted/30 border-b">
-                        <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><TrendingUp className="text-primary" /> Monthly Performance</CardTitle>
-                        <CardDescription>Activity status trend over time.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="h-80 p-6">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={insights.monthlyPerformance}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                                <XAxis dataKey="label" fontSize={10} fontWeight="bold" />
-                                <YAxis fontSize={10} fontWeight="bold" />
-                                <Tooltip 
-                                    contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }}
-                                    cursor={{ fill: 'hsl(var(--muted)/0.2)' }}
-                                />
-                                <Legend verticalAlign="bottom" align="center" iconType="rect" />
-                                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Total Calls" barSize={40} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            )}
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                 <Card className="border-2 shadow-sm overflow-hidden">
-                    <CardHeader className="bg-muted/30 border-b">
-                        <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><Pill className="text-primary" /> Top Products</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-80 p-6">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={insights.topProducts} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
-                                <XAxis type="number" hide />
-                                <YAxis type="category" dataKey="name" width={140} fontSize={10} fontWeight="bold" />
-                                <Tooltip contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }} />
-                                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} name="Mentions" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-                <Card className="border-2 shadow-sm overflow-hidden">
-                    <CardHeader className="bg-muted/30 border-b">
-                        <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><Briefcase className="text-primary" /> Specialty Reach</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-80 p-6">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={insights.topSpecialties} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
-                                <XAxis type="number" hide />
-                                <YAxis type="category" dataKey="name" width={140} fontSize={10} fontWeight="bold" />
-                                <Tooltip contentStyle={{ borderRadius: '12px', border: '2px solid hsl(var(--border))' }} />
-                                <Bar dataKey="count" fill="hsl(var(--chart-4))" radius={[0, 4, 4, 0]} name="Visits" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
-
             <Card className="border-2 shadow-sm overflow-hidden">
-                <CardHeader className="bg-muted/30 border-b">
-                    <CardTitle className="font-black font-headline text-lg flex items-center gap-2"><ThumbsUp className="text-primary" /> Samples Distributed</CardTitle>
-                    <CardDescription>Total quantities issued for primary, secondary, and reminder products.</CardDescription>
-                </CardHeader>
+                <CardHeader className="bg-muted/30 border-b"><CardTitle className="font-black font-headline text-lg flex items-center gap-2"><ThumbsUp className="text-primary" /> Samples Distributed</CardTitle><CardDescription>Total quantities issued for primary, secondary, and reminder products.</CardDescription></CardHeader>
                 <CardContent className="p-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/20 h-12">
-                                <TableHead className="font-bold text-foreground pl-6">Sample Material</TableHead>
-                                <TableHead className="text-right font-bold text-foreground pr-6">Qty Distributed</TableHead>
-                            </TableRow>
-                        </TableHeader>
+                    <Table><TableHeader><TableRow className="bg-muted/20 h-12"><TableHead className="font-bold text-foreground pl-6">Sample Material</TableHead><TableHead className="text-right font-bold text-foreground pr-6">Qty Distributed</TableHead></TableRow></TableHeader>
                         <TableBody>
-                            {insights.topSamples.length > 0 ? (
-                                insights.topSamples.map((s, i) => (
-                                    <TableRow key={i} className="h-14 hover:bg-muted/10 border-b last:border-0">
-                                        <TableCell className="pl-6 font-bold text-sm">{s.name}</TableCell>
-                                        <TableCell className="text-right pr-6 font-mono font-black text-primary text-base">
-                                            {s.count}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={2} className="h-40 text-center text-muted-foreground italic">
-                                        No samples distributed for this period.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                            {insights.topSamples.length > 0 ? (insights.topSamples.map((s, i) => (
+                                    <TableRow key={i} className="h-14 hover:bg-muted/10 border-b last:border-0"><TableCell className="pl-6 font-bold text-sm">{s.name}</TableCell><TableCell className="text-right pr-6 font-mono font-black text-primary text-base">{s.count}</TableCell></TableRow>
+                                ))) : (<TableRow><TableCell colSpan={2} className="h-40 text-center text-muted-foreground italic">No samples distributed for this period.</TableCell></TableRow>)}
                         </TableBody>
                     </Table>
                 </CardContent>

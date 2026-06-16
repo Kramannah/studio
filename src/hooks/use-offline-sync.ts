@@ -1,25 +1,17 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, setDoc, limit } from 'firebase/firestore';
-import { format, parseISO, isValid, isWithinInterval } from 'date-fns';
-import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-};
-
-const sanitizeForStorage = (entry: any): any => {
-    if (!entry) return entry;
-    const { photos, signature, jointCallSignature, dsmSignature, ...rest } = entry;
-    return rest;
 };
 
 const sanitizePayload = (data: any): any => {
@@ -37,20 +29,13 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
+export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
-  
-  const lastFetchedKeyRef = useRef<string | null>(null);
-
-  const getOfflineKey = useCallback(() => `${OFFLINE_ENTRIES_KEY}_${userId}`, [userId]);
-  const getMasterKey = useCallback(() => `${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, [userId]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -66,84 +51,37 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   useEffect(() => {
     if (userId) {
-        try {
-            const localOffline = localStorage.getItem(getOfflineKey());
-            if (localOffline) setOfflineEntries(JSON.parse(localOffline));
-            
-            const localMaster = localStorage.getItem(getMasterKey());
-            if (localMaster) setMasterEntries(JSON.parse(localMaster));
-        } catch (error) {
-            console.warn("Could not load entries cache:", error);
-        }
-    } else {
-        setOfflineEntries([]);
-        setMasterEntries([]);
-        setAvailableMonths([]);
-        lastFetchedKeyRef.current = null;
+        const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
+        if (localOffline) setOfflineEntries(JSON.parse(localOffline));
+        
+        const localMaster = localStorage.getItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`);
+        if (localMaster) setMasterEntries(JSON.parse(localMaster));
     }
-  }, [userId, getOfflineKey, getMasterKey]);
+  }, [userId]);
 
-  const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !db || !active || !navigator.onLine) {
-        if (!active) setLoading(false);
-        return;
-    }
-    
-    const fetchKey = `${userId}_${selectedMonth}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
-        setLoading(false);
-        return;
-    }
-
+  const fetchMasterEntries = useCallback(async () => {
+    if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
-
     try {
-      const { start, end } = getMonthRangeISO(selectedMonth);
-      const interval = { start: parseISO(start), end: parseISO(end) };
-      
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(5000)
+        limit(2000)
       );
-      
       const querySnapshot = await getDocs(q);
-
       const fetched: CoverageEntry[] = [];
-      const months = new Set<string>();
-
       querySnapshot.forEach(docSnap => {
-        const data = docSnap.data() as CoverageEntry;
-        const date = parseAnyDate(data.coverageDate) || parseAnyDate(data.submittedAt);
-        
-        if (date && isValid(date)) {
-            const mKey = format(date, 'yyyy-MM');
-            months.add(mKey);
-            if (isWithinInterval(date, interval)) {
-                fetched.push({ id: docSnap.id, ...data });
-            }
-        }
+        fetched.push({ id: docSnap.id, ...docSnap.data() } as CoverageEntry);
       });
-
-      const currentMonth = selectedMonth || format(new Date(), 'yyyy-MM');
-      months.add(currentMonth);
-      setAvailableMonths(Array.from(months).sort((a,b) => b.localeCompare(a)));
-      
-      fetched.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-      
+      fetched.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(fetched);
-      lastFetchedKeyRef.current = fetchKey;
-      
-      try {
-          const storageData = fetched.map(e => sanitizeForStorage(e));
-          localStorage.setItem(getMasterKey(), JSON.stringify(storageData));
-      } catch (storageError) {}
-    } catch (serverError: any) {
-        console.error("Entries fetch error:", serverError);
+      localStorage.setItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(fetched));
+    } catch (error) {
+        console.error("Fetch entries error:", error);
     } finally {
         setLoading(false);
     }
-  }, [userId, active, getMasterKey, masterEntries.length, selectedMonth]);
+  }, [userId, active]);
 
   useEffect(() => {
     if (userId && active) {
@@ -151,21 +89,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, active, fetchMasterEntries]);
 
-  const updateOfflineInStorage = (updatedEntries: CoverageEntry[]) => {
-      setOfflineEntries(updatedEntries);
-      try {
-          const storageData = updatedEntries.map(e => sanitizeForStorage(e));
-          localStorage.setItem(getOfflineKey(), JSON.stringify(storageData));
-      } catch (e) {}
-  }
-
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
-    const entryId = generateUniqueId();
     const rawPayload = {
       ...entry,
-      id: entryId,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
@@ -173,16 +101,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const sanitizedPayload = sanitizePayload(rawPayload);
 
     if (isOnline) {
-        const docRef = doc(db!, "coverageEntries", entryId);
         try {
-            await setDoc(docRef, sanitizedPayload);
-            setMasterEntries(prev => {
-                const next = [sanitizedPayload as CoverageEntry, ...prev];
-                return next.sort((a, b) => (b.coverageDate || b.submittedAt || '').localeCompare(a.coverageDate || a.submittedAt || ''));
-            });
+            const docRef = await addDoc(collection(db!, "coverageEntries"), sanitizedPayload);
+            setMasterEntries(prev => [{ id: docRef.id, ...sanitizedPayload } as CoverageEntry, ...prev]);
             toast({ title: "Entry Saved" });
             return true;
-        } catch (serverError) {
+        } catch (error) {
             saveEntryOffline(sanitizedPayload);
             return false;
         }
@@ -195,37 +119,34 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const saveEntryOffline = (newEntry: Omit<CoverageEntry, 'id'>) => {
     const entryWithId = { ...newEntry, id: generateUniqueId() };
     const updatedEntries = [entryWithId, ...offlineEntries];
-    updateOfflineInStorage(updatedEntries);
+    setOfflineEntries(updatedEntries);
+    localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updatedEntries));
     toast({ title: "Saved Locally" });
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || !db || offlineEntries.length === 0) return;
-    if (isSyncing) return;
     setIsSyncing(true);
 
-    const entriesToSync = [...offlineEntries];
     const batch = writeBatch(db!);
-
-    for (const entry of entriesToSync) {
-        const { id, isOffline, ...dataToSync } = entry;
-        const sanitizedData = sanitizePayload(dataToSync);
-        const docRef = doc(collection(db!, "coverageEntries")); 
-        batch.set(docRef, { ...sanitizedData, userId: userId, submittedAt: new Date().toISOString() });
+    for (const entry of offlineEntries) {
+        const { id, ...dataToSync } = entry;
+        const docRef = doc(collection(db!, "coverageEntries"));
+        batch.set(docRef, { ...dataToSync, userId: userId });
     }
 
     try {
         await batch.commit();
-        updateOfflineInStorage([]);
-        lastFetchedKeyRef.current = null;
-        fetchMasterEntries(true);
-        toast({ title: 'Sync Complete', description: `${entriesToSync.length} entries synced.` });
-    } catch (serverError) {
-        console.error("Sync failed:", serverError);
+        setOfflineEntries([]);
+        localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
+        fetchMasterEntries();
+        toast({ title: 'Sync Complete' });
+    } catch (error) {
+        console.error("Sync failed:", error);
     } finally {
         setIsSyncing(false);
     }
-  }, [isOnline, userId, offlineEntries, toast, isSyncing, fetchMasterEntries]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0) {
@@ -235,25 +156,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    try {
-        await deleteDoc(doc(db!, "coverageEntries", id));
-        setMasterEntries(prev => prev.filter(e => e.id !== id));
-    } catch (e) {}
+    await deleteDoc(doc(db!, "coverageEntries", id));
+    setMasterEntries(prev => prev.filter(e => e.id !== id));
   };
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
-    const sanitizedPayload = sanitizePayload(e);
-    try {
-        await updateDoc(doc(db!, "coverageEntries", e.id), { ...sanitizedPayload, userId: userId });
-        setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitizedPayload} : item));
-    } catch (error) {}
+    const sanitized = sanitizePayload(e);
+    await updateDoc(doc(db!, "coverageEntries", e.id), sanitized);
+    setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitized} : item));
   };
 
   return { 
     offlineEntries, 
     masterEntries, 
-    availableMonths,
     saveEntry, 
     deleteMasterEntry, 
     isSyncing, 
@@ -262,9 +178,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     updateMasterEntry, 
     updateOfflineEntry: (e: any) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
-        updateOfflineInStorage(updated);
+        setOfflineEntries(updated);
+        localStorage.setItem(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
     },
     loading,
-    refetch: () => fetchMasterEntries(true)
+    refetch: fetchMasterEntries
   };
 };

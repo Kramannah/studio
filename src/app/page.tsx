@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, PackageCheck } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, isValid, format } from "date-fns";
+import { isToday, parseISO, isValid } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
@@ -19,10 +19,9 @@ import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn, parseAnyDate } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PlanningCalendar } from '@/components/planning-calendar';
-
 import { CoverageForm } from '@/components/coverage-form';
 import { OfflineList } from '@/components/offline-list';
 import { MasterList } from '@/components/master-list';
@@ -55,19 +54,12 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
-  const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || 
-           email === 'mbustamante@hovidinc.com' || 
-           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
-           profile?.role === 'Admin';
+    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email) || profile?.role === 'Admin';
   }, [user, profile]);
 
   const isUserManager = useMemo(() => {
@@ -75,63 +67,22 @@ export default function Home() {
     return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
   }, [user, profile]);
 
-  const isMarketingOrHR = useMemo(() => {
-    return profile?.role === 'Marketing' || profile?.role === 'HR';
-  }, [profile]);
+  const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
-
-  const { 
-    offlineEntries, 
-    masterEntries, 
-    availableMonths,
-    saveEntry, 
-    deleteMasterEntry, 
-    isSyncing, 
-    syncAllOfflineEntries, 
-    isOnline, 
-    updateMasterEntry, 
-    updateOfflineEntry, 
-    loading: entriesLoading, 
-    refetch: refetchEntries 
-  } = useOfflineSync(
-    user?.uid, 
-    ['submitted', 'summary', 'planning', 'coverage'].includes(activeView),
-    selectedMonth 
-  );
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, refetch: refetchEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView));
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
+  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary');
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning');
+  const { allocations, usedQuantities: globalUsedQuantities } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', activeView === 'allocation' || activeView === 'coverage');
   
-  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted' || activeView === 'summary');
-  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, syncAllOfflinePlans, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
-  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary' || activeView === 'submitted', selectedMonth);
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning' || activeView === 'coverage', selectedMonth);
-  
-  const { allocations, usedQuantities: globalUsedQuantities, loading: allocationLoading } = useQ4Allocation(
-    activeView === 'coverage' || activeView === 'allocation' || activeView === 'summary', 
-    activeView === 'allocation' || activeView === 'coverage' || activeView === 'summary'
-  );
-  
-  useEffect(() => {
-    if (isOnline && syncAllOfflinePlans) syncAllOfflinePlans();
-  }, [isOnline, syncAllOfflinePlans]);
-
   const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
       try {
-          await Promise.all([
-              syncAllOfflineEntries(),
-              syncAllOfflinePlans ? syncAllOfflinePlans() : Promise.resolve(),
-              refreshPlans(true),
-              fetchTimeLogs(true),
-              fetchNonCallDays(true),
-              refetchEntries()
-          ]);
+          await Promise.all([syncAllOfflineEntries(), refreshPlans(), fetchTimeLogs(), fetchNonCallDays(), refetchEntries()]);
           toast({ title: "Sync Finished" });
-      } catch (e) {
-          toast({ variant: "destructive", title: "Sync Error" });
-      } finally {
-          setIsManualSyncing(false);
-      }
-  }, [syncAllOfflineEntries, syncAllOfflinePlans, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchEntries, toast]);
+      } catch (e) { toast({ variant: "destructive", title: "Sync Error" }); } finally { setIsManualSyncing(false); }
+  }, [syncAllOfflineEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchEntries, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
@@ -169,25 +120,11 @@ export default function Home() {
     return quantities;
   }, [globalUsedQuantities, offlineEntries]);
 
-  const todaysPlans = useMemo(() => {
-    if (!mounted) return [];
-    return plans.filter(p => {
-        const plannedDate = parseAnyDate(p.plannedDate);
-        return plannedDate && isValid(plannedDate) && isToday(plannedDate);
-    });
-  },[plans, mounted]);
+  const todaysPlans = useMemo(() => plans.filter(p => {
+    try { return isToday(parseISO(p.plannedDate)); } catch (e) { return false; }
+  }), [plans]);
 
-  const handleCrmClick = () => {
-    const crmViews: View[] = ['planning', 'coverage', 'offline', 'submitted', 'summary', 'master', 'allocation'];
-    if (!crmViews.includes(activeView)) setActiveView('planning');
-  };
-  
-  if (!mounted || authLoading) return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-        <RefreshCw className="w-12 h-12 animate-spin text-primary" />
-    </div>
-  );
-  
+  if (!mounted || authLoading) return <div className="flex items-center justify-center min-h-screen bg-background"><RefreshCw className="w-12 h-12 animate-spin text-primary" /></div>;
   if (!user) return <LoginPage />;
 
   const renderContent = () => {
@@ -197,56 +134,14 @@ export default function Home() {
     if (activeView === 'master' && (doctorsLoading && doctors.length === 0)) return <DynamicSkeleton />;
 
     switch (activeView) {
-      case 'planning': 
-        return (
-          <PlanningCalendar 
-            doctors={doctors} 
-            plans={plans} 
-            planningRequests={planningRequests} 
-            onRequestUnlock={requestPlanningPermission} 
-            entries={masterEntries} 
-            offlineEntries={offlineEntries} 
-            onAddPlan={addPlan} 
-            onAddPlansBulk={addPlansBulk}
-            onRemovePlan={removePlan} 
-            onLogCall={handleLogPlannedCall} 
-            nonCallDays={nonCallDays} 
-            onAddNonCallDay={addNonCallDay} 
-            selectedMonth={selectedMonth}
-            onMonthChange={setSelectedMonth}
-          />
-        );
-      case 'coverage': 
-        return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
-      case 'offline': 
-        return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
-      case 'submitted': 
-        return <SubmittedList 
-          entries={masterEntries} 
-          availableMonths={availableMonths}
-          doctors={doctors} 
-          nonCallDays={nonCallDays} 
-          onDelete={deleteMasterEntry} 
-          onEdit={(entry) => handleEditEntry(entry, false)} 
-          selectedMonth={selectedMonth} 
-          onMonthChange={setSelectedMonth} 
-        />;
-      case 'summary': 
-        return <CallSummary 
-          entries={masterEntries} 
-          availableMonths={availableMonths}
-          doctors={doctors} 
-          nonCallDays={nonCallDays} 
-          timeLogs={timeLogs} 
-          selectedMonth={selectedMonth} 
-          onMonthChange={setSelectedMonth} 
-        />;
-      case 'master': 
-        return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
-      case 'allocation': 
-        return <Q4AllocationView readOnly={true} />;
-      default: 
-        return null;
+      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
+      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
+      case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} />;
+      case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
+      case 'allocation': return <Q4AllocationView readOnly={true} />;
+      default: return null;
     }
   };
 
@@ -255,21 +150,17 @@ export default function Home() {
       <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
          <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
             <div className="flex items-center gap-4">
-              <SidebarTrigger/>
-              <h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
+              <SidebarTrigger/><h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
             </div>
             <div className="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={handleManualSync} disabled={isManualSyncing || !isOnline} className="font-headline hidden sm:flex">
-                    <RefreshCw className={cn("mr-2", isManualSyncing && "animate-spin")} />
-                    {isManualSyncing ? 'Syncing...' : 'Sync All'}
+                    <RefreshCw className={cn("mr-2", isManualSyncing && "animate-spin")} /> {isManualSyncing ? 'Syncing...' : 'Sync All'}
                 </Button>
                 <Badge variant={isOnline ? "secondary" : "destructive"} className="flex items-center gap-2 px-3 py-1 font-headline">
                     {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : (isOnline ? <Wifi size={14} /> : <WifiOff size={14} />)}
                     <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
                 </Badge>
-                {timeLogsLoading && timeLogs.length === 0 ? (
-                    <Button size="sm" variant="outline" className="font-headline" disabled><RefreshCw className="mr-2 animate-spin"/> Loading...</Button>
-                ) : !todaysTimeIn ? (
+                {!todaysTimeIn ? (
                   <Button size="sm" variant="outline" className="font-headline" onClick={() => { setTimeLogMode("time-in"); setIsTimeLogDialogOpen(true); }}><LogIn className="mr-2"/>Time In</Button>
                 ) : (
                   <Button size="sm" variant="destructive" className="font-headline" onClick={() => { setTimeLogMode("time-out"); setIsTimeLogDialogOpen(true); }}><LogOut className="mr-2"/>Time Out</Button>
@@ -282,17 +173,12 @@ export default function Home() {
             <SidebarContent>
               <SidebarMenu>
                 <SidebarMenuItem isActive={true}>
-                  <SidebarMenuButton onClick={handleCrmClick} hasSubmenu><Notebook />CRM</SidebarMenuButton>
+                  <SidebarMenuButton onClick={() => {}} hasSubmenu><Notebook />CRM</SidebarMenuButton>
                   <SidebarMenuSub>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('planning')} isActive={activeView === 'planning'}>Call Planning</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('coverage')} isActive={activeView === 'coverage'}>Call Reporting</SidebarMenuSubButton></SidebarMenuSubItem>
-                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton onClick={() => setActiveView('offline')} isActive={activeView === 'offline'}>
-                          Offline Calls
-                          {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('offline')} isActive={activeView === 'offline'}>Offline Calls {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}</SidebarMenuSubButton></SidebarMenuSubItem>
+                      <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>Submitted Coverage</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>Call Summary</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>Doctor Masterlist</SidebarMenuSubButton></SidebarMenuSubItem>
                       <SidebarMenuSubItem><SidebarMenuSubButton onClick={() => setActiveView('allocation')} isActive={activeView === 'allocation'}>Marketing Samples</SidebarMenuSubButton></SidebarMenuSubItem>
@@ -302,30 +188,12 @@ export default function Home() {
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter className="p-4 border-t bg-muted/20">
-                 <div className="px-3 py-2 bg-background rounded-lg border shadow-sm mb-2">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 leading-none">Logged in as</p>
-                    <p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p>
-                 </div>
-                 {hasAdminAccess && (
-                    <div className="space-y-2 mb-2">
-                        <Link href="/admin" className="w-full block">
-                            <Button size="sm" variant="outline" className="w-full font-headline border-2 h-10">
-                                <LayoutDashboard className="mr-2 h-4 w-4 text-primary" />
-                                {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'Manager Dashboard'}
-                            </Button>
-                        </Link>
-                    </div>
-                 )}
-                 <Button variant="destructive" size="lg" onClick={logout} className="w-full font-headline">
-                    <LogOut className="mr-2 h-5 w-5" /> Log Out
-                </Button>
+                 <div className="px-3 py-2 bg-background rounded-lg border shadow-sm mb-2"><p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 leading-none">Logged in as</p><p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p></div>
+                 {hasAdminAccess && (<div className="space-y-2 mb-2"><Link href="/admin" className="w-full block"><Button size="sm" variant="outline" className="w-full font-headline border-2 h-10"><LayoutDashboard className="mr-2 h-4 w-4 text-primary" /> Admin Dashboard</Button></Link></div>)}
+                 <Button variant="destructive" size="lg" onClick={logout} className="w-full font-headline"><LogOut className="mr-2 h-5 w-5" /> Log Out</Button>
             </SidebarFooter>
           </Sidebar>
-          <main className="flex-1 w-full overflow-x-hidden">
-            <div className="w-full h-full p-4 md:p-6 lg:p-8">
-              {renderContent()}
-            </div>
-          </main>
+          <main className="flex-1 w-full overflow-x-hidden"><div className="w-full h-full p-4 md:p-6 lg:p-8">{renderContent()}</div></main>
         </div>
       </div>
       <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />
