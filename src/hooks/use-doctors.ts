@@ -18,6 +18,7 @@ import {
   writeBatch,
   limit,
 } from "firebase/firestore";
+import { safeStorageSet } from "@/lib/utils";
 
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v4';
 
@@ -66,7 +67,7 @@ export const useDoctors = (active: boolean = true) => {
       });
 
       setDoctors(fetchedDoctors);
-      localStorage.setItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(fetchedDoctors));
+      safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(fetchedDoctors));
     } catch (error) {
         console.error("Fetch doctors error:", error);
     } finally {
@@ -89,7 +90,7 @@ export const useDoctors = (active: boolean = true) => {
         const created = { id: docRef.id, ...newDoctorData };
         setDoctors((prev) => {
             const next = [...prev, created];
-            localStorage.setItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
         });
         toast({ title: "Doctor Added" });
@@ -131,7 +132,7 @@ export const useDoctors = (active: boolean = true) => {
           await updateDoc(docRef, { ...dataToUpdate, userId: user.uid });
           setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
-            localStorage.setItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
           });
       } catch (e) {}
@@ -146,7 +147,7 @@ export const useDoctors = (active: boolean = true) => {
           await deleteDoc(doc(db, "doctors", id));
           setDoctors((prev) => {
             const next = prev.filter((d) => d.id !== id);
-            localStorage.setItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
           });
           toast({ variant: "destructive", title: "Doctor Removed" });
@@ -164,7 +165,7 @@ export const useDoctors = (active: boolean = true) => {
           await batch.commit();
           setDoctors((prev) => {
             const next = prev.filter((d) => !ids.includes(d.id));
-            localStorage.setItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
           });
           toast({ variant: "destructive", title: "Doctors Deleted" });
