@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -9,7 +10,7 @@ import { format, isWithinInterval, isValid, eachDayOfInterval, isWeekend, startO
 import { Target, Users, TrendingUp, Calendar, Pill, ThumbsUp, Building, PlaneTakeoff, RefreshCw, Percent, Briefcase } from "lucide-react";
 import { cn, PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
 import { Button } from "./ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const StatCard = ({ title, value, description, icon: Icon, color, bgColor }: { title: string, value: string | number, description: string, icon: React.ElementType, color: string, bgColor?: string }) => (
     <Card className={cn(bgColor)}>
@@ -47,7 +48,7 @@ export function CallSummary({
 
     const monthOptions = useMemo(() => {
         const options = [];
-        const currentYear = 2026;
+        const currentYear = new Date().getFullYear();
         for (let i = 0; i < 12; i++) {
             const date = new Date(currentYear, i, 1);
             const value = format(date, 'yyyy-MM');

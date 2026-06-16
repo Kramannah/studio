@@ -95,12 +95,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   /**
    * Fetches full history for a specific PMR.
-   * This is the "VIS-06 Way" - direct, robust collection-based fetching.
    */
   const fetchUserData = useCallback(async (uid: string, monthStr?: string, force: boolean = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    // Skip if already loaded and UID hasn't changed (unless forced)
     if (!force && individualEntries.length > 0 && individualEntries[0].userId === uid) {
         return;
     }
@@ -110,7 +108,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
 
-        // DIRECT FETCH: Querying each collection by userId, just like VIS-06
         const fetchCol = (name: string) => getDocs(query(collection(db!, name), where("userId", "==", uid), limit(5000)));
 
         const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.all([
@@ -123,7 +120,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const allEntries = mapDocs(eSnap) as CoverageEntry[];
         
-        // Dynamic Month List: Scans all historical records to ensure veteran data (like CL-01) is selectable
         const months = new Set<string>();
         allEntries.forEach((entry) => {
             const date = parseAnyDate(entry);
@@ -132,7 +128,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         });
         
-        // Fallback for veteran users who might have records stored under legacy 'uid' field
         if (allEntries.length === 0) {
             const legacySnap = await getDocs(query(collection(db!, "coverageEntries"), where("uid", "==", uid), limit(5000)));
             const legacyEntries = mapDocs(legacySnap) as CoverageEntry[];

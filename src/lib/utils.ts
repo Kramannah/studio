@@ -1,3 +1,4 @@
+
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { startOfWeek, isSameWeek, startOfMonth, isBefore, format, endOfMonth, parseISO, isValid } from "date-fns"
@@ -8,12 +9,10 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Robust date parser that handles ISO strings, Firestore Timestamps, and Date objects.
- * Checks multiple possible field names to support legacy data formats.
  */
 export function parseAnyDate(date: any): Date | null {
   if (!date) return null;
   
-  // If we were passed an object that might be a record, hunt for common date fields
   if (typeof date === 'object' && !(date instanceof Date) && typeof date.toDate !== 'function') {
       const candidates = [
           date.coverageDate, 
@@ -32,13 +31,11 @@ export function parseAnyDate(date: any): Date | null {
       return null;
   }
 
-  // Handle ISO Strings
   if (typeof date === 'string') {
     const d = parseISO(date);
     return isValid(d) ? d : null;
   }
   
-  // Handle Firestore Timestamps
   if (date && typeof date.toDate === 'function') {
     try {
       const d = date.toDate();
@@ -48,12 +45,10 @@ export function parseAnyDate(date: any): Date | null {
     }
   }
   
-  // Handle Date Objects
   if (date instanceof Date) {
     return isValid(date) ? date : null;
   }
 
-  // Fallback for number (timestamp)
   if (typeof date === 'number') {
     const d = new Date(date);
     return isValid(d) ? d : null;
@@ -88,25 +83,16 @@ export const PH_HOLIDAYS_2026: Record<string, string> = {
   "2026-12-31": "Last Day of the Year",
 };
 
-/**
- * Returns the name of the holiday if the date is a holiday.
- */
 export function getHolidayName(date: Date): string | null {
   const key = format(date, 'yyyy-MM-dd');
   return PH_HOLIDAYS_2026[key] || null;
 }
 
-/**
- * Returns the ISO string for the start of the current calendar year.
- */
 export function getStartOfYearISO(): string {
   const now = new Date();
   return new Date(now.getFullYear(), 0, 1).toISOString();
 }
 
-/**
- * Returns the ISO range for a specific month YYYY-MM
- */
 export function getMonthRangeISO(monthStr?: string): { start: string, end: string } {
     const date = monthStr ? new Date(monthStr + "-01") : new Date();
     const start = startOfMonth(date).toISOString();
@@ -114,9 +100,6 @@ export function getMonthRangeISO(monthStr?: string): { start: string, end: strin
     return { start, end };
 }
 
-/**
- * Gets the Monday of the week for a given date.
- */
 export function getWeekMonday(date: Date): Date {
   return startOfWeek(date, { weekStartsOn: 1 });
 }
