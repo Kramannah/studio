@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -84,8 +85,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const { start, end } = getMonthRangeISO(month);
 
     try {
-        // Sequential surgical fetches to ensure stability and precise monthly filtering (Low Cost & Accurate)
-        const entriesSnap = await getDocs(query(
+        // RESILIENT FETCH LOGIC for Veteran Accounts (CL-01, NL-02)
+        // 1. Try fetching by userId + coverageDate
+        let entriesSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),
             where("coverageDate", ">=", start),
@@ -93,13 +95,46 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             limit(1000)
         ));
 
-        const plansSnap = await getDocs(query(
+        // 2. If nothing found, try searching by legacy 'uid' field + coverageDate
+        if (entriesSnap.empty) {
+            entriesSnap = await getDocs(query(
+                collection(db!, "coverageEntries"), 
+                where("uid", "==", uid),
+                where("coverageDate", ">=", start),
+                where("coverageDate", "<=", end),
+                limit(1000)
+            ));
+        }
+
+        // 3. If still nothing, try searching by 'submittedAt' in case coverageDate is missing (Low Cost Fallback)
+        if (entriesSnap.empty) {
+            entriesSnap = await getDocs(query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", uid),
+                where("submittedAt", ">=", start),
+                where("submittedAt", "<=", end),
+                limit(1000)
+            ));
+        }
+
+        // Fetch Plans with similar fallback logic
+        let plansSnap = await getDocs(query(
             collection(db!, "plans"), 
             where("userId", "==", uid),
             where("plannedDate", ">=", start),
             where("plannedDate", "<=", end),
             limit(1000)
         ));
+
+        if (plansSnap.empty) {
+            plansSnap = await getDocs(query(
+                collection(db!, "plans"), 
+                where("uid", "==", uid),
+                where("plannedDate", ">=", start),
+                where("plannedDate", "<=", end),
+                limit(1000)
+            ));
+        }
 
         const logsSnap = await getDocs(query(
             collection(db!, "timeLogs"), 
@@ -125,15 +160,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        setIndividualEntries(mapDocs(entriesSnap) as any);
+        const fetchedEntries = mapDocs(entriesSnap) as any;
+        setIndividualEntries(fetchedEntries);
         setIndividualPlans(mapDocs(plansSnap) as any);
         setIndividualTimeLogs(mapDocs(logsSnap) as any);
         setIndividualNonCallDays(mapDocs(ncdsSnap) as any);
         setIndividualDoctors(mapDocs(docsSnap) as any);
-    } catch (e) {
+
+        if (fetchedEntries.length === 0) {
+            toast({ title: "No Data Found", description: "No records found for this period." });
+        } else {
+            toast({ title: "Data Synced", description: `Loaded ${fetchedEntries.length} records.` });
+        }
+
+    } catch (e: any) {
         console.warn("User data fetch error", e);
+        toast({ variant: "destructive", title: "Fetch Error", description: "Database communication failed." });
     } finally { setLoadingIndividual(false); }
-  }, [active, isAuthorized]);
+  }, [active, isAuthorized, toast]);
 
   return { 
     allEntries: individualEntries, allDoctors: individualDoctors, allPlans: individualPlans, allTimeLogs: individualTimeLogs, allNonCallDaysIndividual: individualNonCallDays,

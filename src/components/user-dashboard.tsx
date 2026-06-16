@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -42,7 +43,7 @@ export function UserDashboard({
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleRefresh = async () => {
-        if (!onFetchUserData) return;
+        if (!onFetchUserData || !userId) return;
         setIsRefreshing(true);
         try {
             await onFetchUserData(userId, selectedMonth);
@@ -86,7 +87,7 @@ export function UserDashboard({
                     className="h-10 border-2 font-headline bg-background hover:bg-muted"
                 >
                     <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
-                    {isRefreshing ? 'Loading...' : 'Refresh Data'}
+                    {isRefreshing ? 'Syncing...' : 'Refresh Data'}
                 </Button>
             </div>
             
