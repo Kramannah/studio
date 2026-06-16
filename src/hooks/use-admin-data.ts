@@ -1,12 +1,14 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { getMonthRangeISO } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -76,25 +78,59 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
+  const fetchUserData = useCallback(async (uid: string, month: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
+    
+    const { start, end } = getMonthRangeISO(month);
+
     try {
-        const [entries, plans, logs, ncds, docs] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
-        ]);
+        // Individual sequential fetches to ensure stability and precise monthly filtering (Low Cost)
+        const entriesSnap = await getDocs(query(
+            collection(db!, "coverageEntries"), 
+            where("userId", "==", uid),
+            where("coverageDate", ">=", start),
+            where("coverageDate", "<=", end),
+            limit(1000)
+        ));
+
+        const plansSnap = await getDocs(query(
+            collection(db!, "plans"), 
+            where("userId", "==", uid),
+            where("plannedDate", ">=", start),
+            where("plannedDate", "<=", end),
+            limit(1000)
+        ));
+
+        const logsSnap = await getDocs(query(
+            collection(db!, "timeLogs"), 
+            where("userId", "==", uid),
+            where("timeIn", ">=", start),
+            where("timeIn", "<=", end),
+            limit(500)
+        ));
+
+        const ncdsSnap = await getDocs(query(
+            collection(db!, "nonCallDays"), 
+            where("userId", "==", uid),
+            where("date", ">=", start),
+            where("date", "<=", end),
+            limit(500)
+        ));
+
+        const docsSnap = await getDocs(query(
+            collection(db!, "doctors"), 
+            where("userId", "==", uid),
+            limit(1000)
+        ));
 
         const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
         
-        setIndividualEntries(mapDocs(entries) as any);
-        setIndividualPlans(mapDocs(plans) as any);
-        setIndividualTimeLogs(mapDocs(logs) as any);
-        setIndividualNonCallDays(mapDocs(ncds) as any);
-        setIndividualDoctors(mapDocs(docs) as any);
+        setIndividualEntries(mapDocs(entriesSnap) as any);
+        setIndividualPlans(mapDocs(plansSnap) as any);
+        setIndividualTimeLogs(mapDocs(logsSnap) as any);
+        setIndividualNonCallDays(mapDocs(ncdsSnap) as any);
+        setIndividualDoctors(mapDocs(docsSnap) as any);
     } catch (e) {
         console.warn("User data fetch error", e);
     } finally { setLoadingIndividual(false); }

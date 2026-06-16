@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
@@ -5,6 +6,7 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
+import { getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
@@ -28,7 +30,7 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true) => {
+export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -52,9 +54,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (userId) {
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
-        
-        const localMaster = localStorage.getItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`);
-        if (localMaster) setMasterEntries(JSON.parse(localMaster));
     }
   }, [userId]);
 
@@ -62,11 +61,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
     try {
+      const { start, end } = getMonthRangeISO(selectedMonth);
+      
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(2000)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(1000)
       );
+      
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = [];
       querySnapshot.forEach(docSnap => {
@@ -74,13 +78,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       });
       fetched.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(fetched);
-      localStorage.setItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(fetched));
     } catch (error) {
         console.error("Fetch entries error:", error);
     } finally {
         setLoading(false);
     }
-  }, [userId, active]);
+  }, [userId, active, selectedMonth]);
 
   useEffect(() => {
     if (userId && active) {
