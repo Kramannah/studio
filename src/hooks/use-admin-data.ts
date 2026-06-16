@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -58,14 +57,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
-            if (!filter) {
-                const snap = await getDocs(query(colRef, limit(1000)));
-                return snap.docs.map(d => ({id: d.id, ...d.data()}));
+            try {
+                if (!filter) {
+                    const snap = await getDocs(query(colRef, limit(500)));
+                    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+                }
+                const chunks = [];
+                for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
+                const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(500)))));
+                return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
+            } catch (e) {
+                console.warn(`Fetch ${name} failed:`, e);
+                return [];
             }
-            const chunks = [];
-            for (let i = 0; i < filter.length; i += 10) chunks.push(filter.slice(i, i+10));
-            const results = await Promise.all(chunks.map(c => getDocs(query(colRef, where("userId", "in", c), limit(1000)))));
-            return results.flatMap(s => s.docs.map(d => ({id: d.id, ...d.data()})));
         };
 
         const [ncd, pr] = await Promise.all([fetchCol("nonCallDays", userFilter), fetchCol("planningRequests", userFilter)]);
@@ -79,22 +83,40 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
+    
+    const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
+    const fetchSafe = async (name: string) => {
+        try {
+            const snap = await getDocs(query(collection(db!, name), where("userId", "==", uid), limit(1000)));
+            return mapDocs(snap);
+        } catch (e) {
+            console.warn(`Safe fetch for ${name} failed:`, e);
+            return [];
+        }
+    };
+
     try {
-        const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
-        const fetchCol = (name: string) => getDocs(query(collection(db!, name), where("userId", "==", uid), limit(2000)));
-
-        const [eSnap, pSnap, lSnap, nSnap, dSnap] = await Promise.all([
-            fetchCol("coverageEntries"), fetchCol("plans"), fetchCol("timeLogs"), fetchCol("nonCallDays"), fetchCol("doctors")
-        ]);
-
-        setIndividualEntries(mapDocs(eSnap) as any);
-        setIndividualPlans(mapDocs(pSnap) as any);
-        setIndividualTimeLogs(mapDocs(lSnap) as any);
-        setIndividualNonCallDays(mapDocs(nSnap) as any);
-        setIndividualDoctors(mapDocs(dSnap) as any);
+        // Fetch each independently to prevent total timeout crash
+        const entries = await fetchSafe("coverageEntries");
+        setIndividualEntries(entries as any);
+        
+        const plans = await fetchSafe("plans");
+        setIndividualPlans(plans as any);
+        
+        const logs = await fetchSafe("timeLogs");
+        setIndividualTimeLogs(logs as any);
+        
+        const ncds = await fetchSafe("nonCallDays");
+        setIndividualNonCallDays(ncds as any);
+        
+        const docs = await fetchSafe("doctors");
+        setIndividualDoctors(docs as any);
+        
     } catch (e: any) {
-        console.warn("Individual user fetch error", e);
-    } finally { setLoadingIndividual(false); }
+        console.warn("Individual user fetch aggregated error:", e);
+    } finally {
+        setLoadingIndividual(false);
+    }
   }, [active, isAuthorized]);
 
   return { 
