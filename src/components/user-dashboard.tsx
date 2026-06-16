@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -20,6 +20,7 @@ interface UserDashboardProps {
     allPlans: Plan[];
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
+    individualPlanningRequests?: PlanningPermissionRequest[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
@@ -35,9 +36,24 @@ interface UserDashboardProps {
 }
 
 export function UserDashboard({ 
-    userId, allEntries, allDoctors, allPlans, allNonCallDays, allTimeLogs, onDeleteEntry = () => {}, isAdminView = false, userMap,
-    onAddDoctor = () => {}, onAddDoctorsBulk = () => {}, onUpdateDoctor = () => {}, onDeleteDoctor = () => {}, onDeleteDoctorsBulk = () => {},
-    onFetchUserData, selectedMonth = format(new Date(), 'yyyy-MM'), onMonthChange
+    userId, 
+    allEntries = [], 
+    allDoctors = [], 
+    allPlans = [], 
+    allNonCallDays = [], 
+    allTimeLogs = [], 
+    individualPlanningRequests = [],
+    onDeleteEntry = () => {}, 
+    isAdminView = false, 
+    userMap,
+    onAddDoctor = () => {}, 
+    onAddDoctorsBulk = () => {}, 
+    onUpdateDoctor = () => {}, 
+    onDeleteDoctor = () => {}, 
+    onDeleteDoctorsBulk = () => {},
+    onFetchUserData, 
+    selectedMonth = format(new Date(), 'yyyy-MM'), 
+    onMonthChange
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('submitted');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -60,7 +76,7 @@ export function UserDashboard({
     }, [userId, selectedMonth, onFetchUserData]);
     
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/20 p-2 rounded-xl border">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-fit">
                     <TabsList className="bg-transparent p-1 grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-2">
@@ -91,28 +107,27 @@ export function UserDashboard({
                 </Button>
             </div>
             
-            <TabsContent value="summary" className="mt-0">
+            <TabsContent value="summary" className="mt-0 w-full">
                 <CallSummary entries={allEntries} doctors={allDoctors} nonCallDays={allNonCallDays} timeLogs={allTimeLogs} />
             </TabsContent>
             
-            <TabsContent value="submitted" className="mt-0">
+            <TabsContent value="submitted" className="mt-0 w-full">
                 <SubmittedList 
                     entries={allEntries} 
                     doctors={allDoctors} 
                     onDelete={onDeleteEntry} 
                     onEdit={() => {}} 
                     readOnly={!isAdminView} 
-                    userMap={userMap}
                     selectedMonth={selectedMonth}
                     onMonthChange={onMonthChange}
                 />
             </TabsContent>
             
-            <TabsContent value="planning" className="mt-0">
+            <TabsContent value="planning" className="mt-0 w-full">
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans} 
-                    planningRequests={[]} 
+                    planningRequests={individualPlanningRequests} 
                     onRequestUnlock={async () => false} 
                     entries={allEntries} 
                     offlineEntries={[]} 
@@ -128,7 +143,7 @@ export function UserDashboard({
                 />
             </TabsContent>
             
-            <TabsContent value="master" className="mt-0">
+            <TabsContent value="master" className="mt-0 w-full">
                 <MasterList 
                     doctors={allDoctors} 
                     entries={allEntries} 
