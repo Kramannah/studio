@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -31,7 +30,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const email = (user.email ?? "").toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
            email === 'mbustamante@hovidinc.com' || 
-           ADMIN_EMAILS.some(e => e.toLowerCase() === email) ||
+           ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
            profile?.role === 'Admin' || profile?.role === 'Manager';
   }, [user, profile]);
 
@@ -85,7 +84,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const { start, end } = getMonthRangeISO(month);
 
     try {
-        // Individual sequential fetches to ensure stability and precise monthly filtering (Low Cost)
+        // Sequential surgical fetches to ensure stability and precise monthly filtering (Low Cost & Accurate)
         const entriesSnap = await getDocs(query(
             collection(db!, "coverageEntries"), 
             where("userId", "==", uid),

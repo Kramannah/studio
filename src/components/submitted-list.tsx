@@ -1,13 +1,12 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay, addMonths, subMonths } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useCallback } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History, Loader2, FileSpreadsheet, Maximize2, Calendar as CalendarIcon, List as ListIcon, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -19,7 +18,8 @@ import { db } from "@/lib/firebase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { cn, parseAnyDate } from "@/lib/utils";
+import * as XLSX from 'xlsx';
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
     <div className="space-y-1">
@@ -51,36 +51,52 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
     const isEditable = useMemo(() => {
         if (readOnly) return false;
         try {
-            return isToday(parseISO(entry.submittedAt));
+            const date = parseAnyDate(entry.submittedAt);
+            return date ? isToday(date) : false;
         } catch (e) { return false; }
     }, [entry.submittedAt, readOnly]);
+
+    const formattedDate = useMemo(() => {
+        const date = parseAnyDate(entry.coverageDate || entry.submittedAt);
+        return date ? format(date, "MMM do, yyyy") : 'N/A';
+    }, [entry.coverageDate, entry.submittedAt]);
+
+    const formattedTime = useMemo(() => {
+        const date = parseAnyDate(entry.submittedAt);
+        return date ? format(date, "h:mm a") : 'N/A';
+    }, [entry.submittedAt]);
 
     return (
         <React.Fragment>
             <TableRow className={cn("h-16 transition-colors border-b", isOpen ? "bg-muted/40" : "hover:bg-muted/20")}>
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
-                        <span className="font-bold text-base leading-tight">{entry.firstName} {entry.lastName}</span>
+                        <span className="font-bold text-sm leading-tight uppercase">{entry.firstName} {entry.lastName}</span>
                         <span className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">{entry.specialty || "PROVIDER"}</span>
                     </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                    <span className="text-sm font-bold uppercase tracking-tight opacity-80">{entry.clinic || "No Clinic Data"}</span>
+                    <span className="text-xs font-bold uppercase tracking-tight opacity-80">{entry.clinic || "No Clinic Data"}</span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                     <div className="flex flex-col">
-                        <span className="text-sm font-bold">{entry.submittedAt ? format(parseISO(entry.submittedAt), "MMM do,") : 'N/A'}</span>
-                        <span className="text-[10px] text-muted-foreground font-bold">{entry.submittedAt ? format(parseISO(entry.submittedAt), "yyyy") : ''}</span>
+                        <span className="text-xs font-black">{formattedDate}</span>
+                    </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-black">{formattedTime}</span>
+                        <span className="text-[10px] text-muted-foreground font-black uppercase tracking-tighter">SUBMITTED</span>
                     </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-center">
-                    {doctor?.frequency && <Badge variant="outline" className="font-black border-2 h-7 w-10 flex items-center justify-center rounded-full text-xs">{doctor.frequency}</Badge>}
+                    {doctor?.frequency && <Badge variant="outline" className="font-black border-2 h-7 w-10 flex items-center justify-center rounded-full text-[10px]">{doctor.frequency}</Badge>}
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
                         {entry.photos?.[0] && (
                             <div 
-                                className="h-9 w-12 rounded-md overflow-hidden border-2 border-primary/20 cursor-pointer hover:scale-105 transition-transform relative group bg-muted"
+                                className="h-9 w-12 rounded-md overflow-hidden border-2 border-primary/20 cursor-pointer hover:scale-105 transition-transform relative group bg-muted shadow-sm"
                                 onClick={() => onPreview(entry.photos![0], `Proof: ${entry.firstName}`)}
                             >
                                 <Image src={entry.photos[0]} alt="proof" fill className="object-cover" />
@@ -128,7 +144,7 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly, onShowHistory, o
             </TableRow>
             {isOpen && (
                 <TableRow className="bg-muted/10 border-b hover:bg-muted/10">
-                    <TableCell colSpan={6} className="p-0">
+                    <TableCell colSpan={7} className="p-0">
                         <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-12 animate-in slide-in-from-top-2 duration-200">
                             <div className="space-y-6">
                                 <h4 className="text-sm font-black text-primary font-headline tracking-tight mb-4">Pre-call Plan</h4>
@@ -207,7 +223,13 @@ function DoctorHistoryDialog({ doctorName, isOpen, onOpenChange }: {
     );
 }
 
-export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, readOnly = false }: { entries: CoverageEntry[], doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) {
+export function SubmittedList({ 
+    entries = [], doctors = [], onDelete, onEdit, readOnly = false,
+    selectedMonth = format(new Date(), 'yyyy-MM'), onMonthChange
+}: { 
+    entries: CoverageEntry[], doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean,
+    selectedMonth?: string, onMonthChange?: (m: string) => void
+}) {
     const [searchQuery, setSearchQuery] = useState("");
     const [historyDoctor, setHistoryDoctor] = useState<{ first: string, last: string } | null>(null);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -219,35 +241,85 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
         const q = (searchQuery || "").toLowerCase().trim();
         if (q && !`${e.firstName} ${e.lastName} ${e.clinic}`.toLowerCase().includes(q)) return false;
         if (activeTab === 'calendar' && selectedDate) {
-            try { return isSameDay(parseISO(e.submittedAt), selectedDate); } catch (e) { return false; }
+            const entryDate = parseAnyDate(e.coverageDate || e.submittedAt);
+            return entryDate ? isSameDay(entryDate, selectedDate) : false;
         }
         return true;
     }), [entries, searchQuery, activeTab, selectedDate]);
 
-    const entryDates = useMemo(() => entries.map(e => { try { return parseISO(e.submittedAt); } catch (e) { return null; } }).filter(Boolean) as Date[], [entries]);
+    const entryDates = useMemo(() => entries.map(e => parseAnyDate(e.coverageDate || e.submittedAt)).filter(Boolean) as Date[], [entries]);
+
+    const handleMonthNavigate = (dir: 'prev' | 'next') => {
+        if (!onMonthChange) return;
+        const current = parseISO(selectedMonth + "-01");
+        const next = dir === 'prev' ? subMonths(current, 1) : addMonths(current, 1);
+        onMonthChange(format(next, 'yyyy-MM'));
+    }
+
+    const handleExportExcel = () => {
+        const data = filtered.map(e => ({
+            "Provider": `${e.firstName} ${e.lastName}`,
+            "Specialty": e.specialty,
+            "Clinic": e.clinic,
+            "Date": e.coverageDate ? format(parseISO(e.coverageDate), "yyyy-MM-dd") : "N/A",
+            "Submitted": e.submittedAt ? format(parseISO(e.submittedAt), "Pp") : "N/A",
+            "Type": e.coverageType,
+            "Objective": e.callObjective
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Reports");
+        XLSX.writeFile(wb, `Reports_${selectedMonth}.xlsx`);
+    }
 
     return (
       <div className="space-y-6 animate-in fade-in duration-500 w-full">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <h2 className="text-2xl font-bold font-headline text-primary">Submitted Reports</h2>
+            <Button variant="outline" size="sm" onClick={handleExportExcel} className="font-headline gap-2 border-2 h-10">
+                <FileSpreadsheet size={16} /> Export Excel
+            </Button>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[320px] h-12">
-                    <TabsTrigger value="list" className="rounded-lg font-headline flex items-center gap-2"><ListIcon size={16} /> List</TabsTrigger>
-                    <TabsTrigger value="calendar" className="rounded-lg font-headline flex items-center gap-2"><CalendarIcon size={16} /> Calendar</TabsTrigger>
-                </TabsList>
-                <div className="relative w-full max-md:max-w-md"><Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" /><Input placeholder="Search by name or clinic..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-12 h-12 text-lg rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" /></div>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-4">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1 bg-muted/50 border-2 rounded-lg p-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMonthNavigate('prev')}><ChevronLeft size={16}/></Button>
+                        <div className="flex items-center gap-2 px-3 text-xs font-black uppercase tracking-widest text-primary min-w-[120px] justify-center">
+                            {format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMonthNavigate('next')}><ChevronRight size={16}/></Button>
+                    </div>
+
+                    <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-[180px] h-10">
+                        <TabsTrigger value="list" className="rounded-lg font-headline flex items-center gap-1 text-xs"><ListIcon size={14} /> List</TabsTrigger>
+                        <TabsTrigger value="calendar" className="rounded-lg font-headline flex items-center gap-1 text-xs"><CalendarIcon size={14} /> Calendar</TabsTrigger>
+                    </TabsList>
+                </div>
+                <div className="relative w-full max-md:max-w-md">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input placeholder="Search by name or clinic..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-12 h-11 text-sm rounded-xl focus-visible:ring-primary border-2 shadow-sm bg-card" />
+                </div>
             </div>
 
             <TabsContent value="list" className="mt-0 w-full">
                 <Card className="shadow-lg border-2 rounded-xl overflow-hidden w-full">
                     <Table>
-                        <TableHeader><TableRow className="bg-muted/50 hover:bg-muted/50 h-14"><TableHead className="font-bold text-foreground">Provider</TableHead><TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead><TableHead className="font-bold text-foreground">Date</TableHead><TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead><TableHead className="font-bold text-foreground">Proof</TableHead><TableHead className="text-right font-bold text-foreground">Actions</TableHead></TableRow></TableHeader>
+                        <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50 h-14">
+                                <TableHead className="font-bold text-foreground pl-6">Provider</TableHead>
+                                <TableHead className="hidden md:table-cell font-bold text-foreground">Clinic</TableHead>
+                                <TableHead className="font-bold text-foreground">Date</TableHead>
+                                <TableHead className="font-bold text-foreground">Submitted</TableHead>
+                                <TableHead className="hidden sm:table-cell font-bold text-center text-foreground">Target</TableHead>
+                                <TableHead className="font-bold text-foreground">Proof</TableHead>
+                                <TableHead className="text-right font-bold text-foreground pr-6">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
                         <TableBody>
                             {filtered.length > 0 ? (filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} onShowHistory={(f, l) => { setHistoryDoctor({first:f,last:l}); setIsHistoryOpen(true); }} onPreview={(s, t) => setPreviewData({src:s,title:t})} />)) : (
-                                <TableRow><TableCell colSpan={6} className="h-72 text-center text-muted-foreground text-lg italic">No reports found matching your filters.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="h-72 text-center text-muted-foreground text-lg italic">No reports found for this month.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

@@ -20,13 +20,24 @@ export function isPastWeek(date: Date): boolean {
   return isBefore(startOfTargetWeek, startOfThisWeek);
 }
 
+/**
+ * Robust date parser that handles ISO strings, Date objects, and Firestore Timestamps.
+ */
 export function parseAnyDate(date: any): Date | null {
   if (!date) return null;
   if (date instanceof Date) return isValid(date) ? date : null;
+  
+  // Handle Firestore Timestamp objects
+  if (typeof date === 'object' && date.seconds !== undefined) {
+    const d = new Date(date.seconds * 1000);
+    return isValid(d) ? d : null;
+  }
+
   if (typeof date === 'string') {
     const parsed = parseISO(date);
     return isValid(parsed) ? parsed : null;
   }
+  
   return null;
 }
 
