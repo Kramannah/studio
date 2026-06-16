@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -10,8 +10,6 @@ import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, LayoutGrid, ClipboardList, CalendarDays, UsersRound } from "lucide-react";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 
 interface UserDashboardProps {
     userId: string;
@@ -20,7 +18,6 @@ interface UserDashboardProps {
     allPlans: Plan[];
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
-    individualPlanningRequests?: PlanningPermissionRequest[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
@@ -30,9 +27,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string) => Promise<void>;
-    selectedMonth?: string;
-    onMonthChange?: (month: string) => void;
+    onFetchUserData?: (uid: string) => Promise<void>;
 }
 
 export function UserDashboard({ 
@@ -42,7 +37,6 @@ export function UserDashboard({
     allPlans = [], 
     allNonCallDays = [], 
     allTimeLogs = [], 
-    individualPlanningRequests = [],
     onDeleteEntry = () => {}, 
     isAdminView = false, 
     userMap,
@@ -51,29 +45,20 @@ export function UserDashboard({
     onUpdateDoctor = () => {}, 
     onDeleteDoctor = () => {}, 
     onDeleteDoctorsBulk = () => {},
-    onFetchUserData, 
-    selectedMonth = format(new Date(), 'yyyy-MM'), 
-    onMonthChange
+    onFetchUserData
 }: UserDashboardProps) {
-    const [activeTab, setActiveTab] = useState('submitted');
+    const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleRefresh = async () => {
         if (!onFetchUserData || !userId) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth);
+            await onFetchUserData(userId);
         } finally {
             setIsRefreshing(false);
         }
     };
-
-    // Auto-refresh when user or month changes to keep data consistent with selection
-    useEffect(() => {
-        if (userId && selectedMonth && onFetchUserData) {
-            onFetchUserData(userId, selectedMonth);
-        }
-    }, [userId, selectedMonth, onFetchUserData]);
     
     return (
         <div className="space-y-6 w-full">
@@ -95,16 +80,18 @@ export function UserDashboard({
                     </TabsList>
                 </Tabs>
 
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleRefresh} 
-                    disabled={isRefreshing}
-                    className="h-10 border-2 font-headline bg-background hover:bg-muted"
-                >
-                    <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
-                    {isRefreshing ? 'Syncing...' : 'Refresh Data'}
-                </Button>
+                {onFetchUserData && (
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleRefresh} 
+                        disabled={isRefreshing}
+                        className="h-10 border-2 font-headline"
+                    >
+                        <RefreshCw className={isRefreshing ? "animate-spin mr-2" : "mr-2"} size={16} />
+                        Sync Latest
+                    </Button>
+                )}
             </div>
             
             <TabsContent value="summary" className="mt-0 w-full">
@@ -112,22 +99,14 @@ export function UserDashboard({
             </TabsContent>
             
             <TabsContent value="submitted" className="mt-0 w-full">
-                <SubmittedList 
-                    entries={allEntries} 
-                    doctors={allDoctors} 
-                    onDelete={onDeleteEntry} 
-                    onEdit={() => {}} 
-                    readOnly={!isAdminView} 
-                    selectedMonth={selectedMonth}
-                    onMonthChange={onMonthChange}
-                />
+                <SubmittedList entries={allEntries} doctors={allDoctors} nonCallDays={allNonCallDays} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} />
             </TabsContent>
             
             <TabsContent value="planning" className="mt-0 w-full">
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans} 
-                    planningRequests={individualPlanningRequests} 
+                    planningRequests={[]} 
                     onRequestUnlock={async () => false} 
                     entries={allEntries} 
                     offlineEntries={[]} 
@@ -138,8 +117,6 @@ export function UserDashboard({
                     nonCallDays={allNonCallDays} 
                     onAddNonCallDay={() => {}} 
                     readOnly={true} 
-                    selectedMonth={selectedMonth} 
-                    onMonthChange={onMonthChange} 
                 />
             </TabsContent>
             

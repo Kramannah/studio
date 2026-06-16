@@ -7,10 +7,10 @@ import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { useQ4Allocation } from '@/hooks/use-q4-allocation';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
-import { isToday, parseISO, isValid, format, subMonths, addMonths } from "date-fns";
+import { isToday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
@@ -46,7 +46,6 @@ export default function Home() {
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState<View>('planning');
-  const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
@@ -70,21 +69,20 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  // Low Cost Update: Hooks now respect the selectedMonth parameter
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, refetch: refetchEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView), selectedMonth);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView));
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
-  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
-  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);
-  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning', selectedMonth);
+  const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage');
+  const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary');
+  const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning');
   const { allocations, usedQuantities: globalUsedQuantities } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', activeView === 'allocation' || activeView === 'coverage');
   
   const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
       try {
-          await Promise.all([syncAllOfflineEntries(), refreshPlans(), fetchTimeLogs(), fetchNonCallDays(), refetchEntries()]);
+          await Promise.all([syncAllOfflineEntries(), refreshPlans(), fetchTimeLogs(), fetchNonCallDays()]);
           toast({ title: "Sync Finished" });
       } catch (e) { toast({ variant: "destructive", title: "Sync Error" }); } finally { setIsManualSyncing(false); }
-  }, [syncAllOfflineEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchEntries, toast]);
+  }, [syncAllOfflineEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
@@ -126,12 +124,6 @@ export default function Home() {
     try { return isToday(parseISO(p.plannedDate)); } catch (e) { return false; }
   }), [plans]);
 
-  const handleMonthChange = (direction: 'prev' | 'next') => {
-      const current = parseISO(selectedMonth + "-01");
-      const nextDate = direction === 'prev' ? subMonths(current, 1) : addMonths(current, 1);
-      setSelectedMonth(format(nextDate, 'yyyy-MM'));
-  };
-
   if (!mounted || authLoading) return <div className="flex items-center justify-center min-h-screen bg-background"><RefreshCw className="w-12 h-12 animate-spin text-primary" /></div>;
   if (!user) return <LoginPage />;
 
@@ -142,7 +134,7 @@ export default function Home() {
     if (activeView === 'master' && (doctorsLoading && doctors.length === 0)) return <DynamicSkeleton />;
 
     switch (activeView) {
-      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
+      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} />;
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} />;
@@ -161,14 +153,6 @@ export default function Home() {
               <SidebarTrigger/><h1 className="text-xl font-bold md:text-2xl font-headline text-primary">SFE Offline</h1>
             </div>
             
-            <div className="hidden md:flex items-center gap-2 bg-muted/50 p-1 rounded-lg border">
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMonthChange('prev')}><ChevronLeft size={16}/></Button>
-                <div className="flex items-center gap-2 px-3 text-xs font-black uppercase tracking-widest text-primary">
-                    <CalendarIcon size={14} /> {format(parseISO(selectedMonth + "-01"), 'MMMM yyyy')}
-                </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMonthChange('next')}><ChevronRight size={16}/></Button>
-            </div>
-
             <div className="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={handleManualSync} disabled={isManualSyncing || !isOnline} className="font-headline hidden sm:flex">
                     <RefreshCw className={cn("mr-2", isManualSyncing && "animate-spin")} /> {isManualSyncing ? 'Syncing...' : 'Sync All'}

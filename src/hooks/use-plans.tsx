@@ -8,9 +8,8 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday } from 'date-fns';
 import { useAuth } from './use-auth';
-import { getMonthRangeISO } from '@/lib/utils';
 
-export const usePlans = (active: boolean = true, selectedMonth?: string) => {
+export const usePlans = (active: boolean = true) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [offlinePlans, setOfflinePlans] = useState<Plan[]>([]);
@@ -22,20 +21,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     if (!user || !db || !active) return;
     setLoading(true);
     try {
-      const { start, end } = getMonthRangeISO(selectedMonth);
-
-      const plansQuery = query(
-          collection(db, "plans"), 
-          where("userId", "==", user.uid),
-          where("plannedDate", ">=", start),
-          where("plannedDate", "<=", end),
-          limit(1000)
-      );
-      
-      const requestsQuery = query(
-          collection(db, "planningRequests"), 
-          where("userId", "==", user.uid)
-      );
+      const plansQuery = query(collection(db, "plans"), where("userId", "==", user.uid), limit(2000));
+      const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery),
@@ -49,7 +36,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     } finally {
         setLoading(false);
     }
-  }, [user, active, selectedMonth]);
+  }, [user, active]);
 
   useEffect(() => {
     if (active) fetchData();
