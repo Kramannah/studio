@@ -5,10 +5,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { isToday, isBefore, startOfToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 import { useAuth } from './use-auth';
-import { isToday, isBefore, startOfToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 
 const OFFLINE_PLANS_KEY = 'sfe-offline-plans-v2';
 
@@ -23,7 +23,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   
   const lastFetchedKeyRef = useRef<string | null>(null);
 
-  const getOfflineKey = useCallback(() => `${OFFLINE_PLANS_KEY}_${user?.uid}`, [user]);
+  const getOfflineKey = useCallback(() => `${OFFLINE_PLANS_KEY}_${user?.uid}`, [user?.uid]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -59,13 +59,13 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const plansQuery = query(
           collection(db, "plans"), 
           where("userId", "==", user.uid),
-          limit(2000)
+          limit(5000)
         );
         
         const requestsQuery = query(
             collection(db, "planningRequests"), 
             where("userId", "==", user.uid),
-            limit(200)
+            limit(500)
         );
         
         const [plansSnapshot, requestsSnapshot] = await Promise.all([
@@ -76,13 +76,20 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         const filteredPlans: Plan[] = [];
         plansSnapshot.forEach((doc) => {
           const data = doc.data() as Plan;
-          const date = parseAnyDate(data.plannedDate);
+          // Use parseAnyDate to handle both ISO strings and legacy Timestamps
+          const date = parseAnyDate(data.plannedDate || data.submittedAt);
           if (date && isValid(date) && isWithinInterval(date, interval)) {
               filteredPlans.push({ id: doc.id, ...data });
           }
         });
 
-        filteredPlans.sort((a, b) => a.plannedDate.localeCompare(b.plannedDate));
+        // Sort by actual date values for reliability
+        filteredPlans.sort((a, b) => {
+            const dA = parseAnyDate(a.plannedDate)?.getTime() || 0;
+            const dB = parseAnyDate(b.plannedDate)?.getTime() || 0;
+            return dA - dB;
+        });
+
         setMasterPlans(filteredPlans);
         lastFetchedKeyRef.current = fetchKey;
         
@@ -93,7 +100,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         setPlanningRequests(fetchedRequests);
 
       } catch (serverError: any) {
-        console.error("Plans fetch error:", serverError);
+        console.warn("Plans fetch error handled:", serverError);
       }
     }
     
@@ -177,9 +184,9 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   };
 
   const requestPlanningPermission = async (week: Date, reason: string) => {
-    if (!db) return false;
+    if (!db || !user) return false;
     const newRequest = {
-        userId: user?.uid,
+        userId: user.uid,
         weekStartDate: week.toISOString(),
         reason,
         status: 'pending',

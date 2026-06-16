@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, parseAnyDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { PlanningCalendar } from '@/components/planning-calendar';
 
@@ -55,7 +55,6 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
-  // [LOW_COST_UPDATE] Shared month state for targeted fetching
   const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
   useEffect(() => {
@@ -82,7 +81,6 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-  // [LOW_COST_UPDATE] Pass selectedMonth to all data hooks for targeted fetching
   const { 
     offlineEntries, 
     masterEntries, 
@@ -174,8 +172,8 @@ export default function Home() {
   const todaysPlans = useMemo(() => {
     if (!mounted) return [];
     return plans.filter(p => {
-        const plannedDate = typeof p.plannedDate === 'string' ? parseISO(p.plannedDate) : p.plannedDate;
-        return isValid(plannedDate) && isToday(plannedDate);
+        const plannedDate = parseAnyDate(p.plannedDate);
+        return plannedDate && isValid(plannedDate) && isToday(plannedDate);
     });
   },[plans, mounted]);
 
@@ -214,6 +212,8 @@ export default function Home() {
             onLogCall={handleLogPlannedCall} 
             nonCallDays={nonCallDays} 
             onAddNonCallDay={addNonCallDay} 
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
           />
         );
       case 'coverage': 

@@ -144,6 +144,8 @@ export function UserDashboard({
                     nonCallDays={allNonCallDays}
                     onAddNonCallDay={() => {}}
                     readOnly={true}
+                    selectedMonth={selectedMonth}
+                    onMonthChange={onMonthChange}
                 />
             </TabsContent>
             <TabsContent value="master" className="mt-0">
