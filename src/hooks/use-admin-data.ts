@@ -8,7 +8,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { getMonthRangeISO } from "@/lib/utils";
+import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
+import { isWithinInterval, parseISO, isValid } from "date-fns";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -60,11 +61,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchCol = async (name: string, filter: string[] | null) => {
             const colRef = collection(db!, name);
             if (!filter) {
-                const snap = await getDocs(query(colRef, limit(1000)));
+                const snap = await getDocs(query(colRef, limit(500)));
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             }
-            const snap = await getDocs(query(colRef, where("userId", "in", filter), limit(1000)));
-            return snap.docs.map(d => ({id: d.id, ...d.data()}));
+            // Firestore 'in' filter limited to 30 items
+            const chunks = [];
+            for (let i = 0; i < filter.length; i += 30) {
+                chunks.push(filter.slice(i, i + 30));
+            }
+            
+            const results: any[] = [];
+            for (const chunk of chunks) {
+                const snap = await getDocs(query(colRef, where("userId", "in", chunk), limit(500)));
+                results.push(...snap.docs.map(d => ({id: d.id, ...d.data()})));
+            }
+            return results;
         };
 
         const [ncd, pr] = await Promise.all([
@@ -78,105 +89,101 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
+  /**
+   * Helper to fetch a collection with index-error fallback.
+   * If a complex query fails (missing index), it falls back to a simpler userId query.
+   */
+  const fetchCollectionResilient = async (colName: string, uid: string, dateField: string, start: string, end: string) => {
+      const colRef = collection(db!, colName);
+      const interval = { start: parseISO(start), end: parseISO(end) };
+
+      try {
+          // Attempt 1: Optimized Monthly Query (Requires Composite Index)
+          // We check both 'userId' (standard) and 'uid' (legacy)
+          const snap = await getDocs(query(
+              colRef, 
+              where("userId", "==", uid),
+              where(dateField, ">=", start),
+              where(dateField, "<=", end),
+              limit(1000)
+          ));
+          
+          if (!snap.empty) return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+          // Fallback legacy field check (uid)
+          const legacySnap = await getDocs(query(
+              colRef, 
+              where("uid", "==", uid),
+              where(dateField, ">=", start),
+              where(dateField, "<=", end),
+              limit(1000)
+          ));
+          return legacySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      } catch (error: any) {
+          // If Attempt 1 fails (likely index error), perform Attempt 2: JS Filtering
+          console.warn(`Optimized fetch failed for ${colName}, falling back to JS filter. Error:`, error.code);
+          
+          // Simplified query (Only requires single-field index, which is automatic)
+          const basicSnap = await getDocs(query(
+              colRef, 
+              where("userId", "==", uid),
+              limit(1000)
+          ));
+
+          const results = basicSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          
+          // Filter by date range in JS
+          return results.filter(item => {
+              const d = parseAnyDate((item as any)[dateField] || (item as any).submittedAt);
+              return d && isValid(interval.start) && isValid(interval.end) && isWithinInterval(d, interval);
+          });
+      }
+  };
+
   const fetchUserData = useCallback(async (uid: string, month: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
     
+    // Clear previous view state to prevent flickering
+    setIndividualEntries([]);
+    setIndividualPlans([]);
+    setIndividualTimeLogs([]);
+    setIndividualNonCallDays([]);
+    setIndividualDoctors([]);
+
     const { start, end } = getMonthRangeISO(month);
 
     try {
-        // RESILIENT FETCH LOGIC for Veteran Accounts (CL-01, NL-02)
-        // 1. Try fetching by userId + coverageDate
-        let entriesSnap = await getDocs(query(
-            collection(db!, "coverageEntries"), 
-            where("userId", "==", uid),
-            where("coverageDate", ">=", start),
-            where("coverageDate", "<=", end),
-            limit(1000)
-        ));
+        // Fetch all relevant data for the PMR
+        const [entries, plans, logs, ncds, doctors] = await Promise.all([
+            fetchCollectionResilient("coverageEntries", uid, "coverageDate", start, end),
+            fetchCollectionResilient("plans", uid, "plannedDate", start, end),
+            fetchCollectionResilient("timeLogs", uid, "timeIn", start, end),
+            fetchCollectionResilient("nonCallDays", uid, "date", start, end),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1000)))
+        ]);
 
-        // 2. If nothing found, try searching by legacy 'uid' field + coverageDate
-        if (entriesSnap.empty) {
-            entriesSnap = await getDocs(query(
-                collection(db!, "coverageEntries"), 
-                where("uid", "==", uid),
-                where("coverageDate", ">=", start),
-                where("coverageDate", "<=", end),
-                limit(1000)
-            ));
-        }
+        setIndividualEntries(entries as any);
+        setIndividualPlans(plans as any);
+        setIndividualTimeLogs(logs as any);
+        setIndividualNonCallDays(ncds as any);
+        setIndividualDoctors(doctors.docs.map(d => ({ id: d.id, ...d.data() })) as any);
 
-        // 3. If still nothing, try searching by 'submittedAt' in case coverageDate is missing (Low Cost Fallback)
-        if (entriesSnap.empty) {
-            entriesSnap = await getDocs(query(
-                collection(db!, "coverageEntries"), 
-                where("userId", "==", uid),
-                where("submittedAt", ">=", start),
-                where("submittedAt", "<=", end),
-                limit(1000)
-            ));
-        }
-
-        // Fetch Plans with similar fallback logic
-        let plansSnap = await getDocs(query(
-            collection(db!, "plans"), 
-            where("userId", "==", uid),
-            where("plannedDate", ">=", start),
-            where("plannedDate", "<=", end),
-            limit(1000)
-        ));
-
-        if (plansSnap.empty) {
-            plansSnap = await getDocs(query(
-                collection(db!, "plans"), 
-                where("uid", "==", uid),
-                where("plannedDate", ">=", start),
-                where("plannedDate", "<=", end),
-                limit(1000)
-            ));
-        }
-
-        const logsSnap = await getDocs(query(
-            collection(db!, "timeLogs"), 
-            where("userId", "==", uid),
-            where("timeIn", ">=", start),
-            where("timeIn", "<=", end),
-            limit(500)
-        ));
-
-        const ncdsSnap = await getDocs(query(
-            collection(db!, "nonCallDays"), 
-            where("userId", "==", uid),
-            where("date", ">=", start),
-            where("date", "<=", end),
-            limit(500)
-        ));
-
-        const docsSnap = await getDocs(query(
-            collection(db!, "doctors"), 
-            where("userId", "==", uid),
-            limit(1000)
-        ));
-
-        const mapDocs = (s: any) => s.docs.map((doc: any) => ({id: doc.id, ...doc.data()}));
-        
-        const fetchedEntries = mapDocs(entriesSnap) as any;
-        setIndividualEntries(fetchedEntries);
-        setIndividualPlans(mapDocs(plansSnap) as any);
-        setIndividualTimeLogs(mapDocs(logsSnap) as any);
-        setIndividualNonCallDays(mapDocs(ncdsSnap) as any);
-        setIndividualDoctors(mapDocs(docsSnap) as any);
-
-        if (fetchedEntries.length === 0) {
-            toast({ title: "No Data Found", description: "No records found for this period." });
-        } else {
-            toast({ title: "Data Synced", description: `Loaded ${fetchedEntries.length} records.` });
+        if (entries.length > 0) {
+            toast({ title: "Data Loaded", description: `Found ${entries.length} reports for ${month}.` });
         }
 
     } catch (e: any) {
-        console.warn("User data fetch error", e);
-        toast({ variant: "destructive", title: "Fetch Error", description: "Database communication failed." });
-    } finally { setLoadingIndividual(false); }
+        console.error("Critical User Data Fetch Error:", e);
+        toast({ 
+            variant: "destructive", 
+            title: "Fetch Error", 
+            description: "The database could not be reached. Check your connection." 
+        });
+    } finally { 
+        setLoadingIndividual(false); 
+    }
   }, [active, isAuthorized, toast]);
 
   return { 
