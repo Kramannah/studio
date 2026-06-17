@@ -29,7 +29,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string, force?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
 }
@@ -61,13 +61,12 @@ export function UserDashboard({
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth);
+            await onFetchUserData(userId, selectedMonth, true);
         } finally {
             setIsRefreshing(false);
         }
     };
 
-    // Auto-fetch data when the user or month context changes to keep Admin views in sync
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             onFetchUserData(userId, selectedMonth);
@@ -77,7 +76,6 @@ export function UserDashboard({
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                {/* High-Fidelity Tab Bar aligned with reference image */}
                 <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
@@ -120,7 +118,6 @@ export function UserDashboard({
                     )}
                 </div>
                 
-                {/* Unified Tab Content Area: CRITICAL - Must be inside <Tabs> */}
                 <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 

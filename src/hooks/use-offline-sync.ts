@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 import { isValid, isWithinInterval, parseISO } from 'date-fns';
 
@@ -32,7 +32,7 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.1: Optimized for minimum reads with monthly targeted fetching.
+ * LOW-COST V2.2: Optimized for minimum reads with monthly synchronization.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -62,7 +62,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
         
-        // Cache is now month-specific to prevent state flickering
         const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
         const localMaster = localStorage.getItem(cacheKey);
         if (localMaster) setMasterEntries(JSON.parse(localMaster));
@@ -79,7 +78,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // Primary targeted query (Requires Index)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -91,19 +89,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      // Sort in memory to avoid index requirements for simple order
       fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
       
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Cache metadata-only version
-      const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
+      // Cache metadata to prevent storage limits
+      const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
         console.warn("Coverage fetch fallback triggered:", error);
-        // High-Horizon Fallback (No Index Required)
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
         const snap = await getDocs(fallbackQ);
         const interval = { start: parseISO(start), end: parseISO(end) };
         const fetched = snap.docs

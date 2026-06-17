@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -11,13 +11,12 @@ import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
 import { isValid, isWithinInterval, parseISO } from "date-fns";
 
-// LOW-COST V2: Singleton cache to prevent redundant reads for the same user+month
+// LOW-COST V2.2: Singleton cache to prevent redundant reads for the same user+month
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * useAdminData - Optimized for UID-based individual oversight.
- * LOW-COST V2: Performs server-side date range queries to minimize billed reads.
- * V2.1: Increased fallback limits to 5,000 to handle high-volume veteran accounts.
+ * useAdminData - Optimized for UID-based individual oversight with monthly synchronization.
+ * LOW-COST V2.2: Implements resilient monthly queries with a 3,000-record fallback to prevent timeouts.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -57,7 +56,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
         if (entry.reminderProducts) {
-            entry.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            entry.reminderProducts.forEach(rp => process(rp?.sampleName, rp?.quantity));
         }
     });
     return quantities;
@@ -66,7 +65,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchTeamApprovals = useCallback(async () => {
     if (!db || !active || !isAuthorized) return;
     
-    // Low-cost: Cache approvals for 5 minutes
     const cacheKey = 'approvals_list';
     const cached = ADMIN_SESSION_CACHE[cacheKey];
     if (cached && (Date.now() - cached.timestamp < 300000)) {
@@ -95,14 +93,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [active, isAuthorized]);
 
   /**
-   * fetchUserData - The core "Low Cost" engine.
-   * LOW-COST V2.1: Uses server-side filters with a high-volume (5000 doc) fallback for missing indexes.
+   * fetchUserData - The Monthly Low-Cost Engine.
+   * Target: Minimal Reads + High Stability.
    */
-  const fetchUserData = useCallback(async (uid: string, selectedMonth?: string, force = false) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
     const { start, end } = getMonthRangeISO(selectedMonth);
-    const cacheKey = `user_${uid}_${selectedMonth || 'current'}`;
+    const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
     if (!force && cached && (Date.now() - cached.timestamp < 600000)) {
@@ -119,7 +117,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 2000) => {
             const colRef = collection(db!, colName);
-            // TARGETED QUERY: Minimum Reads (requires index)
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
@@ -130,10 +127,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             try {
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
-            } catch (indexError) {
-                // HIGH-VOLUME FALLBACK: If index is missing, fetch 5,000 records to ensure data isn't missing for veteran accounts
-                console.warn(`Query ${colName} requires index. Fallback fetch triggered.`);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(5000));
+            } catch (error: any) {
+                // If Timeout or Index Error: Fallback to high-horizon scan (3,000 docs)
+                console.warn(`Admin query fallback for ${colName}:`, error.message);
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(3000));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
@@ -144,10 +141,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         };
 
-        const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 2000),
-            fetchModule("plans", "plannedDate", 2000),
-            fetchModule("timeLogs", "timeIn", 500),
+        // Fetch in smaller groups to prevent broad timeouts
+        const [entries, plans, logs] = await Promise.all([
+            fetchModule("coverageEntries", "coverageDate", 2500),
+            fetchModule("plans", "plannedDate", 2500),
+            fetchModule("timeLogs", "timeIn", 500)
+        ]);
+
+        const [ncds, doctors, requests] = await Promise.all([
             fetchModule("nonCallDays", "date", 200),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
@@ -172,12 +173,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
-        if (selectedMonth && force) {
+        if (force) {
             toast({ title: "Sync Complete", description: `Updated dataset for ${selectedMonth}.` });
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error("Critical User Data Fetch Error:", e);
-        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed for this representative." });
+        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication timed out. Please try again." });
     } finally { 
         setLoadingIndividual(false); 
     }

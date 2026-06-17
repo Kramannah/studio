@@ -5,13 +5,14 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths, isValid, parseISO, isWithinInterval } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, startOfMonth, endOfMonth, subMonths, addMonths } from 'firebase/firestore';
+import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.1: Restricts plan fetching to a specific date range with targeted selection.
+ * LOW-COST V2.2: Restricts plan fetching to a specific month for historical accuracy.
+ * Ensures high-volume accounts like VIS-06 see all plotted calls.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -32,12 +33,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     setLoading(true);
     
     try {
-      // Calculate a range that covers the selected month +/- 1 month for context
       const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
       const rangeStart = startOfMonth(subMonths(refDate, 1)).toISOString();
       const rangeEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
 
-      // Primary targeted query (Requires Index)
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid),
@@ -53,10 +52,9 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
-        getDocs(plansQuery).catch(async (indexError) => {
-           console.warn("Plans range query fallback triggered:", indexError);
-           // High-horizon fallback
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
+        getDocs(plansQuery).catch(async (error) => {
+           console.warn("Plans range query fallback triggered:", error.message);
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            
