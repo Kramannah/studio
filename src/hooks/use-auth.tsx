@@ -29,9 +29,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    // RESILIENCY: 5-second hard timeout for initial loading
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 8000);
+    }, 5000);
 
     if (!auth) {
         setLoading(false);
@@ -51,6 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (firebaseUser && db) {
         const profileRef = doc(db, "userProfiles", firebaseUser.uid);
+        // Sync profile data but don't let it block the main app entry indefinitely
         unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
@@ -60,7 +62,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false);
           clearTimeout(timer);
         }, (err) => {
-          console.error("Profile sync error:", err);
+          console.warn("Profile sync delay/error:", err);
+          // Still clear loading so user isn't stuck
           setLoading(false);
           clearTimeout(timer);
         });
@@ -93,7 +96,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     profile,
     loading,
     logout
-  }), [user, profile, loading]);
+  }), [user, profile, loading, logout]);
 
   return (
     <AuthContext.Provider value={contextValue}>

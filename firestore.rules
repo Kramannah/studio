@@ -14,7 +14,7 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
     }
 
-    // Role-based Access Logic
+    // Role-based Access Logic - Fast path for internal staff
     function hasInternalAccess() {
       if (!isSignedIn()) return false;
       let profile = getProfile();
@@ -29,7 +29,7 @@ service cloud.firestore {
     function isAdminFallback() {
       let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
       let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
-      return request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails;
+      return isSignedIn() && (request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails);
     }
 
     // Universal Read/Write Check
@@ -81,7 +81,8 @@ service cloud.firestore {
     }
     
     match /userProfiles/{id} {
-      allow read, list: if isSignedIn();
+      // Optimization: Users can always read their own profile immediately
+      allow read, list: if isSignedIn() && (request.auth.uid == id || hasInternalAccess() || isAdminFallback());
       allow write: if hasInternalAccess() || isAdminFallback() || (isSignedIn() && request.auth.uid == id);
     }
   }
