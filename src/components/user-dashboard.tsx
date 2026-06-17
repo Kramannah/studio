@@ -67,7 +67,7 @@ export function UserDashboard({
         }
     };
 
-    // Auto-fetch when selectedMonth changes or userId changes
+    // Automatically synchronize the dashboard when user or month context changes
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             onFetchUserData(userId, selectedMonth);
@@ -77,7 +77,7 @@ export function UserDashboard({
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                {/* Design-Matching Tab Bar */}
+                {/* High-Fidelity Tab Navigation matching screenshot */}
                 <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
@@ -120,7 +120,8 @@ export function UserDashboard({
                     )}
                 </div>
                 
-                <div className="pt-2">
+                {/* Unified Tab Content Area */}
+                <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 
                             entries={allEntries} 
