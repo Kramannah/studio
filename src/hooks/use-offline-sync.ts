@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -83,7 +82,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(2000)
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);

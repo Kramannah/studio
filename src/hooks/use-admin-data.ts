@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -115,7 +114,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 1500) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -129,7 +128,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
                 // FALLBACK: If timeout or missing index, fetch broadly but with a safe limit
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(1500));
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(3000));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
@@ -141,14 +140,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 1500),
-            fetchModule("plans", "plannedDate", 1500),
+            fetchModule("coverageEntries", "coverageDate", 3000),
+            fetchModule("plans", "plannedDate", 3000),
             fetchModule("timeLogs", "timeIn", 300)
         ]);
 
         const [ncds, doctors, requests] = await Promise.all([
             fetchModule("nonCallDays", "date", 100),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(50))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 

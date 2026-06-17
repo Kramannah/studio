@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -110,20 +109,20 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("coverageDate", ">=", startOfYear),
-                        limit(2000) 
+                        limit(3000) 
                     ));
                 } else {
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("userId", "==", user.uid),
                         where("coverageDate", ">=", startOfYear),
-                        limit(1000)
+                        limit(3000)
                     ));
                 }
             } catch (indexError) {
                 console.warn("Usage scan fallback triggered. Scanning larger batch.");
                 // Fallback: Broad UID scan with memory filter
-                const q = isManagerial ? query(collection(db!, "coverageEntries"), limit(5000)) : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
+                const q = isManagerial ? query(collection(db!, "coverageEntries"), limit(3000)) : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(3000));
                 entriesSnap = await getDocs(q);
             }
 
