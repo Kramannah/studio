@@ -186,6 +186,18 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
         }).filter(Boolean) as Date[];
     }, [entries]);
 
+    const entriesCountByDate = useMemo(() => {
+        const counts: Record<string, number> = {};
+        (entries || []).forEach(e => {
+            const d = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
+            if (isValid(d)) {
+                const dateStr = format(d, 'yyyy-MM-dd');
+                counts[dateStr] = (counts[dateStr] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [entries]);
+
     const handleExportExcel = () => {
         const data = filtered.map(e => ({
             "Provider": `${e.firstName} ${e.lastName}`,
@@ -250,6 +262,22 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                             }}
                             modifiersStyles={{
                                 submitted: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' }
+                            }}
+                            components={{
+                                DayContent: ({ date }) => {
+                                    const dateStr = format(date, 'yyyy-MM-dd');
+                                    const count = entriesCountByDate[dateStr];
+                                    return (
+                                        <div className="relative flex items-center justify-center w-full h-full">
+                                            {date.getDate()}
+                                            {count > 0 && (
+                                                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] text-primary-foreground font-black shadow-sm">
+                                                    {count}
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                },
                             }}
                         />
                     </Card>
@@ -337,4 +365,3 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
       </div>
     );
 }
-
