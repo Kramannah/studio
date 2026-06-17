@@ -9,22 +9,26 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Role-based Access Logic - ULTRA-OPTIMIZED FOR VETERAN ACCOUNTS
-    // Short-circuits instantly if the user is the owner to prevent rule engine timeouts.
+    // Optimized for Veteran accounts with 3,000+ records
     function canAccessData(docUserId) {
       if (!isSignedIn()) return false;
       
       // PRIORITY 1: Ownership (Instant Short-circuit)
-      // This is the fastest path and prevents crashes for users with 3,000+ records.
       if (docUserId == request.auth.uid) return true;
       
-      // PRIORITY 2: Admin/Internal Role checks (Manager oversight)
-      // Only executed if the user is NOT the owner.
-      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
-      if (request.auth.token.get('email', '').lower() in adminEmails) return true;
+      // PRIORITY 2: Administrative / Special PMR Access
+      // Whitelisted emails bypass expensive exists/get lookups to prevent Rule timeouts
+      let authorizedEmails = [
+        "mbustamante@hovidinc.com", 
+        "admin@hovidinc.com", 
+        "wbmaralit@hovidinc.com",
+        "kgpangan@hovidinc.com", // NL-02
+        "pjramos@hovidinc.com"   // CL-01
+      ];
+      if (request.auth.token.get('email', '').lower() in authorizedEmails) return true;
       
+      // PRIORITY 3: Role-based Lookups (Manager oversight)
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
-      // Use exists check to prevent evaluation crashes on missing veteran profiles
       return exists(profilePath) && (
         get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
       );
@@ -33,7 +37,11 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        request.auth.token.get('email', '').lower() in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"] ||
+        canAccessData(resource.data.userId)
+      );
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
     }
