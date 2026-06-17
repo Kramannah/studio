@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -28,7 +29,7 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
 
@@ -91,7 +92,6 @@ export default function AdminPage() {
         allNonCallDaysIndividual,
         individualPlanningRequests,
         individualUsedQuantities,
-        individualAvailableMonths,
         allNonCallDays,
         allPlanningRequests,
         updateNonCallDayStatus,
@@ -107,12 +107,12 @@ export default function AdminPage() {
         
         if (activeTab === 'district-reports') {
             if (selectedUserId) {
-                fetchUserData(selectedUserId, selectedMonth);
+                fetchUserData(selectedUserId);
             }
         } else if (activeTab === 'approvals' && !isMarketingOrHR) {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedMonth, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
+    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -345,7 +345,6 @@ export default function AdminPage() {
                                 allNonCallDays={allNonCallDaysIndividual}
                                 allTimeLogs={individualTimeLogs}
                                 individualPlanningRequests={individualPlanningRequests}
-                                individualAvailableMonths={individualAvailableMonths}
                                 onDeleteEntry={() => {}}
                                 usedQuantities={individualUsedQuantities}
                                 userMap={mergedUserMap}
@@ -361,7 +360,7 @@ export default function AdminPage() {
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
                                 <Search className="w-10 h-10 text-primary mb-4" />
                                 <AlertTitle className="font-headline text-xl">Representative Selection Required</AlertTitle>
-                                <AlertDescription className="text-lg">Please select a specific representative from the list above to view their individual Submitted Coverage records and masterlist.</AlertDescription>
+                                <AlertDescription className="text-lg">Please select a specific representative from the list above to view their individual activity dashboard.</AlertDescription>
                             </Alert>
                         ) : (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">

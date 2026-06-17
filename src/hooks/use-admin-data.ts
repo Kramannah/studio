@@ -18,6 +18,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const [individualPlans, setIndividualPlans] = useState<Plan[]>([]);
   const [individualTimeLogs, setIndividualTimeLogs] = useState<any[]>([]);
   const [individualNonCallDays, setIndividualNonCallDays] = useState<NonCallDay[]>([]);
+  const [individualPlanningRequests, setIndividualPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   
   const [allNonCallDays, setAllNonCallDays] = useState<NonCallDay[]>([]);
   const [allPlanningRequests, setAllPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
@@ -42,6 +43,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         .map(([uid, _]) => uid);
     return Array.from(new Set([...hardcoded, ...dynamic]));
   }, [userProfiles]);
+
+  const individualUsedQuantities = useMemo(() => {
+    const quantities: Record<string, number> = {};
+    individualEntries.forEach(entry => {
+        const process = (name?: string, qty?: number) => {
+            const safeName = (name ?? "").toLowerCase().trim();
+            if (!safeName) return;
+            const safeQty = Math.round(Number(qty || 0));
+            if (!isNaN(safeQty) && safeQty !== 0) quantities[safeName] = (quantities[safeName] || 0) + safeQty;
+        };
+        process(entry.primarySampleName, entry.primaryProductQty);
+        process(entry.secondarySampleName, entry.secondaryProductQty);
+        if (entry.reminderProducts) {
+            entry.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+        }
+    });
+    return quantities;
+  }, [individualEntries]);
 
   const fetchTeamApprovals = useCallback(async () => {
     if (!user || !db || !active || !isAuthorized) return;
@@ -90,12 +109,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
     try {
-        const [entries, plans, logs, ncds, doctors] = await Promise.all([
+        const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)))
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
         ]);
 
         setIndividualEntries(entries.docs.map(d => ({id: d.id, ...d.data()})) as CoverageEntry[]);
@@ -103,6 +123,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualTimeLogs(logs.docs.map(d => ({id: d.id, ...d.data()})));
         setIndividualNonCallDays(ncds.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[]);
         setIndividualDoctors(doctors.docs.map(d => ({id: d.id, ...d.data()})) as Doctor[]);
+        setIndividualPlanningRequests(requests.docs.map(d => ({id: d.id, ...d.data()})) as PlanningPermissionRequest[]);
     } catch (e) {
         console.warn("User data fetch error", e);
     } finally { setLoadingIndividual(false); }
@@ -114,6 +135,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     allPlans: individualPlans, 
     allTimeLogs: individualTimeLogs, 
     allNonCallDaysIndividual: individualNonCallDays,
+    individualPlanningRequests,
+    individualUsedQuantities,
     allNonCallDays, 
     allPlanningRequests, 
     loadingIndividual, 

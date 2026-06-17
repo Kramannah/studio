@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -18,6 +18,7 @@ interface UserDashboardProps {
     allPlans: Plan[];
     allNonCallDays: NonCallDay[];
     allTimeLogs: TimeLog[];
+    individualPlanningRequests?: PlanningPermissionRequest[];
     onDeleteEntry: (id: string) => void;
     usedQuantities: Record<string, number>;
     isAdminView?: boolean;
@@ -28,6 +29,8 @@ interface UserDashboardProps {
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
     onFetchUserData?: (uid: string) => Promise<void>;
+    selectedMonth?: string;
+    onMonthChange?: (month: string) => void;
 }
 
 export function UserDashboard({ 
@@ -37,6 +40,7 @@ export function UserDashboard({
     allPlans = [], 
     allNonCallDays = [], 
     allTimeLogs = [], 
+    individualPlanningRequests = [],
     onDeleteEntry = () => {}, 
     isAdminView = false, 
     userMap,
@@ -45,7 +49,9 @@ export function UserDashboard({
     onUpdateDoctor = () => {}, 
     onDeleteDoctor = () => {}, 
     onDeleteDoctorsBulk = () => {},
-    onFetchUserData
+    onFetchUserData,
+    selectedMonth,
+    onMonthChange
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -62,19 +68,19 @@ export function UserDashboard({
     
     return (
         <div className="space-y-6 w-full">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/20 p-2 rounded-xl border">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/20 p-2 rounded-xl border shadow-sm">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-fit">
                     <TabsList className="bg-transparent p-1 grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-2">
-                        <TabsTrigger value="summary" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                        <TabsTrigger value="summary" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
                             <LayoutGrid size={16} /> Call Summary
                         </TabsTrigger>
-                        <TabsTrigger value="submitted" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                        <TabsTrigger value="submitted" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
                             <ClipboardList size={16} /> Reports
                         </TabsTrigger>
-                        <TabsTrigger value="planning" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                        <TabsTrigger value="planning" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
                             <CalendarDays size={16} /> Planning
                         </TabsTrigger>
-                        <TabsTrigger value="master" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                        <TabsTrigger value="master" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
                             <UsersRound size={16} /> Masterlist
                         </TabsTrigger>
                     </TabsList>
@@ -86,27 +92,34 @@ export function UserDashboard({
                         size="sm" 
                         onClick={handleRefresh} 
                         disabled={isRefreshing}
-                        className="h-10 border-2 font-headline"
+                        className="h-10 border-2 font-headline shadow-sm hover:bg-background"
                     >
                         <RefreshCw className={isRefreshing ? "animate-spin mr-2" : "mr-2"} size={16} />
-                        Sync Latest
+                        Refresh Data
                     </Button>
                 )}
             </div>
             
-            <TabsContent value="summary" className="mt-0 w-full">
+            <TabsContent value="summary" className="mt-0 w-full animate-in fade-in duration-300">
                 <CallSummary entries={allEntries} doctors={allDoctors} nonCallDays={allNonCallDays} timeLogs={allTimeLogs} />
             </TabsContent>
             
-            <TabsContent value="submitted" className="mt-0 w-full">
-                <SubmittedList entries={allEntries} doctors={allDoctors} nonCallDays={allNonCallDays} onDelete={onDeleteEntry} onEdit={() => {}} readOnly={!isAdminView} />
+            <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in duration-300">
+                <SubmittedList 
+                    entries={allEntries} 
+                    doctors={allDoctors} 
+                    nonCallDays={allNonCallDays} 
+                    onDelete={onDeleteEntry} 
+                    onEdit={() => {}} 
+                    readOnly={!isAdminView} 
+                />
             </TabsContent>
             
-            <TabsContent value="planning" className="mt-0 w-full">
+            <TabsContent value="planning" className="mt-0 w-full animate-in fade-in duration-300">
                 <PlanningCalendar 
                     doctors={allDoctors} 
                     plans={allPlans} 
-                    planningRequests={[]} 
+                    planningRequests={individualPlanningRequests} 
                     onRequestUnlock={async () => false} 
                     entries={allEntries} 
                     offlineEntries={[]} 
@@ -117,10 +130,12 @@ export function UserDashboard({
                     nonCallDays={allNonCallDays} 
                     onAddNonCallDay={() => {}} 
                     readOnly={true} 
+                    selectedMonth={selectedMonth}
+                    onMonthChange={onMonthChange}
                 />
             </TabsContent>
             
-            <TabsContent value="master" className="mt-0 w-full">
+            <TabsContent value="master" className="mt-0 w-full animate-in fade-in duration-300">
                 <MasterList 
                     doctors={allDoctors} 
                     entries={allEntries} 
