@@ -1,10 +1,11 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
 import { safeStorageSet } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
@@ -63,17 +64,21 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
     try {
-      const q = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(2000));
+      // Increased limit and prioritized most recent submissions
+      const q = query(
+        collection(db!, "coverageEntries"), 
+        where("userId", "==", userId), 
+        orderBy("submittedAt", "desc"),
+        limit(5000)
+      );
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = [];
       querySnapshot.forEach(docSnap => {
         fetched.push({ id: docSnap.id, ...docSnap.data() } as CoverageEntry);
       });
-      fetched.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(fetched);
       
       // Create a metadata-only version for the cache to save LocalStorage quota
-      // We strip the heavy base64 images for veteran accounts with thousands of visits
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(lightEntries));
     } catch (error) {

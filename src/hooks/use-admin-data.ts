@@ -87,22 +87,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchModule = async (colName: string, dateField: string) => {
             const colRef = collection(db!, colName);
             try {
-                // Attempt targeted query
+                // Attempt targeted query with higher limit for high-volume days
                 const q = query(
                     colRef, 
                     where("userId", "==", uid), 
                     where(dateField, ">=", start), 
                     where(dateField, "<=", end), 
-                    limit(1000)
+                    limit(5000)
                 );
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (e: any) {
-                // FALLBACK: Fetch batch for veteran accounts
+                // FALLBACK: Fetch broad batch for veteran accounts with many historical records
                 const qFallback = query(
                     colRef, 
                     where("userId", "==", uid), 
-                    limit(2000)
+                    orderBy(dateField, "desc"),
+                    limit(10000)
                 );
                 const snap = await getDocs(qFallback);
                 const allDocs = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -119,8 +120,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchModule("plans", "plannedDate"),
             fetchModule("timeLogs", "timeIn"),
             fetchModule("nonCallDays", "date"),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(200))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         setIndividualEntries((entries as CoverageEntry[]) || []);

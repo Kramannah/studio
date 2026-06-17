@@ -21,16 +21,19 @@ export const usePlans = (active: boolean = true) => {
     if (!user || !db || !active) return;
     setLoading(true);
     try {
+      // Increased limit and added sorting to prioritize current plans for high-volume users
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid), 
-        limit(1000)
+        orderBy("plannedDate", "desc"),
+        limit(5000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        orderBy("requestedAt", "desc")
+        orderBy("requestedAt", "desc"),
+        limit(500)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
@@ -72,7 +75,7 @@ export const usePlans = (active: boolean = true) => {
   }, [user, toast]);
 
   const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
-    if (!user || !db || doctors.length === 0) return false;
+    if (doctors.length === 0 || !user || !db) return false;
     const batch = writeBatch(db);
     const dateISO = plannedDate.toISOString();
     const callType = (isToday(plannedDate) || isBefore(plannedDate, startOfToday())) ? 'unplanned' : 'planned';
