@@ -16,7 +16,6 @@ service cloud.firestore {
     }
 
     // Token-based whitelist check (No DB lookups)
-    // Allows specific veteran accounts to bypass profile lookups entirely for performance
     function isSpecialAuthorizedPMR() {
       let email = request.auth.token.get('email', '').lower();
       return email in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
@@ -48,7 +47,6 @@ service cloud.firestore {
 
     match /coverageEntries/{id} {
       // Rule Priority: Owner > Special Whitelist > DSM/Manager
-      // This flattened logic prevents timeouts for users with 3,000+ records
       allow read, list: if isSignedIn() && (
         resource.data.userId == request.auth.uid || 
         isSpecialAuthorizedPMR() || 

@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -14,8 +14,8 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V4.2: Admin Oversight for Veteran Accounts.
- * Balanced Fetch: Standardized at 3,000 records for all collections.
+ * LOW-COST V4.8: Admin Oversight for Veteran Accounts.
+ * Balanced Fetch: Standardized at 3,000 records for metadata, 1,000 for heavy reports.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -112,44 +112,47 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
-            const safeLimit = lmt;
             const colRef = collection(db!, colName);
+            // Optimized sort for heavy collections
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
-                where(dateField, ">=", start),
-                where(dateField, "<=", end),
-                limit(safeLimit)
+                orderBy(dateField, "desc"),
+                limit(lmt)
             );
             try {
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(safeLimit));
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
                 const snap = await getDocs(fallbackQ);
-                return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
-                    const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.date;
-                    const date = parseAnyDate(dateVal);
-                    return date && isValid(date) && isWithinInterval(date, interval);
-                });
+                return snap.docs.map(d => ({id: d.id, ...d.data()}));
             }
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate"),
-            fetchModule("plans", "plannedDate"),
-            fetchModule("timeLogs", "timeIn")
+            fetchModule("coverageEntries", "submittedAt", 1000), // Heavy collection limit
+            fetchModule("plans", "plannedDate", 3000),
+            fetchModule("timeLogs", "timeIn", 500)
         ]);
 
+        const filteredEntries = (entries as CoverageEntry[]).filter(e => {
+            const date = parseAnyDate(e.coverageDate || e.submittedAt);
+            return date && isValid(date) && isWithinInterval(date, interval);
+        });
+
         const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date"),
+            fetchModule("nonCallDays", "date", 500),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         const data = {
-            entries: (entries as CoverageEntry[]).sort((a,b) => (b.coverageDate || "").localeCompare(a.coverageDate || "")),
-            plans: (plans as Plan[]).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
+            entries: filteredEntries.sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
+            plans: (plans as Plan[]).filter(p => {
+                const d = parseAnyDate(p.plannedDate);
+                return d && isValid(d) && isWithinInterval(d, interval);
+            }).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
             logs: logs as any[],
             ncds: ncds as NonCallDay[],
             doctors: doctors as Doctor[],

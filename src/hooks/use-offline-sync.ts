@@ -33,7 +33,7 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4.7: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
+ * LOW-COST V4.9: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
  * Specifically optimized to handle 3,000+ record datasets with high-memory payloads.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
@@ -87,7 +87,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(2000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -100,7 +100,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
               where("userId", "==", userId),
               where("submittedAt", ">=", start),
               where("submittedAt", "<=", end),
-              limit(3000)
+              limit(2000)
           );
           const snapLegacy = await getDocs(qLegacy);
           fetched.push(...snapLegacy.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry)));
@@ -110,19 +110,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Save light metadata to cache to prevent quota-killing repeated reads
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Primary targeted scan failure (Indexing might be in progress):", error.message);
+        console.warn("Primary targeted scan failure:", error.message);
         
         try {
             // STAGE 3: Recent-First broad scan (Requires Index: userId, submittedAt DESC)
+            // Limit reduced to 1,000 for heavy payloads to avoid datastore timeout
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
                 orderBy("submittedAt", "desc"),
-                limit(3000)
+                limit(1000)
             );
             const snap = await getDocs(fallbackQ);
             
@@ -135,15 +135,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             
             setMasterEntries(fetched);
         } catch (finalError: any) {
-            console.warn("Recent-first fallback failure:", finalError.message);
+            console.warn("Recent-first fallback failure (Likely missing index):", finalError.message);
             
             try {
-                // STAGE 4: Emergency Fallback - Unordered Simple Scan (No Composite Index Required)
-                // This is the "Safety Net" for veteran accounts while indices are building.
+                // STAGE 4: Emergency Fallback - Simple Unordered Scan
+                // Limit reduced to 1,000 for high-volume accounts to prevent network crash
                 const emergencyQ = query(
                     collection(db!, "coverageEntries"), 
                     where("userId", "==", userId),
-                    limit(3000)
+                    limit(1000)
                 );
                 const snap = await getDocs(emergencyQ);
                 const fetched = snap.docs

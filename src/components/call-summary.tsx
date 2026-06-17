@@ -115,7 +115,7 @@ export function CallSummary({
             try { return format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd'); } catch { return ""; }
         }).filter(Boolean));
         
-        // Calculate weighted active days based on user field activity and leave status
+        // Calculate weighted active days
         // CRITICAL: Half-day leaves count as 0.5 active days per requirement
         let activeDays = 0;
         activeDaysSet.forEach(dateStr => {
