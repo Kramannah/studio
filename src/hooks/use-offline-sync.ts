@@ -33,9 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V3.5: Veteran Visibility Fix.
- * Optimized for users like NL-02 (Khristopher George Pangan) with large histories.
- * Uses strict 3,000 record horizon with recent-first ordering.
+ * LOW-COST V4: Optimized for high-activity veteran accounts like NL-02.
+ * Strictly uses UID-partitioned scans with simplified rule-compliant filters.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -82,7 +81,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const interval = { start: parseISO(start), end: parseISO(end) };
     
     try {
-      // PRIMARY: Targeted query for the month. Requires composite index for userId + coverageDate.
+      // 1. Targeted query (Most Efficient)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -99,18 +98,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Save lightweight cache (no heavy photos/signatures)
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Targeted coverage query failed, using veteran scan fallback:", error.message);
+        console.warn("Primary fetch failed, using fallback:", error.message);
         
-        // VETERAN FALLBACK: Pull 3,000 LATEST records to ensure June 2026 is visible.
         try {
+            // 2. Simple UID scan (Ultimate Fallback - Prevents Rule Failures)
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
-                where("userId", "==", userId), 
-                orderBy("coverageDate", "desc"),
+                where("userId", "==", userId),
                 limit(3000)
             );
             const snap = await getDocs(fallbackQ);
@@ -124,17 +121,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
-        } catch (fallbackError: any) {
-            console.warn("Ordered fallback failed, using unordered scan:", fallbackError.message);
-            const unorderedQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
-            const snap = await getDocs(unorderedQ);
-            const fetched = snap.docs
-                .map(d => ({id: d.id, ...d.data()} as CoverageEntry))
-                .filter(e => {
-                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    return d && isValid(d) && isWithinInterval(d, interval);
-                });
-            setMasterEntries(fetched);
+        } catch (finalError: any) {
+            console.error("All fetch attempts failed for CoverageEntries:", finalError);
         }
     } finally {
         setLoading(false);

@@ -9,25 +9,33 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Optimized for Veteran accounts with 3,000+ records
-    function canAccessData(docUserId) {
+    // High-performance ownership check (No DB lookups)
+    function isOwner(docUserId) {
+      return isSignedIn() && docUserId == request.auth.uid;
+    }
+
+    // Token-based whitelist check (No DB lookups)
+    function isSpecialAuthorizedPMR() {
+      let email = request.auth.token.get('email', '').lower();
+      return email in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
+    }
+
+    // Role-based check (Database lookup - only used for managerial oversight)
+    function isManagerialAccess(docUserId) {
       if (!isSignedIn()) return false;
       
-      // PRIORITY 1: Ownership (Instant Short-circuit)
+      // Ownership check again as a guard
       if (docUserId == request.auth.uid) return true;
       
-      // PRIORITY 2: Administrative / Special PMR Access
-      // Whitelisted emails bypass expensive exists/get lookups to prevent Rule timeouts
+      // Admin whitelist (No DB lookup)
       let authorizedEmails = [
         "mbustamante@hovidinc.com", 
         "admin@hovidinc.com", 
-        "wbmaralit@hovidinc.com",
-        "kgpangan@hovidinc.com", // NL-02
-        "pjramos@hovidinc.com"   // CL-01
+        "wbmaralit@hovidinc.com"
       ];
       if (request.auth.token.get('email', '').lower() in authorizedEmails) return true;
       
-      // PRIORITY 3: Role-based Lookups (Manager oversight)
+      // Profile lookup (Expensive - only run if others fail)
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       return exists(profilePath) && (
         get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
@@ -37,58 +45,54 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || 
-        request.auth.token.get('email', '').lower() in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"] ||
-        canAccessData(resource.data.userId)
-      );
+      // Optimized list rule: Short-circuit ownership and special whitelist to prevent timeouts
+      allow read, list: if isOwner(resource.data.userId) || isSpecialAuthorizedPMR() || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /doctors/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /plans/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /timeLogs/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /planningRequests/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      allow read, list: if isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if canAccessData(resource.data.userId);
+      allow update, delete: if isManagerialAccess(resource.data.userId);
     }
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
       allow write: if isSignedIn() && (
         request.auth.token.get('email', '').lower() in ["mbustamante@hovidinc.com", "admin@hovidinc.com"] ||
-        (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"])
+        isManagerialAccess('OVERRIDE_FOR_MARKETING')
       );
     }
     
     match /userProfiles/{id} {
-      allow read: if isSignedIn() && (request.auth.uid == id || canAccessData('MANAGERIAL_OVERRIDE'));
-      allow write: if isSignedIn() && (request.auth.uid == id || canAccessData('MANAGERIAL_OVERRIDE'));
-      allow list: if isSignedIn() && (canAccessData('MANAGERIAL_OVERRIDE'));
+      allow read: if isSignedIn() && (request.auth.uid == id || isManagerialAccess('MANAGERIAL_OVERRIDE'));
+      allow write: if isSignedIn() && (request.auth.uid == id || isManagerialAccess('MANAGERIAL_OVERRIDE'));
+      allow list: if isSignedIn() && (isManagerialAccess('MANAGERIAL_OVERRIDE'));
     }
   }
 }
