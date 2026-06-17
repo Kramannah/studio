@@ -2,13 +2,14 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { getMonthRangeISO } from "@/lib/utils";
+import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
+import { isValid, isWithinInterval, parseISO } from "date-fns";
 
 /**
  * useAdminData - Optimized for UID-based individual oversight.
@@ -63,11 +64,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), limit(1000), orderBy("date", "desc"))),
-            getDocs(query(collection(db!, "planningRequests"), limit(1000), orderBy("requestedAt", "desc")))
+            getDocs(query(collection(db!, "nonCallDays"), limit(1000))),
+            getDocs(query(collection(db!, "planningRequests"), limit(1000)))
         ]);
-        setAllNonCallDays(ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
-        setAllPlanningRequests(prSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
+        
+        const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
+        const reqs = prSnap.docs.map(d => ({id: d.id, ...d.data()})) as PlanningPermissionRequest[];
+
+        // Sort in memory to avoid composite index requirements
+        setAllNonCallDays(ncds.sort((a, b) => (b.date || "").localeCompare(a.date || "")));
+        setAllPlanningRequests(reqs.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
     } catch (e) {
         console.warn("Approval fetch failed", e);
     } finally { setLoadingApprovals(false); }
@@ -83,36 +89,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     try {
         const { start, end } = getMonthRangeISO(selectedMonth);
+        const interval = { start: parseISO(start), end: parseISO(end) };
 
         const fetchModule = async (colName: string, dateField: string) => {
             const colRef = collection(db!, colName);
-            try {
-                // Attempt targeted query with higher limit for high-volume days
-                const q = query(
-                    colRef, 
-                    where("userId", "==", uid), 
-                    where(dateField, ">=", start), 
-                    where(dateField, "<=", end), 
-                    limit(5000)
-                );
-                const snap = await getDocs(q);
-                return snap.docs.map(d => ({id: d.id, ...d.data()}));
-            } catch (e: any) {
-                // FALLBACK: Fetch broad batch for veteran accounts with many historical records
-                const qFallback = query(
-                    colRef, 
-                    where("userId", "==", uid), 
-                    orderBy(dateField, "desc"),
-                    limit(10000)
-                );
-                const snap = await getDocs(qFallback);
-                const allDocs = snap.docs.map(d => ({id: d.id, ...d.data()}));
-                
-                return allDocs.filter((d: any) => {
-                    const val = d[dateField] || d.coverageDate || d.plannedDate || d.submittedAt || d.date;
-                    return val && val >= start && val <= end;
-                });
-            }
+            // Fetch broadly for the user and filter in memory to avoid composite index requirement errors
+            const q = query(colRef, where("userId", "==", uid), limit(10000));
+            const snap = await getDocs(q);
+            const docs = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            
+            return docs.filter((d: any) => {
+                const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.submittedAt || d.date;
+                const date = parseAnyDate(dateVal);
+                return date && isValid(date) && isWithinInterval(date, interval);
+            }).sort((a: any, b: any) => {
+                const dateA = a[dateField] || a.coverageDate || a.plannedDate || a.submittedAt || a.date || "";
+                const dateB = b[dateField] || b.coverageDate || b.plannedDate || b.submittedAt || b.date || "";
+                return dateB.localeCompare(dateA);
+            });
         };
 
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([

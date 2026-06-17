@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 import { safeStorageSet } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
@@ -39,6 +39,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     setIsOnline(navigator.onLine);
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -64,11 +65,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
     try {
-      // Increased limit and prioritized most recent submissions
+      // Limit to 5000 and sort in memory to avoid requiring a composite index for equality + orderBy
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId), 
-        orderBy("submittedAt", "desc"),
         limit(5000)
       );
       const querySnapshot = await getDocs(q);
@@ -76,6 +76,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       querySnapshot.forEach(docSnap => {
         fetched.push({ id: docSnap.id, ...docSnap.data() } as CoverageEntry);
       });
+      
+      // Sort in memory
+      fetched.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
+      
       setMasterEntries(fetched);
       
       // Create a metadata-only version for the cache to save LocalStorage quota

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday } from 'date-fns';
 import { useAuth } from './use-auth';
 
@@ -21,18 +21,16 @@ export const usePlans = (active: boolean = true) => {
     if (!user || !db || !active) return;
     setLoading(true);
     try {
-      // Increased limit and added sorting to prioritize current plans for high-volume users
+      // Avoid composite indexes by removing orderBy and handling sorting in memory
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid), 
-        orderBy("plannedDate", "desc"),
-        limit(5000)
+        limit(10000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        orderBy("requestedAt", "desc"),
         limit(500)
       );
       
@@ -41,8 +39,12 @@ export const usePlans = (active: boolean = true) => {
         getDocs(requestsQuery),
       ]);
 
-      setMasterPlans(plansSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan)));
-      setPlanningRequests(requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest)));
+      const plans = plansSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan));
+      const requests = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
+      
+      // Sort in memory
+      setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));
+      setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
     } catch (error) {
         console.error("Fetch plans error:", error);
     } finally {
