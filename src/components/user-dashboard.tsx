@@ -9,7 +9,7 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, LayoutGrid, ClipboardList, CalendarDays, UsersRound } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 interface UserDashboardProps {
     userId: string;
@@ -66,7 +66,7 @@ export function UserDashboard({
         }
     };
 
-    // Auto-fetch when selectedMonth changes in individual PMR view
+    // Auto-fetch when selectedMonth changes or userId changes
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             onFetchUserData(userId, selectedMonth);
@@ -169,7 +169,7 @@ export function UserDashboard({
                         onUpdateDoctor={onUpdateDoctor} 
                         onDeleteDoctor={onDeleteDoctor} 
                         onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
-                        readOnly={!isAdminView} 
+                        readOnly={true} 
                     />
                 </TabsContent>
             </div>

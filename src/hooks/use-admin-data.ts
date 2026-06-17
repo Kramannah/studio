@@ -1,8 +1,8 @@
 
 "use client"
 
-import { useState, useCallback, useMemo, useRef } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { useState, useCallback, useMemo } from "react";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -113,35 +113,43 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const { start, end } = getMonthRangeISO(selectedMonth);
 
-        // Fetch doctors and plans (plotted calls) globally for the user first to ensure calendar is populated
-        // Coverage and Logs are filtered by month for "Low Cost"
+        // Targeted fetch for the specific month and user
+        const fetchMonthTargeted = async (colName: string, dateField: string) => {
+            const colRef = collection(db!, colName);
+            try {
+                // Primary: Try optimized query with UID and Date range
+                const q = query(colRef, where("userId", "==", uid), where(dateField, ">=", start), where(dateField, "<=", end), limit(1000));
+                const snap = await getDocs(q);
+                return snap.docs.map(d => ({id: d.id, ...d.data()}));
+            } catch (e: any) {
+                // Fallback: If index is missing or query fails, fetch user's global data and filter locally
+                console.warn(`Falling back to global fetch for ${colName} due to: ${e.message}`);
+                const q = query(colRef, where("userId", "==", uid), limit(1000));
+                const snap = await getDocs(q);
+                return snap.docs
+                    .map(d => ({id: d.id, ...d.data()}))
+                    .filter((d: any) => {
+                        const val = d[dateField];
+                        return val && val >= start && val <= end;
+                    });
+            }
+        };
+
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            getDocs(query(
-                collection(db!, "coverageEntries"), 
-                where("userId", "==", uid), 
-                where("coverageDate", ">=", start),
-                where("coverageDate", "<=", end),
-                limit(1000)
-            )).catch(() => getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000)))), // Fallback for indices
-            getDocs(query(
-                collection(db!, "plans"), 
-                where("userId", "==", uid),
-                where("plannedDate", ">=", start),
-                where("plannedDate", "<=", end),
-                limit(1000)
-            )).catch(() => getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
+            fetchMonthTargeted("coverageEntries", "coverageDate"),
+            fetchMonthTargeted("plans", "plannedDate"),
+            fetchMonthTargeted("timeLogs", "timeIn"),
+            fetchMonthTargeted("nonCallDays", "date"),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
-        setIndividualEntries(entries.docs.map(d => ({id: d.id, ...d.data()})) as CoverageEntry[]);
-        setIndividualPlans(plans.docs.map(d => ({id: d.id, ...d.data()})) as Plan[]);
-        setIndividualTimeLogs(logs.docs.map(d => ({id: d.id, ...d.data()})));
-        setIndividualNonCallDays(ncds.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[]);
-        setIndividualDoctors(doctors.docs.map(d => ({id: d.id, ...d.data()})) as Doctor[]);
-        setIndividualPlanningRequests(requests.docs.map(d => ({id: d.id, ...d.data()})) as PlanningPermissionRequest[]);
+        setIndividualEntries(entries as CoverageEntry[]);
+        setIndividualPlans(plans as Plan[]);
+        setIndividualTimeLogs(logs as any[]);
+        setIndividualNonCallDays(ncds as NonCallDay[]);
+        setIndividualDoctors(doctors as Doctor[]);
+        setIndividualPlanningRequests(requests as PlanningPermissionRequest[]);
     } catch (e) {
         console.warn("User data fetch error", e);
     } finally { setLoadingIndividual(false); }
