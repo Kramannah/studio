@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.3: Optimized plan fetching for veteran accounts (NL-02, CL-01).
- * Limit reduced to 2500 to prevent Firestore Security Rules timeouts during list operations.
+ * LOW-COST V2.4: Optimized plan fetching for veteran accounts (NL-02, CL-01).
+ * Limit restored to 3000 to ensure full data visibility for high-volume users.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -42,7 +42,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(2500)
+        limit(3000)
       );
       
       const requestsQuery = query(
@@ -54,8 +54,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
            console.warn("Plans range query fallback triggered:", error.message);
-           // Fallback Horizon optimized to 2500 to prevent Rule Timeouts for users like NL-02
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(2500));
+           // Fallback Horizon optimized to 3000 to ensure VIS-06 sees all plotted calls
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            

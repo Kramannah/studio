@@ -107,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 2500) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -121,7 +121,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
                 // FALLBACK for veteran accounts (like NL-02, CL-01) if index is missing
-                // Limit set to 2500 to prevent Firestore Security Rules from timing out
+                // Limit set to 3000 to balance data completeness and Rule timeout risks
                 const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
@@ -134,14 +134,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 2500),
-            fetchModule("plans", "plannedDate", 2500),
+            fetchModule("coverageEntries", "coverageDate", 3000),
+            fetchModule("plans", "plannedDate", 3000),
             fetchModule("timeLogs", "timeIn", 300)
         ]);
 
         const [ncds, doctors, requests] = await Promise.all([
             fetchModule("nonCallDays", "date", 100),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(50))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
