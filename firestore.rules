@@ -9,26 +9,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Role-based Access Logic - Resilient to missing profile documents
+    // Role-based Access Logic - Optimized for speed and safety
     function hasInternalAccess() {
       if (!isSignedIn()) return false;
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       
-      // CRITICAL: Check existence before accessing .data to prevent rule crashes
+      // CRITICAL: exists() check prevents rule crashes on missing profile documents
       if (!exists(profilePath)) return false;
       
-      let profile = get(profilePath).data;
-      let role = profile.get('role', 'PMR');
+      let role = get(profilePath).data.get('role', 'PMR');
       return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
     }
 
     function isAdminFallback() {
-      let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
       let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
-      return isSignedIn() && (request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails);
+      return isSignedIn() && (request.auth.token.get('email', '').lower() in adminEmails);
     }
 
-    // Optimized Read/Write Check - Prioritize ownership to bypass role-checks for PMRs
+    // Optimized Read/Write Check - Prioritize ownership to bypass expensive role-checks
     function canAccessData(docUserId) {
       return isSignedIn() && (
         docUserId == request.auth.uid || 
@@ -40,9 +38,7 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // Split list and get for maximum performance on large datasets
-      allow list: if isSignedIn() && (request.auth.uid == resource.data.userId || isAdminFallback() || hasInternalAccess());
-      allow get: if canAccessData(resource.data.userId);
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
     }
@@ -83,8 +79,9 @@ service cloud.firestore {
     }
     
     match /userProfiles/{id} {
-      // Allow users to see and manage their own profile even if the doc doesn't exist yet
-      allow read, list, write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
+      // Allow users to see their own profile without recursive hasInternalAccess checks
+      allow read, write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
+      allow list: if isSignedIn() && (isAdminFallback() || hasInternalAccess());
     }
   }
 }

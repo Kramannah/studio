@@ -57,6 +57,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+            setLoading(false);
+            clearTimeout(timer);
           } else {
             // Document missing: Create a default profile to stop rule crashes
             setDoc(profileRef, {
@@ -66,11 +68,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 lastName: "",
                 role: "PMR",
                 updatedAt: new Date().toISOString()
-            }, { merge: true });
-            setProfile(null);
+            }, { merge: true }).then(() => {
+                // Background update, onSnapshot will fire again
+            });
+            setLoading(false);
+            clearTimeout(timer);
           }
-          setLoading(false);
-          clearTimeout(timer);
         }, (err) => {
           // If a rule denied access to the profile itself, we still need to let the user in
           console.warn("Profile sync restricted (proceeding with basic access):", err);
