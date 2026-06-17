@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.5: Optimized for high-activity PMR veteran accounts.
- * Limit set to 3000 to ensure full planning visibility.
+ * LOW-COST V2.8: Optimized for high-activity PMR veteran accounts.
+ * Limit set to 5,000 to ensure full planning visibility for accounts with massive histories.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -42,19 +42,19 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(3000)
+        limit(5000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(100)
+        limit(200)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans range fallback:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
+           console.warn("Plans range fallback for veteran:", error.message);
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            

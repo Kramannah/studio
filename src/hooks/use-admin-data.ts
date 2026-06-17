@@ -107,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 5000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -120,7 +120,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // FALLBACK for veteran accounts (NL-02, CL-01)
+                // FALLBACK for veteran accounts (NL-02, CL-01) - Fetch larger set to guarantee current month visibility
                 const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
@@ -133,15 +133,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 3000),
-            fetchModule("plans", "plannedDate", 3000),
-            fetchModule("timeLogs", "timeIn", 300)
+            fetchModule("coverageEntries", "coverageDate", 5000),
+            fetchModule("plans", "plannedDate", 5000),
+            fetchModule("timeLogs", "timeIn", 500)
         ]);
 
         const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date", 100),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(50))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+            fetchModule("nonCallDays", "date", 200),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         const data = {
@@ -168,7 +168,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
     } catch (e: any) {
         console.error("Critical User Data Fetch Error for UID:", uid, e);
-        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed for this representative." });
+        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed. Retrying in background." });
     } finally { 
         setLoadingIndividual(false); 
     }

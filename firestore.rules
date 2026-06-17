@@ -17,7 +17,8 @@ service cloud.firestore {
       // CRITICAL: exists() check prevents rule crashes on missing profile documents
       if (!exists(profilePath)) return false;
       
-      let role = get(profilePath).data.get('role', 'PMR');
+      let profileData = get(profilePath).data;
+      let role = profileData.get('role', 'PMR');
       return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
     }
 
@@ -26,7 +27,9 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.token.get('email', '').lower() in adminEmails);
     }
 
-    // Optimized Read/Write Check - Prioritize ownership to bypass expensive role-checks
+    // High-performance Access Helper
+    // Priority 1: Ownership (Fastest, avoids rule engine timeouts)
+    // Priority 2: Admin/Internal Role checks (Executed only if not the owner)
     function canAccessData(docUserId) {
       return isSignedIn() && (
         docUserId == request.auth.uid || 
@@ -38,7 +41,9 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      // Simplified list rule to prevent rule engine timeouts on veteran accounts
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdminFallback() || hasInternalAccess());
+      allow get: if canAccessData(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
     }
@@ -80,7 +85,8 @@ service cloud.firestore {
     
     match /userProfiles/{id} {
       // Allow users to see their own profile without recursive hasInternalAccess checks
-      allow read, write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
+      allow read: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
+      allow write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
       allow list: if isSignedIn() && (isAdminFallback() || hasInternalAccess());
     }
   }

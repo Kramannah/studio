@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.6: Fixed visibility for high-volume veteran accounts (NL-02, CL-01).
- * Standardized at 3,000 records with targeted monthly fetching.
+ * LOW-COST V2.8: Final stability fix for veteran accounts (NL-02, CL-01).
+ * Standardized at 5,000 records with high-performance rule evaluations.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -80,13 +80,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // Primary targeted query
+      // Primary targeted query for June 2026 data
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(5000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -100,10 +100,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Coverage fetch fallback triggered for user:", userId, error.message);
-        // Safety Fallback (3,000 records)
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
+        console.warn("Coverage fetch fallback triggered for veteran account:", userId, error.message);
+        // SAFETY FALLBACK: Fetch broad history if month-filter fails (Limit: 5,000 for veterans)
         try {
+            const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
             const snap = await getDocs(fallbackQ);
             const interval = { start: parseISO(start), end: parseISO(end) };
             const fetched = snap.docs
