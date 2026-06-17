@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // RESILIENCY: 5-second hard timeout for initial loading
+    // RESILIENCY: 5-second hard timeout for initial loading to prevent "stuck" UI
     const timer = setTimeout(() => {
       setLoading(false);
     }, 5000);
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (firebaseUser && db) {
         const profileRef = doc(db, "userProfiles", firebaseUser.uid);
-        // Sync profile data but don't let it block the main app entry indefinitely
+        // Sync profile data but ensure loading is cleared even on error
         unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
@@ -62,8 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false);
           clearTimeout(timer);
         }, (err) => {
-          console.warn("Profile sync delay/error:", err);
-          // Still clear loading so user isn't stuck
+          console.warn("Profile sync error (proceeding with limited access):", err);
           setLoading(false);
           clearTimeout(timer);
         });
@@ -85,9 +84,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!auth) return;
     try {
         await firebaseSignOut(auth);
-        toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
+        toast({ title: 'Logged Out' });
     } catch (error) {
-        toast({ variant: 'destructive', title: 'Logout Failed', description: 'An error occurred while logging out.' });
+        toast({ variant: 'destructive', title: 'Logout Failed' });
     }
   }
 

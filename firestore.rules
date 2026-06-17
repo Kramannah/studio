@@ -9,15 +9,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Optimized Profile Lookup (Firestore caches this for the duration of the request)
-    function getProfile() {
-      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
-    }
-
-    // Role-based Access Logic - Fast path for internal staff
+    // Role-based Access Logic - Simplified for performance
     function hasInternalAccess() {
       if (!isSignedIn()) return false;
-      let profile = getProfile();
+      // We use exists() check first to prevent crashes on missing docs
+      let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      if (!exists(profilePath)) return false;
+      
+      let profile = get(profilePath).data;
       let role = profile.get('role', 'PMR');
       return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
     }
@@ -28,13 +27,13 @@ service cloud.firestore {
 
     function isAdminFallback() {
       let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
-      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
+      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
       return isSignedIn() && (request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails);
     }
 
-    // Universal Read/Write Check
+    // Universal Read/Write Check - Optimized to short-circuit for owners
     function canAccessData(userId) {
-      return isOwner(userId) || hasInternalAccess() || isAdminFallback();
+      return isOwner(userId) || isAdminFallback() || hasInternalAccess();
     }
 
     // --- Collection Rules ---
@@ -77,13 +76,13 @@ service cloud.firestore {
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
-      allow write: if hasInternalAccess() || isAdminFallback();
+      allow write: if isAdminFallback() || hasInternalAccess();
     }
     
     match /userProfiles/{id} {
-      // Optimization: Users can always read their own profile immediately
-      allow read, list: if isSignedIn() && (request.auth.uid == id || hasInternalAccess() || isAdminFallback());
-      allow write: if hasInternalAccess() || isAdminFallback() || (isSignedIn() && request.auth.uid == id);
+      // Users can always read and write their own profile
+      allow read, list: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
+      allow write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
     }
   }
 }

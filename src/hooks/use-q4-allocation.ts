@@ -1,12 +1,11 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc, orderBy } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
@@ -19,6 +18,7 @@ const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
  * LOW-COST V2.1: Optimized read logic with resilient fallback for usage scans.
+ * Guarded against managerial broad scans for standard PMRs.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
@@ -105,6 +105,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             
             let entriesSnap;
             try {
+                // DEFENSIVE: Strict check to avoid permission errors on PMR accounts
                 if (isManagerial) {
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
@@ -120,9 +121,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     ));
                 }
             } catch (indexError) {
-                console.warn("Usage scan fallback triggered. Scanning larger batch.");
-                // Fallback: Broad UID scan with memory filter
-                const q = isManagerial ? query(collection(db!, "coverageEntries"), limit(3000)) : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(3000));
+                // Fallback for unindexed broad scans (UID-locked for PMRs)
+                const q = isManagerial 
+                    ? query(collection(db!, "coverageEntries"), limit(3000)) 
+                    : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(3000));
                 entriesSnap = await getDocs(q);
             }
 
@@ -155,12 +157,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, isUserAdmin, profile, active, includeUsage, allocations.length]);
+  }, [user, profile, active, includeUsage, allocations.length]);
 
   useEffect(() => {
-    if (active) {
-        performFetch();
-    }
+    if (active) performFetch();
   }, [performFetch, active]);
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
