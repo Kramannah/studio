@@ -6,12 +6,16 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
-import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit, orderBy } from 'firebase/firestore';
+import { isToday, parseISO, isValid, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 
-const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v4';
+const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v5';
 
+/**
+ * LOW-COST V2: Optimized for minimum reads by restricting fetching to the selected month
+ * on the server side.
+ */
 export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -37,48 +41,43 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user?.uid]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
-    if (!user || !db || !active || !navigator.onLine) {
-        if (!active) setLoading(false);
-        return;
-    }
+    if (!user || !db || !active || !navigator.onLine) return;
 
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) {
-        setLoading(false);
-        return;
-    }
+    if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
 
     setLoading(true);
 
     try {
       const { start, end } = getMonthRangeISO(selectedMonth);
-      const interval = { start: parseISO(start), end: parseISO(end) };
       
       const q = query(
         collection(db, "timeLogs"), 
         where("userId", "==", user.uid),
-        limit(1000)
+        where("timeIn", ">=", start),
+        where("timeIn", "<=", end),
+        limit(150)
       );
       
-      const querySnapshot = await getDocs(q);
-      
-      const fetchedLogs: TimeLog[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as TimeLog;
-        if (data.timeIn) {
-            const d = parseISO(data.timeIn);
-            if (isValid(d) && isWithinInterval(d, interval)) {
-                fetchedLogs.push({ id: doc.id, ...data });
-            }
-        }
-      });
+      try {
+          const querySnapshot = await getDocs(q);
+          const fetchedLogs: TimeLog[] = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as TimeLog) }));
+          fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
 
-      fetchedLogs.sort((a, b) => b.timeIn.localeCompare(a.timeIn));
-
-      setTodaysTimeIn(fetchedLogs.find(l => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
-      setTimeLogs(fetchedLogs);
-      lastFetchedKeyRef.current = fetchKey;
-      safeStorageSet(getStoreKey(), JSON.stringify(fetchedLogs));
+          setTodaysTimeIn(fetchedLogs.find(l => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+          setTimeLogs(fetchedLogs);
+          lastFetchedKeyRef.current = fetchKey;
+          safeStorageSet(getStoreKey(), JSON.stringify(fetchedLogs));
+      } catch (indexError) {
+          // Fallback if index missing
+          const fallbackQ = query(collection(db, "timeLogs"), where("userId", "==", user.uid), limit(100));
+          const snap = await getDocs(fallbackQ);
+          const interval = { start: parseISO(start), end: parseISO(end) };
+          const filtered = snap.docs
+            .map(doc => ({ id: doc.id, ...(doc.data() as TimeLog) }))
+            .filter(l => l.timeIn && isValid(parseISO(l.timeIn)) && isWithinInterval(parseISO(l.timeIn), interval));
+          setTimeLogs(filtered);
+      }
     } catch (serverError: any) {
         console.error("Time logs fetch error:", serverError);
     } finally {
@@ -87,9 +86,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, timeLogs.length, selectedMonth]);
 
   useEffect(() => {
-    if (active) {
-        fetchTimeLogs();
-    }
+    if (active) fetchTimeLogs();
   }, [fetchTimeLogs, active]);
 
   const addTimeIn = async (photo: string, loc: 'inbase' | 'outbase') => {
@@ -98,10 +95,8 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
     try {
         const docRef = await addDoc(collection(db, "timeLogs"), newLog);
         const created = { id: docRef.id, ...newLog } as TimeLog;
-        const nextLogs = [created, ...timeLogs];
-        setTimeLogs(nextLogs);
+        setTimeLogs(prev => [created, ...prev]);
         setTodaysTimeIn(created);
-        safeStorageSet(getStoreKey(), JSON.stringify(nextLogs));
         toast({ title: "Time In Recorded" });
     } catch (error) {
         console.error("Time in failed:", error);
@@ -113,22 +108,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
     const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
     try {
         await updateDoc(doc(db, "timeLogs", todaysTimeIn.id), updateData);
-        const nextLogs = timeLogs.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l);
-        setTimeLogs(nextLogs);
+        setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
         setTodaysTimeIn(null);
-        safeStorageSet(getStoreKey(), JSON.stringify(nextLogs));
         toast({ title: "Time Out Recorded" });
     } catch (error) {
         console.error("Time out failed:", error);
     }
   };
 
-  return { 
-      timeLogs, 
-      addTimeIn, 
-      addTimeOut, 
-      loading, 
-      todaysTimeIn,
-      fetchTimeLogs
-  };
+  return { timeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn, fetchTimeLogs };
 };

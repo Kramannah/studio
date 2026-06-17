@@ -15,9 +15,13 @@ import { isValid, parseISO } from 'date-fns';
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
 const ALLOCATION_CACHE_TTL = 30 * 60 * 1000;
-const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v4';
-const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v4';
+const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
+const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
+/**
+ * LOW-COST V2: Optimized for minimum reads by restricting usage scans to a limited timeframe
+ * and using stricter document limits.
+ */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
@@ -72,7 +76,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (allocations.length === 0) setLoading(true);
 
     try {
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(5000)));
+        // LOW-COST V2: Fetch marketing samples (master list is small)
+        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)));
 
         const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
@@ -95,35 +100,32 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
 
+        // LOW-COST V2: Restrict usage scan to current year/quarter for better performance
         if (includeUsage && !usageFetchedRef.current) {
             const used: Record<string, number> = {};
-            const canDoGlobalFetch = isUserAdmin || (profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role));
-
+            const isManagerial = profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role);
             const startOfYear = getStartOfYearISO();
             
             let entriesSnap;
-            if (canDoGlobalFetch) {
+            if (isManagerial) {
+                // For managers, we still scan broadly but with a more realistic limit and date cutoff
                 entriesSnap = await getDocs(query(
                     collection(db!, "coverageEntries"), 
                     where("coverageDate", ">=", startOfYear),
-                    limit(5000) 
+                    limit(2000) 
                 ));
             } else {
+                // For PMRs, strictly their own data for the year
                 entriesSnap = await getDocs(query(
                     collection(db!, "coverageEntries"), 
                     where("userId", "==", user.uid),
-                    limit(2000)
+                    where("coverageDate", ">=", startOfYear),
+                    limit(1000)
                 ));
             }
 
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
-                
-                if (!canDoGlobalFetch) {
-                    const coverageDate = data.coverageDate || data.submittedAt;
-                    if (!coverageDate || coverageDate < startOfYear) return;
-                }
-
                 const process = (name?: string, qty?: number) => {
                     const key = String(name ?? "").toLowerCase().trim();
                     if (!key) return;
@@ -144,10 +146,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
     } catch (error) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: 'marketingSamples-usage',
-            operation: 'list',
-        }));
+        console.warn("Allocation fetch optimized scan failure:", error);
     } finally {
         setLoading(false);
     }

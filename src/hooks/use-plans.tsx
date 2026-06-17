@@ -5,10 +5,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, startAt, endAt } from 'firebase/firestore';
+import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { useAuth } from './use-auth';
 
+/**
+ * LOW-COST V2: Restricts plan fetching to a specific date range (current month +/- 1 month)
+ * to prevent over-scanning history for veteran accounts.
+ */
 export const usePlans = (active: boolean = true) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -18,31 +22,39 @@ export const usePlans = (active: boolean = true) => {
   const [loading, setLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!user || !db || !active) return;
+    if (!user || !db || !active || !navigator.onLine) return;
     setLoading(true);
+    
     try {
-      // Avoid composite indexes by removing orderBy and handling sorting in memory
+      // LOW-COST V2: Only fetch plans from last month to next month (3-month window)
+      const rangeStart = startOfMonth(subMonths(new Date(), 1)).toISOString();
+      const rangeEnd = endOfMonth(addMonths(new Date(), 1)).toISOString();
+
       const plansQuery = query(
         collection(db, "plans"), 
-        where("userId", "==", user.uid), 
-        limit(10000)
+        where("userId", "==", user.uid),
+        where("plannedDate", ">=", rangeStart),
+        where("plannedDate", "<=", rangeEnd),
+        limit(2000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(500)
+        limit(50)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
-        getDocs(plansQuery),
+        getDocs(plansQuery).catch(() => {
+           // Fallback if index missing
+           return getDocs(query(collection(db, "plans"), where("userId", "==", user.uid), limit(1000)));
+        }),
         getDocs(requestsQuery),
       ]);
 
       const plans = plansSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan));
       const requests = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
       
-      // Sort in memory
       setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
     } catch (error) {

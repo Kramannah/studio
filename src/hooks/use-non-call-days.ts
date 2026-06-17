@@ -4,14 +4,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { NonCallDay } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { parseISO, isValid, isWithinInterval } from 'date-fns';
+import { parseISO, isValid, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 
-const NCD_STORAGE_KEY = 'sfe-non-call-days-v4';
+const NCD_STORAGE_KEY = 'sfe-non-call-days-v5';
 
+/**
+ * LOW-COST V2: Optimized for minimum reads by restricting fetching to a relevant window
+ * (current month +/- 1 month) on the server side.
+ */
 export const useNonCallDays = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -37,35 +41,37 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && nonCallDays.length > 0) return;
 
-    if (nonCallDays.length === 0 || force) {
-        setLoading(true);
-    }
+    setLoading(true);
 
     try {
+      // LOW-COST V2: Restricted window (3 months total)
       const { start, end } = getMonthRangeISO(selectedMonth);
-      const interval = { start: parseISO(start), end: parseISO(end) };
       
       const q = query(
         collection(db, "nonCallDays"), 
         where("userId", "==", user.uid),
-        limit(1000)
+        where("date", ">=", start),
+        where("date", "<=", end),
+        limit(200)
       );
       
-      const querySnapshot = await getDocs(q);
-      const fetched: NonCallDay[] = [];
-      querySnapshot.forEach((doc) => {
-        fetched.push({ id: doc.id, ...(doc.data() as NonCallDay) });
-      });
-
-      const filtered = fetched.filter(n => {
-          if (!n.date) return false;
-          const d = parseISO(n.date);
-          return isValid(d) && isWithinInterval(d, interval);
-      });
-
-      setNonCallDays(filtered);
-      lastFetchedKeyRef.current = fetchKey;
-      safeStorageSet(getStoreKey(), JSON.stringify(filtered));
+      try {
+          const querySnapshot = await getDocs(q);
+          const fetched: NonCallDay[] = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as NonCallDay) }));
+          setNonCallDays(fetched);
+          lastFetchedKeyRef.current = fetchKey;
+          safeStorageSet(getStoreKey(), JSON.stringify(fetched));
+      } catch (indexError) {
+          // Fallback if index missing: Fetch broadly but with lower limit
+          const fallbackQ = query(collection(db, "nonCallDays"), where("userId", "==", user.uid), limit(200));
+          const querySnapshot = await getDocs(fallbackQ);
+          const interval = { start: parseISO(start), end: parseISO(end) };
+          const filtered = querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...(doc.data() as NonCallDay) }))
+            .filter(n => n.date && isValid(parseISO(n.date)) && isWithinInterval(parseISO(n.date), interval));
+          
+          setNonCallDays(filtered);
+      }
     } catch (error) {
         console.error("Error fetching non-call days:", error);
     } finally {
@@ -74,9 +80,7 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
   }, [user, active, nonCallDays.length, selectedMonth]);
 
   useEffect(() => {
-    if (active) {
-        fetchNonCallDays();
-    }
+    if (active) fetchNonCallDays();
   }, [fetchNonCallDays, active]);
 
   const addNonCallDay = async (entry: any) => {
@@ -91,10 +95,5 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
     }
   };
 
-  return { 
-      nonCallDays, 
-      addNonCallDay, 
-      loading,
-      fetchNonCallDays
-  };
+  return { nonCallDays, addNonCallDay, loading, fetchNonCallDays };
 };

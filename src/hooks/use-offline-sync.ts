@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
 import { safeStorageSet } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
-const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v4';
+const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -30,6 +30,10 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
+/**
+ * LOW-COST V2: Optimized for minimum reads by fetching only recent reports
+ * and caching lightweight versions to local storage.
+ */
 export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
@@ -65,28 +69,31 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
     try {
-      // Limit to 5000 and sort in memory to avoid requiring a composite index for equality + orderBy
+      // LOW-COST V2: Fetch only the 500 most recent entries instead of full history
       const q = query(
         collection(db!, "coverageEntries"), 
-        where("userId", "==", userId), 
-        limit(5000)
+        where("userId", "==", userId),
+        orderBy("submittedAt", "desc"),
+        limit(500)
       );
+      
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = [];
       querySnapshot.forEach(docSnap => {
         fetched.push({ id: docSnap.id, ...docSnap.data() } as CoverageEntry);
       });
       
-      // Sort in memory
-      fetched.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
-      
       setMasterEntries(fetched);
       
-      // Create a metadata-only version for the cache to save LocalStorage quota
+      // LOW-COST V2: Create a lightweight version for the cache (remove images) to save space
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(lightEntries));
     } catch (error) {
-        console.error("Fetch entries error:", error);
+        console.warn("Fetch master entries optimized scan fallback:", error);
+        // Fallback for missing index
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(200));
+        const snap = await getDocs(fallbackQ);
+        setMasterEntries(snap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)));
     } finally {
         setLoading(false);
     }

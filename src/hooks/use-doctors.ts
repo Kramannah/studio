@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -20,8 +21,12 @@ import {
 } from "firebase/firestore";
 import { safeStorageSet } from "@/lib/utils";
 
-const DOCTORS_STORAGE_KEY = 'sfe-doctors-v4';
+const DOCTORS_STORAGE_KEY = 'sfe-doctors-v5';
 
+/**
+ * LOW-COST V2: Optimized for minimum reads by using stricter limits for global masterlist
+ * scans and prioritizing local cache for faster UI responsiveness.
+ */
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -47,24 +52,20 @@ export const useDoctors = (active: boolean = true) => {
   }, [user, profile]);
 
   const fetchDoctors = useCallback(async () => {
-    if (!user || !db || !active || !navigator.onLine) {
-      return;
-    }
+    if (!user || !db || !active || !navigator.onLine) return;
 
     setLoading(true);
     try {
       let q;
       if (isUserAdmin) {
-        q = query(collection(db, "doctors"), limit(10000));
+        // LOW-COST V2: Stricter limit for global scans to prevent quota spikes
+        q = query(collection(db, "doctors"), limit(5000));
       } else {
-        q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(10000));
+        q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(2000));
       }
 
       const querySnapshot = await getDocs(q);
-      const fetchedDoctors: Doctor[] = [];
-      querySnapshot.forEach((docSnap) => {
-        fetchedDoctors.push({ id: docSnap.id, ...docSnap.data() } as Doctor);
-      });
+      const fetchedDoctors: Doctor[] = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
 
       setDoctors(fetchedDoctors);
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(fetchedDoctors));
@@ -76,9 +77,7 @@ export const useDoctors = (active: boolean = true) => {
   }, [user, isUserAdmin, active]);
 
   useEffect(() => {
-    if (active) {
-        fetchDoctors();
-    }
+    if (active) fetchDoctors();
   }, [fetchDoctors, active]);
 
   const addDoctor = useCallback(
@@ -87,7 +86,7 @@ export const useDoctors = (active: boolean = true) => {
       const newDoctorData = { ...doctorData, userId: user.uid };
       try {
         const docRef = await addDoc(collection(db, "doctors"), newDoctorData);
-        const created = { id: docRef.id, ...newDoctorData };
+        const created = { id: docRef.id, ...newDoctorData } as Doctor;
         setDoctors((prev) => {
             const next = [...prev, created];
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
