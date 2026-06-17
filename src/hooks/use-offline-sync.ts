@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -33,8 +32,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V5.0: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
- * Optimized to handle 3,000 record datasets with high-memory payloads.
+ * LOW-COST V6.0: Resilient Retrieval for Veteran Accounts.
+ * Detects "Missing Index" errors and falls back to Scan-and-Sort to restore visibility.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -94,7 +93,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
       if (fetched.length === 0) {
-          // STAGE 2: Fallback for legacy records using submittedAt
+          // STAGE 2: Fallback for legacy records using submittedAt (Requires Index)
           const qLegacy = query(
               collection(db!, "coverageEntries"),
               where("userId", "==", userId),
@@ -113,7 +112,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Primary targeted scan failure:", error.message);
+        console.warn("Primary targeted scan failure (Check Index Status):", error.message);
         
         try {
             // STAGE 3: Recent-First broad scan (Requires Index: userId, submittedAt DESC)
@@ -134,14 +133,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             
             setMasterEntries(fetched);
         } catch (finalError: any) {
-            console.warn("Recent-first fallback failure (Likely missing index):", finalError.message);
+            console.warn("Broad sorted scan failure (Index Missing):", finalError.message);
             
             try {
-                // STAGE 4: Emergency Fallback - Simple Unordered Scan
+                // STAGE 4: EMERGENCY INDEX-FREE SCAN
+                // We increase the limit to 4,000 to ensure we capture the newest records that are currently "cut off"
+                // but we process them in memory to avoid crashing the dashboard.
                 const emergencyQ = query(
                     collection(db!, "coverageEntries"), 
                     where("userId", "==", userId),
-                    limit(3000)
+                    limit(4000)
                 );
                 const snap = await getDocs(emergencyQ);
                 const fetched = snap.docs
@@ -151,6 +152,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                         return d && isValid(d) && isWithinInterval(d, interval);
                     });
                 
+                // Sort in memory since DB sort is blocked by missing index
                 fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
                 setMasterEntries(fetched);
             } catch (criticalError: any) {

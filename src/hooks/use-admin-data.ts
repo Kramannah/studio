@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -14,8 +13,8 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V5.0: Admin Oversight for Veteran Accounts.
- * Balanced Fetch: Standardized at 3,000 records for all critical metadata.
+ * LOW-COST V6.0: Index-Resilient Admin Oversight.
+ * Handles veteran accounts by switching to Scan-and-Sort if database indices are missing.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -111,8 +110,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 3500) => {
             const colRef = collection(db!, colName);
+            // Targeted query (Needs index)
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
@@ -123,15 +123,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
+                // EMERGENCY INDEX-FREE FALLBACK
+                // We increase the limit to 4k to ensure we get past the "invisible tail" for NL-02
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(4000));
                 const snap = await getDocs(fallbackQ);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             }
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "submittedAt", 3000), 
-            fetchModule("plans", "plannedDate", 3000),
+            fetchModule("coverageEntries", "submittedAt", 3500), 
+            fetchModule("plans", "plannedDate", 3500),
             fetchModule("timeLogs", "timeIn", 1000)
         ]);
 
@@ -142,7 +144,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const [ncds, doctors, requests] = await Promise.all([
             fetchModule("nonCallDays", "date", 1000),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 

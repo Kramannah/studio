@@ -6,7 +6,7 @@ import { usePlans } from '@/hooks/use-plans';
 import { useNonCallDays } from '@/hooks/use-non-call-days';
 import { useQ4Allocation } from '@/hooks/use-q4-allocation';
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard, Bug } from "lucide-react";
+import { Wifi, WifiOff, RefreshCw, LogIn, LogOut, Notebook, LifeBuoy, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
 import { isToday, parseISO, format } from "date-fns";
@@ -29,10 +29,6 @@ import { SubmittedList } from '@/components/submitted-list';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { TimeLogDialog } from '@/components/time-log-dialog';
 import { HelpdeskDialog } from '@/components/helpdesk-dialog';
-
-// Diagnostic Imports
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
 
@@ -58,36 +54,7 @@ export default function Home() {
   const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
-  // Diagnostic State
-  const [diagResults, setDiagResults] = useState<any[] | null>(null);
-  const [diagError, setDiagError] = useState<string | null>(null);
-  const [diagTime, setDiagTime] = useState<number | null>(null);
-
   useEffect(() => { setMounted(true); }, []);
-
-  // DIAGNOSTIC EFFECT: ONLY FOR NL-02
-  useEffect(() => {
-      if (user?.uid === "mdLCjhNVnYas96aW4IkrPWip7RS2" && db) {
-          const runDiagnostic = async () => {
-              const start = Date.now();
-              try {
-                  const q = query(
-                      collection(db, "coverageEntries"), 
-                      where("userId", "==", user.uid), 
-                      orderBy("submittedAt", "desc"), 
-                      limit(10)
-                  );
-                  const snap = await getDocs(q);
-                  setDiagTime(Date.now() - start);
-                  setDiagResults(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-              } catch (e: any) {
-                  setDiagError(e.message);
-                  setDiagTime(Date.now() - start);
-              }
-          };
-          runDiagnostic();
-      }
-  }, [user]);
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -228,39 +195,6 @@ export default function Home() {
             </SidebarFooter>
           </Sidebar>
           <main className="flex-1 w-full overflow-x-hidden">
-            {/* NL-02 DIAGNOSTIC OVERLAY */}
-            {(diagResults || diagError) && (
-              <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[1000] bg-[#0a0c14] border-2 border-primary/50 p-4 rounded-xl shadow-2xl max-w-lg w-[90vw] animate-in slide-in-from-top-4 duration-500">
-                <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Bug className="text-primary w-4 h-4" />
-                    <h4 className="font-headline text-primary text-sm font-black uppercase tracking-widest">Diagnostic Trace: NL-02</h4>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">{diagTime}ms</span>
-                </div>
-                {diagError ? (
-                  <div className="bg-destructive/10 p-3 rounded border border-destructive/20">
-                    <p className="text-destructive text-[10px] font-bold uppercase mb-1">Index/Query Error:</p>
-                    <p className="text-destructive text-[10px] font-mono leading-tight">{diagError}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                    {diagResults?.map((r, i) => (
-                      <div key={r.id} className="text-[9px] font-mono text-white/80 grid grid-cols-3 gap-2 border-b border-white/5 py-1 last:border-0">
-                        <span className="text-primary font-bold">{i+1}. {r.id.substring(0,6)}</span>
-                        <span className="text-orange-500">Sub: {r.submittedAt?.substring(5,16).replace('T', ' ')}</span>
-                        <span className="text-teal-500">Cov: {r.coverageDate?.substring(5,10) || 'MISSING'}</span>
-                      </div>
-                    ))}
-                    {diagResults?.length === 0 && <p className="text-center text-muted-foreground text-[10px] py-4 italic">No documents returned by sorted query.</p>}
-                  </div>
-                )}
-                <p className="text-[8px] text-muted-foreground mt-3 uppercase font-bold text-center tracking-tighter">
-                  If June 2026 IDs appear, the dashboard hang is caused by total payload size.
-                </p>
-              </div>
-            )}
-            
             <div className="w-full h-full p-4 md:p-6 lg:p-8">
                 {renderContent()}
             </div>
