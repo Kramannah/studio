@@ -11,7 +11,6 @@ import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
 import { isValid, isWithinInterval, parseISO } from "date-fns";
 
-// Singleton cache to prevent redundant reads for the same user+month
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
@@ -72,8 +71,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(500))),
-            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(500)))
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
+            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
@@ -84,7 +83,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = { ncds, reqs, timestamp: Date.now() };
     } catch (e) {
-        console.warn("Approval fetch failed", e);
+        console.warn("Approval fetch failure", e);
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
@@ -92,6 +91,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!uid || !db || !active || !isAuthorized) return;
     
     const { start, end } = getMonthRangeISO(selectedMonth);
+    const interval = { start: parseISO(start), end: parseISO(end) };
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
@@ -107,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 10000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -120,11 +120,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // FALLBACK for veteran accounts (Standardized at 3,000 for stability)
-                console.warn(`Admin fetch fallback for veteran UID: ${uid} on ${colName}`);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(3000));
+                console.warn(`Admin targeted scan fallback for UID: ${uid} on ${colName}`);
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(10000));
                 const snap = await getDocs(fallbackQ);
-                const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
                     const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.date;
                     const date = parseAnyDate(dateVal);
@@ -134,15 +132,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 3000),
-            fetchModule("plans", "plannedDate", 3000),
-            fetchModule("timeLogs", "timeIn", 500)
+            fetchModule("coverageEntries", "coverageDate"),
+            fetchModule("plans", "plannedDate"),
+            fetchModule("timeLogs", "timeIn")
         ]);
 
         const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date", 200),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+            fetchModule("nonCallDays", "date"),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         const data = {
@@ -165,11 +163,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
         if (force) {
-            toast({ title: "Data Synchronized", description: `Showing records for ${selectedMonth}.` });
+            toast({ title: "Sync Complete", description: `Updated records for ${uid}.` });
         }
     } catch (e: any) {
-        console.warn("Caught User Data Fetch Timeout/Error for UID:", uid);
-        toast({ variant: "destructive", title: "Connection Timeout", description: "Database is slow. Please refresh and try again." });
+        console.error("Individual User Fetch Failure:", e);
+        toast({ variant: "destructive", title: "Connection Error", description: "Database is slow. Please refresh." });
     } finally { 
         setLoadingIndividual(false); 
     }

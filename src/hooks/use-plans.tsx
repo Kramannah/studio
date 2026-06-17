@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.9: Optimized for high-activity PMR veteran accounts.
- * Standardized at 3,000 records to prevent Firestore Rules evaluation timeouts.
+ * LOW-COST V3: Optimized for high-activity PMR veteran accounts.
+ * Horizon expanded to 10,000 records to ensure plans are never missed during broad scans.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -36,27 +36,27 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
       const rangeStart = startOfMonth(subMonths(refDate, 1)).toISOString();
       const rangeEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
+      const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
 
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(3000)
+        limit(5000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(200)
+        limit(500)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans range fallback for veteran:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
+           console.warn("Plans targeted scan failed, using veteran horizon:", error.message);
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(10000));
            const snap = await getDocs(fallbackQ);
-           const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            
            const filtered = snap.docs
                .map(d => ({ id: d.id, ...d.data() } as Plan))
@@ -77,7 +77,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
       lastFetchedKeyRef.current = fetchKey;
     } catch (error) {
-        console.warn("Fetch plans timeout/error caught:", error);
+        console.error("Fetch plans failure:", error);
     } finally {
         setLoading(false);
     }

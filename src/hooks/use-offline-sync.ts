@@ -33,9 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.9: Optimized for veteran PMR accounts (e.g., NL-02 UID mdLCjhNVnYas96aW4IkrPWip7RS2).
- * Horizon standardized at 3,000 records to prevent Firestore Security Rules timeouts
- * while maintaining data completeness for the selected month.
+ * LOW-COST V3: Optimized for massive veteran PMR accounts (e.g., NL-02 UID mdLCjhNVnYas96aW4IkrPWip7RS2).
+ * Horizon expanded to 10,000 records to ensure current month visibility even for high-volume users.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -72,7 +71,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, selectedMonth]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    // CRITICAL: Ensure UID (e.g. mdLCjhNVnYas96aW4IkrPWip7RS2) is strictly filtered
     if (!userId || !db || !active || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
@@ -80,15 +78,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     const { start, end } = getMonthRangeISO(selectedMonth);
+    const interval = { start: parseISO(start), end: parseISO(end) };
     
     try {
-      // Primary targeted query for selected month data
+      // Attempt targeted query (Requires composite index)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(5000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -102,12 +101,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Coverage fetch fallback triggered for veteran account:", userId, error.message);
-        // SAFETY FALLBACK: Fetch broad history standardized at 3,000 records
+        console.warn("Targeted coverage query failed, using expanded veteran horizon:", error.message);
+        
+        // VETERAN FALLBACK: Pull 10,000 records to ensure current month is captured
         try {
-            const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
+            const fallbackQ = query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", userId), 
+                limit(10000)
+            );
             const snap = await getDocs(fallbackQ);
-            const interval = { start: parseISO(start), end: parseISO(end) };
+            
             const fetched = snap.docs
                 .map(d => ({id: d.id, ...d.data()} as CoverageEntry))
                 .filter(e => {
@@ -118,7 +122,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
         } catch (fallbackError) {
-            console.warn("Critical Coverage Fetch Timeout/Failure:", fallbackError);
+            console.error("Critical Coverage Fetch Failure:", fallbackError);
         }
     } finally {
         setLoading(false);
