@@ -9,21 +9,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Role-based Access Logic - Optimized for high-volume list queries
-    // Checks ownership first to avoid expensive document lookups (get/exists) for the owner.
+    // Role-based Access Logic - ULTRA-OPTIMIZED FOR VETERAN ACCOUNTS
+    // Short-circuits instantly if the user is the owner to prevent rule engine timeouts.
     function canAccessData(docUserId) {
       if (!isSignedIn()) return false;
       
       // PRIORITY 1: Ownership (Instant Short-circuit)
-      // This prevents the Rules engine from timing out on large list queries (e.g. 10k records)
+      // This is the fastest path and prevents crashes for users with 3,000+ records.
       if (docUserId == request.auth.uid) return true;
       
-      // PRIORITY 2: Admin/Internal Role checks
-      // Only executed if the user is NOT the owner (e.g. Manager oversight)
+      // PRIORITY 2: Admin/Internal Role checks (Manager oversight)
+      // Only executed if the user is NOT the owner.
       let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
       if (request.auth.token.get('email', '').lower() in adminEmails) return true;
       
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
+      // Use exists check to prevent evaluation crashes on missing veteran profiles
       return exists(profilePath) && (
         get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
       );

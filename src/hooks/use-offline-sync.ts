@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V3: Optimized for massive veteran PMR accounts (e.g., NL-02 UID mdLCjhNVnYas96aW4IkrPWip7RS2).
- * Horizon expanded to 10,000 records to ensure current month visibility even for high-volume users.
+ * LOW-COST V3.1: Standardized Fetch Horizon (3,000 Records).
+ * Optimized to prevent rule timeouts while ensuring June 2026 data visibility.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -87,7 +87,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(5000)
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -101,14 +101,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Targeted coverage query failed, using expanded veteran horizon:", error.message);
+        console.warn("Targeted coverage query failed, using broad scan fallback:", error.message);
         
-        // VETERAN FALLBACK: Pull 10,000 records to ensure current month is captured
+        // VETERAN FALLBACK: Pull 3,000 records to ensure current data is captured.
         try {
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId), 
-                limit(10000)
+                limit(3000)
             );
             const snap = await getDocs(fallbackQ);
             

@@ -107,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 10000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -121,7 +121,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
                 console.warn(`Admin targeted scan fallback for UID: ${uid} on ${colName}`);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(10000));
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
                 const snap = await getDocs(fallbackQ);
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
                     const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.date;
@@ -139,7 +139,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         const [ncds, doctors, requests] = await Promise.all([
             fetchModule("nonCallDays", "date"),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 

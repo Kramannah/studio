@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V3: Optimized for high-activity PMR veteran accounts.
- * Horizon expanded to 10,000 records to ensure plans are never missed during broad scans.
+ * LOW-COST V3.1: Optimized for high-activity PMR veteran accounts.
+ * Standardized horizon to 3,000 records.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -43,7 +43,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(5000)
+        limit(3000)
       );
       
       const requestsQuery = query(
@@ -54,8 +54,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans targeted scan failed, using veteran horizon:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(10000));
+           console.warn("Plans targeted scan failed, using fallback scan:", error.message);
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            
            const filtered = snap.docs
