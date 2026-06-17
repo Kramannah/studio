@@ -5,8 +5,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, startOfMonth, endOfMonth, subMonths, addMonths } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
+import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 

@@ -56,7 +56,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         process(entry.primarySampleName, entry.primaryProductQty);
         process(entry.secondarySampleName, entry.secondaryProductQty);
         if (entry.reminderProducts) {
-            entry.reminderProducts.forEach(rp => process(rp?.sampleName, rp?.quantity));
+            entry.reminderProducts.forEach(rp => rp?.sampleName && process(rp?.sampleName, rp?.quantity));
         }
     });
     return quantities;
@@ -115,7 +115,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 2000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 1500) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -141,17 +141,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         };
 
-        // Fetch in smaller groups to prevent broad timeouts
+        // Fetch modules with protective limits to avoid timeouts
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 2500),
-            fetchModule("plans", "plannedDate", 2500),
-            fetchModule("timeLogs", "timeIn", 500)
+            fetchModule("coverageEntries", "coverageDate", 1500),
+            fetchModule("plans", "plannedDate", 1500),
+            fetchModule("timeLogs", "timeIn", 300)
         ]);
 
         const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date", 200),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+            fetchModule("nonCallDays", "date", 100),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(50))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         const data = {
