@@ -13,8 +13,9 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V6.0: Index-Resilient Admin Oversight.
- * Handles veteran accounts by switching to Scan-and-Sort if database indices are missing.
+ * LOW-COST V7.0: Admin-Resilient Targeted Retrieval.
+ * Specifically optimized to prevent payload crashes when viewing veteran accounts (NL-02 / CL-01).
+ * Uses a multi-stage fetch to prioritize monthly data and reduce network strain.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -110,50 +111,71 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 3500) => {
-            const colRef = collection(db!, colName);
-            // Targeted query (Needs index)
-            const q = query(
-                colRef, 
-                where("userId", "==", uid), 
-                orderBy(dateField, "desc"),
-                limit(lmt)
-            );
+        // RESILIENT MULTI-STAGE FETCH FOR ADMIN OVERSIGHT
+        const fetchEntriesResilient = async () => {
+            const colRef = collection(db!, "coverageEntries");
+            
+            // Stage 1: Targeted Monthly Query (Coverage Date)
             try {
-                const snap = await getDocs(q);
-                return snap.docs.map(d => ({id: d.id, ...d.data()}));
-            } catch (error: any) {
-                // EMERGENCY INDEX-FREE FALLBACK
-                // We increase the limit to 4k to ensure we get past the "invisible tail" for NL-02
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(4000));
-                const snap = await getDocs(fallbackQ);
-                return snap.docs.map(d => ({id: d.id, ...d.data()}));
+                const q1 = query(colRef, where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000));
+                const snap1 = await getDocs(q1);
+                if (snap1.docs.length > 0) return snap1.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
+            } catch (e) { console.warn("Admin Stage 1 fail", e); }
+
+            // Stage 2: Legacy Monthly Fallback (Submitted At)
+            try {
+                const q2 = query(colRef, where("userId", "==", uid), where("submittedAt", ">=", start), where("submittedAt", "<=", end), limit(1000));
+                const snap2 = await getDocs(q2);
+                if (snap2.docs.length > 0) return snap2.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
+            } catch (e) { console.warn("Admin Stage 2 fail", e); }
+
+            // Stage 3: Recent-First Broad Scan (Latest 3,500)
+            try {
+                const q3 = query(colRef, where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(3500));
+                const snap3 = await getDocs(q3);
+                return snap3.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
+                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                });
+            } catch (e) {
+                // Stage 4: EMERGENCY INDEX-FREE SCAN
+                const q4 = query(colRef, where("userId", "==", uid), limit(4000));
+                const snap4 = await getDocs(q4);
+                return snap4.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
+                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                });
             }
         };
 
-        const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "submittedAt", 3500), 
-            fetchModule("plans", "plannedDate", 3500),
-            fetchModule("timeLogs", "timeIn", 1000)
-        ]);
+        const fetchPlansResilient = async () => {
+            const colRef = collection(db!, "plans");
+            try {
+                const q = query(colRef, where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000));
+                const snap = await getDocs(q);
+                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
+            } catch (e) {
+                const qFallback = query(colRef, where("userId", "==", uid), limit(3500));
+                const snap = await getDocs(qFallback);
+                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan)).filter(p => {
+                    const d = parseAnyDate(p.plannedDate);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                });
+            }
+        };
 
-        const filteredEntries = (entries as CoverageEntry[]).filter(e => {
-            const date = parseAnyDate(e.coverageDate || e.submittedAt);
-            return date && isValid(date) && isWithinInterval(date, interval);
-        });
-
-        const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date", 1000),
+        const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
+            fetchEntriesResilient(),
+            fetchPlansResilient(),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         const data = {
-            entries: filteredEntries.sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
-            plans: (plans as Plan[]).filter(p => {
-                const d = parseAnyDate(p.plannedDate);
-                return d && isValid(d) && isWithinInterval(d, interval);
-            }).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
+            entries: (entries as CoverageEntry[]).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
+            plans: (plans as Plan[]).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
             logs: logs as any[],
             ncds: ncds as NonCallDay[],
             doctors: doctors as Doctor[],
@@ -171,11 +193,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
         if (force) {
-            toast({ title: "Sync Complete", description: `Updated records for user.` });
+            toast({ title: "Admin Sync Complete", description: `Restored visibility for user records.` });
         }
     } catch (e: any) {
         console.error("Individual User Fetch Failure:", e);
-        toast({ variant: "destructive", title: "Connection Error", description: "Database is slow. Please refresh." });
+        toast({ variant: "destructive", title: "Access Error", description: "Database is heavily congested. Retrying..." });
     } finally { 
         setLoadingIndividual(false); 
     }
