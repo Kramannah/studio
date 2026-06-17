@@ -34,6 +34,7 @@ const sanitizePayload = (data: any): any => {
 
 /**
  * LOW-COST V2.2: Optimized for minimum reads with monthly synchronization and high-horizon fallbacks.
+ * Ensures accounts like NL-02 (mdLCjhNVnYas96aW4IkrPWip7RS2) load their coverage correctly.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -79,6 +80,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
+      // Primary targeted query (requires composite index: userId + coverageDate)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -98,8 +100,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
-        console.warn("Coverage fetch fallback triggered:", error);
-        // Fallback increased to 5000 to ensure veteran accounts load correctly
+        console.warn("Coverage fetch fallback triggered for user:", userId);
+        // High-horizon fallback for veteran accounts (like NL-02)
         const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
         const snap = await getDocs(fallbackQ);
         const interval = { start: parseISO(start), end: parseISO(end) };
@@ -166,7 +168,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     for (const entry of offlineEntries) {
         const { id, ...dataToSync } = entry;
         const docRef = doc(collection(db!, "coverageEntries"));
-        // Critically sanitizing data before batch sync to prevent crashes on undefined fields
         const sanitized = sanitizePayload({ ...dataToSync, userId: userId });
         batch.set(docRef, sanitized);
     }

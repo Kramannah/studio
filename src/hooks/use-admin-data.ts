@@ -109,6 +109,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 5000) => {
             const colRef = collection(db!, colName);
+            // Targeted ranged query
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
@@ -120,7 +121,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // FALLBACK: Increased to 5000 to ensure veteran accounts like VIS-06 capture current month
+                // FALLBACK for veteran accounts (like NL-02: mdLCjhNVnYas96aW4IkrPWip7RS2)
                 const fallbackQ = query(colRef, where("userId", "==", uid), limit(5000));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
@@ -167,7 +168,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             toast({ title: "Data Synchronized", description: `Showing records for ${selectedMonth}.` });
         }
     } catch (e: any) {
-        console.error("Critical User Data Fetch Error:", e);
+        console.error("Critical User Data Fetch Error for UID:", uid, e);
         toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed for this representative." });
     } finally { 
         setLoadingIndividual(false); 
