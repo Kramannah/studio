@@ -29,25 +29,17 @@ service cloud.firestore {
       // SECONDARY CHEAP CHECK: Admin email check in token.
       if (isAdminFallback()) return true;
       
-      // TERTIARY: Internal Role check (Expensive document read, only for managers/marketing)
+      // TERTIARY: Internal Role check (Resilient check for profile existence)
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
-      if (!exists(profilePath)) return false;
-      
-      let profileData = get(profilePath).data;
-      let role = profileData.get('role', 'PMR');
-      return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
+      return exists(profilePath) && (
+        get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
+      );
     }
 
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // Simplified list rule to prevent rule engine timeouts on veteran accounts
-      allow list: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || 
-        isAdminFallback() || 
-        (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"])
-      );
-      allow get: if canAccessData(resource.data.userId);
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
     }

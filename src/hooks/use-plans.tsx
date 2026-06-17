@@ -12,8 +12,7 @@ import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
  * LOW-COST V2.9: Optimized for high-activity PMR veteran accounts.
- * Standardized at 3,000 records to prevent Firestore Rules evaluation timeouts
- * during unindexed historical scans.
+ * Standardized at 3,000 records to prevent Firestore Rules evaluation timeouts.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();

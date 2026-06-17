@@ -33,7 +33,7 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.9: Optimized for veteran PMR accounts.
+ * LOW-COST V2.9: Optimized for veteran PMR accounts (e.g., NL-02 UID mdLCjhNVnYas96aW4IkrPWip7RS2).
  * Horizon standardized at 3,000 records to prevent Firestore Security Rules timeouts
  * while maintaining data completeness for the selected month.
  */
@@ -72,6 +72,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, selectedMonth]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
+    // CRITICAL: Ensure UID (e.g. mdLCjhNVnYas96aW4IkrPWip7RS2) is strictly filtered
     if (!userId || !db || !active || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
@@ -102,7 +103,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
         console.warn("Coverage fetch fallback triggered for veteran account:", userId, error.message);
-        // SAFETY FALLBACK: Fetch broad history if index is missing (Standardized at 3,000 for stability)
+        // SAFETY FALLBACK: Fetch broad history standardized at 3,000 records
         try {
             const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
             const snap = await getDocs(fallbackQ);
