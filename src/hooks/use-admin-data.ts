@@ -15,7 +15,7 @@ const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
  * LOW-COST V4.2: Admin Oversight for Veteran Accounts.
- * Balanced Fetch: 1,000 for CoverageEntries, 3,000 for others.
+ * Balanced Fetch: Standardized at 3,000 records for all collections.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -112,8 +112,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
-            // REDUCED LIMIT FOR COVERAGE ENTRIES (HEAVY DATA)
-            const safeLimit = colName === 'coverageEntries' ? 1000 : lmt;
+            const safeLimit = lmt;
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 

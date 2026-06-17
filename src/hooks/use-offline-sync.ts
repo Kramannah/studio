@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4.1: Optimized for veteran accounts (NL-02, CL-01).
- * Balanced payload: 1,000 record limit for heavy coverage entries to prevent timeouts.
+ * LOW-COST V4.2: Admin Oversight for Veteran Accounts (NL-02, CL-01).
+ * Standardized Fetch: 3,000 record limit for all coverage scans.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -82,13 +82,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     try {
       // 1. Targeted query (Most Efficient)
-      // LIMIT: 1000 is safe for a single month and prevents timeout for veteran accounts
+      // LIMIT: 3000 is safe for a single month and ensures completeness for veteran accounts
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(1000)
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -106,11 +106,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         
         try {
             // 2. Fallback Scan
-            // LIMIT: Reduced to 1000 for heavy data collections to prevent payload timeouts
+            // LIMIT: Standardized to 3,000 records
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
-                limit(1000)
+                limit(3000)
             );
             const snap = await getDocs(fallbackQ);
             
