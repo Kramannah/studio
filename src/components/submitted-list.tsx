@@ -4,15 +4,19 @@
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { format, parseISO, isValid, isToday } from "date-fns";
+import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, History } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
+import { Calendar } from "@/components/ui/calendar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+import { cn } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
@@ -22,7 +26,21 @@ const DetailField = ({ label, value }: { label: string, value?: string | number 
     </div>
 )
 
-const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: CoverageEntry, doctors: Doctor[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) => {
+const EntryRow = ({ 
+    entry, 
+    doctors, 
+    onDelete, 
+    onEdit, 
+    readOnly,
+    onPreview
+}: { 
+    entry: CoverageEntry, 
+    doctors: Doctor[], 
+    onDelete: (id: string) => void, 
+    onEdit: (entry: CoverageEntry) => void, 
+    readOnly?: boolean,
+    onPreview: (src: string, title: string) => void
+}) => {
     const [isOpen, setIsOpen] = useState(false);
     
     const doctor = useMemo(() => {
@@ -63,8 +81,22 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-1">
-                        {entry.photos?.[0] && <div className="h-8 w-10 bg-muted rounded overflow-hidden relative border"><Image src={entry.photos[0]} alt="proof" fill className="object-cover" /></div>}
-                        {entry.signature && <div className="h-8 w-14 bg-white rounded border flex items-center justify-center p-0.5"><Image src={entry.signature} alt="sig" width={40} height={20} className="object-contain" /></div>}
+                        {entry.photos?.[0] && (
+                            <div 
+                                className="h-8 w-10 bg-muted rounded overflow-hidden relative border cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                onClick={() => onPreview(entry.photos![0], `Photo: ${entry.firstName} ${entry.lastName}`)}
+                            >
+                                <Image src={entry.photos[0]} alt="proof" fill className="object-cover" />
+                            </div>
+                        )}
+                        {entry.signature && (
+                            <div 
+                                className="h-8 w-14 bg-white rounded border flex items-center justify-center p-0.5 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                onClick={() => onPreview(entry.signature!, `Signature: ${entry.firstName} ${entry.lastName}`)}
+                            >
+                                <Image src={entry.signature} alt="sig" width={40} height={20} className="object-contain" />
+                            </div>
+                        )}
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
@@ -131,11 +163,28 @@ const EntryRow = ({ entry, doctors, onDelete, onEdit, readOnly }: { entry: Cover
 
 export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, readOnly = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays?: NonCallDay[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) {
     const [searchQuery, setSearchQuery] = useState("");
+    const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+    const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
 
     const filtered = useMemo(() => (entries || []).filter(e => {
         const q = (searchQuery || "").toLowerCase().trim();
-        return !q || `${e.firstName} ${e.lastName} ${e.clinic} ${e.specialty}`.toLowerCase().includes(q);
-    }), [entries, searchQuery]);
+        const matchesSearch = !q || `${e.firstName} ${e.lastName} ${e.clinic} ${e.specialty}`.toLowerCase().includes(q);
+        
+        if (viewMode === 'calendar' && selectedDate) {
+            const entryDate = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
+            return matchesSearch && isValid(entryDate) && isSameDay(entryDate, selectedDate);
+        }
+        
+        return matchesSearch;
+    }), [entries, searchQuery, viewMode, selectedDate]);
+
+    const entryDates = useMemo(() => {
+        return (entries || []).map(e => {
+            const d = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
+            return isValid(d) ? d : null;
+        }).filter(Boolean) as Date[];
+    }, [entries]);
 
     const handleExportExcel = () => {
         const data = filtered.map(e => ({
@@ -153,39 +202,139 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
         XLSX.writeFile(wb, `Submitted_Coverage.xlsx`);
     }
 
+    const openPreview = (src: string, title: string) => {
+        setPreviewData({ src, title });
+    };
+
     if (entries.length === 0) return <Card className="p-20 text-center"><p className="text-muted-foreground italic">No reports found.</p></Card>;
 
     return (
       <div className="space-y-4 animate-in fade-in duration-500 w-full">
-        <Card className="p-4 border-2">
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="relative flex-1 w-full max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search records..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-10 border-2" />
+        <Card className="p-4 border-2 shadow-sm">
+            <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+                <div className="flex items-center gap-4 w-full max-w-xl">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="Search records..." 
+                            value={searchQuery} 
+                            onChange={(e) => setSearchQuery(e.target.value)} 
+                            className="pl-10 h-10 border-2" 
+                        />
+                    </div>
+                    <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="shrink-0">
+                        <TabsList className="grid grid-cols-2 w-[160px] h-10">
+                            <TabsTrigger value="list" className="gap-2"><List size={14}/> List</TabsTrigger>
+                            <TabsTrigger value="calendar" className="gap-2"><CalendarIcon size={14}/> Cal</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportExcel} className="font-headline h-10 gap-2 border-2"><Download size={16} /> Export Excel</Button>
+                <Button variant="outline" size="sm" onClick={handleExportExcel} className="font-headline h-10 gap-2 border-2 w-full lg:w-auto"><Download size={16} /> Export Excel</Button>
             </div>
         </Card>
 
-        <Card className="border-2 overflow-hidden shadow-lg">
-            <Table>
-                <TableHeader className="bg-muted/50 h-14">
-                    <TableRow>
-                        <TableHead className="font-bold">Provider</TableHead>
-                        <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
-                        <TableHead className="font-bold">Date</TableHead>
-                        <TableHead className="hidden sm:table-cell font-bold text-center">Freq</TableHead>
-                        <TableHead className="font-bold">Proof</TableHead>
-                        <TableHead className="text-right font-bold">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {filtered.length > 0 ? (filtered.map(e => <EntryRow key={e.id} entry={e} doctors={doctors} onDelete={onDelete} onEdit={onEdit} readOnly={readOnly} />)) : (
-                        <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No matches found.</TableCell></TableRow>
+        <div className={cn("grid grid-cols-1 gap-6", viewMode === 'calendar' ? "lg:grid-cols-12" : "")}>
+            {viewMode === 'calendar' && (
+                <div className="lg:col-span-4">
+                    <Card className="border-2 shadow-sm overflow-hidden sticky top-24">
+                        <CardHeader className="bg-muted/30 border-b p-4">
+                            <CardTitle className="text-sm font-black font-headline text-primary uppercase tracking-widest">Submission History</CardTitle>
+                        </CardHeader>
+                        <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={setSelectedDate}
+                            className="p-4"
+                            modifiers={{ 
+                                submitted: entryDates,
+                            }}
+                            modifiersStyles={{
+                                submitted: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' }
+                            }}
+                        />
+                    </Card>
+                </div>
+            )}
+
+            <div className={cn(viewMode === 'calendar' ? "lg:col-span-8" : "w-full")}>
+                <Card className="border-2 overflow-hidden shadow-lg">
+                    <Table>
+                        <TableHeader className="bg-muted/50 h-14">
+                            <TableRow>
+                                <TableHead className="font-bold">Provider</TableHead>
+                                <TableHead className="hidden md:table-cell font-bold">Clinic</TableHead>
+                                <TableHead className="font-bold">Date</TableHead>
+                                <TableHead className="hidden sm:table-cell font-bold text-center">Freq</TableHead>
+                                <TableHead className="font-bold">Proof</TableHead>
+                                <TableHead className="text-right font-bold">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filtered.length > 0 ? (
+                                filtered.map(e => (
+                                    <EntryRow 
+                                        key={e.id} 
+                                        entry={e} 
+                                        doctors={doctors} 
+                                        onDelete={onDelete} 
+                                        onEdit={onEdit} 
+                                        readOnly={readOnly} 
+                                        onPreview={openPreview}
+                                    />
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-48 text-center">
+                                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                            <Search size={32} className="opacity-20" />
+                                            <p className="italic">No matching reports found for {viewMode === 'calendar' && selectedDate ? format(selectedDate, "MMM d") : "this period"}.</p>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </Card>
+            </div>
+        </div>
+
+        {/* Full-screen Proof Preview Dialog */}
+        <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
+            <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90 z-[1000]">
+                <DialogHeader className="sr-only">
+                    <DialogTitle>{previewData?.title || "Proof Preview"}</DialogTitle>
+                    <DialogDescription>Full-screen inspection of the captured proof of coverage.</DialogDescription>
+                </DialogHeader>
+                <div className="relative w-full h-[85vh] flex items-center justify-center p-4">
+                    {previewData?.src && (
+                        <Image 
+                            src={previewData.src} 
+                            alt="Full Proof" 
+                            width={1600} 
+                            height={1200} 
+                            className={cn(
+                                "max-w-full max-h-full object-contain rounded-md shadow-2xl",
+                                previewData.title.includes("Signature") ? "bg-white p-12" : ""
+                            )} 
+                        />
                     )}
-                </TableBody>
-            </Table>
-        </Card>
+                </div>
+                <div className="absolute top-4 left-4 flex items-center gap-2">
+                    <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg border-2 border-primary/20">
+                        {previewData?.title}
+                    </Badge>
+                </div>
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute top-4 right-4 text-white hover:bg-white/10"
+                    onClick={() => setPreviewData(null)}
+                >
+                    <Maximize2 size={24} />
+                </Button>
+            </DialogContent>
+        </Dialog>
       </div>
     );
 }
+
