@@ -105,11 +105,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         console.warn("Primary targeted scan failure (NL-02/CL-01):", error.message);
         
         try {
-            // 2. Fallback Scan
-            // LIMIT: Standardized to 3,000 records
+            // 2. Fallback Scan (Recent-First Priority)
+            // CRITICAL: orderBy("submittedAt", "desc") ensures the last 3,000 records (June 2026) are pulled.
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
+                orderBy("submittedAt", "desc"),
                 limit(3000)
             );
             const snap = await getDocs(fallbackQ);

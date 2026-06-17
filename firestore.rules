@@ -16,6 +16,7 @@ service cloud.firestore {
     }
 
     // Token-based whitelist check (No DB lookups)
+    // Allows specific veteran accounts to bypass profile lookups entirely for performance
     function isSpecialAuthorizedPMR() {
       let email = request.auth.token.get('email', '').lower();
       return email in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
