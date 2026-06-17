@@ -6,12 +6,13 @@ import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, startAt, endAt } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
+import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
 
 /**
- * LOW-COST V2: Restricts plan fetching to a specific date range (current month +/- 1 month)
+ * LOW-COST V2.1: Restricts plan fetching to a specific date range (current month +/- 1 month)
  * to prevent over-scanning history for veteran accounts.
+ * Includes a 5,000 doc fallback for missing indexes.
  */
 export const usePlans = (active: boolean = true) => {
   const { toast } = useToast();
@@ -46,13 +47,23 @@ export const usePlans = (active: boolean = true) => {
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(() => {
-           // Fallback if index missing
-           return getDocs(query(collection(db, "plans"), where("userId", "==", user.uid), limit(1000)));
+           // HIGH-VOLUME FALLBACK: If index is missing, fetch 5,000 records
+           console.warn("Plans range query requires index. Using 5k fallback.");
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
+           return getDocs(fallbackQ).then(snap => {
+               const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
+               return {
+                   docs: snap.docs.filter(d => {
+                       const date = parseISO(d.data().plannedDate);
+                       return isValid(date) && isWithinInterval(date, interval);
+                   })
+               } as any;
+           });
         }),
         getDocs(requestsQuery),
       ]);
 
-      const plans = plansSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Plan));
+      const plans = plansSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Plan));
       const requests = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
       
       setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));

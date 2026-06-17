@@ -17,6 +17,7 @@ const ADMIN_SESSION_CACHE: Record<string, any> = {};
 /**
  * useAdminData - Optimized for UID-based individual oversight.
  * LOW-COST V2: Performs server-side date range queries to minimize billed reads.
+ * V2.1: Increased fallback limits to 5,000 to handle high-volume veteran accounts.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -95,7 +96,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   /**
    * fetchUserData - The core "Low Cost" engine.
-   * LOW-COST V2: Uses server-side filters to only fetch documents for the selected month.
+   * LOW-COST V2.1: Uses server-side filters with a high-volume (5000 doc) fallback for missing indexes.
    */
   const fetchUserData = useCallback(async (uid: string, selectedMonth?: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
@@ -116,9 +117,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 1000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 2000) => {
             const colRef = collection(db!, colName);
-            // LOW-COST V2: Range filter on the server side
+            // TARGETED QUERY: Minimum Reads (requires index)
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
@@ -130,24 +131,25 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (indexError) {
-                // Fallback for missing index: fetch strictly by UID and filter in memory (charges more, but prevents crash)
-                console.warn(`Query ${colName} requires an index for range filtering. Falling back to UID-only fetch.`);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
+                // HIGH-VOLUME FALLBACK: If index is missing, fetch 5,000 records to ensure data isn't missing for veteran accounts
+                console.warn(`Query ${colName} requires index. Fallback fetch triggered.`);
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(5000));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
-                    const date = parseAnyDate(d[dateField] || d.coverageDate || d.plannedDate || d.date);
+                    const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.date;
+                    const date = parseAnyDate(dateVal);
                     return date && isValid(date) && isWithinInterval(date, interval);
                 });
             }
         };
 
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 1500),
-            fetchModule("plans", "plannedDate", 1500),
+            fetchModule("coverageEntries", "coverageDate", 2000),
+            fetchModule("plans", "plannedDate", 2000),
             fetchModule("timeLogs", "timeIn", 500),
             fetchModule("nonCallDays", "date", 200),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
@@ -170,12 +172,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
-        if (selectedMonth) {
-            toast({ title: "Module Synchronized", description: `Loaded individual activity for ${selectedMonth}.` });
+        if (selectedMonth && force) {
+            toast({ title: "Sync Complete", description: `Updated dataset for ${selectedMonth}.` });
         }
     } catch (e) {
         console.error("Critical User Data Fetch Error:", e);
-        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed." });
+        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed for this representative." });
     } finally { 
         setLoadingIndividual(false); 
     }
