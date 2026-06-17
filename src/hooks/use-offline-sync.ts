@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.2: Optimized for minimum reads with monthly synchronization and high-horizon fallbacks.
- * Ensures accounts like NL-02 (mdLCjhNVnYas96aW4IkrPWip7RS2) load their coverage correctly.
+ * LOW-COST V2.3: Optimized for minimum reads and Rules stability.
+ * Fallback limit reduced to 2500 to prevent Rule Timeouts for high-volume accounts like NL-02 (mdLCjhNVnYas96aW4IkrPWip7RS2).
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -86,7 +86,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(5000)
+        limit(2500)
       );
       
       const querySnapshot = await getDocs(q);
@@ -101,8 +101,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
         console.warn("Coverage fetch fallback triggered for user:", userId);
-        // High-horizon fallback for veteran accounts (like NL-02)
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
+        // Fallback Horizon set to 2500 to keep Security Rules evaluation fast
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(2500));
         const snap = await getDocs(fallbackQ);
         const interval = { start: parseISO(start), end: parseISO(end) };
         const fetched = snap.docs
