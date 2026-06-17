@@ -3,10 +3,9 @@
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, isSameDay } from "date-fns";
-import { Target, Users, TrendingUp, ThumbsUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Activity } from "lucide-react";
+import { Card, CardContent } from "./ui/card";
+import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth } from "date-fns";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
@@ -146,20 +145,21 @@ export function CallSummary({
     
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-             <div className="space-y-1">
-                <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
-                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Territory activity and productivity analytics for the selected period.</p>
-            </div>
-
-            <div className="w-[240px]">
-                <Select value={selectedMonth} onValueChange={onMonthChange}>
-                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
-                        <SelectValue placeholder="Select Month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                    </SelectContent>
-                </Select>
+             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                    <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
+                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Territory activity and productivity analytics for the selected period.</p>
+                </div>
+                <div className="w-[240px] shrink-0">
+                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                        <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
+                            <SelectValue placeholder="Select Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

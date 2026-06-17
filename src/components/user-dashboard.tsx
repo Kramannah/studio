@@ -9,7 +9,7 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, LayoutDashboard } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UserDashboardProps {
@@ -76,9 +76,9 @@ export function UserDashboard({
     
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
-            {/* Design-Matching Tab Bar */}
-            <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                {/* Design-Matching Tab Bar */}
+                <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
                             value="summary" 
@@ -105,76 +105,76 @@ export function UserDashboard({
                             Masterlist
                         </TabsTrigger>
                     </TabsList>
-                </Tabs>
 
-                {onFetchUserData && (
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={handleRefresh} 
-                        disabled={isRefreshing}
-                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg shrink-0"
-                    >
-                        <RefreshCw className={cn(isRefreshing && "animate-spin")} size={14} />
-                        Refresh Data
-                    </Button>
-                )}
-            </div>
-            
-            <div className="pt-2">
-                <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <CallSummary 
-                        entries={allEntries} 
-                        doctors={allDoctors} 
-                        nonCallDays={allNonCallDays} 
-                        timeLogs={allTimeLogs} 
-                        selectedMonth={selectedMonth}
-                        onMonthChange={onMonthChange}
-                    />
-                </TabsContent>
+                    {onFetchUserData && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={handleRefresh} 
+                            disabled={isRefreshing}
+                            className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg shrink-0"
+                        >
+                            <RefreshCw className={cn(isRefreshing && "animate-spin")} size={14} />
+                            Refresh Data
+                        </Button>
+                    )}
+                </div>
                 
-                <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <SubmittedList 
-                        entries={allEntries} 
-                        doctors={allDoctors} 
-                        onDelete={onDeleteEntry} 
-                        onEdit={() => {}} 
-                        readOnly={!isAdminView} 
-                    />
-                </TabsContent>
-                
-                <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <PlanningCalendar 
-                        doctors={allDoctors} 
-                        plans={allPlans} 
-                        planningRequests={individualPlanningRequests} 
-                        onRequestUnlock={async () => false} 
-                        entries={allEntries} 
-                        onAddPlan={() => {}} 
-                        onAddPlansBulk={async () => false} 
-                        onRemovePlan={() => {}} 
-                        onLogCall={() => {}} 
-                        nonCallDays={allNonCallDays} 
-                        onAddNonCallDay={() => {}} 
-                        readOnly={true} 
-                        selectedMonth={selectedMonth}
-                        onMonthChange={onMonthChange}
-                    />
-                </TabsContent>
-                
-                <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <MasterList 
-                        doctors={allDoctors} 
-                        entries={allEntries} 
-                        onAddDoctor={onAddDoctor} 
-                        onAddDoctorsBulk={onAddDoctorsBulk} 
-                        onUpdateDoctor={onUpdateDoctor} 
-                        onDeleteDoctor={onDeleteDoctor} 
-                        onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
-                        readOnly={true} 
-                    />
-                </TabsContent>
-            </div>
+                <div className="pt-2">
+                    <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <CallSummary 
+                            entries={allEntries} 
+                            doctors={allDoctors} 
+                            nonCallDays={allNonCallDays} 
+                            timeLogs={allTimeLogs} 
+                            selectedMonth={selectedMonth}
+                            onMonthChange={onMonthChange}
+                        />
+                    </TabsContent>
+                    
+                    <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <SubmittedList 
+                            entries={allEntries} 
+                            doctors={allDoctors} 
+                            onDelete={onDeleteEntry} 
+                            onEdit={() => {}} 
+                            readOnly={!isAdminView} 
+                        />
+                    </TabsContent>
+                    
+                    <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <PlanningCalendar 
+                            doctors={allDoctors} 
+                            plans={allPlans} 
+                            planningRequests={individualPlanningRequests} 
+                            onRequestUnlock={async () => false} 
+                            entries={allEntries} 
+                            onAddPlan={() => {}} 
+                            onAddPlansBulk={async () => false} 
+                            onRemovePlan={() => {}} 
+                            onLogCall={() => {}} 
+                            nonCallDays={allNonCallDays} 
+                            onAddNonCallDay={() => {}} 
+                            readOnly={true} 
+                            selectedMonth={selectedMonth}
+                            onMonthChange={onMonthChange}
+                        />
+                    </TabsContent>
+                    
+                    <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <MasterList 
+                            doctors={allDoctors} 
+                            entries={allEntries} 
+                            onAddDoctor={onAddDoctor} 
+                            onAddDoctorsBulk={onAddDoctorsBulk} 
+                            onUpdateDoctor={onUpdateDoctor} 
+                            onDeleteDoctor={onDeleteDoctor} 
+                            onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
+                            readOnly={true} 
+                        />
+                    </TabsContent>
+                </div>
+            </Tabs>
         </div>
     );
 }
