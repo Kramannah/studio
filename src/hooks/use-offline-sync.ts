@@ -1,12 +1,13 @@
 
 "use client"
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
-import { safeStorageSet } from '@/lib/utils';
+import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
+import { isValid, isWithinInterval, parseISO } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -31,16 +32,17 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.1: Optimized for minimum reads with high-volume fallback.
- * Limits are set to 5,000 to ensure veteran accounts see recent data even without indexes.
+ * LOW-COST V2.1: Optimized for minimum reads with monthly targeted fetching.
  */
-export const useOfflineSync = (userId?: string, active: boolean = true) => {
+export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
+  
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -60,52 +62,69 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
         
-        const localMaster = localStorage.getItem(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`);
+        // Cache is now month-specific to prevent state flickering
+        const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
+        const localMaster = localStorage.getItem(cacheKey);
         if (localMaster) setMasterEntries(JSON.parse(localMaster));
     }
-  }, [userId]);
+  }, [userId, selectedMonth]);
 
-  const fetchMasterEntries = useCallback(async () => {
+  const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !db || !active || !navigator.onLine) return;
+    
+    const fetchKey = `${userId}_${selectedMonth || 'current'}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
+
     setLoading(true);
+    const { start, end } = getMonthRangeISO(selectedMonth);
+    
     try {
-      // Primary targeted query (Requires Index: userId + submittedAt DESC)
+      // Primary targeted query (Requires Index)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        orderBy("submittedAt", "desc"),
-        limit(1000)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(2000)
       );
       
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      setMasterEntries(fetched);
+      // Sort in memory to avoid index requirements for simple order
+      fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
       
-      // Cache metadata-only version (no heavy images) to save LocalStorage space
+      setMasterEntries(fetched);
+      lastFetchedKeyRef.current = fetchKey;
+      
+      // Cache metadata-only version
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(lightEntries));
+      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
-        console.warn("Coverage fetch fallback triggered (Index likely missing):", error);
-        // Robust Fallback: Fetch a larger batch without server-side sorting (No Index Required)
-        // limit(5000) ensures recent entries are retrieved even for veteran accounts
+        console.warn("Coverage fetch fallback triggered:", error);
+        // High-Horizon Fallback (No Index Required)
         const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
         const snap = await getDocs(fallbackQ);
-        const fetched = snap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
+        const interval = { start: parseISO(start), end: parseISO(end) };
+        const fetched = snap.docs
+            .map(d => ({id: d.id, ...d.data()} as CoverageEntry))
+            .filter(e => {
+                const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                return d && isValid(d) && isWithinInterval(d, interval);
+            });
         
-        // Sort in memory to ensure UI displays recent items first
         fetched.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
         setMasterEntries(fetched);
     } finally {
         setLoading(false);
     }
-  }, [userId, active]);
+  }, [userId, active, selectedMonth, masterEntries.length]);
 
   useEffect(() => {
     if (userId && active) {
         fetchMasterEntries();
     }
-  }, [userId, active, fetchMasterEntries]);
+  }, [userId, active, selectedMonth, fetchMasterEntries]);
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
@@ -157,7 +176,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
         await batch.commit();
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
-        fetchMasterEntries();
+        fetchMasterEntries(true);
         toast({ title: 'Sync Complete' });
     } catch (error) {
         console.error("Sync failed:", error);
@@ -194,6 +213,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     syncAllOfflineEntries, 
     isOnline, 
     updateMasterEntry, 
+    loading,
     updateOfflineEntry: (e: any) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
         setOfflineEntries(updated);

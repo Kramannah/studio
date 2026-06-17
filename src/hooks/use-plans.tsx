@@ -1,35 +1,43 @@
 
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
+import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.1: Restricts plan fetching to a specific date range with a high-volume 5,000 doc fallback.
- * Ensures veteran accounts see recent plans even if indexes are missing.
+ * LOW-COST V2.1: Restricts plan fetching to a specific date range with targeted selection.
  */
-export const usePlans = (active: boolean = true) => {
+export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [offlinePlans, setOfflinePlans] = useState<Plan[]>([]);
   const [masterPlans, setMasterPlans] = useState<Plan[]>([]);
   const [planningRequests, setPlanningRequests] = useState<PlanningPermissionRequest[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) return;
+    
+    const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
+
     setLoading(true);
     
     try {
-      const rangeStart = startOfMonth(subMonths(new Date(), 1)).toISOString();
-      const rangeEnd = endOfMonth(addMonths(new Date(), 1)).toISOString();
+      // Calculate a range that covers the selected month +/- 1 month for context
+      const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+      const rangeStart = startOfMonth(subMonths(refDate, 1)).toISOString();
+      const rangeEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
 
-      // Primary targeted query (Requires Index: userId + plannedDate range)
+      // Primary targeted query (Requires Index)
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid),
@@ -41,26 +49,24 @@ export const usePlans = (active: boolean = true) => {
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(50)
+        limit(100)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (indexError) => {
-           console.warn("Plans range query fallback triggered (Index likely missing). Scanning larger batch.");
-           // Fallback: Fetch a larger batch without range filter (No Index Required)
+           console.warn("Plans range query fallback triggered:", indexError);
+           // High-horizon fallback
            const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            
-           // Filter and sort in memory
            const filtered = snap.docs
                .map(d => ({ id: d.id, ...d.data() } as Plan))
                .filter(d => {
-                   const date = parseISO(d.plannedDate);
-                   return isValid(date) && isWithinInterval(date, interval);
+                   const date = parseAnyDate(d.plannedDate);
+                   return date && isValid(date) && isWithinInterval(date, interval);
                });
                
-           // Mock a snapshot-like structure for consistent processing
            return { docs: filtered.map(d => ({ id: d.id, data: () => d })) } as any;
         }),
         getDocs(requestsQuery),
@@ -71,12 +77,13 @@ export const usePlans = (active: boolean = true) => {
       
       setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
+      lastFetchedKeyRef.current = fetchKey;
     } catch (error) {
         console.error("Fetch plans error:", error);
     } finally {
         setLoading(false);
     }
-  }, [user, active]);
+  }, [user, active, selectedMonth, masterPlans.length]);
 
   useEffect(() => {
     if (active) fetchData();
