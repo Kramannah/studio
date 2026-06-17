@@ -21,12 +21,10 @@ export const usePlans = (active: boolean = true) => {
     if (!user || !db || !active) return;
     setLoading(true);
     try {
-      // Increased limit to 5000 and added ordering to ensure recent plans (June 2026) are visible
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid), 
-        orderBy("plannedDate", "desc"),
-        limit(5000)
+        limit(1000)
       );
       
       const requestsQuery = query(
