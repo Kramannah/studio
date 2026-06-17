@@ -4,7 +4,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import type { UserProfile } from '@/lib/types';
 
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // RESILIENCY: 5-second hard timeout for initial loading to prevent "stuck" UI
+    // RESILIENCY: Hard timeout for loading to prevent veteran accounts from getting stuck
     const timer = setTimeout(() => {
       setLoading(false);
     }, 5000);
@@ -52,17 +52,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (firebaseUser && db) {
         const profileRef = doc(db, "userProfiles", firebaseUser.uid);
-        // Sync profile data but ensure loading is cleared even on error
+        
+        // Profile Healing Logic for veteran accounts (NL-02, CL-01)
         unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
           } else {
+            // Document missing: Create a default profile to stop rule crashes
+            setDoc(profileRef, {
+                userId: firebaseUser.uid,
+                email: firebaseUser.email,
+                firstName: "User",
+                lastName: "",
+                role: "PMR",
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
             setProfile(null);
           }
           setLoading(false);
           clearTimeout(timer);
         }, (err) => {
-          console.warn("Profile sync error (proceeding with limited access):", err);
+          // If a rule denied access to the profile itself, we still need to let the user in
+          console.warn("Profile sync restricted (proceeding with basic access):", err);
           setLoading(false);
           clearTimeout(timer);
         });

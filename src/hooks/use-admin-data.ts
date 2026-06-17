@@ -120,8 +120,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // FALLBACK for veteran accounts (like NL-02, CL-01) if index is missing
-                // Limit set to 3000 to balance data completeness and Rule timeout risks
+                // FALLBACK for veteran accounts (NL-02, CL-01)
                 const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };

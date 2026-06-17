@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.4: Optimized plan fetching for veteran accounts (NL-02, CL-01).
- * Limit restored to 3000 to ensure full data visibility for high-volume users.
+ * LOW-COST V2.5: Optimized for high-activity PMR veteran accounts.
+ * Limit set to 3000 to ensure full planning visibility.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -53,8 +53,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans range query fallback triggered:", error.message);
-           // Fallback Horizon optimized to 3000 to ensure VIS-06 sees all plotted calls
+           console.warn("Plans range fallback:", error.message);
            const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };

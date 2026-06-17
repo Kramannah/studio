@@ -9,13 +9,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Role-based Access Logic - Simplified to reduce execution time
+    // Role-based Access Logic - Resilient to missing profile documents
     function hasInternalAccess() {
       if (!isSignedIn()) return false;
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       
-      // Basic existence check is enough to start, then we get the data
-      // Rules engine caches this lookup across documents in a single list query
+      // CRITICAL: Check existence before accessing .data to prevent rule crashes
+      if (!exists(profilePath)) return false;
+      
       let profile = get(profilePath).data;
       let role = profile.get('role', 'PMR');
       return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
@@ -27,8 +28,7 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails);
     }
 
-    // Optimized Read/Write Check - Prioritize short-circuiting for owners
-    // This is CRITICAL for veteran accounts (NL-02, CL-01) to prevent rule timeouts
+    // Optimized Read/Write Check - Prioritize ownership to bypass role-checks for PMRs
     function canAccessData(docUserId) {
       return isSignedIn() && (
         docUserId == request.auth.uid || 
@@ -40,7 +40,9 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if canAccessData(resource.data.userId);
+      // Split list and get for maximum performance on large datasets
+      allow list: if isSignedIn() && (request.auth.uid == resource.data.userId || isAdminFallback() || hasInternalAccess());
+      allow get: if canAccessData(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
     }
@@ -81,10 +83,8 @@ service cloud.firestore {
     }
     
     match /userProfiles/{id} {
-      // Direct UID comparison is the fastest possible rule
-      allow read, list, write: if isSignedIn() && request.auth.uid == id;
-      // Secondary check for administrative personnel
-      allow read, list, write: if isSignedIn() && (isAdminFallback() || hasInternalAccess());
+      // Allow users to see and manage their own profile even if the doc doesn't exist yet
+      allow read, list, write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
     }
   }
 }

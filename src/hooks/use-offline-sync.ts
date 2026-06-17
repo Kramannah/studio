@@ -21,7 +21,7 @@ const sanitizePayload = (data: any): any => {
   if (!data) return cleaned;
   Object.keys(data).forEach(key => {
     const val = data[key];
-    if (val === undefined || val === null && key === 'id') return;
+    if (val === undefined || (val === null && key === 'id')) return;
     if (Array.isArray(val) && key === 'reminderProducts') {
       cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
       return;
@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.4: Optimized for minimum reads and Rules stability.
- * Fallback limit restored to 3000 to ensure data completeness for veteran accounts like VIS-06/NL-02.
+ * LOW-COST V2.5: Optimized for high-volume veteran accounts (NL-02, CL-01).
+ * Limit set to 3000 to ensure data completeness while Rules handle evaluation efficiency.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -80,7 +80,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // Primary targeted query (requires composite index: userId + coverageDate)
+      // Primary targeted query (requires UID filter for performance and security)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -101,7 +101,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
         console.warn("Coverage fetch fallback triggered for user:", userId);
-        // Fallback Horizon set to 3000 to capture recent reports for veteran accounts
         const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
         const snap = await getDocs(fallbackQ);
         const interval = { start: parseISO(start), end: parseISO(end) };
@@ -167,8 +166,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const batch = writeBatch(db!);
     for (const entry of offlineEntries) {
         const { id, ...dataToSync } = entry;
-        const docRef = doc(collection(db!, "coverageEntries"));
         const sanitized = sanitizePayload({ ...dataToSync, userId: userId });
+        const docRef = doc(collection(db!, "coverageEntries"));
         batch.set(docRef, sanitized);
     }
 
