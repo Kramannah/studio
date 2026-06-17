@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2 } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -16,7 +16,7 @@ import { Input } from "./ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
-import { cn } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
@@ -167,6 +167,12 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
 
+    const holidayDates = useMemo(() => {
+        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
+    }, []);
+
+    const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
+
     const filtered = useMemo(() => (entries || []).filter(e => {
         const q = (searchQuery || "").toLowerCase().trim();
         const matchesSearch = !q || `${e.firstName} ${e.lastName} ${e.clinic} ${e.specialty}`.toLowerCase().includes(q);
@@ -247,7 +253,7 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
 
         <div className={cn("grid grid-cols-1 gap-6", viewMode === 'calendar' ? "lg:grid-cols-12" : "")}>
             {viewMode === 'calendar' && (
-                <div className="lg:col-span-4">
+                <div className="lg:col-span-4 space-y-4">
                     <Card className="border-2 shadow-sm overflow-hidden sticky top-24">
                         <CardHeader className="bg-muted/30 border-b p-4">
                             <CardTitle className="text-sm font-black font-headline text-primary uppercase tracking-widest">Submission History</CardTitle>
@@ -259,9 +265,11 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                             className="p-4"
                             modifiers={{ 
                                 submitted: entryDates,
+                                holiday: holidayDates,
                             }}
                             modifiersStyles={{
-                                submitted: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' }
+                                submitted: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' },
+                                holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' }
                             }}
                             components={{
                                 DayContent: ({ date }) => {
@@ -281,6 +289,17 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                             }}
                         />
                     </Card>
+                    {selectedHoliday && (
+                        <Card className="border-2 border-orange-500/20 bg-orange-500/5 p-4 animate-in slide-in-from-left-2 duration-300">
+                            <div className="flex items-start gap-3">
+                                <Info className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-500/70">Holiday Information</p>
+                                    <p className="font-bold text-sm text-orange-500">{selectedHoliday}</p>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
                 </div>
             )}
 
