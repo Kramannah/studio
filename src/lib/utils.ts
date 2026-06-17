@@ -76,7 +76,8 @@ export function getMonthRangeISO(monthStr?: string) {
 }
 
 /**
- * Safely sets an item in localStorage, handling QuotaExceeded errors by purging old caches.
+ * Safely sets an item in localStorage, handling QuotaExceeded errors gracefully.
+ * Strips heavy caches if needed and fails silently to prevent app crashes.
  */
 export function safeStorageSet(key: string, value: string) {
   try {
@@ -86,24 +87,21 @@ export function safeStorageSet(key: string, value: string) {
       (e.code === 22 || e.code === 1014 || e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED');
 
     if (isQuotaError) {
-      console.warn('LocalStorage quota exceeded. Purging non-essential caches to make room...');
-      
-      // Purge all items starting with sfe- that are NOT critical offline data
+      // Purge all non-essential display caches to make room
       Object.keys(localStorage).forEach(k => {
+        // Protect critical locally-saved offline entries (not yet synced to DB)
         if (k.startsWith('sfe-') && !k.includes('offline-coverage-entries')) {
           localStorage.removeItem(k);
         }
       });
 
-      // Try one more time after purge
       try {
         localStorage.setItem(key, value);
       } catch (retryError) {
-        // If it still fails, just log and continue without caching this specific item
-        console.error('LocalStorage critical failure: Data too large for available space even after purge.');
+        // If it still fails, the item itself is simply too large. 
+        // We log it to the console but DON'T re-throw, allowing the app to continue using live data.
+        console.warn('LocalStorage quota limit reached even after purge. This item will not be cached.');
       }
-    } else {
-        console.error('LocalStorage write failed:', e);
     }
   }
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -120,7 +119,7 @@ export function UserDashboard({
                     )}
                 </div>
                 
-                {/* Unified Tab Content Area */}
+                {/* Unified Tab Content Area correctly wrapped inside <Tabs> */}
                 <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 

@@ -71,7 +71,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
       });
       fetched.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
       setMasterEntries(fetched);
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(fetched));
+      
+      // Create a metadata-only version for the cache to save LocalStorage quota
+      // We strip the heavy base64 images for veteran accounts with thousands of visits
+      const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
+      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(lightEntries));
     } catch (error) {
         console.error("Fetch entries error:", error);
     } finally {
