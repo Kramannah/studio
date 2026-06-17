@@ -14,8 +14,8 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V4.8: Admin Oversight for Veteran Accounts.
- * Balanced Fetch: Standardized at 3,000 records for metadata, 1,000 for heavy reports.
+ * LOW-COST V5.0: Admin Oversight for Veteran Accounts.
+ * Balanced Fetch: Standardized at 3,000 records for all critical metadata.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -113,7 +113,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
             const colRef = collection(db!, colName);
-            // Optimized sort for heavy collections
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
@@ -131,9 +130,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "submittedAt", 1000), // Heavy collection limit
+            fetchModule("coverageEntries", "submittedAt", 3000), 
             fetchModule("plans", "plannedDate", 3000),
-            fetchModule("timeLogs", "timeIn", 500)
+            fetchModule("timeLogs", "timeIn", 1000)
         ]);
 
         const filteredEntries = (entries as CoverageEntry[]).filter(e => {
@@ -142,7 +141,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         });
 
         const [ncds, doctors, requests] = await Promise.all([
-            fetchModule("nonCallDays", "date", 500),
+            fetchModule("nonCallDays", "date", 1000),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
@@ -170,7 +169,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
         if (force) {
-            toast({ title: "Sync Complete", description: `Updated records for ${uid}.` });
+            toast({ title: "Sync Complete", description: `Updated records for user.` });
         }
     } catch (e: any) {
         console.error("Individual User Fetch Failure:", e);

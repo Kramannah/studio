@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4.9: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
- * Specifically optimized to handle 3,000+ record datasets with high-memory payloads.
+ * LOW-COST V5.0: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
+ * Optimized to handle 3,000 record datasets with high-memory payloads.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -87,7 +87,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(2000)
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -100,7 +100,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
               where("userId", "==", userId),
               where("submittedAt", ">=", start),
               where("submittedAt", "<=", end),
-              limit(2000)
+              limit(3000)
           );
           const snapLegacy = await getDocs(qLegacy);
           fetched.push(...snapLegacy.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry)));
@@ -117,12 +117,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         
         try {
             // STAGE 3: Recent-First broad scan (Requires Index: userId, submittedAt DESC)
-            // Limit reduced to 1,000 for heavy payloads to avoid datastore timeout
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
                 orderBy("submittedAt", "desc"),
-                limit(1000)
+                limit(3000)
             );
             const snap = await getDocs(fallbackQ);
             
@@ -139,11 +138,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             
             try {
                 // STAGE 4: Emergency Fallback - Simple Unordered Scan
-                // Limit reduced to 1,000 for high-volume accounts to prevent network crash
                 const emergencyQ = query(
                     collection(db!, "coverageEntries"), 
                     where("userId", "==", userId),
-                    limit(1000)
+                    limit(3000)
                 );
                 const snap = await getDocs(emergencyQ);
                 const fetched = snap.docs

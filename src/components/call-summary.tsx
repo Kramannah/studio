@@ -86,7 +86,6 @@ export function CallSummary({
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
-        // Filter entries for the selected month
         const filteredEntries = safeEntries.filter(e => {
             try { 
                 const d = parseISO(e.coverageDate || e.submittedAt); 
@@ -94,7 +93,6 @@ export function CallSummary({
             } catch { return false; }
         });
 
-        // Filter approved non-call days for the selected month
         const approvedNCDs = safeNCDs.filter(n => {
             try {
                 const d = parseISO(n.date);
@@ -102,7 +100,6 @@ export function CallSummary({
             } catch { return false; }
         });
 
-        // Map dates to their leave types for quick lookup
         const ncdMap = new Map<string, string>();
         approvedNCDs.forEach(n => {
             try {
@@ -115,8 +112,6 @@ export function CallSummary({
             try { return format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd'); } catch { return ""; }
         }).filter(Boolean));
         
-        // Calculate weighted active days
-        // CRITICAL: Half-day leaves count as 0.5 active days per requirement
         let activeDays = 0;
         activeDaysSet.forEach(dateStr => {
             const leaveType = ncdMap.get(dateStr);
@@ -132,14 +127,12 @@ export function CallSummary({
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        // Map visits per doctor name
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        // 1. CONCENTRATION (3X): Target vs Achieved
         const targetHighFreqDoctors = safeDoctors.filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
             const freqVal = parseInt(freqStr, 10);
@@ -152,7 +145,6 @@ export function CallSummary({
         }).length;
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // 2. CALL REACH: Unique vs Masterlist
         const totalDoctorsInList = safeDoctors.length;
         const actualVisitedFromList = safeDoctors.filter(d => {
             const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
@@ -160,7 +152,6 @@ export function CallSummary({
         }).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedFromList / totalDoctorsInList) * 100) : 0;
 
-        // 3. CALL RATE: Total calls vs target (12 per active day)
         const totalCalls = filteredEntries.length;
         const targetCalls = activeDays * 12;
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
