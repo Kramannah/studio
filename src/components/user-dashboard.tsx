@@ -9,7 +9,8 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LayoutDashboard } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface UserDashboardProps {
     userId: string;
@@ -75,7 +76,8 @@ export function UserDashboard({
     
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
-            <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl">
+            {/* Design-Matching Tab Bar */}
+            <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
@@ -111,9 +113,9 @@ export function UserDashboard({
                         size="sm" 
                         onClick={handleRefresh} 
                         disabled={isRefreshing}
-                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg"
+                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg shrink-0"
                     >
-                        <RefreshCw className={isRefreshing ? "animate-spin" : ""} size={14} />
+                        <RefreshCw className={cn(isRefreshing && "animate-spin")} size={14} />
                         Refresh Data
                     </Button>
                 )}

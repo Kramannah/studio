@@ -153,7 +153,7 @@ export function CallSummary({
 
             <div className="w-[240px]">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
-                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl">
+                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
                         <SelectValue placeholder="Select Month" />
                     </SelectTrigger>
                     <SelectContent>

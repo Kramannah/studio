@@ -102,17 +102,18 @@ export default function AdminPage() {
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
+    // Deep Fetch Effect for Individual PMR
     useEffect(() => {
-        if (!mounted || !hasAdminAccess) return;
-        
-        if (activeTab === 'district-reports') {
-            if (selectedUserId) {
-                fetchUserData(selectedUserId);
-            }
-        } else if (activeTab === 'approvals' && !isMarketingOrHR) {
+        if (mounted && selectedUserId && activeTab === 'district-reports') {
+            fetchUserData(selectedUserId, selectedMonth);
+        }
+    }, [selectedUserId, selectedMonth, activeTab, fetchUserData, mounted]);
+
+    useEffect(() => {
+        if (mounted && activeTab === 'approvals' && !isMarketingOrHR) {
             fetchTeamApprovals();
         }
-    }, [activeTab, selectedUserId, selectedManagerId, fetchUserData, fetchTeamApprovals, mounted, hasAdminAccess, isMarketingOrHR]);
+    }, [activeTab, fetchTeamApprovals, mounted, isMarketingOrHR]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };

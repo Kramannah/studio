@@ -113,17 +113,16 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         const { start, end } = getMonthRangeISO(selectedMonth);
 
-        // Targeted fetch for the specific month and user
         const fetchMonthTargeted = async (colName: string, dateField: string) => {
             const colRef = collection(db!, colName);
             try {
-                // Primary: Try optimized query with UID and Date range
+                // Primary optimized query
                 const q = query(colRef, where("userId", "==", uid), where(dateField, ">=", start), where(dateField, "<=", end), limit(1000));
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (e: any) {
-                // Fallback: If index is missing or query fails, fetch user's global data and filter locally
-                console.warn(`Falling back to global fetch for ${colName} due to: ${e.message}`);
+                // Fallback for missing index or other errors
+                console.warn(`Falling back for ${colName}: ${e.message}`);
                 const q = query(colRef, where("userId", "==", uid), limit(1000));
                 const snap = await getDocs(q);
                 return snap.docs
