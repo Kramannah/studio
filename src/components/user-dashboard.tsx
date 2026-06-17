@@ -111,7 +111,7 @@ export function UserDashboard({
                         size="sm" 
                         onClick={handleRefresh} 
                         disabled={isRefreshing}
-                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4"
+                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg"
                     >
                         <RefreshCw className={isRefreshing ? "animate-spin" : ""} size={14} />
                         Refresh Data

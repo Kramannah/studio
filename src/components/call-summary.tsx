@@ -6,12 +6,12 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, isSameDay } from "date-fns";
-import { Target, Users, TrendingUp, ThumbsUp, RefreshCw, Percent } from "lucide-react";
+import { Target, Users, TrendingUp, ThumbsUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
-const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string }) => (
-    <Card className={cn("border-none relative overflow-hidden", bgColor)}>
+const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
+    <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
         <CardContent className="p-6">
             <div className="flex flex-col space-y-4">
                 <div className="flex justify-between items-start">
@@ -19,12 +19,32 @@ const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgCo
                     <Icon className={cn("w-5 h-5", color)} />
                 </div>
                 <div className="space-y-1">
-                    <div className="flex items-baseline gap-1">
+                    <div className="flex items-baseline gap-2">
                         <h4 className="text-2xl font-black font-headline text-white tracking-tight">{value}</h4>
                         {subValue && <span className="text-sm font-bold text-white/40">{subValue}</span>}
                     </div>
                     <p className="text-[10px] text-white/40 font-bold uppercase tracking-tight">{description}</p>
                 </div>
+            </div>
+        </CardContent>
+        {footer && (
+             <div className="px-6 py-2 bg-black/20 border-t border-white/5">
+                <p className="text-[9px] font-medium text-white/30 italic">{footer}</p>
+             </div>
+        )}
+    </Card>
+)
+
+const SmallStatCard = ({ title, value, description, icon: Icon, color, iconBg }: { title: string, value: string | number, description: string, icon: any, color: string, iconBg: string }) => (
+    <Card className="bg-[#0a0c14] border border-white/5 shadow-xl">
+        <CardContent className="p-5 flex items-center gap-4">
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", iconBg)}>
+                <Icon className={cn("w-6 h-6", color)} />
+            </div>
+            <div className="space-y-0.5">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">{title}</p>
+                <h4 className="text-xl font-black font-headline text-white">{value}</h4>
+                <p className="text-[10px] text-white/30 font-medium leading-tight">{description}</p>
             </div>
         </CardContent>
     </Card>
@@ -71,66 +91,69 @@ export function CallSummary({
             } catch { return false; }
         });
 
+        // Unique days with submissions
+        const activeDaysSet = new Set(filteredEntries.map(e => format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd')));
+        const activeDays = activeDaysSet.size;
+
+        // Inbase vs Outbase
+        const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
+        const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
+
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        const totalHighFreqTarget = doctors.filter(d => parseInt(String(d.frequency || "1x").replace('x', ''), 10) >= 3).length;
-        const actualHighFreqAchieved = doctors.filter(d => {
+        // Target high freq (3x or 4x)
+        const highFreqDoctors = doctors.filter(d => {
             const freq = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
-            if (freq < 3) return false;
-            return (providerVisits[`${d.firstName} ${d.lastName}`.toLowerCase()] || 0) >= 3;
+            return freq >= 3;
+        });
+        const totalHighFreqTarget = highFreqDoctors.length;
+        const actualHighFreqAchieved = highFreqDoctors.filter(d => {
+            return (providerVisits[`${d.firstName} ${d.lastName}`.toLowerCase()] || 0) >= 1; // Visited at least once
         }).length;
         
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
+        
+        // Reach
         const totalDoctorsInList = doctors.length;
         const actualVisitedCount = Object.keys(providerVisits).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
 
-        const callsByDay = filteredEntries.reduce((acc, entry) => {
-            try {
-                const day = format(parseISO(entry.coverageDate || entry.submittedAt), 'yyyy-MM-dd');
-                if(!acc[day]) acc[day] = [];
-                acc[day].push(entry);
-            } catch (e) {}
-            return acc;
-        }, {} as Record<string, CoverageEntry[]>);
-        
-        // Use a fixed count of working days for target calculation if no leaves are present, or adjust by approved leaves
-        const activeDaysActual = 22; // Target baseline
+        // Call Rate based on 12 calls/day target
         const totalCalls = filteredEntries.length;
-        const targetCalls = activeDaysActual * 12;
+        const targetCalls = activeDays * 12;
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
 
+        const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
+
         return {
+            activeDays,
+            inbaseCalls,
+            outbaseCalls,
+            totalCalls,
+            targetCalls,
+            callRatePercentage,
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
-            callRate: { actual: totalCalls, target: targetCalls, percentage: callRatePercentage },
-            avgCallsPerDay: totalCalls > 0 ? (totalCalls / 20).toFixed(2) : "0.00",
-            topSamples: Object.entries(filteredEntries.reduce((acc, e) => {
-                const process = (name?: string, qty?: number) => { if (name) acc[name] = (acc[name] || 0) + (qty || 0); };
-                process(e.primarySampleName, e.primaryProductQty);
-                process(e.secondarySampleName, e.secondaryProductQty);
-                if (e.reminderProducts) e.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
-                return acc;
-            }, {} as Record<string, number>)).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+            avgCallsPerDay,
         };
     }, [entries, doctors, selectedMonth]);
 
     if (!insights) return <div className="flex items-center justify-center p-20"><RefreshCw className="animate-spin text-primary" /></div>;
     
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-in fade-in duration-500">
              <div className="space-y-1">
                 <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
-                <p className="text-white/50 text-xs font-bold uppercase tracking-widest">Territory activity and productivity analytics for the selected period.</p>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Territory activity and productivity analytics for the selected period.</p>
             </div>
 
             <div className="w-[240px]">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
-                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-10 font-headline">
+                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl">
                         <SelectValue placeholder="Select Month" />
                     </SelectTrigger>
                     <SelectContent>
@@ -142,27 +165,27 @@ export function CallSummary({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
-                    value={insights.callRate.actual}
-                    subValue={`/${insights.callRate.target}`}
-                    description={`${insights.callRate.percentage}% Achievement`} 
+                    value={`${insights.totalCalls}/${insights.targetCalls}`}
+                    subValue={`(${insights.callRatePercentage}%)`}
+                    description="Calculated as 12x Active Days" 
                     icon={Percent} 
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
                 />
                 <StatCard 
                     title="CONCENTRATION (3X)" 
-                    value={insights.completedHighFreq.actual}
-                    subValue={`/${insights.completedHighFreq.total}`}
-                    description={`${insights.completedHighFreq.percentage}% Achievement`} 
+                    value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total}`}
+                    subValue={`(${insights.completedHighFreq.percentage}%)`}
+                    description="High frequency retention" 
                     icon={Target} 
                     color="text-[#10b981]" 
                     bgColor="bg-[#0d1e18]" 
                 />
                 <StatCard 
                     title="CALL REACH" 
-                    value={insights.coverageReach.actual}
-                    subValue={`/${insights.coverageReach.total}`}
-                    description={`${insights.coverageReach.percentage}% Achievement`} 
+                    value={`${insights.coverageReach.actual}/${insights.coverageReach.total}`}
+                    subValue={`(${insights.coverageReach.percentage}%)`}
+                    description="Territory penetration" 
                     icon={Users} 
                     color="text-[#06b6d4]" 
                     bgColor="bg-[#0e1d21]" 
@@ -170,7 +193,7 @@ export function CallSummary({
                 <StatCard 
                     title="EFFICIENCY" 
                     value={insights.avgCallsPerDay} 
-                    description="Avg Daily Submissions" 
+                    description="Avg daily submissions" 
                     icon={TrendingUp} 
                     color="text-[#3b82f6]" 
                     bgColor="bg-[#0f172a]" 
@@ -178,39 +201,34 @@ export function CallSummary({
             </div>
 
             <div className="space-y-6">
-                <h3 className="text-2xl font-black font-headline text-white">Field Activity Statistics</h3>
+                <h3 className="text-xl font-black font-headline text-white tracking-tight">Field Activity Statistics</h3>
                 
-                <Card className="border border-white/5 shadow-xl overflow-hidden bg-[#0a0c14]">
-                    <CardHeader className="bg-white/[0.02] border-b border-white/5">
-                        <CardTitle className="font-black font-headline text-sm flex items-center gap-2 text-[#10b981]">
-                            <ThumbsUp size={16} /> SAMPLE DISTRIBUTION LOG
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-white/[0.01] h-12 border-white/5">
-                                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-white/50 pl-6">Sample Material</TableHead>
-                                    <TableHead className="text-right font-black text-[10px] uppercase tracking-widest text-white/50 pr-6">Qty Distributed</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {insights.topSamples.length > 0 ? (
-                                    insights.topSamples.map((s, i) => (
-                                        <TableRow key={i} className="h-14 hover:bg-white/[0.02] border-white/5 last:border-0">
-                                            <TableCell className="pl-6 font-bold text-sm text-white/90">{s.name}</TableCell>
-                                            <TableCell className="text-right pr-6 font-mono font-black text-[#10b981] text-base">{s.count}</TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow>
-                                        <TableCell colSpan={2} className="h-40 text-center text-white/30 italic text-sm">No samples recorded for this period.</TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <SmallStatCard 
+                        title="ACTIVE DAYS"
+                        value={insights.activeDays}
+                        description="Unique days with submissions"
+                        icon={CalendarIcon}
+                        color="text-[#10b981]"
+                        iconBg="bg-[#10b981]/10"
+                    />
+                    <SmallStatCard 
+                        title="INBASE CALLS"
+                        value={insights.inbaseCalls}
+                        description="Metropolitan submissions"
+                        icon={Building2}
+                        color="text-[#3b82f6]"
+                        iconBg="bg-[#3b82f6]/10"
+                    />
+                    <SmallStatCard 
+                        title="OUTBASE CALLS"
+                        value={insights.outbaseCalls}
+                        description="Provincial submissions"
+                        icon={MapPin}
+                        color="text-[#ef4444]"
+                        iconBg="bg-[#ef4444]/10"
+                    />
+                </div>
             </div>
         </div>
     );
