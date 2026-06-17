@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4: Optimized for high-activity veteran accounts like NL-02.
- * Strictly uses UID-partitioned scans with simplified rule-compliant filters.
+ * LOW-COST V4.1: Optimized for veteran accounts (NL-02, CL-01).
+ * Balanced payload: 1,000 record limit for heavy coverage entries to prevent timeouts.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -82,12 +82,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     try {
       // 1. Targeted query (Most Efficient)
+      // LIMIT: 1000 is safe for a single month and prevents timeout for veteran accounts
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -98,17 +99,18 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
+      const lightEntries = fetched.map(({ photos, signature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Primary fetch failed, using fallback:", error.message);
+        console.warn("Primary targeted scan failure (NL-02/CL-01):", error.message);
         
         try {
-            // 2. Simple UID scan (Ultimate Fallback - Prevents Rule Failures)
+            // 2. Fallback Scan
+            // LIMIT: Reduced to 1000 for heavy data collections to prevent payload timeouts
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
-                limit(3000)
+                limit(1000)
             );
             const snap = await getDocs(fallbackQ);
             
@@ -122,7 +124,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
         } catch (finalError: any) {
-            console.error("All fetch attempts failed for CoverageEntries:", finalError);
+            console.error("Critical Coverage Fetch Failure:", finalError);
         }
     } finally {
         setLoading(false);

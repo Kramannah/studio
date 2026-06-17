@@ -13,6 +13,10 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
+/**
+ * LOW-COST V4.2: Admin Oversight for Veteran Accounts.
+ * Balanced Fetch: 1,000 for CoverageEntries, 3,000 for others.
+ */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -108,20 +112,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
+            // REDUCED LIMIT FOR COVERAGE ENTRIES (HEAVY DATA)
+            const safeLimit = colName === 'coverageEntries' ? 1000 : lmt;
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
                 where("userId", "==", uid), 
                 where(dateField, ">=", start),
                 where(dateField, "<=", end),
-                limit(lmt)
+                limit(safeLimit)
             );
             try {
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                console.warn(`Admin targeted scan fallback for UID: ${uid} on ${colName}`);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(lmt));
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(safeLimit));
                 const snap = await getDocs(fallbackQ);
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
                     const dateVal = d[dateField] || d.coverageDate || d.plannedDate || d.date;

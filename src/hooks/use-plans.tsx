@@ -11,8 +11,8 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V3.1: Optimized for high-activity PMR veteran accounts.
- * Standardized horizon to 3,000 records.
+ * LOW-COST V3.2: Precision Plan Fetching.
+ * Horizon: 3,000 records for plans (Lightweight metadata).
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -54,7 +54,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans targeted scan failed, using fallback scan:", error.message);
+           console.warn("Plans fallback for NL-02/CL-01:", error.message);
            const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            
