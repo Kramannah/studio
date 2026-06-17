@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -10,8 +11,7 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.2: Restricts plan fetching to a specific month for historical accuracy.
- * Ensures high-volume accounts like VIS-06 see all plotted calls.
+ * LOW-COST V2.2: Optimized plan fetching with high-horizon fallbacks for veteran account completeness.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -41,7 +41,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(3000)
+        limit(5000)
       );
       
       const requestsQuery = query(
@@ -53,7 +53,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
            console.warn("Plans range query fallback triggered:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
+           // Fallback Horizon increased to 5000 for high-volume users like VIS-06
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            

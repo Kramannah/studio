@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -20,18 +21,19 @@ const sanitizePayload = (data: any): any => {
   if (!data) return cleaned;
   Object.keys(data).forEach(key => {
     const val = data[key];
-    if (val === undefined) return;
+    if (val === undefined || val === null && key === 'id') return;
     if (Array.isArray(val) && key === 'reminderProducts') {
       cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
       return;
     }
+    if (val === undefined) return;
     cleaned[key] = val;
   });
   return cleaned;
 };
 
 /**
- * LOW-COST V2.2: Optimized for minimum reads with monthly synchronization.
+ * LOW-COST V2.2: Optimized for minimum reads with monthly synchronization and high-horizon fallbacks.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -82,7 +84,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(5000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -93,12 +95,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Cache metadata to prevent storage limits
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error) {
         console.warn("Coverage fetch fallback triggered:", error);
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
+        // Fallback increased to 5000 to ensure veteran accounts load correctly
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
         const snap = await getDocs(fallbackQ);
         const interval = { start: parseISO(start), end: parseISO(end) };
         const fetched = snap.docs
@@ -108,7 +110,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 return d && isValid(d) && isWithinInterval(d, interval);
             });
         
-        fetched.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
+        fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
         setMasterEntries(fetched);
     } finally {
         setLoading(false);
@@ -164,7 +166,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     for (const entry of offlineEntries) {
         const { id, ...dataToSync } = entry;
         const docRef = doc(collection(db!, "coverageEntries"));
-        batch.set(docRef, { ...dataToSync, userId: userId });
+        // Critically sanitizing data before batch sync to prevent crashes on undefined fields
+        const sanitized = sanitizePayload({ ...dataToSync, userId: userId });
+        batch.set(docRef, sanitized);
     }
 
     try {
@@ -175,6 +179,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: 'Sync Complete' });
     } catch (error) {
         console.error("Sync failed:", error);
+        toast({ variant: 'destructive', title: 'Sync Error', description: 'Could not upload offline data.' });
     } finally {
         setIsSyncing(false);
     }

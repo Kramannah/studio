@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -10,13 +11,9 @@ import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
 import { isValid, isWithinInterval, parseISO } from "date-fns";
 
-// LOW-COST V2.2: Singleton cache to prevent redundant reads for the same user+month
+// Singleton cache to prevent redundant reads for the same user+month
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
-/**
- * useAdminData - Optimized for UID-based individual oversight with monthly synchronization.
- * LOW-COST V2.2: Implements resilient monthly queries with optimized quotas to prevent timeouts.
- */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -91,10 +88,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
-  /**
-   * fetchUserData - The Monthly Low-Cost Engine.
-   * Target: Minimal Reads + High Stability.
-   */
   const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
@@ -114,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchModule = async (colName: string, dateField: string, lmt = 3000) => {
+        const fetchModule = async (colName: string, dateField: string, lmt = 5000) => {
             const colRef = collection(db!, colName);
             const q = query(
                 colRef, 
@@ -127,8 +120,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // FALLBACK: If timeout or missing index, fetch broadly but with a safe limit
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(3000));
+                // FALLBACK: Increased to 5000 to ensure veteran accounts like VIS-06 capture current month
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(5000));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
@@ -140,8 +133,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entries, plans, logs] = await Promise.all([
-            fetchModule("coverageEntries", "coverageDate", 3000),
-            fetchModule("plans", "plannedDate", 3000),
+            fetchModule("coverageEntries", "coverageDate", 5000),
+            fetchModule("plans", "plannedDate", 5000),
             fetchModule("timeLogs", "timeIn", 300)
         ]);
 
@@ -152,8 +145,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ]);
 
         const data = {
-            entries: entries as CoverageEntry[],
-            plans: plans as Plan[],
+            entries: (entries as CoverageEntry[]).sort((a,b) => (b.coverageDate || "").localeCompare(a.coverageDate || "")),
+            plans: (plans as Plan[]).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
             logs: logs as any[],
             ncds: ncds as NonCallDay[],
             doctors: doctors as Doctor[],
@@ -175,7 +168,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         }
     } catch (e: any) {
         console.error("Critical User Data Fetch Error:", e);
-        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication timed out. Please try again." });
+        toast({ variant: "destructive", title: "Sync Failed", description: "Database communication failed for this representative." });
     } finally { 
         setLoadingIndividual(false); 
     }
