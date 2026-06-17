@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
-import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
@@ -63,8 +63,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), limit(500))),
-            getDocs(query(collection(db!, "planningRequests"), limit(500)))
+            getDocs(query(collection(db!, "nonCallDays"), limit(1000), orderBy("date", "desc"))),
+            getDocs(query(collection(db!, "planningRequests"), limit(1000), orderBy("requestedAt", "desc")))
         ]);
         setAllNonCallDays(ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
         setAllPlanningRequests(prSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
@@ -75,7 +75,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
   /**
    * fetchUserData - The core "Low Cost" engine.
-   * Strictly uses UID (H5NGDRDneWdH9ADuZDCFNHIovK83) to fetch Edcel's records.
+   * Strictly uses UID to fetch representative records.
    */
   const fetchUserData = useCallback(async (uid: string, selectedMonth?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
@@ -87,28 +87,30 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchModule = async (colName: string, dateField: string) => {
             const colRef = collection(db!, colName);
             try {
-                // Attempt targeted query (Index required)
+                // Attempt targeted query with priority ordering
                 const q = query(
                     colRef, 
                     where("userId", "==", uid), 
                     where(dateField, ">=", start), 
                     where(dateField, "<=", end), 
-                    limit(1000)
+                    orderBy(dateField, "desc"),
+                    limit(2000)
                 );
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (e: any) {
-                // Ultra-Robust Fallback: Fetch by UID and filter in memory
-                // This ensures Edcel Babas' data displays even if Firestore indexes are missing.
-                const q1 = query(colRef, where("userId", "==", uid), limit(1500));
-                const q2 = query(colRef, where("uid", "==", uid), limit(1500)); // Legacy support
+                // FALLBACK: Fetch larger batch for veteran accounts like VIS-06 / CL-01
+                // We fetch 5000 most recent records to ensure target month is caught
+                const qFallback = query(
+                    colRef, 
+                    where("userId", "==", uid), 
+                    orderBy(dateField, "desc"),
+                    limit(5000)
+                );
+                const snap = await getDocs(qFallback);
+                const allDocs = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 
-                const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-                const allDocs = [...s1.docs, ...s2.docs].map(d => ({id: d.id, ...d.data()}));
-                
-                const uniqueDocs = Array.from(new Map(allDocs.map(item => [item.id, item])).values());
-
-                return uniqueDocs.filter((d: any) => {
+                return allDocs.filter((d: any) => {
                     const val = d[dateField] || d.coverageDate || d.plannedDate || d.submittedAt || d.date;
                     return val && val >= start && val <= end;
                 });
@@ -120,8 +122,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchModule("plans", "plannedDate"),
             fetchModule("timeLogs", "timeIn"),
             fetchModule("nonCallDays", "date"),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(200))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
         setIndividualEntries((entries as CoverageEntry[]) || []);

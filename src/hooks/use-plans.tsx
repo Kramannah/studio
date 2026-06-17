@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, orderBy } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday } from 'date-fns';
 import { useAuth } from './use-auth';
 
@@ -21,8 +21,19 @@ export const usePlans = (active: boolean = true) => {
     if (!user || !db || !active) return;
     setLoading(true);
     try {
-      const plansQuery = query(collection(db, "plans"), where("userId", "==", user.uid), limit(2000));
-      const requestsQuery = query(collection(db, "planningRequests"), where("userId", "==", user.uid));
+      // Increased limit to 5000 and added ordering to ensure recent plans (June 2026) are visible
+      const plansQuery = query(
+        collection(db, "plans"), 
+        where("userId", "==", user.uid), 
+        orderBy("plannedDate", "desc"),
+        limit(5000)
+      );
+      
+      const requestsQuery = query(
+        collection(db, "planningRequests"), 
+        where("userId", "==", user.uid),
+        orderBy("requestedAt", "desc")
+      );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery),
