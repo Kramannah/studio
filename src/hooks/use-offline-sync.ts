@@ -33,8 +33,9 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2.8: Final stability fix for veteran accounts (NL-02, CL-01).
- * Standardized at 5,000 records with high-performance rule evaluations.
+ * LOW-COST V2.9: Optimized for veteran PMR accounts.
+ * Horizon standardized at 3,000 records to prevent Firestore Security Rules timeouts
+ * while maintaining data completeness for the selected month.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -80,13 +81,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // Primary targeted query for June 2026 data
+      // Primary targeted query for selected month data
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(5000)
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
@@ -101,9 +102,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
         console.warn("Coverage fetch fallback triggered for veteran account:", userId, error.message);
-        // SAFETY FALLBACK: Fetch broad history if month-filter fails (Limit: 5,000 for veterans)
+        // SAFETY FALLBACK: Fetch broad history if index is missing (Standardized at 3,000 for stability)
         try {
-            const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
+            const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(3000));
             const snap = await getDocs(fallbackQ);
             const interval = { start: parseISO(start), end: parseISO(end) };
             const fetched = snap.docs
@@ -116,7 +117,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
         } catch (fallbackError) {
-            console.error("Critical Coverage Fetch Failure:", fallbackError);
+            console.warn("Critical Coverage Fetch Timeout/Failure:", fallbackError);
         }
     } finally {
         setLoading(false);

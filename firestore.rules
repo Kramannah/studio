@@ -10,11 +10,27 @@ service cloud.firestore {
     }
 
     // Role-based Access Logic - Optimized for speed and safety
-    function hasInternalAccess() {
+    // Uses a cheap token check for admins first to avoid unnecessary document reads
+    function isAdminFallback() {
+      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
+      return isSignedIn() && (request.auth.token.get('email', '').lower() in adminEmails);
+    }
+
+    // High-performance Access Helper
+    // Priority 1: Ownership (Cheapest & Fastest, avoids timeouts for large list queries)
+    // Priority 2: Admin/Internal Role checks (Executed only if ownership check fails)
+    function canAccessData(docUserId) {
       if (!isSignedIn()) return false;
-      let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       
-      // CRITICAL: exists() check prevents rule crashes on missing profile documents
+      // CHEAP SHORT-CIRCUIT: If the user owns the data, grant access immediately.
+      // This prevents the Rules engine from running expensive 'get()' calls on every document in a list.
+      if (docUserId == request.auth.uid) return true;
+      
+      // SECONDARY CHEAP CHECK: Admin email check in token.
+      if (isAdminFallback()) return true;
+      
+      // TERTIARY: Internal Role check (Expensive document read, only for managers/marketing)
+      let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       if (!exists(profilePath)) return false;
       
       let profileData = get(profilePath).data;
@@ -22,27 +38,15 @@ service cloud.firestore {
       return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
     }
 
-    function isAdminFallback() {
-      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com", "wbmaralit@hovidinc.com"];
-      return isSignedIn() && (request.auth.token.get('email', '').lower() in adminEmails);
-    }
-
-    // High-performance Access Helper
-    // Priority 1: Ownership (Fastest, avoids rule engine timeouts)
-    // Priority 2: Admin/Internal Role checks (Executed only if not the owner)
-    function canAccessData(docUserId) {
-      return isSignedIn() && (
-        docUserId == request.auth.uid || 
-        isAdminFallback() || 
-        hasInternalAccess()
-      );
-    }
-
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
       // Simplified list rule to prevent rule engine timeouts on veteran accounts
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdminFallback() || hasInternalAccess());
+      allow list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        isAdminFallback() || 
+        (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"])
+      );
       allow get: if canAccessData(resource.data.userId);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if canAccessData(resource.data.userId);
@@ -80,14 +84,14 @@ service cloud.firestore {
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isAdminFallback() || hasInternalAccess();
+      allow write: if isAdminFallback() || (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]);
     }
     
     match /userProfiles/{id} {
-      // Allow users to see their own profile without recursive hasInternalAccess checks
-      allow read: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
-      allow write: if isSignedIn() && (request.auth.uid == id || isAdminFallback() || hasInternalAccess());
-      allow list: if isSignedIn() && (isAdminFallback() || hasInternalAccess());
+      // Allow users to see their own profile without recursive checks
+      allow read: if isSignedIn() && (request.auth.uid == id || isAdminFallback());
+      allow write: if isSignedIn() && (request.auth.uid == id || isAdminFallback());
+      allow list: if isSignedIn() && (isAdminFallback() || (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]));
     }
   }
 }

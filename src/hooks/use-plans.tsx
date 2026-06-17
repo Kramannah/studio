@@ -11,8 +11,9 @@ import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
 /**
- * LOW-COST V2.8: Optimized for high-activity PMR veteran accounts.
- * Limit set to 5,000 to ensure full planning visibility for accounts with massive histories.
+ * LOW-COST V2.9: Optimized for high-activity PMR veteran accounts.
+ * Standardized at 3,000 records to prevent Firestore Rules evaluation timeouts
+ * during unindexed historical scans.
  */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -42,7 +43,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(5000)
+        limit(3000)
       );
       
       const requestsQuery = query(
@@ -54,7 +55,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
            console.warn("Plans range fallback for veteran:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
            
@@ -77,7 +78,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
       lastFetchedKeyRef.current = fetchKey;
     } catch (error) {
-        console.error("Fetch plans error:", error);
+        console.warn("Fetch plans timeout/error caught:", error);
     } finally {
         setLoading(false);
     }
