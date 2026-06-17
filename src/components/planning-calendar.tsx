@@ -378,6 +378,7 @@ export function PlanningCalendar({
                                 <TableRow className="bg-muted/50 h-14">
                                     <TableHead className="font-bold">Doctor</TableHead>
                                     <TableHead className="font-bold">Location</TableHead>
+                                    <TableHead className="font-bold">Call Type</TableHead>
                                     <TableHead className="font-bold">Status</TableHead>
                                     <TableHead className="text-right font-bold">Actions</TableHead>
                                 </TableRow>
@@ -400,6 +401,11 @@ export function PlanningCalendar({
                                                 </TableCell>
                                                 <TableCell>{doctor?.municipality || "—"}</TableCell>
                                                 <TableCell>
+                                                    <Badge variant="secondary" className="capitalize text-[10px] font-bold">
+                                                        {plan.callType || 'unplanned'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
                                                      <Badge variant="outline" className={cn("font-black text-[10px] uppercase", isCovered && "bg-primary/10 text-primary border-primary/30")}>
                                                         {isCovered ? 'Covered' : 'Not Covered'}
                                                     </Badge>
@@ -411,7 +417,7 @@ export function PlanningCalendar({
                                         )
                                     })
                                 ) : (
-                                    <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground italic">No visits planned for this day.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground italic">No visits planned for this day.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
