@@ -1,13 +1,14 @@
 
 "use client"
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
+import { getMonthRangeISO } from "@/lib/utils";
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -105,17 +106,34 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [user, managerId, getManagedUserIds, active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
     setLoadingIndividual(true);
+    
     try {
+        const { start, end } = getMonthRangeISO(selectedMonth);
+
+        // Fetch doctors and plans (plotted calls) globally for the user first to ensure calendar is populated
+        // Coverage and Logs are filtered by month for "Low Cost"
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", uid), 
+                where("coverageDate", ">=", start),
+                where("coverageDate", "<=", end),
+                limit(1000)
+            )).catch(() => getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1000)))), // Fallback for indices
+            getDocs(query(
+                collection(db!, "plans"), 
+                where("userId", "==", uid),
+                where("plannedDate", ">=", start),
+                where("plannedDate", "<=", end),
+                limit(1000)
+            )).catch(() => getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000)))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(1000)))
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
         ]);
 
         setIndividualEntries(entries.docs.map(d => ({id: d.id, ...d.data()})) as CoverageEntry[]);

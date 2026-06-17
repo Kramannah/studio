@@ -28,7 +28,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
 }
@@ -57,96 +57,122 @@ export function UserDashboard({
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleRefresh = async () => {
-        if (!onFetchUserData || !userId) return;
+        if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId);
+            await onFetchUserData(userId, selectedMonth);
         } finally {
             setIsRefreshing(false);
         }
     };
+
+    // Auto-fetch when selectedMonth changes in individual PMR view
+    useEffect(() => {
+        if (onFetchUserData && userId && selectedMonth) {
+            onFetchUserData(userId, selectedMonth);
+        }
+    }, [selectedMonth, userId, onFetchUserData]);
     
     return (
-        <div className="space-y-6 w-full">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/20 p-2 rounded-xl border shadow-sm">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-fit">
-                    <TabsList className="bg-transparent p-1 grid grid-cols-2 md:grid-cols-4 w-full h-auto gap-2">
-                        <TabsTrigger value="summary" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
-                            <LayoutGrid size={16} /> Call Summary
+        <div className="space-y-6 w-full animate-in fade-in duration-500">
+            <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-fit">
+                    <TabsList className="bg-transparent h-10 p-0 flex gap-1">
+                        <TabsTrigger 
+                            value="summary" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                        >
+                            Call Summary
                         </TabsTrigger>
-                        <TabsTrigger value="submitted" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
-                            <ClipboardList size={16} /> Reports
+                        <TabsTrigger 
+                            value="submitted" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                        >
+                            Reports
                         </TabsTrigger>
-                        <TabsTrigger value="planning" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
-                            <CalendarDays size={16} /> Planning
+                        <TabsTrigger 
+                            value="planning" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                        >
+                            Planning
                         </TabsTrigger>
-                        <TabsTrigger value="master" className="font-headline data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 h-10 px-4">
-                            <UsersRound size={16} /> Masterlist
+                        <TabsTrigger 
+                            value="master" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                        >
+                            Masterlist
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
 
                 {onFetchUserData && (
                     <Button 
-                        variant="outline" 
+                        variant="ghost" 
                         size="sm" 
                         onClick={handleRefresh} 
                         disabled={isRefreshing}
-                        className="h-10 border-2 font-headline shadow-sm hover:bg-background"
+                        className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4"
                     >
-                        <RefreshCw className={isRefreshing ? "animate-spin mr-2" : "mr-2"} size={16} />
+                        <RefreshCw className={isRefreshing ? "animate-spin" : ""} size={14} />
                         Refresh Data
                     </Button>
                 )}
             </div>
             
-            <TabsContent value="summary" className="mt-0 w-full animate-in fade-in duration-300">
-                <CallSummary entries={allEntries} doctors={allDoctors} nonCallDays={allNonCallDays} timeLogs={allTimeLogs} />
-            </TabsContent>
-            
-            <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in duration-300">
-                <SubmittedList 
-                    entries={allEntries} 
-                    doctors={allDoctors} 
-                    nonCallDays={allNonCallDays} 
-                    onDelete={onDeleteEntry} 
-                    onEdit={() => {}} 
-                    readOnly={!isAdminView} 
-                />
-            </TabsContent>
-            
-            <TabsContent value="planning" className="mt-0 w-full animate-in fade-in duration-300">
-                <PlanningCalendar 
-                    doctors={allDoctors} 
-                    plans={allPlans} 
-                    planningRequests={individualPlanningRequests} 
-                    onRequestUnlock={async () => false} 
-                    entries={allEntries} 
-                    offlineEntries={[]} 
-                    onAddPlan={() => {}} 
-                    onAddPlansBulk={async () => false} 
-                    onRemovePlan={() => {}} 
-                    onLogCall={() => {}} 
-                    nonCallDays={allNonCallDays} 
-                    onAddNonCallDay={() => {}} 
-                    readOnly={true} 
-                    selectedMonth={selectedMonth}
-                    onMonthChange={onMonthChange}
-                />
-            </TabsContent>
-            
-            <TabsContent value="master" className="mt-0 w-full animate-in fade-in duration-300">
-                <MasterList 
-                    doctors={allDoctors} 
-                    entries={allEntries} 
-                    onAddDoctor={onAddDoctor} 
-                    onAddDoctorsBulk={onAddDoctorsBulk} 
-                    onUpdateDoctor={onUpdateDoctor} 
-                    onDeleteDoctor={onDeleteDoctor} 
-                    onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
-                    readOnly={!isAdminView} 
-                />
-            </TabsContent>
+            <div className="pt-2">
+                <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <CallSummary 
+                        entries={allEntries} 
+                        doctors={allDoctors} 
+                        nonCallDays={allNonCallDays} 
+                        timeLogs={allTimeLogs} 
+                        selectedMonth={selectedMonth}
+                        onMonthChange={onMonthChange}
+                    />
+                </TabsContent>
+                
+                <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <SubmittedList 
+                        entries={allEntries} 
+                        doctors={allDoctors} 
+                        onDelete={onDeleteEntry} 
+                        onEdit={() => {}} 
+                        readOnly={!isAdminView} 
+                    />
+                </TabsContent>
+                
+                <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <PlanningCalendar 
+                        doctors={allDoctors} 
+                        plans={allPlans} 
+                        planningRequests={individualPlanningRequests} 
+                        onRequestUnlock={async () => false} 
+                        entries={allEntries} 
+                        onAddPlan={() => {}} 
+                        onAddPlansBulk={async () => false} 
+                        onRemovePlan={() => {}} 
+                        onLogCall={() => {}} 
+                        nonCallDays={allNonCallDays} 
+                        onAddNonCallDay={() => {}} 
+                        readOnly={true} 
+                        selectedMonth={selectedMonth}
+                        onMonthChange={onMonthChange}
+                    />
+                </TabsContent>
+                
+                <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <MasterList 
+                        doctors={allDoctors} 
+                        entries={allEntries} 
+                        onAddDoctor={onAddDoctor} 
+                        onAddDoctorsBulk={onAddDoctorsBulk} 
+                        onUpdateDoctor={onUpdateDoctor} 
+                        onDeleteDoctor={onDeleteDoctor} 
+                        onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
+                        readOnly={!isAdminView} 
+                    />
+                </TabsContent>
+            </div>
         </div>
     );
 }
