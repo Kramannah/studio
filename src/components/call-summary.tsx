@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -115,17 +116,15 @@ export function CallSummary({
         }).filter(Boolean));
         
         // Calculate weighted active days based on user field activity and leave status
+        // CRITICAL: Half-day leaves count as 0.5 active days per requirement
         let activeDays = 0;
         activeDaysSet.forEach(dateStr => {
             const leaveType = ncdMap.get(dateStr);
             if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') {
-                // If the PMR has a half day leave, count it as 0.5 in active days
                 activeDays += 0.5;
             } else if (leaveType === 'wholeday') {
-                // If they filed reports on a whole day leave, it's counted as 0 active work days
                 activeDays += 0;
             } else {
-                // Regular active day
                 activeDays += 1.0;
             }
         });
@@ -133,14 +132,14 @@ export function CallSummary({
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        // Map visits per doctor name (lower-case key)
+        // Map visits per doctor name
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        // 1. CONCENTRATION (3X): Count doctors targeted 3x/4x who were ACTUALLY visited 3+ times
+        // 1. CONCENTRATION (3X): Target vs Achieved
         const targetHighFreqDoctors = safeDoctors.filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
             const freqVal = parseInt(freqStr, 10);
@@ -153,7 +152,7 @@ export function CallSummary({
         }).length;
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // 2. CALL REACH: Unique visited doctors in masterlist vs total in masterlist
+        // 2. CALL REACH: Unique vs Masterlist
         const totalDoctorsInList = safeDoctors.length;
         const actualVisitedFromList = safeDoctors.filter(d => {
             const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();

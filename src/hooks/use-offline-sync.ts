@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -32,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4.6: High-Resiliency Query Cascade for Veteran Accounts (NL-02 / CL-01).
- * Specifically handles structural field differences and prevents Rule evaluation timeouts.
+ * LOW-COST V4.7: Precision Resilience for Veteran Accounts (NL-02 / CL-01).
+ * Specifically optimized to handle 3,000+ record datasets with high-memory payloads.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -93,7 +94,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
       if (fetched.length === 0) {
-          // If no records found by coverageDate, try submittedAt as fallback for legacy records
+          // STAGE 2: Fallback for legacy records using submittedAt
           const qLegacy = query(
               collection(db!, "coverageEntries"),
               where("userId", "==", userId),
@@ -109,13 +110,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
+      // Save light metadata to cache to prevent quota-killing repeated reads
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Primary targeted scan failure:", error.message);
+        console.warn("Primary targeted scan failure (Indexing might be in progress):", error.message);
         
         try {
-            // STAGE 2: Recent-First broad scan (Requires Index)
+            // STAGE 3: Recent-First broad scan (Requires Index: userId, submittedAt DESC)
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
@@ -131,14 +133,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                     return d && isValid(d) && isWithinInterval(d, interval);
                 });
             
-            fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
         } catch (finalError: any) {
             console.warn("Recent-first fallback failure:", finalError.message);
             
             try {
-                // STAGE 3: Emergency Fallback - Unordered Scan (No Composite Index Required)
-                // This ensures veteran accounts NL-02 and CL-01 don't crash while indices are building
+                // STAGE 4: Emergency Fallback - Unordered Simple Scan (No Composite Index Required)
+                // This is the "Safety Net" for veteran accounts while indices are building.
                 const emergencyQ = query(
                     collection(db!, "coverageEntries"), 
                     where("userId", "==", userId),
