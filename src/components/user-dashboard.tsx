@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -66,7 +67,7 @@ export function UserDashboard({
         }
     };
 
-    // Automatically synchronize the dashboard when user or month context changes
+    // Auto-fetch data when the user or month context changes to keep Admin views in sync
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             onFetchUserData(userId, selectedMonth);
@@ -76,7 +77,7 @@ export function UserDashboard({
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                {/* High-Fidelity Tab Navigation matching screenshot */}
+                {/* Fixed Layout: TabsList and Refresh button in a high-fidelity bar */}
                 <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
@@ -119,7 +120,7 @@ export function UserDashboard({
                     )}
                 </div>
                 
-                {/* Unified Tab Content Area correctly wrapped inside <Tabs> */}
+                {/* Unified Tab Content Area: Ensure everything is inside <Tabs> */}
                 <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 

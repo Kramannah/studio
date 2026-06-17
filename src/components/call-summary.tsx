@@ -82,7 +82,7 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // Submitted Coverage filter
+        // Filter entries for the selected month
         const filteredEntries = entries.filter(e => {
             try { 
                 const d = parseISO(e.coverageDate || e.submittedAt); 
@@ -96,28 +96,34 @@ export function CallSummary({
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
+        // Map visits per doctor name (lower-case key)
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase();
+            const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
             acc[providerName] = (acc[providerName] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
         
-        const highFreqDoctors = doctors.filter(d => {
-            const freq = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
-            return freq >= 3;
+        // 1. CONCENTRATION (3X): Count doctors targeted 3x/4x who were ACTUALLY visited 3+ times
+        const targetHighFreqDoctors = doctors.filter(d => {
+            const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
+            return freqVal >= 3;
         });
-        const totalHighFreqTarget = highFreqDoctors.length;
-        const actualHighFreqAchieved = highFreqDoctors.filter(d => {
-            return (providerVisits[`${d.firstName} ${d.lastName}`.toLowerCase()] || 0) >= 1;
+        const totalHighFreqTarget = targetHighFreqDoctors.length;
+        const actualHighFreqAchieved = targetHighFreqDoctors.filter(d => {
+            const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
+            return (providerVisits[name] || 0) >= 3;
         }).length;
-        
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
+        // 2. CALL REACH: Count doctors in masterlist visited AT LEAST once
         const totalDoctorsInList = doctors.length;
-        const actualVisitedCount = Object.keys(providerVisits).length;
-        const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedCount / totalDoctorsInList) * 100) : 0;
+        const actualVisitedFromList = doctors.filter(d => {
+            const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
+            return (providerVisits[name] || 0) >= 1;
+        }).length;
+        const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedFromList / totalDoctorsInList) * 100) : 0;
 
-        // KPI: 12 calls/day target
+        // 3. CALL RATE: Total calls vs target (12 per active day)
         const totalCalls = filteredEntries.length;
         const targetCalls = activeDays * 12;
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
@@ -131,7 +137,7 @@ export function CallSummary({
             targetCalls,
             callRatePercentage,
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
-            coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
+            coverageReach: { actual: actualVisitedFromList, total: totalDoctorsInList, percentage: percentageReach },
             avgCallsPerDay,
         };
     }, [entries, doctors, selectedMonth]);
@@ -140,7 +146,6 @@ export function CallSummary({
     
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-             {/* Matching screenshot header */}
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
@@ -158,7 +163,6 @@ export function CallSummary({
                 </div>
             </div>
 
-            {/* Design-matching stat cards with fractional display */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
@@ -173,7 +177,7 @@ export function CallSummary({
                     title="CONCENTRATION (3X)" 
                     value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total}`}
                     subValue={`(${insights.completedHighFreq.percentage}%)`}
-                    description="High frequency retention rate" 
+                    description="High frequency retention (3+ visits)" 
                     icon={Target} 
                     color="text-[#10b981]" 
                     bgColor="bg-[#0d1e18]" 
