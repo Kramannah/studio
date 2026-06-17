@@ -84,6 +84,7 @@ export function CallSummary({
 
         const safeEntries = Array.isArray(entries) ? entries : [];
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
+        const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
         // Filter entries for the selected month
         const filteredEntries = safeEntries.filter(e => {
@@ -93,10 +94,43 @@ export function CallSummary({
             } catch { return false; }
         });
 
+        // Filter approved non-call days for the selected month
+        const approvedNCDs = safeNCDs.filter(n => {
+            try {
+                const d = parseISO(n.date);
+                return n.status === 'approved' && isValid(d) && isWithinInterval(d, { start, end });
+            } catch { return false; }
+        });
+
+        // Map dates to their leave types for quick lookup
+        const ncdMap = new Map<string, string>();
+        approvedNCDs.forEach(n => {
+            try {
+                const dateStr = format(parseISO(n.date), 'yyyy-MM-dd');
+                ncdMap.set(dateStr, n.dayType);
+            } catch {}
+        });
+
         const activeDaysSet = new Set(filteredEntries.map(e => {
             try { return format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd'); } catch { return ""; }
         }).filter(Boolean));
-        const activeDays = activeDaysSet.size;
+        
+        // Calculate weighted active days based on user field activity and leave status
+        let activeDays = 0;
+        activeDaysSet.forEach(dateStr => {
+            const leaveType = ncdMap.get(dateStr);
+            if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') {
+                // If the PMR has a half day leave, count it as 0.5 in active days
+                activeDays += 0.5;
+            } else if (leaveType === 'wholeday') {
+                // If they filed reports on a whole day leave, it's counted as 0 active work days
+                // because they were officially on leave (even if they squeezed in a call).
+                activeDays += 0;
+            } else {
+                // Regular active day
+                activeDays += 1.0;
+            }
+        });
 
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
@@ -145,7 +179,7 @@ export function CallSummary({
             coverageReach: { actual: actualVisitedFromList, total: totalDoctorsInList, percentage: percentageReach },
             avgCallsPerDay,
         };
-    }, [entries, doctors, selectedMonth]);
+    }, [entries, doctors, nonCallDays, selectedMonth]);
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -169,7 +203,7 @@ export function CallSummary({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
-                    value={`${insights.totalCalls}/${insights.targetCalls}`}
+                    value={`${insights.totalCalls}/${Math.round(insights.targetCalls)}`}
                     subValue={`(${insights.callRatePercentage}%)`}
                     description="Target: 12 reports per active day" 
                     icon={Percent} 
@@ -211,7 +245,7 @@ export function CallSummary({
                     <SmallStatCard 
                         title="ACTIVE DAYS"
                         value={insights.activeDays}
-                        description="Days with at least one report"
+                        description="Weighted days with filed reports"
                         icon={CalendarIcon}
                         color="text-[#10b981]"
                         iconBg="bg-[#10b981]/10"
@@ -237,3 +271,4 @@ export function CallSummary({
         </div>
     );
 }
+
