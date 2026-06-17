@@ -71,12 +71,14 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
         
         const totalBusinessDaysInMonth = eachDayOfInterval({ start, end }).filter(day => !isWeekend(day)).length;
-        const callRatePercentage = activeDaysActual > 0 ? Math.round((totalCalls / (activeDaysActual * 12)) * 100) : 0;
+        
+        const targetCalls = Math.round(activeDaysActual * 12);
+        const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
 
         return {
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedCount, total: totalDoctorsInList, percentage: percentageReach },
-            callRate: { percentage: callRatePercentage },
+            callRate: { actual: totalCalls, target: targetCalls, percentage: callRatePercentage },
             avgCallsPerDay: activeDaysActual > 0 ? (totalCalls / activeDaysActual).toFixed(2) : 0,
             totalWorkingDays: { actual: activeDaysActual, total: totalBusinessDaysInMonth },
             inbaseCalls,
@@ -98,7 +100,14 @@ export function CallSummary({ entries = [], doctors = [], nonCallDays = [], time
              <Card><CardHeader><CardTitle className="font-headline text-2xl font-black text-primary">Performance Oversight</CardTitle><CardDescription>Real-time analytics for the current active month.</CardDescription></CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <StatCard title="Call Rate" value={`${insights.callRate.percentage}%`} description="Target achievement vs active days" icon={Percent} color="text-orange-500" bgColor="bg-orange-500/10" />
+                        <StatCard 
+                            title="Call Rate" 
+                            value={`${insights.callRate.actual}/${insights.callRate.target} (${insights.callRate.percentage}%)`} 
+                            description="Calculated as 12x Active Days" 
+                            icon={Percent} 
+                            color="text-orange-500" 
+                            bgColor="bg-orange-500/10" 
+                        />
                         <StatCard title="Concentration (3x)" value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total} (${insights.completedHighFreq.percentage}%)`} description="High frequency retention" icon={Target} color="text-primary" bgColor="bg-primary/10" />
                         <StatCard title="Call Reach" value={`${insights.coverageReach.actual}/${insights.coverageReach.total} (${insights.coverageReach.percentage}%)`} description="Territory penetration" icon={Users} color="text-teal-500" bgColor="bg-teal-500/10" />
                         <StatCard title="Efficiency" value={insights.avgCallsPerDay} description="Avg daily submissions" icon={TrendingUp} color="text-blue-500" bgColor="bg-blue-500/10" />
