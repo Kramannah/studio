@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V4.2: Admin Oversight for Veteran Accounts (NL-02, CL-01).
- * Standardized Fetch: 3,000 record limit for all coverage scans.
+ * LOW-COST V4.5: Resilient Query Cascade for Veteran Accounts.
+ * Handles Index Errors gracefully with multi-stage fallback.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -81,8 +81,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const interval = { start: parseISO(start), end: parseISO(end) };
     
     try {
-      // 1. Targeted query (Most Efficient)
-      // LIMIT: 3000 is safe for a single month and ensures completeness for veteran accounts
+      // 1. Targeted query (Most Efficient) - Requires Composite Index
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -95,18 +94,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
       fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
-      
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
     } catch (error: any) {
-        console.warn("Primary targeted scan failure (NL-02/CL-01):", error.message);
+        console.warn("Primary targeted scan failure (Index building?):", error.message);
         
         try {
-            // 2. Fallback Scan (Recent-First Priority)
-            // CRITICAL: orderBy("submittedAt", "desc") ensures the last 3,000 records (June 2026) are pulled.
+            // 2. Recent-First Priority Fallback - Requires Composite Index
             const fallbackQ = query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", userId),
@@ -125,7 +122,29 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
             setMasterEntries(fetched);
         } catch (finalError: any) {
-            console.error("Critical Coverage Fetch Failure:", finalError);
+            console.warn("Recent-first fallback failure (Index required):", finalError.message);
+            
+            try {
+                // 3. Emergency Fallback: Simple Scan (No Composite Index Required)
+                // Prevents app crash while indices are building.
+                const emergencyQ = query(
+                    collection(db!, "coverageEntries"), 
+                    where("userId", "==", userId),
+                    limit(3000)
+                );
+                const snap = await getDocs(emergencyQ);
+                const fetched = snap.docs
+                    .map(d => ({id: d.id, ...d.data()} as CoverageEntry))
+                    .filter(e => {
+                        const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                        return d && isValid(d) && isWithinInterval(d, interval);
+                    });
+                
+                fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+                setMasterEntries(fetched);
+            } catch (criticalError: any) {
+                console.error("Critical Coverage Fetch Failure:", criticalError);
+            }
         }
     } finally {
         setLoading(false);

@@ -124,7 +124,6 @@ export function CallSummary({
                 activeDays += 0.5;
             } else if (leaveType === 'wholeday') {
                 // If they filed reports on a whole day leave, it's counted as 0 active work days
-                // because they were officially on leave (even if they squeezed in a call).
                 activeDays += 0;
             } else {
                 // Regular active day
@@ -271,4 +270,3 @@ export function CallSummary({
         </div>
     );
 }
-
