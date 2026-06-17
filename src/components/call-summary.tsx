@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -143,7 +142,8 @@ export function CallSummary({
         
         // 1. CONCENTRATION (3X): Count doctors targeted 3x/4x who were ACTUALLY visited 3+ times
         const targetHighFreqDoctors = safeDoctors.filter(d => {
-            const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
+            const freqStr = String(d.frequency || "1x").replace('x', '');
+            const freqVal = parseInt(freqStr, 10);
             return freqVal >= 3;
         });
         const totalHighFreqTarget = targetHighFreqDoctors.length;

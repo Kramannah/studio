@@ -48,8 +48,9 @@ service cloud.firestore {
 
     match /coverageEntries/{id} {
       // Rule Priority: Owner > Special Whitelist > DSM/Manager
+      // This flattened logic prevents timeouts for users with 3,000+ records
       allow read, list: if isSignedIn() && (
-        isOwner(resource.data.userId) || 
+        resource.data.userId == request.auth.uid || 
         isSpecialAuthorizedPMR() || 
         isManagerialAccess(resource.data.userId)
       );
