@@ -3,100 +3,86 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
+    // --- Core Helper Functions ---
 
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      if (!isSignedIn()) return null;
-      let path = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
-      return exists(path) ? get(path).data : null;
+    // Optimized Profile Lookup (Firestore caches this for the duration of the request)
+    function getProfile() {
+      return get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
     }
 
-    function isAdmin() {
+    // Role-based Access Logic
+    function hasInternalAccess() {
       if (!isSignedIn()) return false;
-      let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
-      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
-      let email = request.auth.token.get('email', '').lower();
-      let profile = getUserData();
-      
-      return request.auth.uid in adminUids ||
-             email in adminEmails ||
-             (profile != null && profile.get('role', '') == "Admin");
-    }
-
-    function isManager() {
-      if (!isSignedIn()) return false;
-      let managerUids = [
-        "e11qs3XD1vW3JWHfEaJI2DXcCEj2", "UmyUP0VwccRKLfrej67idFukFz42", 
-        "tb73WEIzndUrPEaD1q4H0VQfQaD3", "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
-        "x8u4kvWvieZIVc9NdgiWmG01nts2", "MlE49ceLEDbzvKAsisKnW07fGfW2",
-        "r19lVIqk4xTtzxvbs4W0kprHSvD2"
-      ];
-      let profile = getUserData();
-      
-      return request.auth.uid in managerUids || 
-             (profile != null && profile.get('role', '') == "Manager") ||
-             isAdmin();
-    }
-
-    function isStaff() {
-      let profile = getUserData();
-      return profile != null && (profile.get('role', '') == "Marketing" || profile.get('role', '') == "HR");
+      let profile = getProfile();
+      let role = profile.get('role', 'PMR');
+      return role == "Admin" || role == "Manager" || role == "Marketing" || role == "HR";
     }
 
     function isOwner(userId) {
       return isSignedIn() && userId == request.auth.uid;
     }
 
+    function isAdminFallback() {
+      let adminUids = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+      let adminEmails = ["mbustamante@hovidinc.com", "admin@hovidinc.com"];
+      return request.auth.uid in adminUids || request.auth.token.get('email', '').lower() in adminEmails;
+    }
+
+    // Universal Read/Write Check
+    function canAccessData(userId) {
+      return isOwner(userId) || hasInternalAccess() || isAdminFallback();
+    }
+
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /doctors/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /plans/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /timeLogs/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /planningRequests/{id} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin() || isManager() || isStaff();
+      allow read, list: if canAccessData(resource.data.userId);
       allow create: if isOwner(request.resource.data.userId);
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update, delete: if canAccessData(resource.data.userId);
     }
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isAdmin() || isManager();
+      allow write: if hasInternalAccess() || isAdminFallback();
     }
     
     match /userProfiles/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isAdmin() || isManager() || (isSignedIn() && request.auth.uid == id);
+      allow write: if hasInternalAccess() || isAdminFallback() || (isSignedIn() && request.auth.uid == id);
     }
   }
 }

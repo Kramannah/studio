@@ -16,7 +16,7 @@ const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
  * useAdminData - Optimized for UID-based individual oversight with monthly synchronization.
- * LOW-COST V2.2: Implements resilient monthly queries with a 3,000-record fallback to prevent timeouts.
+ * LOW-COST V2.2: Implements resilient monthly queries with optimized quotas to prevent timeouts.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -128,9 +128,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (error: any) {
-                // If Timeout or Index Error: Fallback to high-horizon scan (3,000 docs)
-                console.warn(`Admin query fallback for ${colName}:`, error.message);
-                const fallbackQ = query(colRef, where("userId", "==", uid), limit(3000));
+                // FALLBACK: If timeout or missing index, fetch broadly but with a safe limit
+                const fallbackQ = query(colRef, where("userId", "==", uid), limit(1500));
                 const snap = await getDocs(fallbackQ);
                 const interval = { start: parseISO(start), end: parseISO(end) };
                 return snap.docs.map(d => ({id: d.id, ...d.data()})).filter((d: any) => {
@@ -141,7 +140,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         };
 
-        // Fetch modules with protective limits to avoid timeouts
         const [entries, plans, logs] = await Promise.all([
             fetchModule("coverageEntries", "coverageDate", 1500),
             fetchModule("plans", "plannedDate", 1500),
@@ -174,7 +172,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
         if (force) {
-            toast({ title: "Sync Complete", description: `Updated dataset for ${selectedMonth}.` });
+            toast({ title: "Data Synchronized", description: `Showing records for ${selectedMonth}.` });
         }
     } catch (e: any) {
         console.error("Critical User Data Fetch Error:", e);
