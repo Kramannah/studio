@@ -9,8 +9,8 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
-import { getStartOfYearISO, safeStorageSet } from '@/lib/utils';
-import { isValid, parseISO } from 'date-fns';
+import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
+import { isValid, parseISO, isAfter } from 'date-fns';
 
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
@@ -19,8 +19,7 @@ const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * LOW-COST V2: Optimized for minimum reads by restricting usage scans to a limited timeframe
- * and using stricter document limits.
+ * LOW-COST V2.1: Optimized read logic with resilient fallback for usage scans.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
@@ -76,7 +75,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (allocations.length === 0) setLoading(true);
 
     try {
-        // LOW-COST V2: Fetch marketing samples (master list is small)
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)));
 
         const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
@@ -100,32 +98,40 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
 
-        // LOW-COST V2: Restrict usage scan to current year/quarter for better performance
         if (includeUsage && !usageFetchedRef.current) {
             const used: Record<string, number> = {};
             const isManagerial = profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role);
             const startOfYear = getStartOfYearISO();
+            const startOfYearDate = parseISO(startOfYear);
             
             let entriesSnap;
-            if (isManagerial) {
-                // For managers, we still scan broadly but with a more realistic limit and date cutoff
-                entriesSnap = await getDocs(query(
-                    collection(db!, "coverageEntries"), 
-                    where("coverageDate", ">=", startOfYear),
-                    limit(2000) 
-                ));
-            } else {
-                // For PMRs, strictly their own data for the year
-                entriesSnap = await getDocs(query(
-                    collection(db!, "coverageEntries"), 
-                    where("userId", "==", user.uid),
-                    where("coverageDate", ">=", startOfYear),
-                    limit(1000)
-                ));
+            try {
+                if (isManagerial) {
+                    entriesSnap = await getDocs(query(
+                        collection(db!, "coverageEntries"), 
+                        where("coverageDate", ">=", startOfYear),
+                        limit(2000) 
+                    ));
+                } else {
+                    entriesSnap = await getDocs(query(
+                        collection(db!, "coverageEntries"), 
+                        where("userId", "==", user.uid),
+                        where("coverageDate", ">=", startOfYear),
+                        limit(1000)
+                    ));
+                }
+            } catch (indexError) {
+                console.warn("Usage scan fallback triggered. Scanning larger batch.");
+                // Fallback: Broad UID scan with memory filter
+                const q = isManagerial ? query(collection(db!, "coverageEntries"), limit(5000)) : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(5000));
+                entriesSnap = await getDocs(q);
             }
 
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
+                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                if (!cDate || !isAfter(cDate, startOfYearDate)) return;
+
                 const process = (name?: string, qty?: number) => {
                     const key = String(name ?? "").toLowerCase().trim();
                     if (!key) return;
@@ -146,7 +152,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
     } catch (error) {
-        console.warn("Allocation fetch optimized scan failure:", error);
+        console.warn("Allocation fetch error:", error);
     } finally {
         setLoading(false);
     }

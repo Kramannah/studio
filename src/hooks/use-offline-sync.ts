@@ -31,8 +31,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * LOW-COST V2: Optimized for minimum reads by fetching only recent reports
- * and caching lightweight versions to local storage.
+ * LOW-COST V2.1: Optimized for minimum reads with high-volume fallback.
+ * Limits are set to 5,000 to ensure veteran accounts see recent data even without indexes.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true) => {
   const { toast } = useToast();
@@ -69,31 +69,33 @@ export const useOfflineSync = (userId?: string, active: boolean = true) => {
     if (!userId || !db || !active || !navigator.onLine) return;
     setLoading(true);
     try {
-      // LOW-COST V2: Fetch only the 500 most recent entries instead of full history
+      // Primary targeted query (Requires Index: userId + submittedAt DESC)
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
         orderBy("submittedAt", "desc"),
-        limit(500)
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
-      const fetched: CoverageEntry[] = [];
-      querySnapshot.forEach(docSnap => {
-        fetched.push({ id: docSnap.id, ...docSnap.data() } as CoverageEntry);
-      });
+      const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
       setMasterEntries(fetched);
       
-      // LOW-COST V2: Create a lightweight version for the cache (remove images) to save space
+      // Cache metadata-only version (no heavy images) to save LocalStorage space
       const lightEntries = fetched.map(({ photos, signature, jointCallSignature, dsmSignature, ...rest }) => rest);
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}`, JSON.stringify(lightEntries));
     } catch (error) {
-        console.warn("Fetch master entries optimized scan fallback:", error);
-        // Fallback for missing index
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(200));
+        console.warn("Coverage fetch fallback triggered (Index likely missing):", error);
+        // Robust Fallback: Fetch a larger batch without server-side sorting (No Index Required)
+        // limit(5000) ensures recent entries are retrieved even for veteran accounts
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(5000));
         const snap = await getDocs(fallbackQ);
-        setMasterEntries(snap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)));
+        const fetched = snap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
+        
+        // Sort in memory to ensure UI displays recent items first
+        fetched.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
+        setMasterEntries(fetched);
     } finally {
         setLoading(false);
     }

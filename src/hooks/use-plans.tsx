@@ -5,14 +5,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit, startAt, endAt } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday, startOfMonth, endOfMonth, addMonths, subMonths, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { useAuth } from './use-auth';
 
 /**
- * LOW-COST V2.1: Restricts plan fetching to a specific date range (current month +/- 1 month)
- * to prevent over-scanning history for veteran accounts.
- * Includes a 5,000 doc fallback for missing indexes.
+ * LOW-COST V2.1: Restricts plan fetching to a specific date range with a high-volume 5,000 doc fallback.
+ * Ensures veteran accounts see recent plans even if indexes are missing.
  */
 export const usePlans = (active: boolean = true) => {
   const { toast } = useToast();
@@ -27,10 +26,10 @@ export const usePlans = (active: boolean = true) => {
     setLoading(true);
     
     try {
-      // LOW-COST V2: Only fetch plans from last month to next month (3-month window)
       const rangeStart = startOfMonth(subMonths(new Date(), 1)).toISOString();
       const rangeEnd = endOfMonth(addMonths(new Date(), 1)).toISOString();
 
+      // Primary targeted query (Requires Index: userId + plannedDate range)
       const plansQuery = query(
         collection(db, "plans"), 
         where("userId", "==", user.uid),
@@ -46,25 +45,29 @@ export const usePlans = (active: boolean = true) => {
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
-        getDocs(plansQuery).catch(() => {
-           // HIGH-VOLUME FALLBACK: If index is missing, fetch 5,000 records
-           console.warn("Plans range query requires index. Using 5k fallback.");
+        getDocs(plansQuery).catch(async (indexError) => {
+           console.warn("Plans range query fallback triggered (Index likely missing). Scanning larger batch.");
+           // Fallback: Fetch a larger batch without range filter (No Index Required)
            const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(5000));
-           return getDocs(fallbackQ).then(snap => {
-               const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
-               return {
-                   docs: snap.docs.filter(d => {
-                       const date = parseISO(d.data().plannedDate);
-                       return isValid(date) && isWithinInterval(date, interval);
-                   })
-               } as any;
-           });
+           const snap = await getDocs(fallbackQ);
+           const interval = { start: parseISO(rangeStart), end: parseISO(rangeEnd) };
+           
+           // Filter and sort in memory
+           const filtered = snap.docs
+               .map(d => ({ id: d.id, ...d.data() } as Plan))
+               .filter(d => {
+                   const date = parseISO(d.plannedDate);
+                   return isValid(date) && isWithinInterval(date, interval);
+               });
+               
+           // Mock a snapshot-like structure for consistent processing
+           return { docs: filtered.map(d => ({ id: d.id, data: () => d })) } as any;
         }),
         getDocs(requestsQuery),
       ]);
 
-      const plans = plansSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Plan));
-      const requests = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
+      const plans = (plansSnapshot.docs || []).map((doc: any) => ({ id: doc.id, ...doc.data() } as Plan));
+      const requests = (requestsSnapshot.docs || []).map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
       
       setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
