@@ -77,7 +77,7 @@ export function UserDashboard({
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                {/* Fixed Layout: TabsList and Refresh button in a high-fidelity bar */}
+                {/* High-Fidelity Tab Bar aligned with reference image */}
                 <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
                     <TabsList className="bg-transparent h-10 p-0 flex gap-1">
                         <TabsTrigger 
@@ -120,14 +120,14 @@ export function UserDashboard({
                     )}
                 </div>
                 
-                {/* Unified Tab Content Area: Ensure everything is inside <Tabs> */}
+                {/* Unified Tab Content Area: CRITICAL - Must be inside <Tabs> */}
                 <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 
-                            entries={allEntries} 
-                            doctors={allDoctors} 
-                            nonCallDays={allNonCallDays} 
-                            timeLogs={allTimeLogs} 
+                            entries={allEntries || []} 
+                            doctors={allDoctors || []} 
+                            nonCallDays={allNonCallDays || []} 
+                            timeLogs={allTimeLogs || []} 
                             selectedMonth={selectedMonth}
                             onMonthChange={onMonthChange}
                         />
@@ -135,8 +135,8 @@ export function UserDashboard({
                     
                     <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <SubmittedList 
-                            entries={allEntries} 
-                            doctors={allDoctors} 
+                            entries={allEntries || []} 
+                            doctors={allDoctors || []} 
                             onDelete={onDeleteEntry} 
                             onEdit={() => {}} 
                             readOnly={!isAdminView} 
@@ -145,16 +145,16 @@ export function UserDashboard({
                     
                     <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <PlanningCalendar 
-                            doctors={allDoctors} 
-                            plans={allPlans} 
-                            planningRequests={individualPlanningRequests} 
+                            doctors={allDoctors || []} 
+                            plans={allPlans || []} 
+                            planningRequests={individualPlanningRequests || []} 
                             onRequestUnlock={async () => false} 
-                            entries={allEntries} 
+                            entries={allEntries || []} 
                             onAddPlan={() => {}} 
                             onAddPlansBulk={async () => false} 
                             onRemovePlan={() => {}} 
                             onLogCall={() => {}} 
-                            nonCallDays={allNonCallDays} 
+                            nonCallDays={allNonCallDays || []} 
                             onAddNonCallDay={() => {}} 
                             readOnly={true} 
                             selectedMonth={selectedMonth}
@@ -164,8 +164,8 @@ export function UserDashboard({
                     
                     <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <MasterList 
-                            doctors={allDoctors} 
-                            entries={allEntries} 
+                            doctors={allDoctors || []} 
+                            entries={allEntries || []} 
                             onAddDoctor={onAddDoctor} 
                             onAddDoctorsBulk={onAddDoctorsBulk} 
                             onUpdateDoctor={onUpdateDoctor} 

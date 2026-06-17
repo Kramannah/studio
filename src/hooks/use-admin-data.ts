@@ -5,14 +5,14 @@ import { useState, useCallback, useMemo } from "react";
 import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
+import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getMonthRangeISO } from "@/lib/utils";
 
 /**
- * useAdminData - A robust hook for administrative data fetching.
- * Optimized for "Low Cost" by targeting specific months and using UIDs.
+ * useAdminData - Optimized for UID-based individual oversight.
+ * Strictly queries 'plans' and 'coverageEntries' for the selected UID and month.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -40,18 +40,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
            ['Admin', 'Manager', 'Marketing', 'HR'].includes(profile?.role || '');
   }, [user, profile]);
 
-  const getManagedUserIds = useCallback((mgrId?: string) => {
-    if (!mgrId) return [];
-    const hardcoded = MANAGER_TEAMS[mgrId] || [];
-    const dynamic = Object.entries(userProfiles)
-        .filter(([_, p]) => p.managerId === mgrId)
-        .map(([uid, _]) => uid);
-    return Array.from(new Set([...hardcoded, ...dynamic]));
-  }, [userProfiles]);
-
   const individualUsedQuantities = useMemo(() => {
     const quantities: Record<string, number> = {};
-    individualEntries.forEach(entry => {
+    (individualEntries || []).forEach(entry => {
         const process = (name?: string, qty?: number) => {
             const safeName = (name ?? "").toLowerCase().trim();
             if (!safeName) return;
@@ -68,51 +59,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   }, [individualEntries]);
 
   const fetchTeamApprovals = useCallback(async () => {
-    if (!user || !db || !active || !isAuthorized) return;
+    if (!db || !active || !isAuthorized) return;
     setLoadingApprovals(true);
     try {
-        let userFilter: string[] | null = null;
-        if (managerId) {
-            userFilter = getManagedUserIds(managerId);
-            if (userFilter.length === 0) {
-                setLoadingApprovals(false);
-                return;
-            }
-        }
-        
-        const fetchCol = async (name: string, filter: string[] | null) => {
-            const colRef = collection(db!, name);
-            if (!filter) {
-                const snap = await getDocs(query(colRef, limit(1000)));
-                return snap.docs.map(d => ({id: d.id, ...d.data()}));
-            }
-            const chunks = [];
-            for (let i = 0; i < filter.length; i += 30) {
-                chunks.push(filter.slice(i, i + 30));
-            }
-            
-            const results: any[] = [];
-            for (const chunk of chunks) {
-                const snap = await getDocs(query(colRef, where("userId", "in", chunk), limit(1000)));
-                results.push(...snap.docs.map(d => ({id: d.id, ...d.data()})));
-            }
-            return results;
-        };
-
-        const [ncd, pr] = await Promise.all([
-            fetchCol("nonCallDays", userFilter),
-            fetchCol("planningRequests", userFilter)
+        const [ncdSnap, prSnap] = await Promise.all([
+            getDocs(query(collection(db!, "nonCallDays"), limit(500))),
+            getDocs(query(collection(db!, "planningRequests"), limit(500)))
         ]);
-        setAllNonCallDays(ncd as any);
-        setAllPlanningRequests(pr as any);
+        setAllNonCallDays(ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
+        setAllPlanningRequests(prSnap.docs.map(d => ({id: d.id, ...d.data()})) as any);
     } catch (e) {
-        console.warn("Approval fetch error", e);
+        console.warn("Approval fetch failed", e);
     } finally { setLoadingApprovals(false); }
-  }, [user, managerId, getManagedUserIds, active, isAuthorized]);
+  }, [active, isAuthorized]);
 
   /**
-   * fetchUserData - Fetches all module data for a specific PMR using their UID.
-   * Leverages an index-resilient approach for veteran accounts.
+   * fetchUserData - The core "Low Cost" engine.
+   * Strictly uses UID (H5NGDRDneWdH9ADuZDCFNHIovK83) to fetch Edcel's records.
    */
   const fetchUserData = useCallback(async (uid: string, selectedMonth?: string) => {
     if (!uid || !db || !active || !isAuthorized) return;
@@ -124,7 +87,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const fetchModule = async (colName: string, dateField: string) => {
             const colRef = collection(db!, colName);
             try {
-                // Targeted query for UID + Date Range
+                // Attempt targeted query (Index required)
                 const q = query(
                     colRef, 
                     where("userId", "==", uid), 
@@ -135,20 +98,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()}));
             } catch (e: any) {
-                // Fallback for missing indexes or veteran accounts with legacy fields
-                console.warn(`Query optimization fallback for ${colName}: ${e.message}`);
-                const q = query(colRef, where("userId", "==", uid), limit(1500));
-                const snap = await getDocs(q);
-                return snap.docs
-                    .map(d => ({id: d.id, ...d.data()}))
-                    .filter((d: any) => {
-                        const val = d[dateField] || d.submittedAt || d.date;
-                        return val && val >= start && val <= end;
-                    });
+                // Ultra-Robust Fallback: Fetch by UID and filter in memory
+                // This ensures Edcel Babas' data displays even if Firestore indexes are missing.
+                const q1 = query(colRef, where("userId", "==", uid), limit(1500));
+                const q2 = query(colRef, where("uid", "==", uid), limit(1500)); // Legacy support
+                
+                const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+                const allDocs = [...s1.docs, ...s2.docs].map(d => ({id: d.id, ...d.data()}));
+                
+                const uniqueDocs = Array.from(new Map(allDocs.map(item => [item.id, item])).values());
+
+                return uniqueDocs.filter((d: any) => {
+                    const val = d[dateField] || d.coverageDate || d.plannedDate || d.submittedAt || d.date;
+                    return val && val >= start && val <= end;
+                });
             }
         };
 
-        // Execute all module fetches in parallel
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
             fetchModule("coverageEntries", "coverageDate"),
             fetchModule("plans", "plannedDate"),
@@ -158,15 +124,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
-        setIndividualEntries(entries as CoverageEntry[]);
-        setIndividualPlans(plans as Plan[]);
-        setIndividualTimeLogs(logs as any[]);
-        setIndividualNonCallDays(ncds as NonCallDay[]);
-        setIndividualDoctors(doctors as Doctor[]);
-        setIndividualPlanningRequests(requests as PlanningPermissionRequest[]);
+        setIndividualEntries((entries as CoverageEntry[]) || []);
+        setIndividualPlans((plans as Plan[]) || []);
+        setIndividualTimeLogs((logs as any[]) || []);
+        setIndividualNonCallDays((ncds as NonCallDay[]) || []);
+        setIndividualDoctors((doctors as Doctor[]) || []);
+        setIndividualPlanningRequests((requests as PlanningPermissionRequest[]) || []);
         
         if (selectedMonth) {
-            toast({ title: "Data Synchronized", description: `Loaded records for ${selectedMonth}.` });
+            toast({ title: "Module Synchronized", description: `Loaded individual activity for ${selectedMonth}.` });
         }
     } catch (e) {
         console.error("Critical User Data Fetch Error:", e);

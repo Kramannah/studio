@@ -67,8 +67,8 @@ export function CallSummary({
     const months = useMemo(() => {
         const list = [];
         const currentYear = new Date().getFullYear();
-        for (let i = 0; i < 12; i++) {
-            const date = new Date(currentYear, i, 1);
+        for (let i = -6; i <= 6; i++) {
+            const date = new Date(currentYear, new Date().getMonth() + i, 1);
             list.push({
                 value: format(date, 'yyyy-MM'),
                 label: format(date, 'MMMM yyyy')
@@ -82,15 +82,20 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
+        const safeEntries = Array.isArray(entries) ? entries : [];
+        const safeDoctors = Array.isArray(doctors) ? doctors : [];
+
         // Filter entries for the selected month
-        const filteredEntries = entries.filter(e => {
+        const filteredEntries = safeEntries.filter(e => {
             try { 
                 const d = parseISO(e.coverageDate || e.submittedAt); 
                 return isValid(d) && isWithinInterval(d, { start, end }); 
             } catch { return false; }
         });
 
-        const activeDaysSet = new Set(filteredEntries.map(e => format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd')));
+        const activeDaysSet = new Set(filteredEntries.map(e => {
+            try { return format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd'); } catch { return ""; }
+        }).filter(Boolean));
         const activeDays = activeDaysSet.size;
 
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
@@ -104,7 +109,7 @@ export function CallSummary({
         }, {} as Record<string, number>);
         
         // 1. CONCENTRATION (3X): Count doctors targeted 3x/4x who were ACTUALLY visited 3+ times
-        const targetHighFreqDoctors = doctors.filter(d => {
+        const targetHighFreqDoctors = safeDoctors.filter(d => {
             const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10);
             return freqVal >= 3;
         });
@@ -115,9 +120,9 @@ export function CallSummary({
         }).length;
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // 2. CALL REACH: Count doctors in masterlist visited AT LEAST once
-        const totalDoctorsInList = doctors.length;
-        const actualVisitedFromList = doctors.filter(d => {
+        // 2. CALL REACH: Unique visited doctors in masterlist vs total in masterlist
+        const totalDoctorsInList = safeDoctors.length;
+        const actualVisitedFromList = safeDoctors.filter(d => {
             const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
             return (providerVisits[name] || 0) >= 1;
         }).length;
@@ -142,8 +147,6 @@ export function CallSummary({
         };
     }, [entries, doctors, selectedMonth]);
 
-    if (!insights) return <div className="flex items-center justify-center p-20"><RefreshCw className="animate-spin text-primary" /></div>;
-    
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
