@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Database } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -31,7 +31,6 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
-import { DatabaseMigrationTool } from '@/components/database-migration-tool';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -307,7 +306,6 @@ export default function AdminPage() {
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
                             {!isMarketingOrHR && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
-                            {isUserAdmin && <TabsTrigger value="migration" className="px-6 rounded-lg font-headline flex items-center gap-2"><Database className="h-4 w-4" /> Database</TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -389,12 +387,6 @@ export default function AdminPage() {
                                     />
                                 </>
                             )}
-                        </TabsContent>
-                    )}
-
-                    {isUserAdmin && (
-                        <TabsContent value="migration">
-                            <DatabaseMigrationTool />
                         </TabsContent>
                     )}
 
