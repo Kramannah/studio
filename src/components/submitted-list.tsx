@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -6,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
-import React, { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -18,6 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
+
+const ITEMS_PER_PAGE = 10;
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
     <div className="space-y-1">
@@ -166,6 +167,7 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     const holidayDates = useMemo(() => {
         return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
@@ -184,6 +186,19 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
         
         return matchesSearch;
     }), [entries, searchQuery, viewMode, selectedDate]);
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+    
+    // Reset page when search or date selection changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedDate, viewMode]);
+
+    const paginatedEntries = useMemo(() => {
+        if (viewMode === 'calendar') return filtered; // Show all for specific day in calendar view
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filtered.slice(start, start + ITEMS_PER_PAGE);
+    }, [filtered, currentPage, viewMode]);
 
     const entryDates = useMemo(() => {
         return (entries || []).map(e => {
@@ -317,8 +332,8 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filtered.length > 0 ? (
-                                filtered.map(e => (
+                            {paginatedEntries.length > 0 ? (
+                                paginatedEntries.map(e => (
                                     <EntryRow 
                                         key={e.id} 
                                         entry={e} 
@@ -342,6 +357,34 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                         </TableBody>
                     </Table>
                 </Card>
+
+                {viewMode === 'list' && totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 px-1">
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+                            Page {currentPage} of {totalPages}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="h-8 border-2 font-headline"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-1" /> Prev
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="h-8 border-2 font-headline"
+                            >
+                                Next <ChevronRight className="w-4 h-4 ml-1" />
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
 
