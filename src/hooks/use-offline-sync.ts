@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -34,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * SELF-HEALING VERSION: Background optimization for owner-based migration.
- * Identifies Base64 data in the user's own records and silently moves them to Storage.
+ * SELF-HEALING VERSION 2.0: Owner-based background migration.
+ * Identifies Base64 data and moves it to Storage with a migrationStatus: 'optimized' tag.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -124,41 +123,34 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   /**
    * SELF-HEALING EFFECT: Background task to process up to 200 records.
+   * Tags processed records with 'optimized' for tracking.
    */
   useEffect(() => {
     const healLegacyData = async () => {
         if (!isOnline || !userId || !db || isHealingRef.current || masterEntries.length === 0) return;
         
-        // Find documents that need optimization
         const docsToHeal = masterEntries.filter(e => 
-            isBase64Image(e.signature) || 
+            (isBase64Image(e.signature) || 
             isBase64Image(e.jointCallSignature) || 
-            (e.photos && Array.isArray(e.photos) && e.photos.some(p => isBase64Image(p)))
-        ).slice(0, 200); // Process 200 records per session
+            (e.photos && Array.isArray(e.photos) && e.photos.some(p => isBase64Image(p)))) &&
+            e.migrationStatus !== 'optimized'
+        ).slice(0, 200);
 
         if (docsToHeal.length === 0) return;
 
         isHealingRef.current = true;
-        console.log(`Self-Healing: Optimizing ${docsToHeal.length} legacy records for owner ${userId}...`);
-
         for (const entry of docsToHeal) {
             try {
                 const storagePayload = await processImagesForStorage(entry, userId);
-                const sanitized = sanitizePayload(storagePayload);
+                const sanitized = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
                 await updateDoc(doc(db!, "coverageEntries", entry.id), sanitized);
-                
-                // Locally update the entry state so it doesn't match the filter anymore
                 setMasterEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...sanitized } : item));
-                
-                // Small throttle to avoid rule engine bottlenecks
                 await new Promise(resolve => setTimeout(resolve, 100));
             } catch (err) {
                 console.warn(`Self-Healing Skip for doc ${entry.id}:`, err);
             }
         }
-        
         isHealingRef.current = false;
-        console.log("Self-Healing: Batch complete.");
     };
 
     healLegacyData();
@@ -204,13 +196,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (isOnline) {
         try {
             const storagePayload = await processImagesForStorage(rawPayload, userId);
-            const sanitizedPayload = sanitizePayload(storagePayload);
+            const sanitizedPayload = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
             const docRef = await addDoc(collection(db!, "coverageEntries"), sanitizedPayload);
             setMasterEntries(prev => [{ id: docRef.id, ...sanitizedPayload } as CoverageEntry, ...prev]);
             toast({ title: "Report Synced" });
             return true;
         } catch (error) {
-            console.warn("Storage upload failed, falling back to local offline mode", error);
+            console.warn("Storage upload failed, fallback to local", error);
             saveEntryOffline(rawPayload);
             return false;
         }
@@ -237,7 +229,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         for (const entry of offlineEntries) {
             const { id, ...dataToSync } = entry;
             const storagePayload = await processImagesForStorage(dataToSync, userId);
-            const sanitized = sanitizePayload({ ...storagePayload, userId: userId });
+            const sanitized = sanitizePayload({ ...storagePayload, userId: userId, migrationStatus: 'optimized' });
             const docRef = doc(collection(db!, "coverageEntries"));
             batch.set(docRef, sanitized);
         }
@@ -249,7 +241,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: 'Sync Successful' });
     } catch (error) {
         console.error("Batch sync failed:", error);
-        toast({ variant: 'destructive', title: 'Sync Error', description: 'Failed to upload reports.' });
+        toast({ variant: 'destructive', title: 'Sync Error' });
     } finally {
         setIsSyncing(false);
     }
@@ -278,7 +270,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const updateMasterEntry = async (e: any) => {
     if (!db || !userId) return;
     const storagePayload = await processImagesForStorage(e, userId);
-    const sanitized = sanitizePayload(storagePayload);
+    const sanitized = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
     await updateDoc(doc(db!, "coverageEntries", e.id), sanitized);
     setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitized} : item));
   };

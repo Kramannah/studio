@@ -38,6 +38,7 @@ export interface CoverageEntry {
   whatWentWell?: string;
   areasForImprovement?: string;
   isOffline?: boolean;
+  migrationStatus?: 'optimized';
 }
 
 export interface Doctor {

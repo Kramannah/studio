@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react";
@@ -13,21 +12,21 @@ import {
     Activity,
     Loader2,
     RefreshCw,
-    Search
+    Search,
+    BarChart3
 } from "lucide-react";
-import { collection, query, limit, getDocs } from "firebase/firestore";
+import { collection, query, limit, getDocs, getCountFromServer, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { isBase64Image } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 
 /**
  * SYSTEM HEALTH MONITOR (Self-Healing Observer)
- * This tool no longer performs "Push" migrations (which encounter identity deadlocks).
- * It now monitors the background "Self-Healing" progress across the organization.
+ * Tracks background migration progress across the organization.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'complete'>('idle');
-    const [stats, setStats] = useState({ legacy: 0, optimized: 0, total: 0 });
+    const [stats, setStats] = useState({ legacy: 0, optimized: 0, total: 0, globalMigrated: 0 });
     const [isProcessing, setIsProcessing] = useState(false);
     const { toast } = useToast();
 
@@ -37,7 +36,7 @@ export function DatabaseMigrationTool() {
         setStatus('scanning');
         
         try {
-            // Scan latest 1000 records to gauge organization-wide health
+            // 1. Density Sample (Check latest 1,000 for health percentage)
             const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(1000)));
             let legacyCount = 0;
             
@@ -50,18 +49,25 @@ export function DatabaseMigrationTool() {
                 if (isLegacy) legacyCount++;
             });
 
+            // 2. Global Aggregate Count (Total exact number of migrated files)
+            const countSnapshot = await getCountFromServer(
+                query(collection(db, "coverageEntries"), where("migrationStatus", "==", "optimized"))
+            );
+            const globalCount = countSnapshot.data().count;
+
             setStats({
                 legacy: legacyCount,
                 optimized: snapshot.docs.length - legacyCount,
-                total: snapshot.docs.length
+                total: snapshot.docs.length,
+                globalMigrated: globalCount
             });
 
             setStatus('complete');
-            toast({ title: "Health Scan Complete", description: `Detected ${legacyCount} records needing self-healing.` });
+            toast({ title: "Audit Complete", description: "Database telemetry updated." });
 
         } catch (error: any) {
-            console.warn("Health scan failure:", error.message);
-            toast({ variant: "destructive", title: "Scan Failed", description: "Database is heavily congested." });
+            console.warn("Audit failure:", error.message);
+            toast({ variant: "destructive", title: "Audit Failed", description: "Unable to reach database." });
         } finally {
             setIsProcessing(false);
         }
@@ -81,38 +87,38 @@ export function DatabaseMigrationTool() {
                         <Activity className="w-8 h-8 text-primary" />
                     </div>
                     <div>
-                        <CardTitle className="text-2xl font-black font-headline">Organization Health Monitor</CardTitle>
-                        <CardDescription>Observing the distributed "Self-Healing" migration process.</CardDescription>
+                        <CardTitle className="text-2xl font-black font-headline tracking-tight">Organization Health Monitor</CardTitle>
+                        <CardDescription>Real-time telemetry for the background "Self-Healing" process.</CardDescription>
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
+                    <div className="p-5 border-2 rounded-2xl bg-primary/10 flex flex-col items-center text-center gap-2 border-primary/20 shadow-sm animate-in zoom-in-95 duration-500">
+                        <CheckCircle2 className="w-7 h-7 text-primary" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/70">Files Migrated</p>
+                        <p className="text-3xl font-black font-headline text-primary">{stats.globalMigrated.toLocaleString()}</p>
+                    </div>
+                    <div className="p-5 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
                         <Search className="w-6 h-6 text-muted-foreground" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Distributed</p>
-                        <p className="text-xs text-muted-foreground">PMRs clean their own records.</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Efficiency</p>
+                        <p className="text-sm font-bold">{healthPercentage}% Health</p>
                     </div>
-                    <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
-                        <ShieldCheck className="w-6 h-6 text-primary" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Authorized</p>
-                        <p className="text-xs text-muted-foreground">Bypasses permission deadlocks.</p>
-                    </div>
-                    <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
-                        <CheckCircle2 className="w-6 h-6 text-primary" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Automatic</p>
-                        <p className="text-xs text-muted-foreground">Zero-touch for field reps.</p>
+                    <div className="p-5 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
+                        <BarChart3 className="w-6 h-6 text-muted-foreground" />
+                        <p className="text-[10px] font-black uppercase tracking-widest">Pending</p>
+                        <p className="text-sm font-bold">{stats.legacy} in sample</p>
                     </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4 bg-muted/20 p-6 rounded-2xl border-2">
                     <div className="flex justify-between items-end">
                         <div>
                             <p className="text-sm font-black font-headline uppercase text-primary tracking-tight">
-                                Overall Optimization Status
+                                Optimization Density (Recent Data)
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                                {stats.legacy} legacy records remaining in current sample.
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {stats.optimized} records offloaded in current sample of {stats.total}.
                             </p>
                         </div>
                         <p className="text-2xl font-black font-headline">
@@ -130,13 +136,13 @@ export function DatabaseMigrationTool() {
                         className="w-full h-16 text-lg font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95"
                     >
                         {isProcessing ? (
-                            <><RefreshCw className="mr-3 h-6 w-6 animate-spin" /> Scanning Global Data...</>
+                            <><RefreshCw className="mr-3 h-6 w-6 animate-spin" /> Fetching Global Telemetry...</>
                         ) : (
                             <><Database className="mr-3 h-6 w-6" /> Refresh Organization Stats</>
                         )}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-4">
-                        Migration is now distributed. Stats reflect a sample of 1,000 recent records.
+                        Migration status is tracked globally. Density stats reflect the 1,000 most recent records.
                     </p>
                 </div>
             </CardContent>
