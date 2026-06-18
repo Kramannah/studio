@@ -1,7 +1,7 @@
 'use client';
 
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
-import { storage } from "./firebase";
+import { storage, auth } from "./firebase";
 
 /**
  * Client-side utility to resize and compress images before storage or local caching.
@@ -45,12 +45,18 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     if (!storage) throw new Error("Firebase Storage is not initialized.");
     if (!base64 || !base64.startsWith('data:image')) return base64; 
 
+    // Verify auth state before upload to provide better local diagnostic
+    if (!auth?.currentUser) {
+        throw new Error("Unauthorized: No active Firebase Auth session.");
+    }
+
     const storageRef = ref(storage, path);
     try {
+        // High-compression base64 string upload
         await uploadString(storageRef, base64, 'data_url');
         return await getDownloadURL(storageRef);
-    } catch (error) {
-        console.warn("Storage Upload Warning:", error);
+    } catch (error: any) {
+        console.warn("Storage Upload Warning:", error?.message || error);
         throw error; 
     }
 }
