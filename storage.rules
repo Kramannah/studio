@@ -2,29 +2,40 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Helper to identify administrators based on Email or UID
+    // Helper to check if a user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper to verify if the user is a system administrator or manager
+    // This now dynamically checks the Firestore 'userProfiles' collection
     function isSystemAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == "mbustamante@hovidinc.com" ||
-        request.auth.token.email == "wbmaralit@hovidinc.com" ||
-        request.auth.token.email == "admin@hovidinc.com" ||
-        request.auth.uid == "SgOR5cjCC6dZ0oABv4nXdntu6pI3" ||
-        request.auth.uid == "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
-      );
+      let profilePath = /databases/(default)/documents/userProfiles/$(request.auth.uid);
+      let email = request.auth.token.get('email', '').lower();
+      
+      // Explicit Whitelist (Fastest)
+      let isWhitelisted = email in ["mbustamante@hovidinc.com", "wbmaralit@hovidinc.com", "admin@hovidinc.com"];
+      
+      // Database Role Check (Robust)
+      // Note: We use get() which allows Storage rules to read Firestore data
+      let hasAdminRole = firestore.exists(profilePath) && 
+                         firestore.get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"];
+      
+      return isSignedIn() && (isWhitelisted || hasAdminRole);
     }
 
     // Coverage folder rules
     match /coverage/{userId}/{allPaths=**} {
       // Anyone logged in can read (for oversight/history)
-      allow read: if request.auth != null;
+      allow read: if isSignedIn();
       
       // Allow write if:
-      // 1. The user is the owner of the record
-      // 2. The user is an authorized System Admin (Migration/Cleanup)
-      allow write: if request.auth != null && (request.auth.uid == userId || isSystemAdmin());
+      // 1. The user is the owner of the folder
+      // 2. The user is an authorized System Admin/Manager (Crucial for Migration)
+      allow write: if isSignedIn() && (request.auth.uid == userId || isSystemAdmin());
     }
 
-    // Default deny
+    // Default deny for all other paths
     match /{allPaths=**} {
       allow read, write: if false;
     }
