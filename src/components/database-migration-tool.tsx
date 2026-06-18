@@ -24,12 +24,14 @@ import type { CoverageEntry, UserProfile } from "@/lib/types";
 import { Progress } from "@/components/ui/progress";
 
 /**
- * LOW COST PILLAR: MIGRATION ENGINE (V9.0)
+ * LOW COST PILLAR: MIGRATION ENGINE (V9.1)
  * Implements Pillar A (Binary Pivot) and Pillar B (Administrative Bypass).
  * Handles: 
  * 1. Global Scan (Bypasses UID isolation)
  * 2. Identity Repair (Injects missing userIds)
  * 3. Binary Offloading (Moves Base64 strings to Storage)
+ * 
+ * V9.1 UPDATE: Added resilience for storage/unauthorized skips.
  */
 export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Record<string, UserProfile> }) {
     const [isOptimizing, setIsOptimizing] = useState(false);
@@ -97,32 +99,37 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
                     const targetUid = updatePayload.userId || data.userId || 'system_migration';
                     const timestamp = Date.now();
 
-                    // OFFLOAD: Move images to Storage
-                    if (hasBase64Sig) {
-                        updatePayload.signature = await uploadBase64ToStorage(
-                            data.signature!, 
-                            `coverage/${targetUid}/${timestamp}_sig.jpg`
-                        );
-                    }
+                    try {
+                        // OFFLOAD: Move images to Storage
+                        if (hasBase64Sig) {
+                            updatePayload.signature = await uploadBase64ToStorage(
+                                data.signature!, 
+                                `coverage/${targetUid}/${timestamp}_sig.jpg`
+                            );
+                        }
 
-                    if (hasBase64JointSig) {
-                        updatePayload.jointCallSignature = await uploadBase64ToStorage(
-                            data.jointCallSignature!, 
-                            `coverage/${targetUid}/${timestamp}_joint_sig.jpg`
-                        );
-                    }
+                        if (hasBase64JointSig) {
+                            updatePayload.jointCallSignature = await uploadBase64ToStorage(
+                                data.jointCallSignature!, 
+                                `coverage/${targetUid}/${timestamp}_joint_sig.jpg`
+                            );
+                        }
 
-                    if (hasBase64Photo && data.photos) {
-                        updatePayload.photos = await Promise.all(data.photos.map((p, i) => 
-                            isBase64Image(p) 
-                                ? uploadBase64ToStorage(p, `coverage/${targetUid}/${timestamp}_p${i}.jpg`)
-                                : Promise.resolve(p)
-                        ));
-                    }
+                        if (hasBase64Photo && data.photos) {
+                            updatePayload.photos = await Promise.all(data.photos.map((p, i) => 
+                                isBase64Image(p) 
+                                    ? uploadBase64ToStorage(p, `coverage/${targetUid}/${timestamp}_p${i}.jpg`)
+                                    : Promise.resolve(p)
+                            ));
+                        }
 
-                    // Commit repair and optimization
-                    await updateDoc(doc(db, "coverageEntries", docSnap.id), updatePayload);
-                    setOptimizedCount(prev => prev + 1);
+                        // Commit repair and optimization
+                        await updateDoc(doc(db, "coverageEntries", docSnap.id), updatePayload);
+                        setOptimizedCount(prev => prev + 1);
+                    } catch (storageErr: any) {
+                        // V9.1 Resilience: Skip if unauthorized and continue batch
+                        console.warn(`Skipping Record ${docSnap.id}:`, storageErr.message);
+                    }
                     
                     // Throttle to prevent browser freeze
                     await new Promise(r => setTimeout(r, 100));
