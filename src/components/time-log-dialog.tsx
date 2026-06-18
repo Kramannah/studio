@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -18,23 +17,22 @@ import { Label } from "./ui/label"
 import Image from "next/image"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 
-type TimeLogDialogProps = {
-  isOpen: boolean
-  onOpenChange: (isOpen: boolean) => void
-  mode: "time-in" | "time-out"
-  onTimeIn?: (photo: string, locationType: "inbase" | "outbase") => void
-  onTimeOut?: (photo: string) => void
-}
-
-const compressImage = (dataUrl: string, quality = 0.7, maxWidth = 800): Promise<string> => {
+/**
+ * LOW COST PILLAR: Attendance Resizer
+ * Minimizes egress costs for time log verification photos.
+ */
+const compressImage = (dataUrl: string, quality = 0.5, maxWidth = 800): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = dataUrl;
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const aspect = img.height / img.width;
-            canvas.width = Math.min(img.width, maxWidth);
-            canvas.height = canvas.width * aspect;
+            
+            // Pillar B: Strict attendance photo resolution
+            const finalWidth = Math.min(img.width, maxWidth);
+            canvas.width = finalWidth;
+            canvas.height = finalWidth * aspect;
             
             const ctx = canvas.getContext('2d');
             if (!ctx) {
@@ -117,6 +115,7 @@ export function TimeLogDialog({ isOpen, onOpenChange, mode, onTimeIn, onTimeOut 
       if (context) {
         context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        // Pillar B: Compress before submitting
         const compressedUrl = await compressImage(dataUrl);
         setCapturedImage(compressedUrl);
         stopCamera();

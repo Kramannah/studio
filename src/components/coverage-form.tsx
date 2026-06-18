@@ -128,7 +128,11 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
-const compressImage = (dataUrl: string, quality = 0.4, maxWidth = 600): Promise<string> => {
+/**
+ * LOW COST PILLAR: Enhanced Resizer
+ * Significantly downsamples images to reduce storage costs and Firestore transfer bulk.
+ */
+const compressImage = (dataUrl: string, quality = 0.5, maxWidth = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = dataUrl;
@@ -137,6 +141,7 @@ const compressImage = (dataUrl: string, quality = 0.4, maxWidth = 600): Promise<
             let width = img.width;
             let height = img.height;
 
+            // Pillar B: Strict resolution capping
             if (width > maxWidth) {
                 height = (maxWidth / width) * height;
                 width = maxWidth;
@@ -151,6 +156,7 @@ const compressImage = (dataUrl: string, quality = 0.4, maxWidth = 600): Promise<
             ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
             
+            // High-efficiency compression
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = (error) => reject(error);
@@ -364,7 +370,8 @@ export function CoverageForm({
       reader.onload = async (e) => {
         try {
             const dataUrl = e.target?.result as string;
-            const compressedDataUrl = await compressImage(dataUrl);
+            // Pillar B: Aggressive photo downsampling
+            const compressedDataUrl = await compressImage(dataUrl, 0.5, 1024);
             form.setValue('photos', [compressedDataUrl], { shouldValidate: true });
             form.setValue('signature', null);
             setProofMethod('photo');
