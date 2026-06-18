@@ -20,9 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL V2.2
+ * DATABASE MIGRATION TOOL V2.3
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
- * Improved resilience: Uses console.warn to prevent Next.js overlay crashes.
+ * Resilience Update: Handles storage/unauthorized and network timeouts per-record.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
@@ -39,8 +39,7 @@ export function DatabaseMigrationTool() {
         setStatus('scanning');
         
         try {
-            // 1. Fetch documents that might need migration
-            // Small batches to ensure stability and avoid memory pressure
+            // Fetch documents that might need migration
             const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
@@ -103,9 +102,8 @@ export function DatabaseMigrationTool() {
                     setProgress(p => ({ ...p, current: i + 1 }));
 
                 } catch (err: any) {
-                    // RESILIENCE: Log as warning to avoid triggering Next.js error overlay.
-                    // This allows the migration to continue for other documents.
-                    console.warn(`Migration skipped for doc ${docSnap.id}:`, err.message || 'Unauthorized');
+                    // Log to console for debugging but don't stop the tool
+                    console.warn(`Migration skipped for record ${docSnap.id}:`, err.message || 'Permission Denied');
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
             }
@@ -114,7 +112,7 @@ export function DatabaseMigrationTool() {
             toast({ 
                 title: "Batch Complete", 
                 description: progress.errors > 0 
-                    ? `Processed ${docsToMigrate.length} items with ${progress.errors} skips (See console).` 
+                    ? `Processed ${docsToMigrate.length} items. ${progress.errors} skips encountered.` 
                     : `Successfully moved ${docsToMigrate.length} records to Storage.`
             });
 

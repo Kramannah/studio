@@ -9,12 +9,16 @@ service firebase.storage {
       
       // Allow write if:
       // 1. The user owns the folder (Standard PMR upload)
-      // 2. The user is a hardcoded Admin (For reliable Migration Tool access)
-      // 3. The user has an Admin/Manager role in their profile
+      // 2. The user is an authorized Admin via Email (Master Key for Migration)
+      // 3. The user is a hardcoded Admin via UID
       allow write: if request.auth != null && (
         request.auth.uid == userId || 
-        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"] ||
-        firestore.get(/databases/(default)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing"]
+        request.auth.token.get('email', '').lower() in [
+          "mbustamante@hovidinc.com", 
+          "wbmaralit@hovidinc.com", 
+          "admin@hovidinc.com"
+        ] ||
+        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"]
       );
     }
 
