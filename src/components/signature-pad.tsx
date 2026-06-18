@@ -28,7 +28,6 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
     const parent = canvas.parentElement;
     if (parent) {
       const rect = parent.getBoundingClientRect();
-      // Ensure we have actual dimensions before initializing
       if (rect.width > 0 && rect.height > 0) {
         canvas.width = rect.width;
         canvas.height = rect.height;
@@ -38,7 +37,6 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Set a solid white background
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -54,15 +52,9 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   }, [value, getCanvasContext]);
 
   useEffect(() => {
-    // Initial load
     initializeCanvas();
-
-    // Use a small delay to handle dialog opening animations
     const timer = setTimeout(initializeCanvas, 100);
-
-    // Watch for window resizes
     window.addEventListener('resize', initializeCanvas);
-    
     return () => {
       clearTimeout(timer);
       window.removeEventListener('resize', initializeCanvas);
@@ -106,12 +98,8 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
   const isCanvasBlank = (canvas: HTMLCanvasElement) => {
     const context = canvas.getContext('2d');
     if (!context) return true;
-    
-    // Create a small hidden canvas to compare if it's still pure white
-    // This is faster than comparing full resolution strings
     const pixelData = context.getImageData(0, 0, canvas.width, canvas.height).data;
     for (let i = 0; i < pixelData.length; i += 4) {
-      // Check if any pixel is not white (255, 255, 255)
       if (pixelData[i] !== 255 || pixelData[i+1] !== 255 || pixelData[i+2] !== 255) {
         return false;
       }
@@ -128,9 +116,8 @@ export function SignaturePad({ value, onChange, className }: SignaturePadProps) 
       if (isCanvasBlank(canvas)) {
         onChange(null);
       } else {
-        // High compression for fast syncing
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
-        onChange(dataUrl);
+        // Reverted to standard PNG for high quality
+        onChange(canvas.toDataURL('image/png'));
       }
     }
   };

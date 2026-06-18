@@ -5,17 +5,12 @@ import type { TimeLog } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit, orderBy } from 'firebase/firestore';
-import { isToday, parseISO, isValid, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
+import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
 import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
-import { uploadBase64ToStorage, compressImage } from '@/lib/storage-utils';
 
 const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v5';
 
-/**
- * LOW-COST V2.2: Attendance Logs with Storage Pivot.
- * Automatically offloads attendance photos to Cloud Storage.
- */
 export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -91,18 +86,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   const addTimeIn = async (photo: string, loc: 'inbase' | 'outbase') => {
     if (!user || !db) return;
     
-    let photoUrl = photo;
-    try {
-        // Pillar B: Shrink attendance photo to 800px
-        const compressed = await compressImage(photo, 800, 0.5);
-        // Pillar A: Offload to Storage
-        const path = `coverage/${user.uid}/timelog_${Date.now()}_in.jpg`;
-        photoUrl = await uploadBase64ToStorage(compressed, path);
-    } catch (e) {
-        console.warn("Storage upload failed for Time In, using base64 fallback", e);
-    }
-
-    const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photoUrl };
+    const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
     try {
         const docRef = await addDoc(collection(db, "timeLogs"), newLog);
         const created = { id: docRef.id, ...newLog } as TimeLog;
@@ -117,16 +101,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   const addTimeOut = async (photo: string) => {
     if (!user || !db || !todaysTimeIn) return;
 
-    let photoUrl = photo;
-    try {
-        const compressed = await compressImage(photo, 800, 0.5);
-        const path = `coverage/${user.uid}/timelog_${Date.now()}_out.jpg`;
-        photoUrl = await uploadBase64ToStorage(compressed, path);
-    } catch (e) {
-        console.warn("Storage upload failed for Time Out, using base64 fallback", e);
-    }
-
-    const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photoUrl };
+    const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
     try {
         await updateDoc(doc(db, "timeLogs", todaysTimeIn.id), updateData);
         setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
