@@ -614,7 +614,7 @@ export function CoverageForm({
               ...sanitizedPayload,
               id: entryToEdit!.id,
           } as any);
-          toast({ title: "Update Successful", description: "Coverage report updated." });
+          toast({ title: "Update Request Sent", description: "Storage assets are being processed." });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
           setIsSubmitting(false);
@@ -627,7 +627,7 @@ export function CoverageForm({
       onFormSubmit?.(savedOnline);
     } catch (error) {
       console.error("Submission failed:", error);
-      toast({ variant: 'destructive', title: 'Submission Error', description: 'Check data or connection.' });
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'Technical failure during upload.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -642,7 +642,7 @@ export function CoverageForm({
     <Card className="h-full flex flex-col">
         <CardHeader>
             <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage' : 'Log Coverage'}</CardTitle>
-            <CardDescription>{isEditMode ? 'Update details below.' : 'Fill in the details below.'}</CardDescription>
+            <CardDescription>{isEditMode ? 'Updates will be processed and moved to storage.' : 'New reports will use Storage for images.'}</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
@@ -1132,7 +1132,7 @@ export function CoverageForm({
                       </div>
                       
                       <Button type="submit" size="lg" className="w-full font-headline" disabled={isSubmitting}>
-                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
+                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing Storage...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
                       </Button>
                   </div>
               </form>

@@ -23,3 +23,4 @@ const getServices = () => {
 export const app = typeof window !== 'undefined' ? getServices()?.firebaseApp : null;
 export const db = typeof window !== 'undefined' ? getServices()?.firestore : null;
 export const auth = typeof window !== 'undefined' ? getServices()?.auth : null;
+export const storage = typeof window !== 'undefined' ? getServices()?.storage : null;
