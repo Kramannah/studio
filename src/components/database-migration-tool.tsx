@@ -20,9 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL V2.6 (ULTRA-RESILIENT)
+ * DATABASE MIGRATION TOOL V2.8 (THROTTLED & RESILIENT)
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
- * Resilience Update: Handles storage permissions gracefully to prevent batch blocking.
+ * Resilience Update: Implements concurrency throttling (100ms) to allow Security Rules to resolve.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
@@ -40,7 +40,6 @@ export function DatabaseMigrationTool() {
         
         try {
             // Fetch documents that might need migration
-            // We limit to 200 to keep the UI responsive and avoid timeout errors
             const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
@@ -104,9 +103,10 @@ export function DatabaseMigrationTool() {
                     // Force state update to UI
                     setProgress(p => ({ ...p, current: i + 1 }));
 
+                    // THROTTLING: Wait 100ms between records to allow Storage Rules engine to breathe
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
                 } catch (err: any) {
-                    // SILENT CATCH: Just log warning and increment error counter to prevent UI crash
-                    // This allows the migration to continue for other accessible records
                     console.warn(`Migration skipped for record ${docSnap.id}:`, err.message || 'Permission Denied');
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
@@ -122,7 +122,7 @@ export function DatabaseMigrationTool() {
 
         } catch (error: any) {
             console.warn("Migration batch warning:", error.message);
-            toast({ variant: "destructive", title: "Batch Interrupted", description: "Some records were busy or restricted. Please run again." });
+            toast({ variant: "destructive", title: "Batch Interrupted", description: "Operation halted. Please run again." });
         } finally {
             setIsProcessing(false);
         }
@@ -198,7 +198,7 @@ export function DatabaseMigrationTool() {
                         {isProcessing ? (
                             <>
                                 {status === 'scanning' ? <RefreshCw className="mr-3 h-6 w-6 animate-spin" /> : <Loader2 className="mr-3 h-6 w-6 animate-spin" />}
-                                Running Batch Optimization...
+                                Running Throttled Batch...
                             </>
                         ) : (
                             <>
@@ -208,7 +208,7 @@ export function DatabaseMigrationTool() {
                         )}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-4">
-                        Batch Size: 200 documents. Running this repeatedly will eventually clear all Base64 data.
+                        Batch Size: 200 documents. Throttle: 100ms/record.
                     </p>
                 </div>
             </CardContent>

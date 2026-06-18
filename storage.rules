@@ -2,30 +2,29 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Helper to check if a user is authenticated
-    function isSignedIn() {
-      return request.auth != null;
+    // Explicit Admin Check (Flattened for speed)
+    function isSystemAdmin() {
+      return request.auth != null && (
+        request.auth.token.get('email', '').lower() in [
+          "mbustamante@hovidinc.com", 
+          "admin@hovidinc.com", 
+          "wbmaralit@hovidinc.com", 
+          "kgpangan@hovidinc.com", 
+          "pjramos@hovidinc.com"
+        ] ||
+        request.auth.uid in [
+          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", 
+          "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
+        ]
+      );
     }
 
-    // Explicitly authorize system admins via Token Data
-    // This uses a flat structure to prevent evaluation errors during high-volume migrations.
     match /coverage/{userId}/{allPaths=**} {
-      // Anyone logged in can read (for oversight/history)
-      allow read: if isSignedIn();
+      // Standard read for all authenticated users
+      allow read: if request.auth != null;
       
-      // Allow write if:
-      // 1. The user is the owner of the folder
-      // 2. The user is one of the verified system administrators
-      allow write: if isSignedIn() && (
-        request.auth.uid == userId || 
-        request.auth.token.get('email', '').lower() == "mbustamante@hovidinc.com" ||
-        request.auth.token.get('email', '').lower() == "admin@hovidinc.com" ||
-        request.auth.token.get('email', '').lower() == "wbmaralit@hovidinc.com" ||
-        request.auth.token.get('email', '').lower() == "kgpangan@hovidinc.com" ||
-        request.auth.token.get('email', '').lower() == "pjramos@hovidinc.com" ||
-        request.auth.uid == "SgOR5cjCC6dZ0oABv4nXdntu6pI3" ||
-        request.auth.uid == "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
-      );
+      // Allow write if owner OR system administrator
+      allow write: if request.auth != null && (request.auth.uid == userId || isSystemAdmin());
     }
 
     // Default deny for all other paths
