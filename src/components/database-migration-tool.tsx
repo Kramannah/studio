@@ -20,8 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL
+ * DATABASE MIGRATION TOOL V2.1
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
+ * Updated to handle 'storage/unauthorized' errors without crashing the UI.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
@@ -39,8 +40,8 @@ export function DatabaseMigrationTool() {
         
         try {
             // 1. Fetch documents that might need migration (Broad scan)
-            // We limit to 200 to prevent payload crashes on veteran accounts
-            const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
+            // Process in batches of 100 to stay well under memory and timeout limits
+            const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(100)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
                 return (
@@ -90,31 +91,36 @@ export function DatabaseMigrationTool() {
                             return p;
                         }));
                         
-                        // Check if any actually changed to avoid redundant updates
                         if (JSON.stringify(newPhotos) !== JSON.stringify(data.photos)) {
                             updates.photos = newPhotos;
                             hasChanges = true;
                         }
                     }
 
-                    // Update Firestore document with URLs only if we made changes
                     if (hasChanges) {
                         await updateDoc(doc(db, "coverageEntries", docSnap.id), updates);
                     }
                     setProgress(p => ({ ...p, current: i + 1 }));
 
                 } catch (err: any) {
-                    console.error(`Migration failed for doc ${docSnap.id}:`, err);
+                    // SILENT CATCH: Don't crash the whole UI on a single unauthorized record
+                    // Just count it as an error in the progress bar
+                    console.warn(`Record Skip (${docSnap.id}): ${err.message || 'Storage Restricted'}`);
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
             }
 
             setStatus('complete');
-            toast({ title: "Migration Batch Finished", description: `Processed ${docsToMigrate.length} records.` });
+            toast({ 
+                title: "Batch Finished", 
+                description: progress.errors > 0 
+                    ? `Processed ${docsToMigrate.length} items with ${progress.errors} skips.` 
+                    : `Successfully optimized ${docsToMigrate.length} records.`
+            });
 
         } catch (error: any) {
             console.error("Migration fatal error:", error);
-            toast({ variant: "destructive", title: "Migration Failed", description: error.message || "An unexpected error occurred." });
+            toast({ variant: "destructive", title: "Migration Interrupted", description: error.message || "An unexpected error occurred." });
         } finally {
             setIsProcessing(false);
         }
@@ -129,7 +135,7 @@ export function DatabaseMigrationTool() {
                     </div>
                     <div>
                         <CardTitle className="text-2xl font-black font-headline">Payload Optimization Engine</CardTitle>
-                        <CardDescription>Move legacy Base64 images to Firebase Storage to shrink document size and fix veteran account crashes.</CardDescription>
+                        <CardDescription>Shift legacy Base64 images to Storage to restore speed to veteran accounts.</CardDescription>
                     </div>
                 </div>
             </CardHeader>
@@ -137,18 +143,18 @@ export function DatabaseMigrationTool() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
                         <Database className="w-6 h-6 text-muted-foreground" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Step 1: Scan</p>
-                        <p className="text-xs text-muted-foreground">Find documents with inline Base64 data strings.</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Identify</p>
+                        <p className="text-xs text-muted-foreground">Find docs with heavy text data.</p>
                     </div>
                     <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
                         <HardDrive className="w-6 h-6 text-muted-foreground" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Step 2: Offload</p>
-                        <p className="text-xs text-muted-foreground">Upload images to binary storage bucket.</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Offload</p>
+                        <p className="text-xs text-muted-foreground">Extract binary files to Storage.</p>
                     </div>
                     <div className="p-4 border-2 rounded-2xl bg-muted/30 flex flex-col items-center text-center gap-2">
                         <CheckCircle2 className="w-6 h-6 text-muted-foreground" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Step 3: Point</p>
-                        <p className="text-xs text-muted-foreground">Replace Base64 strings with lightweight URLs.</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Replace</p>
+                        <p className="text-xs text-muted-foreground">Point Firestore to tiny URLs.</p>
                     </div>
                 </div>
 
@@ -174,7 +180,7 @@ export function DatabaseMigrationTool() {
                         {progress.errors > 0 && (
                             <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/20 text-xs font-bold">
                                 <AlertTriangle className="w-4 h-4" />
-                                Warning: {progress.errors} records failed to migrate. Check console for details.
+                                Notice: {progress.errors} records were skipped (Check Storage Rules).
                             </div>
                         )}
                     </div>
@@ -190,17 +196,17 @@ export function DatabaseMigrationTool() {
                         {isProcessing ? (
                             <>
                                 {status === 'scanning' ? <RefreshCw className="mr-3 h-6 w-6 animate-spin" /> : <Loader2 className="mr-3 h-6 w-6 animate-spin" />}
-                                Processing Database (Don't Close Window)...
+                                Running Batch Optimization...
                             </>
                         ) : (
                             <>
                                 <Database className="mr-3 h-6 w-6" />
-                                {status === 'complete' ? 'Run Another Batch' : 'Start Optimization Migration'}
+                                {status === 'complete' ? 'Scan Next Batch' : 'Start Optimization Migration'}
                             </>
                         )}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-4">
-                        Note: Migration processes up to 200 documents per batch to avoid network timeouts.
+                        Batch Size: 100 documents. Recommended to run until "No records found" appears.
                     </p>
                 </div>
             </CardContent>

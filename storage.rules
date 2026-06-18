@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Logic for Coverage Proofs (Photos and Signatures)
+    match /coverage/{userId}/{allPaths=**} {
+      // Allow any authenticated user to read (for Admin oversight and PMR history)
+      allow read: if request.auth != null;
+      
+      // Allow write if:
+      // 1. The user owns the folder (Standard PMR upload)
+      // 2. The user is an Admin or Manager (For the Migration Tool)
+      allow write: if request.auth != null && (
+        request.auth.uid == userId || 
+        firestore.get(/databases/(default)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing"]
+      );
+    }
+
+    // Default deny for everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
