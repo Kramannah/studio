@@ -7,46 +7,25 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // EMERGENCY ADMIN KEY: Explicitly authorize system admins via Token Data
-    // This is faster and more reliable than firestore lookups during migrations.
-    function isSystemAdmin() {
-      let email = request.auth.token.get('email', '').lower();
-      let uid = request.auth.uid;
-      
-      // Admin Emails
-      let isAdminEmail = email in [
-        "mbustamante@hovidinc.com", 
-        "wbmaralit@hovidinc.com", 
-        "admin@hovidinc.com",
-        "kgpangan@hovidinc.com",
-        "pjramos@hovidinc.com"
-      ];
-      
-      // Hardcoded Admin UIDs (From admins.ts)
-      let isAdminUid = uid in [
-        "SgOR5cjCC6dZ0oABv4nXdntu6pI3", 
-        "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
-        "e11qs3XD1vW3JWHfEaJI2DXcCEj2",
-        "UmyUP0VwccRKLfrej67idFukFz42",
-        "tb73WEIzndUrPEaD1q4H0VQfQaD3",
-        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
-        "x8u4kvWvieZIVc9NdgiWmG01nts2",
-        "MlE49ceLEDbzvKAsisKnW07fGfW2",
-        "r19lVIqk4xTtzxvbs4W0kprHSvD2"
-      ];
-      
-      return isSignedIn() && (isAdminEmail || isAdminUid);
-    }
-
-    // Coverage folder rules
+    // Explicitly authorize system admins via Token Data
+    // This uses a flat structure to prevent evaluation errors during high-volume migrations.
     match /coverage/{userId}/{allPaths=**} {
       // Anyone logged in can read (for oversight/history)
       allow read: if isSignedIn();
       
       // Allow write if:
       // 1. The user is the owner of the folder
-      // 2. The user is an authorized System Admin (Migration Master Key)
-      allow write: if isSignedIn() && (request.auth.uid == userId || isSystemAdmin());
+      // 2. The user is one of the verified system administrators
+      allow write: if isSignedIn() && (
+        request.auth.uid == userId || 
+        request.auth.token.get('email', '').lower() == "mbustamante@hovidinc.com" ||
+        request.auth.token.get('email', '').lower() == "admin@hovidinc.com" ||
+        request.auth.token.get('email', '').lower() == "wbmaralit@hovidinc.com" ||
+        request.auth.token.get('email', '').lower() == "kgpangan@hovidinc.com" ||
+        request.auth.token.get('email', '').lower() == "pjramos@hovidinc.com" ||
+        request.auth.uid == "SgOR5cjCC6dZ0oABv4nXdntu6pI3" ||
+        request.auth.uid == "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
+      );
     }
 
     // Default deny for all other paths

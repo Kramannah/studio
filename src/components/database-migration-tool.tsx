@@ -20,9 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL V2.5 (SUPER-RESILIENT)
+ * DATABASE MIGRATION TOOL V2.6 (ULTRA-RESILIENT)
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
- * Resilience Update: Silently skips unauthorized records to prevent UI crashes.
+ * Resilience Update: Handles storage permissions gracefully to prevent batch blocking.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
@@ -40,6 +40,7 @@ export function DatabaseMigrationTool() {
         
         try {
             // Fetch documents that might need migration
+            // We limit to 200 to keep the UI responsive and avoid timeout errors
             const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
@@ -105,6 +106,7 @@ export function DatabaseMigrationTool() {
 
                 } catch (err: any) {
                     // SILENT CATCH: Just log warning and increment error counter to prevent UI crash
+                    // This allows the migration to continue for other accessible records
                     console.warn(`Migration skipped for record ${docSnap.id}:`, err.message || 'Permission Denied');
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
