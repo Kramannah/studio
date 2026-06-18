@@ -2,27 +2,29 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Logic for Coverage Proofs (Photos and Signatures)
-    match /coverage/{userId}/{allPaths=**} {
-      // Allow any authenticated user to read (for Admin oversight and PMR history)
-      allow read: if request.auth != null;
-      
-      // Allow write if:
-      // 1. The user owns the folder (Standard PMR upload)
-      // 2. The user is an authorized Admin via Email (Master Key for Migration)
-      // 3. The user is a hardcoded Admin via UID
-      allow write: if request.auth != null && (
-        request.auth.uid == userId || 
-        request.auth.token.get('email', '').lower() in [
-          "mbustamante@hovidinc.com", 
-          "wbmaralit@hovidinc.com", 
-          "admin@hovidinc.com"
-        ] ||
-        request.auth.uid in ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"]
+    // Helper to identify administrators based on Email or UID
+    function isSystemAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == "mbustamante@hovidinc.com" ||
+        request.auth.token.email == "wbmaralit@hovidinc.com" ||
+        request.auth.token.email == "admin@hovidinc.com" ||
+        request.auth.uid == "SgOR5cjCC6dZ0oABv4nXdntu6pI3" ||
+        request.auth.uid == "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
       );
     }
 
-    // Default deny for everything else
+    // Coverage folder rules
+    match /coverage/{userId}/{allPaths=**} {
+      // Anyone logged in can read (for oversight/history)
+      allow read: if request.auth != null;
+      
+      // Allow write if:
+      // 1. The user is the owner of the record
+      // 2. The user is an authorized System Admin (Migration/Cleanup)
+      allow write: if request.auth != null && (request.auth.uid == userId || isSystemAdmin());
+    }
+
+    // Default deny
     match /{allPaths=**} {
       allow read, write: if false;
     }

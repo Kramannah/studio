@@ -20,9 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL V2.3
+ * DATABASE MIGRATION TOOL V2.4
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
- * Resilience Update: Handles storage/unauthorized and network timeouts per-record.
+ * Resilience Update: Silently skips unauthorized records to prevent UI crashes.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
