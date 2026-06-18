@@ -20,9 +20,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * DATABASE MIGRATION TOOL V2.1
+ * DATABASE MIGRATION TOOL V2.2
  * Moves legacy Base64 strings from coverageEntries to Firebase Storage.
- * Updated to handle 'storage/unauthorized' errors without crashing the UI.
+ * Improved resilience: Uses console.warn to prevent Next.js overlay crashes.
  */
 export function DatabaseMigrationTool() {
     const [status, setStatus] = useState<'idle' | 'scanning' | 'migrating' | 'complete'>('idle');
@@ -39,9 +39,9 @@ export function DatabaseMigrationTool() {
         setStatus('scanning');
         
         try {
-            // 1. Fetch documents that might need migration (Broad scan)
-            // Process in batches of 100 to stay well under memory and timeout limits
-            const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(100)));
+            // 1. Fetch documents that might need migration
+            // Small batches to ensure stability and avoid memory pressure
+            const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
                 return (
@@ -53,7 +53,7 @@ export function DatabaseMigrationTool() {
 
             if (docsToMigrate.length === 0) {
                 setStatus('complete');
-                toast({ title: "No Base64 records found", description: "Your database is already optimized." });
+                toast({ title: "Optimized", description: "No legacy Base64 records detected in this batch." });
                 setIsProcessing(false);
                 return;
             }
@@ -70,19 +70,19 @@ export function DatabaseMigrationTool() {
                 let hasChanges = false;
 
                 try {
-                    // Move Signature
+                    // Migrate Doctor Signature
                     if (isBase64Image(data.signature)) {
                         updates.signature = await uploadBase64ToStorage(data.signature, `coverage/${uid}/${timestamp}_mig_sig_${i}.jpg`);
                         hasChanges = true;
                     }
 
-                    // Move Joint Signature
+                    // Migrate Joint Call Signature
                     if (isBase64Image(data.jointCallSignature)) {
                         updates.jointCallSignature = await uploadBase64ToStorage(data.jointCallSignature, `coverage/${uid}/${timestamp}_mig_joint_${i}.jpg`);
                         hasChanges = true;
                     }
 
-                    // Move Photos
+                    // Migrate Photos
                     if (data.photos && Array.isArray(data.photos)) {
                         const newPhotos = await Promise.all(data.photos.map(async (p, idx) => {
                             if (isBase64Image(p)) {
@@ -103,24 +103,24 @@ export function DatabaseMigrationTool() {
                     setProgress(p => ({ ...p, current: i + 1 }));
 
                 } catch (err: any) {
-                    // SILENT CATCH: Don't crash the whole UI on a single unauthorized record
-                    // Just count it as an error in the progress bar
-                    console.warn(`Record Skip (${docSnap.id}): ${err.message || 'Storage Restricted'}`);
+                    // RESILIENCE: Log as warning to avoid triggering Next.js error overlay.
+                    // This allows the migration to continue for other documents.
+                    console.warn(`Migration skipped for doc ${docSnap.id}:`, err.message || 'Unauthorized');
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
             }
 
             setStatus('complete');
             toast({ 
-                title: "Batch Finished", 
+                title: "Batch Complete", 
                 description: progress.errors > 0 
-                    ? `Processed ${docsToMigrate.length} items with ${progress.errors} skips.` 
-                    : `Successfully optimized ${docsToMigrate.length} records.`
+                    ? `Processed ${docsToMigrate.length} items with ${progress.errors} skips (See console).` 
+                    : `Successfully moved ${docsToMigrate.length} records to Storage.`
             });
 
         } catch (error: any) {
             console.error("Migration fatal error:", error);
-            toast({ variant: "destructive", title: "Migration Interrupted", description: error.message || "An unexpected error occurred." });
+            toast({ variant: "destructive", title: "Migration Error", description: error.message || "An unexpected error occurred." });
         } finally {
             setIsProcessing(false);
         }
@@ -206,7 +206,7 @@ export function DatabaseMigrationTool() {
                         )}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-4">
-                        Batch Size: 100 documents. Recommended to run until "No records found" appears.
+                        Batch Size: 200 documents. Run multiple times until "No legacy records detected" appears.
                     </p>
                 </div>
             </CardContent>
