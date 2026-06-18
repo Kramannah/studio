@@ -128,41 +128,6 @@ const jointCallRoles = [
     "Product Manager"
 ];
 
-/**
- * LOW COST PILLAR: Enhanced Resizer
- * Significantly downsamples images to reduce storage costs and Firestore transfer bulk.
- */
-const compressImage = (dataUrl: string, quality = 0.5, maxWidth = 1024): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const img = new window.Image();
-        img.src = dataUrl;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-
-            // Pillar B: Strict resolution capping
-            if (width > maxWidth) {
-                height = (maxWidth / width) * height;
-                width = maxWidth;
-            }
-
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return reject(new Error('Failed to get canvas context'));
-            
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // High-efficiency compression
-            resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = (error) => reject(error);
-    });
-};
-
 const SearchableSelect = ({ 
     options = [], 
     value, 
@@ -368,16 +333,10 @@ export function CoverageForm({
     if (file) {
       const reader = new FileReader();
       reader.onload = async (e) => {
-        try {
-            const dataUrl = e.target?.result as string;
-            // Pillar B: Aggressive photo downsampling
-            const compressedDataUrl = await compressImage(dataUrl, 0.5, 1024);
-            form.setValue('photos', [compressedDataUrl], { shouldValidate: true });
-            form.setValue('signature', null);
-            setProofMethod('photo');
-        } catch (err) {
-            toast({ variant: "destructive", title: "Image Error", description: "Failed to process the photo." });
-        }
+        const dataUrl = e.target?.result as string;
+        form.setValue('photos', [dataUrl], { shouldValidate: true });
+        form.setValue('signature', null);
+        setProofMethod('photo');
       };
       reader.readAsDataURL(file);
     }
@@ -621,7 +580,7 @@ export function CoverageForm({
               ...sanitizedPayload,
               id: entryToEdit!.id,
           } as any);
-          toast({ title: "Update Request Sent", description: "Storage assets are being processed." });
+          toast({ title: "Report Updated" });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
           setIsSubmitting(false);
@@ -634,7 +593,7 @@ export function CoverageForm({
       onFormSubmit?.(savedOnline);
     } catch (error) {
       console.error("Submission failed:", error);
-      toast({ variant: 'destructive', title: 'Submission Error', description: 'Technical failure during upload.' });
+      toast({ variant: 'destructive', title: 'Submission Error', description: 'Failed to process report.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -649,7 +608,7 @@ export function CoverageForm({
     <Card className="h-full flex flex-col">
         <CardHeader>
             <CardTitle className="font-headline">{isEditMode ? 'Edit Coverage' : 'Log Coverage'}</CardTitle>
-            <CardDescription>{isEditMode ? 'Updates will be processed and moved to storage.' : 'New reports will use Storage for images.'}</CardDescription>
+            <CardDescription>Submit call reports for medical providers.</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
@@ -1139,7 +1098,7 @@ export function CoverageForm({
                       </div>
                       
                       <Button type="submit" size="lg" className="w-full font-headline" disabled={isSubmitting}>
-                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing Storage...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
+                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
                       </Button>
                   </div>
               </form>

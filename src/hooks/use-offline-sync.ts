@@ -4,10 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, orderBy } from 'firebase/firestore';
-import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
-import { isValid, isWithinInterval, parseISO } from 'date-fns';
-import { uploadBase64ToStorage, deleteStorageFile, isBase64Image } from '@/lib/storage-utils';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
+import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -33,8 +31,9 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * OFFLINE SYNC HOOK (V8.0 - Self-Healing Disabled)
- * Handles local storage for offline use and syncing when online.
+ * OFFLINE SYNC HOOK (V5.0)
+ * Reverted to Standard Base64 Storage in Firestore.
+ * Background optimization and Pillar A/B logic removed.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -85,35 +84,17 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         where("userId", "==", userId),
         where("coverageDate", ">=", start),
         where("coverageDate", "<=", end),
-        limit(3000)
+        limit(1500)
       );
       
       const querySnapshot = await getDocs(q);
       const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      if (fetched.length === 0) {
-          const qLegacy = query(
-              collection(db!, "coverageEntries"),
-              where("userId", "==", userId),
-              where("submittedAt", ">=", start),
-              where("submittedAt", "<=", end),
-              limit(3000)
-          );
-          const snapLegacy = await getDocs(qLegacy);
-          fetched.push(...snapLegacy.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry)));
-      }
-
       fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Save light metadata to local cache
-      const lightEntries = fetched.map(({ photos, signature, ...rest }) => ({
-          ...rest,
-          photos: (photos || []).map(p => p.startsWith('http') ? p : p.substring(0, 100)),
-          signature: signature?.startsWith('http') ? signature : signature?.substring(0, 100)
-      }));
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(lightEntries));
+      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(fetched));
     } catch (error: any) {
         console.warn("PMR fetch failure:", error.message);
     } finally {
@@ -127,28 +108,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, active, selectedMonth, fetchMasterEntries]);
 
-  const processImagesForStorage = async (entry: Partial<CoverageEntry>, uid: string) => {
-    const timestamp = Date.now();
-    const processed = { ...entry };
-
-    if (isBase64Image(entry.signature)) {
-        processed.signature = await uploadBase64ToStorage(entry.signature!, `coverage/${uid}/${timestamp}_signature.jpg`);
-    }
-
-    if (isBase64Image(entry.jointCallSignature)) {
-        processed.jointCallSignature = await uploadBase64ToStorage(entry.jointCallSignature!, `coverage/${uid}/${timestamp}_joint_sig.jpg`);
-    }
-
-    if (entry.photos && entry.photos.length > 0) {
-        const photoUrls = await Promise.all(entry.photos.map((p, i) => 
-            isBase64Image(p) ? uploadBase64ToStorage(p, `coverage/${uid}/${timestamp}_photo_${i}.jpg`) : Promise.resolve(p)
-        ));
-        processed.photos = photoUrls;
-    }
-
-    return processed;
-  };
-
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
@@ -160,14 +119,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     if (isOnline) {
         try {
-            const storagePayload = await processImagesForStorage(rawPayload, userId);
-            const sanitizedPayload = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
+            const sanitizedPayload = sanitizePayload(rawPayload);
             const docRef = await addDoc(collection(db!, "coverageEntries"), sanitizedPayload);
             setMasterEntries(prev => [{ id: docRef.id, ...sanitizedPayload } as CoverageEntry, ...prev]);
-            toast({ title: "Report Synced" });
+            toast({ title: "Report Saved Online" });
             return true;
         } catch (error) {
-            console.warn("Storage upload failed, fallback to local", error);
             saveEntryOffline(rawPayload);
             return false;
         }
@@ -182,7 +139,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const updatedEntries = [entryWithId, ...offlineEntries];
     setOfflineEntries(updatedEntries);
     safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updatedEntries));
-    toast({ title: "Saved to Device" });
+    toast({ title: "Saved to Device (Offline)" });
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
@@ -193,8 +150,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const batch = writeBatch(db!);
         for (const entry of offlineEntries) {
             const { id, ...dataToSync } = entry;
-            const storagePayload = await processImagesForStorage(dataToSync, userId);
-            const sanitized = sanitizePayload({ ...storagePayload, userId: userId, migrationStatus: 'optimized' });
+            const sanitized = sanitizePayload({ ...dataToSync, userId: userId });
             const docRef = doc(collection(db!, "coverageEntries"));
             batch.set(docRef, sanitized);
         }
@@ -203,10 +159,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
         fetchMasterEntries(true);
-        toast({ title: 'Sync Successful' });
+        toast({ title: 'Offline Data Synced' });
     } catch (error) {
         console.error("Batch sync failed:", error);
-        toast({ variant: 'destructive', title: 'Sync Error' });
+        toast({ variant: 'destructive', title: 'Sync Failed' });
     } finally {
         setIsSyncing(false);
     }
@@ -220,22 +176,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    const entry = masterEntries.find(e => e.id === id);
-    if (entry) {
-        await deleteStorageFile(entry.signature);
-        await deleteStorageFile(entry.jointCallSignature);
-        if (entry.photos) {
-            await Promise.all(entry.photos.map(p => deleteStorageFile(p)));
-        }
-    }
     await deleteDoc(doc(db!, "coverageEntries", id));
     setMasterEntries(prev => prev.filter(e => e.id !== id));
   };
 
   const updateMasterEntry = async (e: any) => {
     if (!db || !userId) return;
-    const storagePayload = await processImagesForStorage(e, userId);
-    const sanitized = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
+    const sanitized = sanitizePayload(e);
     await updateDoc(doc(db!, "coverageEntries", e.id), sanitized);
     setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitized} : item));
   };

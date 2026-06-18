@@ -1,37 +1,10 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Explicit Admin Check (Standardized for master-key access)
-    // Uses safer .get() syntax to prevent Rule Engine crashes if email is missing
-    function isSystemAdmin() {
-      let email = request.auth.token.get('email', '').lower();
-      let uid = request.auth.uid;
-      
-      return request.auth != null && (
-        email in [
-          "mbustamante@hovidinc.com", 
-          "admin@hovidinc.com", 
-          "wbmaralit@hovidinc.com", 
-          "kgpangan@hovidinc.com", 
-          "pjramos@hovidinc.com"
-        ] ||
-        uid in [
-          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", 
-          "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
-        ]
-      );
-    }
-
     match /coverage/{userId}/{allPaths=**} {
-      // Standard read for all authenticated users
-      allow read: if request.auth != null;
-      
-      // Allow write if owner OR system administrator bypass
-      allow write: if request.auth != null && (request.auth.uid == userId || isSystemAdmin());
+      // standard read/write isolated to the folder owner
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // Default deny for all other paths
     match /{allPaths=**} {
       allow read, write: if false;
     }
