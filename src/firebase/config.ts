@@ -4,5 +4,6 @@ export const firebaseConfig = {
   "apiKey": "AIzaSyCqtWu5SXQmQllqN61DM80uquFa0K06QCE",
   "authDomain": "hovidcoverage.firebaseapp.com",
   "measurementId": "G-29Y9Y3BM5N",
-  "messagingSenderId": "321369261510"
+  "messagingSenderId": "321369261510",
+  "storageBucket": "hovidcoverage.firebasestorage.app"
 };

@@ -14,7 +14,7 @@ import {
     RefreshCw
 } from "lucide-react";
 import { collection, query, limit, getDocs, doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { uploadBase64ToStorage, isBase64Image } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -30,19 +30,23 @@ export function DatabaseMigrationTool() {
     const { toast } = useToast();
 
     const startMigration = async () => {
-        if (!db) return;
+        if (!db || !storage) {
+            toast({ variant: "destructive", title: "Configuration Error", description: "Firebase Services not fully initialized." });
+            return;
+        }
         setIsProcessing(true);
         setStatus('scanning');
         
         try {
             // 1. Fetch documents that might need migration (Broad scan)
+            // We limit to 200 to prevent payload crashes on veteran accounts
             const snapshot = await getDocs(query(collection(db, "coverageEntries"), limit(200)));
             const docsToMigrate = snapshot.docs.filter(d => {
                 const data = d.data();
                 return (
                     isBase64Image(data.signature) || 
                     isBase64Image(data.jointCallSignature) || 
-                    (data.photos && data.photos.some((p: string) => isBase64Image(p)))
+                    (data.photos && Array.isArray(data.photos) && data.photos.some((p: string) => isBase64Image(p)))
                 );
             });
 
@@ -62,34 +66,44 @@ export function DatabaseMigrationTool() {
                 const uid = data.userId || "migrated";
                 const timestamp = Date.now();
                 const updates: any = {};
+                let hasChanges = false;
 
                 try {
                     // Move Signature
                     if (isBase64Image(data.signature)) {
-                        updates.signature = await uploadBase64ToStorage(data.signature, `coverage/${uid}/${timestamp}_mig_sig.jpg`);
+                        updates.signature = await uploadBase64ToStorage(data.signature, `coverage/${uid}/${timestamp}_mig_sig_${i}.jpg`);
+                        hasChanges = true;
                     }
 
                     // Move Joint Signature
                     if (isBase64Image(data.jointCallSignature)) {
-                        updates.jointCallSignature = await uploadBase64ToStorage(data.jointCallSignature, `coverage/${uid}/${timestamp}_mig_joint.jpg`);
+                        updates.jointCallSignature = await uploadBase64ToStorage(data.jointCallSignature, `coverage/${uid}/${timestamp}_mig_joint_${i}.jpg`);
+                        hasChanges = true;
                     }
 
                     // Move Photos
                     if (data.photos && Array.isArray(data.photos)) {
                         const newPhotos = await Promise.all(data.photos.map(async (p, idx) => {
                             if (isBase64Image(p)) {
-                                return await uploadBase64ToStorage(p, `coverage/${uid}/${timestamp}_mig_photo_${idx}.jpg`);
+                                return await uploadBase64ToStorage(p, `coverage/${uid}/${timestamp}_mig_photo_${i}_${idx}.jpg`);
                             }
                             return p;
                         }));
-                        updates.photos = newPhotos;
+                        
+                        // Check if any actually changed to avoid redundant updates
+                        if (JSON.stringify(newPhotos) !== JSON.stringify(data.photos)) {
+                            updates.photos = newPhotos;
+                            hasChanges = true;
+                        }
                     }
 
-                    // Update Firestore document with URLs
-                    await updateDoc(doc(db, "coverageEntries", docSnap.id), updates);
+                    // Update Firestore document with URLs only if we made changes
+                    if (hasChanges) {
+                        await updateDoc(doc(db, "coverageEntries", docSnap.id), updates);
+                    }
                     setProgress(p => ({ ...p, current: i + 1 }));
 
-                } catch (err) {
+                } catch (err: any) {
                     console.error(`Migration failed for doc ${docSnap.id}:`, err);
                     setProgress(p => ({ ...p, current: i + 1, errors: p.errors + 1 }));
                 }
@@ -98,9 +112,9 @@ export function DatabaseMigrationTool() {
             setStatus('complete');
             toast({ title: "Migration Batch Finished", description: `Processed ${docsToMigrate.length} records.` });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Migration fatal error:", error);
-            toast({ variant: "destructive", title: "Migration Failed", description: "An unexpected error occurred during batch processing." });
+            toast({ variant: "destructive", title: "Migration Failed", description: error.message || "An unexpected error occurred." });
         } finally {
             setIsProcessing(false);
         }
@@ -160,7 +174,7 @@ export function DatabaseMigrationTool() {
                         {progress.errors > 0 && (
                             <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/20 text-xs font-bold">
                                 <AlertTriangle className="w-4 h-4" />
-                                Warning: {progress.errors} records failed to migrate.
+                                Warning: {progress.errors} records failed to migrate. Check console for details.
                             </div>
                         )}
                     </div>
@@ -186,7 +200,7 @@ export function DatabaseMigrationTool() {
                         )}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-4">
-                        Note: Migration processes 200 documents per batch to avoid network timeouts.
+                        Note: Migration processes up to 200 documents per batch to avoid network timeouts.
                     </p>
                 </div>
             </CardContent>
