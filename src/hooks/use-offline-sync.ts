@@ -33,8 +33,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * SELF-HEALING VERSION 2.0: Owner-based background migration.
- * Identifies Base64 data and moves it to Storage with a migrationStatus: 'optimized' tag.
+ * OFFLINE SYNC HOOK (V8.0 - Self-Healing Disabled)
+ * Handles local storage for offline use and syncing when online.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -45,7 +45,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
-  const isHealingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -108,6 +107,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
+      // Save light metadata to local cache
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => ({
           ...rest,
           photos: (photos || []).map(p => p.startsWith('http') ? p : p.substring(0, 100)),
@@ -120,41 +120,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setLoading(false);
     }
   }, [userId, active, selectedMonth, masterEntries.length]);
-
-  /**
-   * SELF-HEALING EFFECT: Background task to process up to 200 records.
-   * Tags processed records with 'optimized' for tracking.
-   */
-  useEffect(() => {
-    const healLegacyData = async () => {
-        if (!isOnline || !userId || !db || isHealingRef.current || masterEntries.length === 0) return;
-        
-        const docsToHeal = masterEntries.filter(e => 
-            (isBase64Image(e.signature) || 
-            isBase64Image(e.jointCallSignature) || 
-            (e.photos && Array.isArray(e.photos) && e.photos.some(p => isBase64Image(p)))) &&
-            e.migrationStatus !== 'optimized'
-        ).slice(0, 200);
-
-        if (docsToHeal.length === 0) return;
-
-        isHealingRef.current = true;
-        for (const entry of docsToHeal) {
-            try {
-                const storagePayload = await processImagesForStorage(entry, userId);
-                const sanitized = sanitizePayload({ ...storagePayload, migrationStatus: 'optimized' });
-                await updateDoc(doc(db!, "coverageEntries", entry.id), sanitized);
-                setMasterEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...sanitized } : item));
-                await new Promise(resolve => setTimeout(resolve, 100));
-            } catch (err) {
-                console.warn(`Self-Healing Skip for doc ${entry.id}:`, err);
-            }
-        }
-        isHealingRef.current = false;
-    };
-
-    healLegacyData();
-  }, [masterEntries, isOnline, userId]);
 
   useEffect(() => {
     if (userId && active) {
