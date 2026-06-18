@@ -3,16 +3,20 @@ service firebase.storage {
   match /b/{bucket}/o {
     
     // Explicit Admin Check (Standardized for master-key access)
+    // Uses safer .get() syntax to prevent Rule Engine crashes if email is missing
     function isSystemAdmin() {
+      let email = request.auth.token.get('email', '').lower();
+      let uid = request.auth.uid;
+      
       return request.auth != null && (
-        request.auth.token.email.lower() in [
+        email in [
           "mbustamante@hovidinc.com", 
           "admin@hovidinc.com", 
           "wbmaralit@hovidinc.com", 
           "kgpangan@hovidinc.com", 
           "pjramos@hovidinc.com"
         ] ||
-        request.auth.uid in [
+        uid in [
           "SgOR5cjCC6dZ0oABv4nXdntu6pI3", 
           "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"
         ]

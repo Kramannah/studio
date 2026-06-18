@@ -24,14 +24,14 @@ import type { CoverageEntry, UserProfile } from "@/lib/types";
 import { Progress } from "@/components/ui/progress";
 
 /**
- * LOW COST PILLAR: MIGRATION ENGINE (V9.1)
+ * LOW COST PILLAR: MIGRATION ENGINE (V9.2)
  * Implements Pillar A (Binary Pivot) and Pillar B (Administrative Bypass).
  * Handles: 
  * 1. Global Scan (Bypasses UID isolation)
  * 2. Identity Repair (Injects missing userIds)
  * 3. Binary Offloading (Moves Base64 strings to Storage)
  * 
- * V9.1 UPDATE: Added resilience for storage/unauthorized skips.
+ * V9.2 UPDATE: Resilient Rules handling and aggressive identity mapping.
  */
 export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Record<string, UserProfile> }) {
     const [isOptimizing, setIsOptimizing] = useState(false);
@@ -44,8 +44,14 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
     const nameToUidMap = useMemo(() => {
         const map: Record<string, string> = {};
         Object.values(userProfiles).forEach(p => {
-            const key = `${p.firstName} ${p.lastName}`.toLowerCase().trim();
-            if (p.userId) map[key] = p.userId;
+            const first = (p.firstName || "").toLowerCase().trim();
+            const last = (p.lastName || "").toLowerCase().trim();
+            const fullName = `${first} ${last}`.trim();
+            if (p.userId) {
+                map[fullName] = p.userId;
+                // Add secondary lookup by last name for edge cases
+                if (last && !map[last]) map[last] = p.userId;
+            }
         });
         return map;
     }, [userProfiles]);
@@ -69,6 +75,7 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
 
         try {
             // PILLAR A: Global scan (No UID filter)
+            // Limit to 200 records to keep execution window safe
             const q = query(collection(db, "coverageEntries"), limit(200));
             const snapshot = await getDocs(q);
             const docs = snapshot.docs;
@@ -91,8 +98,9 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
 
                     // REPAIR: Inject missing userId
                     if (needsUserIdRepair) {
-                        const pmrName = `${data.firstName || ''} ${data.lastName || ''}`.toLowerCase().trim();
-                        const foundUid = nameToUidMap[pmrName];
+                        const pmrFirst = (data.firstName || "").toLowerCase().trim();
+                        const pmrLast = (data.lastName || "").toLowerCase().trim();
+                        const foundUid = nameToUidMap[`${pmrFirst} ${pmrLast}`] || nameToUidMap[pmrLast];
                         if (foundUid) updatePayload.userId = foundUid;
                     }
 
@@ -127,20 +135,20 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
                         await updateDoc(doc(db, "coverageEntries", docSnap.id), updatePayload);
                         setOptimizedCount(prev => prev + 1);
                     } catch (storageErr: any) {
-                        // V9.1 Resilience: Skip if unauthorized and continue batch
-                        console.warn(`Skipping Record ${docSnap.id}:`, storageErr.message);
+                        // V9.2 Resilience: Log skip if unauthorized and continue batch
+                        console.warn(`Skipping Record ${docSnap.id} for ${data.firstName}:`, storageErr.message);
                     }
                     
-                    // Throttle to prevent browser freeze
+                    // Throttle to prevent browser freeze during heavy binary processing
                     await new Promise(r => setTimeout(r, 100));
                 }
             }
 
-            toast({ title: "Batch Complete", description: "Storage offloading successful." });
+            toast({ title: "Batch Complete", description: "Successfully processed current record window." });
             fetchTotalMigrated();
         } catch (error: any) {
             console.error("Migration Error:", error);
-            toast({ variant: "destructive", title: "Error", description: error.message });
+            toast({ variant: "destructive", title: "Process Interrupted", description: error.message });
         } finally {
             setIsOptimizing(false);
         }
@@ -232,7 +240,7 @@ export function DatabaseMigrationTool({ userProfiles = {} }: { userProfiles: Rec
                                 <span>Scanning Organization...</span>
                                 <span>{scannedCount} Inspected</span>
                             </div>
-                            <Progress value={(processedCount / 200) * 100} className="h-3" />
+                            <Progress value={(scannedCount / 200) * 100} className="h-3" />
                             <p className="text-center text-[10px] text-muted-foreground italic">
                                 Offloading binary data and repairing identity metadata in real-time.
                             </p>
