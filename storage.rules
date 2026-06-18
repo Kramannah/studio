@@ -2,8 +2,10 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /coverage/{userId}/{allPaths=**} {
-      // standard read/write isolated to the folder owner
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // READ: Allow any authenticated user (DSM/Admin/PMR) to view the file if they have the complex URL
+      // WRITE: Isolated strictly to the folder owner to prevent cross-account tampering
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
     match /{allPaths=**} {
       allow read, write: if false;

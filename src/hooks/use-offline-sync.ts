@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
+import { uploadBase64ToStorage, compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -31,9 +32,37 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * OFFLINE SYNC HOOK (V5.0)
- * Reverted to Standard Base64 Storage in Firestore.
- * Background optimization and Pillar A/B logic removed.
+ * Helper to offload all Base64 fields in a document to Firebase Storage.
+ */
+const uploadEntryImages = async (entry: any, uid: string) => {
+    const ts = Date.now();
+    const result = { ...entry };
+    
+    if (result.photos && result.photos.length > 0) {
+        result.photos = await Promise.all(result.photos.map(async (p: string, i: number) => {
+            if (p.startsWith('data:image')) {
+                return await uploadBase64ToStorage(p, `coverage/${uid}/${ts}_photo_${i}.jpg`);
+            }
+            return p;
+        }));
+    }
+    
+    if (result.signature && result.signature.startsWith('data:image')) {
+        result.signature = await uploadBase64ToStorage(result.signature, `coverage/${uid}/${ts}_sig.jpg`);
+    }
+
+    if (result.jointCallSignature && result.jointCallSignature.startsWith('data:image')) {
+        result.jointCallSignature = await uploadBase64ToStorage(result.jointCallSignature, `coverage/${uid}/${ts}_joint_sig.jpg`);
+    }
+    
+    return result;
+};
+
+/**
+ * OFFLINE SYNC HOOK (V6.0)
+ * FUTURE-ONLY DIRECT-TO-STORAGE PILLARS:
+ * 1. Pillar A: Binary Pivot (Online uploads go to Storage).
+ * 2. Pillar B: Aggressive Downsampling (Offline images are shrunk to prevent LocalStorage crashes).
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -111,20 +140,36 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
+    // PILLAR B: Aggressive Downsampling (Pre-Save)
+    // We ALWAYS compress immediately to keep local storage tiny and minimize cloud egress
+    const compressedData = { ...entry };
+    if (compressedData.photos && compressedData.photos.length > 0) {
+        compressedData.photos = await Promise.all(compressedData.photos.map(p => compressImage(p, 1024, 0.5)));
+    }
+    if (compressedData.signature) {
+        compressedData.signature = await compressImage(compressedData.signature, 300, 0.5);
+    }
+    if (compressedData.jointCallSignature) {
+        compressedData.jointCallSignature = await compressImage(compressedData.jointCallSignature, 300, 0.5);
+    }
+
     let rawPayload: any = {
-      ...entry,
+      ...compressedData,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
 
     if (isOnline) {
         try {
-            const sanitizedPayload = sanitizePayload(rawPayload);
+            // PILLAR A: Direct-to-Storage (Binary Pivot)
+            const storagePayload = await uploadEntryImages(rawPayload, userId);
+            const sanitizedPayload = sanitizePayload(storagePayload);
             const docRef = await addDoc(collection(db!, "coverageEntries"), sanitizedPayload);
             setMasterEntries(prev => [{ id: docRef.id, ...sanitizedPayload } as CoverageEntry, ...prev]);
             toast({ title: "Report Saved Online" });
             return true;
         } catch (error) {
+            console.warn("Online storage save failed, falling back to local cache", error);
             saveEntryOffline(rawPayload);
             return false;
         }
@@ -150,7 +195,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const batch = writeBatch(db!);
         for (const entry of offlineEntries) {
             const { id, ...dataToSync } = entry;
-            const sanitized = sanitizePayload({ ...dataToSync, userId: userId });
+            // PILLAR A: Binary Pivot (Offload cached Base64 to Storage on sync)
+            const storagePayload = await uploadEntryImages({ ...dataToSync, userId: userId }, userId);
+            const sanitized = sanitizePayload(storagePayload);
             const docRef = doc(collection(db!, "coverageEntries"));
             batch.set(docRef, sanitized);
         }
@@ -182,7 +229,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const updateMasterEntry = async (e: any) => {
     if (!db || !userId) return;
-    const sanitized = sanitizePayload(e);
+    // Compress updates too
+    const updatedEntry = { ...e };
+    if (updatedEntry.photos && updatedEntry.photos.length > 0) {
+        updatedEntry.photos = await Promise.all(updatedEntry.photos.map(p => compressImage(p, 1024, 0.5)));
+    }
+    if (updatedEntry.signature) {
+        updatedEntry.signature = await compressImage(updatedEntry.signature, 300, 0.5);
+    }
+    const storagePayload = await uploadEntryImages(updatedEntry, userId);
+    const sanitized = sanitizePayload(storagePayload);
     await updateDoc(doc(db!, "coverageEntries", e.id), sanitized);
     setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitized} : item));
   };
