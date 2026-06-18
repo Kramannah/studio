@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -33,7 +34,8 @@ const sanitizePayload = (data: any): any => {
 };
 
 /**
- * MIGRATION VERSION: Updated to move Base64 data to Storage during sync.
+ * SELF-HEALING VERSION: Background optimization for owner-based migration.
+ * Identifies Base64 data in the user's own records and silently moves them to Storage.
  */
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -44,6 +46,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
+  const isHealingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -77,7 +80,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     const { start, end } = getMonthRangeISO(selectedMonth);
-    const interval = { start: parseISO(start), end: parseISO(end) };
     
     try {
       const q = query(
@@ -107,10 +109,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       setMasterEntries(fetched);
       lastFetchedKeyRef.current = fetchKey;
       
-      // Save light metadata to cache to keep localStorage size under control
       const lightEntries = fetched.map(({ photos, signature, ...rest }) => ({
           ...rest,
-          // Only cache the first few chars of URLs or Base64 to save space
           photos: (photos || []).map(p => p.startsWith('http') ? p : p.substring(0, 100)),
           signature: signature?.startsWith('http') ? signature : signature?.substring(0, 100)
       }));
@@ -121,6 +121,48 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setLoading(false);
     }
   }, [userId, active, selectedMonth, masterEntries.length]);
+
+  /**
+   * SELF-HEALING EFFECT: Background task to process up to 200 records.
+   */
+  useEffect(() => {
+    const healLegacyData = async () => {
+        if (!isOnline || !userId || !db || isHealingRef.current || masterEntries.length === 0) return;
+        
+        // Find documents that need optimization
+        const docsToHeal = masterEntries.filter(e => 
+            isBase64Image(e.signature) || 
+            isBase64Image(e.jointCallSignature) || 
+            (e.photos && Array.isArray(e.photos) && e.photos.some(p => isBase64Image(p)))
+        ).slice(0, 200); // Process 200 records per session
+
+        if (docsToHeal.length === 0) return;
+
+        isHealingRef.current = true;
+        console.log(`Self-Healing: Optimizing ${docsToHeal.length} legacy records for owner ${userId}...`);
+
+        for (const entry of docsToHeal) {
+            try {
+                const storagePayload = await processImagesForStorage(entry, userId);
+                const sanitized = sanitizePayload(storagePayload);
+                await updateDoc(doc(db!, "coverageEntries", entry.id), sanitized);
+                
+                // Locally update the entry state so it doesn't match the filter anymore
+                setMasterEntries(prev => prev.map(item => item.id === entry.id ? { ...item, ...sanitized } : item));
+                
+                // Small throttle to avoid rule engine bottlenecks
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (err) {
+                console.warn(`Self-Healing Skip for doc ${entry.id}:`, err);
+            }
+        }
+        
+        isHealingRef.current = false;
+        console.log("Self-Healing: Batch complete.");
+    };
+
+    healLegacyData();
+  }, [masterEntries, isOnline, userId]);
 
   useEffect(() => {
     if (userId && active) {
@@ -194,7 +236,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const batch = writeBatch(db!);
         for (const entry of offlineEntries) {
             const { id, ...dataToSync } = entry;
-            // Process images from local Base64 to Storage URLs during sync
             const storagePayload = await processImagesForStorage(dataToSync, userId);
             const sanitized = sanitizePayload({ ...storagePayload, userId: userId });
             const docRef = doc(collection(db!, "coverageEntries"));
@@ -224,7 +265,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!db) return;
     const entry = masterEntries.find(e => e.id === id);
     if (entry) {
-        // Cleanup storage assets
         await deleteStorageFile(entry.signature);
         await deleteStorageFile(entry.jointCallSignature);
         if (entry.photos) {
