@@ -7,21 +7,35 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Helper to verify if the user is a system administrator or manager
-    // This now dynamically checks the Firestore 'userProfiles' collection
+    // EMERGENCY ADMIN KEY: Explicitly authorize system admins via Token Data
+    // This is faster and more reliable than firestore lookups during migrations.
     function isSystemAdmin() {
-      let profilePath = /databases/(default)/documents/userProfiles/$(request.auth.uid);
       let email = request.auth.token.get('email', '').lower();
+      let uid = request.auth.uid;
       
-      // Explicit Whitelist (Fastest)
-      let isWhitelisted = email in ["mbustamante@hovidinc.com", "wbmaralit@hovidinc.com", "admin@hovidinc.com"];
+      // Admin Emails
+      let isAdminEmail = email in [
+        "mbustamante@hovidinc.com", 
+        "wbmaralit@hovidinc.com", 
+        "admin@hovidinc.com",
+        "kgpangan@hovidinc.com",
+        "pjramos@hovidinc.com"
+      ];
       
-      // Database Role Check (Robust)
-      // Note: We use get() which allows Storage rules to read Firestore data
-      let hasAdminRole = firestore.exists(profilePath) && 
-                         firestore.get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"];
+      // Hardcoded Admin UIDs (From admins.ts)
+      let isAdminUid = uid in [
+        "SgOR5cjCC6dZ0oABv4nXdntu6pI3", 
+        "m2ZTNUi5v9ef82FxVRbwSmyGv9S2",
+        "e11qs3XD1vW3JWHfEaJI2DXcCEj2",
+        "UmyUP0VwccRKLfrej67idFukFz42",
+        "tb73WEIzndUrPEaD1q4H0VQfQaD3",
+        "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1",
+        "x8u4kvWvieZIVc9NdgiWmG01nts2",
+        "MlE49ceLEDbzvKAsisKnW07fGfW2",
+        "r19lVIqk4xTtzxvbs4W0kprHSvD2"
+      ];
       
-      return isSignedIn() && (isWhitelisted || hasAdminRole);
+      return isSignedIn() && (isAdminEmail || isAdminUid);
     }
 
     // Coverage folder rules
@@ -31,7 +45,7 @@ service firebase.storage {
       
       // Allow write if:
       // 1. The user is the owner of the folder
-      // 2. The user is an authorized System Admin/Manager (Crucial for Migration)
+      // 2. The user is an authorized System Admin (Migration Master Key)
       allow write: if isSignedIn() && (request.auth.uid == userId || isSystemAdmin());
     }
 

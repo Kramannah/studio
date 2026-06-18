@@ -5,6 +5,7 @@ import { storage } from "./firebase";
 
 /**
  * Uploads a Base64 string to Firebase Storage and returns the public download URL.
+ * Update: Uses warnings instead of errors to prevent Next.js runtime crashes during batch migration.
  */
 export async function uploadBase64ToStorage(base64: string, path: string): Promise<string> {
     if (!storage) throw new Error("Firebase Storage is not initialized.");
@@ -15,8 +16,9 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
         await uploadString(storageRef, base64, 'data_url');
         return await getDownloadURL(storageRef);
     } catch (error) {
-        console.error("Storage Upload Error:", error);
-        throw error;
+        // Use console.warn to avoid triggering Next.js error overlays
+        console.warn("Storage Upload Warning (Item Skipped):", error);
+        throw error; // Still throw so the caller knows it failed, but caller must catch silently
     }
 }
 
