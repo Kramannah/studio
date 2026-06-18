@@ -15,6 +15,7 @@ import { Input } from "./ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
@@ -162,12 +163,42 @@ const EntryRow = ({
     )
 }
 
-export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, readOnly = false }: { entries: CoverageEntry[], doctors: Doctor[], nonCallDays?: NonCallDay[], onDelete: (id: string) => void, onEdit: (entry: CoverageEntry) => void, readOnly?: boolean }) {
+export function SubmittedList({ 
+    entries = [], 
+    doctors = [], 
+    onDelete, 
+    onEdit, 
+    readOnly = false,
+    selectedMonth,
+    onMonthChange
+}: { 
+    entries: CoverageEntry[], 
+    doctors: Doctor[], 
+    nonCallDays?: NonCallDay[], 
+    onDelete: (id: string) => void, 
+    onEdit: (entry: CoverageEntry) => void, 
+    readOnly?: boolean,
+    selectedMonth?: string,
+    onMonthChange?: (m: string) => void
+}) {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
+
+    const months = useMemo(() => {
+        const list = [];
+        const currentYear = new Date().getFullYear();
+        for (let i = -6; i <= 6; i++) {
+            const date = new Date(currentYear, new Date().getMonth() + i, 1);
+            list.push({
+                value: format(date, 'yyyy-MM'),
+                label: format(date, 'MMMM yyyy')
+            });
+        }
+        return list;
+    }, []);
 
     const holidayDates = useMemo(() => {
         return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
@@ -239,10 +270,47 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
         setPreviewData({ src, title });
     };
 
-    if (entries.length === 0) return <Card className="p-20 text-center"><p className="text-muted-foreground italic">No reports found.</p></Card>;
+    if (entries.length === 0 && !searchQuery) return (
+        <div className="space-y-4">
+             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                    <h3 className="text-2xl font-black font-headline text-primary">Coverage Records</h3>
+                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
+                </div>
+                <div className="w-[240px] shrink-0">
+                    <Select value={selectedMonth} onValueChange={onMonthChange}>
+                        <SelectTrigger className="border-2 h-11 font-headline rounded-xl">
+                            <SelectValue placeholder="Select Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <Card className="p-20 text-center"><p className="text-muted-foreground italic">No reports found for this period.</p></Card>
+        </div>
+    );
 
     return (
       <div className="space-y-4 animate-in fade-in duration-500 w-full">
+         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+                <h3 className="text-2xl font-black font-headline text-primary">Coverage Records</h3>
+                <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
+            </div>
+            <div className="w-[240px] shrink-0">
+                <Select value={selectedMonth} onValueChange={onMonthChange}>
+                    <SelectTrigger className="border-2 h-11 font-headline rounded-xl">
+                        <SelectValue placeholder="Select Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+
         <Card className="p-4 border-2 shadow-sm">
             <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
                 <div className="flex items-center gap-4 w-full max-w-xl">
@@ -277,6 +345,7 @@ export function SubmittedList({ entries = [], doctors = [], onDelete, onEdit, re
                             mode="single"
                             selected={selectedDate}
                             onSelect={setSelectedDate}
+                            month={selectedMonth ? parseISO(selectedMonth + "-01") : undefined}
                             className="p-4"
                             modifiers={{ 
                                 submitted: entryDates,
