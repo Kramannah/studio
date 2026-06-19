@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Fingerprint as IdIcon } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -47,7 +47,6 @@ export default function AdminPage() {
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-    const [directUid, setDirectUid] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
     const [accountSearch, setAccountSearch] = useState('');
     const [activeTab, setActiveTab] = useState('district-reports');
@@ -263,12 +262,6 @@ export default function AdminPage() {
         await deleteProfile(uid);
     };
 
-    const handleDirectUidFetch = () => {
-        if (!directUid.trim()) return;
-        setSelectedUserId(directUid.trim());
-        toast({ title: "Targeting UID", description: `Bypassing DSM filters for ${directUid.substring(0, 8)}...` });
-    };
-
     if (!mounted || authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
@@ -318,7 +311,7 @@ export default function AdminPage() {
                     <TabsContent value="district-reports">
                          <Card className="mb-8 border-2 shadow-sm">
                             <CardHeader>
-                                <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+                                <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                      <div className="space-y-3">
                                         <CardTitle className="font-headline text-xl">District Manager</CardTitle>
                                         <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin && !isMarketingOrHR} />
@@ -335,21 +328,6 @@ export default function AdminPage() {
                                                 </SelectContent>
                                             </Select>
                                             {selectedUserId && <Button variant="ghost" size="icon" onClick={() => setSelectedUserId(null)}><X className="w-5 h-5"/></Button>}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-3">
-                                        <CardTitle className="font-headline text-xl">Direct UID Access</CardTitle>
-                                        <div className="flex gap-2">
-                                            <div className="relative flex-1">
-                                                <IdIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                                <Input 
-                                                    placeholder="Enter raw UID..." 
-                                                    value={directUid} 
-                                                    onChange={(e) => setDirectUid(e.target.value)} 
-                                                    className="pl-10 h-11 border-2" 
-                                                />
-                                            </div>
-                                            <Button onClick={handleDirectUidFetch} variant="secondary" className="h-11 px-6 font-headline">Find</Button>
                                         </div>
                                     </div>
                                 </div>
@@ -381,7 +359,7 @@ export default function AdminPage() {
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
                                 <Search className="w-10 h-10 text-primary mb-4" />
                                 <AlertTitle className="font-headline text-xl">Representative Selection Required</AlertTitle>
-                                <AlertDescription className="text-lg">Please select a specific representative from the list above or use Direct UID Access for verification.</AlertDescription>
+                                <AlertDescription className="text-lg">Please select a specific representative from the list above to verify.</AlertDescription>
                             </Alert>
                         ) : (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
