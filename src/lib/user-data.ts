@@ -287,8 +287,8 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Dimaala",
         email: "cdimaala@hovidinc.com"
     },
-    "PENDING_UID_IAN_NATINGA": {
-        code: "VIS-PENDING",
+    "AhkYw50sBueJFvRO8glPlpE4QWt2": {
+        code: "VIS-IAN",
         firstName: "Ian",
         lastName: "Natinga",
         email: "ian.natinga@hovidinc.com"
