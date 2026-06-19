@@ -286,11 +286,5 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Carmina",
         lastName: "Dimaala",
         email: "cdimaala@hovidinc.com"
-    },
-    "AhkYw50sBueJFvRO8glPlpE4QWt2": {
-        code: "MIN-01",
-        firstName: "Ian",
-        lastName: "Natinga",
-        email: "inatinga@hovidinc.com"
     }
 };
