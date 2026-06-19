@@ -13,9 +13,8 @@ import { isValid, isWithinInterval, parseISO } from "date-fns";
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V7.0: Admin-Resilient Targeted Retrieval.
- * Specifically optimized to prevent payload crashes when viewing veteran accounts (NL-02 / CL-01).
- * Uses a multi-stage fetch to prioritize monthly data and reduce network strain.
+ * LOW-COST V7.1: Admin-Resilient Targeted Retrieval.
+ * Specifically optimized to prevent payload crashes and ensure specific UIDs are reachable.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -111,40 +110,37 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // RESILIENT MULTI-STAGE FETCH FOR ADMIN OVERSIGHT
         const fetchEntriesResilient = async () => {
             const colRef = collection(db!, "coverageEntries");
             
             // Stage 1: Targeted Monthly Query (Coverage Date)
             try {
-                const q1 = query(colRef, where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(1000));
+                const q1 = query(colRef, where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000));
                 const snap1 = await getDocs(q1);
                 if (snap1.docs.length > 0) return snap1.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
             } catch (e) { console.warn("Admin Stage 1 fail", e); }
 
             // Stage 2: Legacy Monthly Fallback (Submitted At)
             try {
-                const q2 = query(colRef, where("userId", "==", uid), where("submittedAt", ">=", start), where("submittedAt", "<=", end), limit(1000));
+                const q2 = query(colRef, where("userId", "==", uid), where("submittedAt", ">=", start), where("submittedAt", "<=", end), limit(2000));
                 const snap2 = await getDocs(q2);
                 if (snap2.docs.length > 0) return snap2.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
             } catch (e) { console.warn("Admin Stage 2 fail", e); }
 
-            // Stage 3: Recent-First Broad Scan (Latest 3,500)
+            // Stage 3: BROAD SCAN (Required for cases like Ian Natinga where reports might be unindexed or date-shifted)
             try {
-                const q3 = query(colRef, where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(3500));
+                const q3 = query(colRef, where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(4000));
                 const snap3 = await getDocs(q3);
                 return snap3.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    // If filtering by month fails to show data, return the most recent regardless of month filter for diagnostics
+                    if (force) return true; 
                     return d && isValid(d) && isWithinInterval(d, interval);
                 });
             } catch (e) {
-                // Stage 4: EMERGENCY INDEX-FREE SCAN
-                const q4 = query(colRef, where("userId", "==", uid), limit(4000));
+                const q4 = query(colRef, where("userId", "==", uid), limit(5000));
                 const snap4 = await getDocs(q4);
-                return snap4.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
-                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    return d && isValid(d) && isWithinInterval(d, interval);
-                });
+                return snap4.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
             }
         };
 
@@ -155,12 +151,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 const snap = await getDocs(q);
                 return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
             } catch (e) {
-                const qFallback = query(colRef, where("userId", "==", uid), limit(3500));
+                const qFallback = query(colRef, where("userId", "==", uid), limit(3000));
                 const snap = await getDocs(qFallback);
-                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan)).filter(p => {
-                    const d = parseAnyDate(p.plannedDate);
-                    return d && isValid(d) && isWithinInterval(d, interval);
-                });
+                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
             }
         };
 
@@ -169,7 +162,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             fetchPlansResilient(),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
         ]);
 
@@ -193,11 +186,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ADMIN_SESSION_CACHE[cacheKey] = data;
 
         if (force) {
-            toast({ title: "Admin Sync Complete", description: `Restored visibility for user records.` });
+            toast({ title: "Deep Sync Complete", description: `Found ${entries.length} reports for UID ${uid.substring(0, 6)}...` });
         }
     } catch (e: any) {
-        console.error("Individual User Fetch Failure:", e);
-        toast({ variant: "destructive", title: "Access Error", description: "Database is heavily congested. Retrying..." });
+        console.error("Fetch Failure:", e);
+        toast({ variant: "destructive", title: "Sync Failed", description: e.message || "Could not retrieve records." });
     } finally { 
         setLoadingIndividual(false); 
     }
