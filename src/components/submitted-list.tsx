@@ -274,12 +274,12 @@ export function SubmittedList({
         <div className="space-y-4">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h3 className="text-2xl font-black font-headline text-primary">Coverage Records</h3>
-                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
+                    <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
+                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
                 </div>
                 <div className="w-[240px] shrink-0">
                     <Select value={selectedMonth} onValueChange={onMonthChange}>
-                        <SelectTrigger className="border-2 h-11 font-headline rounded-xl">
+                        <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
                             <SelectValue placeholder="Select Month" />
                         </SelectTrigger>
                         <SelectContent>
@@ -296,12 +296,12 @@ export function SubmittedList({
       <div className="space-y-4 animate-in fade-in duration-500 w-full">
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
-                <h3 className="text-2xl font-black font-headline text-primary">Coverage Records</h3>
-                <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
+                <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
             </div>
             <div className="w-[240px] shrink-0">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
-                    <SelectTrigger className="border-2 h-11 font-headline rounded-xl">
+                    <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
                         <SelectValue placeholder="Select Month" />
                     </SelectTrigger>
                     <SelectContent>

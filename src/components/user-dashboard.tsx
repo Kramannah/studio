@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -137,6 +136,8 @@ export function UserDashboard({
                             onDelete={onDeleteEntry} 
                             onEdit={() => {}} 
                             readOnly={!isAdminView} 
+                            selectedMonth={selectedMonth}
+                            onMonthChange={onMonthChange}
                         />
                     </TabsContent>
                     
