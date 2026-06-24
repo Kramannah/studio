@@ -84,11 +84,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
 
   useEffect(() => {
     if (user && active) {
-        // LAZY LOADING: Only auto-fetch if it's the current month
-        const currentMonth = format(new Date(), 'yyyy-MM');
-        if (!selectedMonth || selectedMonth === currentMonth) {
-            fetchTimeLogs();
-        }
+        fetchTimeLogs();
     }
   }, [fetchTimeLogs, active, user, selectedMonth]);
 

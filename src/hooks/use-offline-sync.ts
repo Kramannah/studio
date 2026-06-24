@@ -106,11 +106,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   useEffect(() => {
     if (userId && active) {
-        // LAZY LOADING: Only auto-fetch if it's the current month
-        const currentMonth = format(new Date(), 'yyyy-MM');
-        if (!selectedMonth || selectedMonth === currentMonth) {
-            fetchMasterEntries();
-        }
+        fetchMasterEntries();
     }
   }, [userId, active, selectedMonth, fetchMasterEntries]);
 

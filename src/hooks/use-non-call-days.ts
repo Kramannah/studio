@@ -81,11 +81,7 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
 
   useEffect(() => {
     if (user && active) {
-        // LAZY LOADING: Only auto-fetch if it's the current month
-        const currentMonth = format(new Date(), 'yyyy-MM');
-        if (!selectedMonth || selectedMonth === currentMonth) {
-            fetchNonCallDays();
-        }
+        fetchNonCallDays();
     }
   }, [fetchNonCallDays, active, user, selectedMonth]);
 
