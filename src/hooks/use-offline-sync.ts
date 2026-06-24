@@ -9,6 +9,7 @@ import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
 import { format } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -92,8 +93,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, selectedMonth]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    // LOW-COST FIX: Allow manual sync (force=true) to bypass the 'active' view guard
-    if (!userId || !db || (!active && !force) || !navigator.onLine) return;
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
+
+    // LOW-COST FIX: Only auto-fetch if current month. Force bypasses for manual sync.
+    if (!userId || !db || (!active && !force) || (!isCurrentMonth && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
@@ -132,19 +136,23 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, active, selectedMonth, masterEntries.length]);
 
   useEffect(() => {
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
-
-    if (userId && active && isCurrentMonth) {
-        fetchMasterEntries();
-    }
-  }, [userId, active, selectedMonth, fetchMasterEntries]);
+    fetchMasterEntries();
+  }, [fetchMasterEntries]);
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
+    // TABLET FIX: Compress photos before any processing to ensure payload is within 1MB limit
+    let processedPhotos = entry.photos;
+    if (entry.photos && entry.photos.length > 0) {
+        try {
+            processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 1024, 0.6)));
+        } catch (e) { console.warn("Compression failed, using raw", e); }
+    }
+
     const rawPayload: any = {
       ...entry,
+      photos: processedPhotos,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
@@ -236,7 +244,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
         const timer = setTimeout(() => {
             syncAllOfflineEntries();
-        }, 1000);
+        }, 3000); // 3 second delay to ensure connection is warm
         return () => clearTimeout(timer);
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);
