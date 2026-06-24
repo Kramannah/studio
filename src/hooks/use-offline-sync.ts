@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
+import { format } from 'date-fns';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -99,7 +100,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   useEffect(() => {
     if (userId && active) {
-        fetchMasterEntries();
+        // LAZY LOADING: Only auto-fetch if it's the current month
+        const currentMonth = format(new Date(), 'yyyy-MM');
+        if (!selectedMonth || selectedMonth === currentMonth) {
+            fetchMasterEntries();
+        }
     }
   }, [userId, active, selectedMonth, fetchMasterEntries]);
 
@@ -138,7 +143,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!isOnline || !userId || !db || offlineEntries.length === 0) return;
+    if (!isOnline || !userId || !db) return;
+    
+    // If no offline entries, we still allow a "Force Refresh" from the DB
+    if (offlineEntries.length === 0) {
+        await fetchMasterEntries(true);
+        return;
+    }
     
     setIsSyncing(true);
     try {
@@ -152,7 +163,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         await batch.commit();
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
-        fetchMasterEntries(true);
+        await fetchMasterEntries(true);
         toast({ title: "Offline Data Synced" });
     } catch (error: any) {
         console.error("Batch sync failed:", error);
@@ -191,6 +202,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     isOnline, 
     updateMasterEntry, 
     loading,
+    fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
         const updated = offlineEntries.map(item => item.id === e.id ? e : item);
         setOfflineEntries(updated);

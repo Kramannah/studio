@@ -1,10 +1,9 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { NonCallDay } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { parseISO, isValid, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
+import { parseISO, isValid, isWithinInterval, format } from 'date-fns';
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, limit } from 'firebase/firestore';
@@ -80,8 +79,14 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
   }, [user, active, nonCallDays.length, selectedMonth]);
 
   useEffect(() => {
-    if (active) fetchNonCallDays();
-  }, [fetchNonCallDays, active]);
+    if (user && active) {
+        // LAZY LOADING: Only auto-fetch if it's the current month
+        const currentMonth = format(new Date(), 'yyyy-MM');
+        if (!selectedMonth || selectedMonth === currentMonth) {
+            fetchNonCallDays();
+        }
+    }
+  }, [fetchNonCallDays, active, user, selectedMonth]);
 
   const addNonCallDay = async (entry: any) => {
     if (!user || !db) return;

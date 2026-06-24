@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from './use-auth';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
-import { isToday, parseISO, isValid, isWithinInterval } from 'date-fns';
+import { isToday, parseISO, isValid, isWithinInterval, format } from 'date-fns';
 import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 
 const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v5';
@@ -80,8 +80,14 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, timeLogs.length, selectedMonth]);
 
   useEffect(() => {
-    if (active) fetchTimeLogs();
-  }, [fetchTimeLogs, active]);
+    if (user && active) {
+        // LAZY LOADING: Only auto-fetch if it's the current month
+        const currentMonth = format(new Date(), 'yyyy-MM');
+        if (!selectedMonth || selectedMonth === currentMonth) {
+            fetchTimeLogs();
+        }
+    }
+  }, [fetchTimeLogs, active, user, selectedMonth]);
 
   const addTimeIn = async (photo: string, loc: 'inbase' | 'outbase') => {
     if (!user || !db) return;

@@ -69,7 +69,7 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView), selectedMonth);
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, fetchMasterEntries: refreshEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView), selectedMonth);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);
@@ -79,10 +79,21 @@ export default function Home() {
   const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
       try {
-          await Promise.all([syncAllOfflineEntries(), refreshPlans(), fetchTimeLogs(), fetchNonCallDays()]);
-          toast({ title: "Sync Finished" });
-      } catch (e) { toast({ variant: "destructive", title: "Sync Error" }); } finally { setIsManualSyncing(false); }
-  }, [syncAllOfflineEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, toast]);
+          // Manual Sync forces a fresh fetch from the server for whatever month is currently selected
+          await Promise.all([
+              syncAllOfflineEntries(), 
+              refreshEntries(true),
+              refreshPlans(true), 
+              fetchTimeLogs(true), 
+              fetchNonCallDays(true)
+          ]);
+          toast({ title: "Sync Finished", description: "Database records updated." });
+      } catch (e) { 
+          toast({ variant: "destructive", title: "Sync Error" }); 
+      } finally { 
+          setIsManualSyncing(false); 
+      }
+  }, [syncAllOfflineEntries, refreshEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);

@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -6,7 +5,7 @@ import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
+import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 
@@ -84,8 +83,14 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, selectedMonth, masterPlans.length]);
 
   useEffect(() => {
-    if (active) fetchData();
-  }, [fetchData, active]);
+    if (user && active) {
+        // LAZY LOADING: Only auto-fetch if it's the current month
+        const currentMonth = format(new Date(), 'yyyy-MM');
+        if (!selectedMonth || selectedMonth === currentMonth) {
+            fetchData();
+        }
+    }
+  }, [fetchData, active, user, selectedMonth]);
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
