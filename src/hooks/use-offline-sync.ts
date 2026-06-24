@@ -56,12 +56,18 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   useEffect(() => {
     if (userId) {
+        // Always load offline items
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
         
+        // Load master cache or clear if switching months
         const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
         const localMaster = localStorage.getItem(cacheKey);
-        if (localMaster) setMasterEntries(JSON.parse(localMaster));
+        if (localMaster) {
+            setMasterEntries(JSON.parse(localMaster));
+        } else {
+            setMasterEntries([]);
+        }
     }
   }, [userId, selectedMonth]);
 

@@ -7,7 +7,9 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
 import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { useAuth } from './use-auth';
-import { getMonthRangeISO, parseAnyDate } from '@/lib/utils';
+import { getMonthRangeISO, parseAnyDate, safeStorageSet } from '@/lib/utils';
+
+const PLANS_STORAGE_KEY = 'sfe-plans-v5';
 
 /**
  * LOW-COST V3.2: Precision Plan Fetching.
@@ -22,6 +24,18 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+        const cacheKey = `${PLANS_STORAGE_KEY}_${user.uid}_${selectedMonth || 'current'}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            setMasterPlans(JSON.parse(cached));
+        } else {
+            setMasterPlans([]);
+        }
+    }
+  }, [user, selectedMonth]);
 
   const fetchData = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) return;
@@ -53,7 +67,7 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans fallback for NL-02/CL-01:", error.message);
+           console.warn("Plans fallback for quota resilience:", error.message);
            const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
            const snap = await getDocs(fallbackQ);
            
@@ -72,9 +86,12 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const plans = (plansSnapshot.docs || []).map((doc: any) => ({ id: doc.id, ...doc.data() } as Plan));
       const requests = (requestsSnapshot.docs || []).map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
       
-      setMasterPlans(plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")));
+      const sortedPlans = plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || ""));
+      setMasterPlans(sortedPlans);
       setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
       lastFetchedKeyRef.current = fetchKey;
+
+      safeStorageSet(`${PLANS_STORAGE_KEY}_${user.uid}_${selectedMonth || 'current'}`, JSON.stringify(sortedPlans));
     } catch (error) {
         console.error("Fetch plans failure:", error);
     } finally {

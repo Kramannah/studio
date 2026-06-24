@@ -12,8 +12,7 @@ import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
 const NCD_STORAGE_KEY = 'sfe-non-call-days-v5';
 
 /**
- * LOW-COST V2: Optimized for minimum reads by restricting fetching to a relevant window
- * (current month +/- 1 month) on the server side.
+ * LOW-COST V2: Optimized for minimum reads by restricting fetching to a relevant window.
  */
 export const useNonCallDays = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -23,16 +22,20 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
   
   const lastFetchedKeyRef = useRef<string | null>(null);
 
-  const getStoreKey = () => `${NCD_STORAGE_KEY}_${user?.uid}`;
+  const getStoreKey = () => `${NCD_STORAGE_KEY}_${user?.uid}_${selectedMonth || 'current'}`;
 
   useEffect(() => {
     if (user?.uid) {
         try {
             const cached = localStorage.getItem(getStoreKey());
-            if (cached) setNonCallDays(JSON.parse(cached));
+            if (cached) {
+                setNonCallDays(JSON.parse(cached));
+            } else {
+                setNonCallDays([]);
+            }
         } catch (e) {}
     }
-  }, [user?.uid]);
+  }, [user?.uid, selectedMonth]);
 
   const fetchNonCallDays = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) return;
@@ -43,7 +46,6 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
     setLoading(true);
 
     try {
-      // LOW-COST V2: Restricted window (3 months total)
       const { start, end } = getMonthRangeISO(selectedMonth);
       
       const q = query(
@@ -61,7 +63,6 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
           lastFetchedKeyRef.current = fetchKey;
           safeStorageSet(getStoreKey(), JSON.stringify(fetched));
       } catch (indexError) {
-          // Fallback if index missing: Fetch broadly but with lower limit
           const fallbackQ = query(collection(db, "nonCallDays"), where("userId", "==", user.uid), limit(200));
           const querySnapshot = await getDocs(fallbackQ);
           const interval = { start: parseISO(start), end: parseISO(end) };

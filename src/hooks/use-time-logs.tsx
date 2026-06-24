@@ -20,7 +20,7 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   
   const lastFetchedKeyRef = useRef<string | null>(null);
 
-  const getStoreKey = () => `${TIME_LOGS_STORAGE_KEY}_${user?.uid}`;
+  const getStoreKey = () => `${TIME_LOGS_STORAGE_KEY}_${user?.uid}_${selectedMonth || 'current'}`;
 
   useEffect(() => {
     if (user?.uid) {
@@ -30,10 +30,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
                 const logs = JSON.parse(cached);
                 setTimeLogs(logs);
                 setTodaysTimeIn(logs.find((l: TimeLog) => l.timeIn && isToday(parseISO(l.timeIn)) && !l.timeOut) || null);
+            } else {
+                setTimeLogs([]);
+                setTodaysTimeIn(null);
             }
         } catch (e) {}
     }
-  }, [user?.uid]);
+  }, [user?.uid, selectedMonth]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) return;
