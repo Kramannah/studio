@@ -69,8 +69,21 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  // LOW-COST FIX: Hook must be active in 'offline' view to process sync confirmations and refresh lists
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, fetchMasterEntries: refreshEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage', 'offline'].includes(activeView), selectedMonth);
+  // LOW-COST FIX: Sync hook handles offline entries and master list refreshes. Scoped by view and month.
+  const { 
+    offlineEntries, 
+    masterEntries, 
+    saveEntry, 
+    deleteMasterEntry, 
+    isSyncing, 
+    syncAllOfflineEntries, 
+    isOnline, 
+    updateMasterEntry, 
+    updateOfflineEntry, 
+    loading: entriesLoading, 
+    fetchMasterEntries: refreshEntries 
+  } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage', 'offline'].includes(activeView), selectedMonth);
+  
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);
@@ -88,9 +101,9 @@ export default function Home() {
               fetchTimeLogs(true), 
               fetchNonCallDays(true)
           ]);
-          toast({ title: "Sync Finished", description: "Database records updated." });
+          toast({ title: "Sync Finished", description: "All records updated from server." });
       } catch (e) { 
-          toast({ variant: "destructive", title: "Sync Error" }); 
+          toast({ variant: "destructive", title: "Sync Error", description: "Could not reach database." }); 
       } finally { 
           setIsManualSyncing(false); 
       }
@@ -114,6 +127,7 @@ export default function Home() {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
+    // If not saved online, we go to offline view to show it's pending sync
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, []);
 

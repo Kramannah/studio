@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
 import { format } from 'date-fns';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
@@ -15,17 +17,36 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
+/**
+ * Deep sanitization to ensure Firestore compatibility.
+ * Removes undefined, empty strings, and empty arrays to prevent batch failures.
+ */
 const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
-  if (!data) return cleaned;
+  if (!data || typeof data !== 'object') return cleaned;
+  
   Object.keys(data).forEach(key => {
     const val = data[key];
-    if (val === undefined || (val === null && key === 'id')) return;
-    if (Array.isArray(val) && key === 'reminderProducts') {
-      cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
+    if (val === undefined || val === "") return;
+    if (val === null && (key === 'id' || key === 'isOffline')) return;
+    
+    if (Array.isArray(val)) {
+      if (val.length === 0) return;
+      if (key === 'reminderProducts') {
+        cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
+        if (cleaned[key].length === 0) delete cleaned[key];
+        return;
+      }
+      cleaned[key] = val;
       return;
     }
-    if (val === undefined) return;
+    
+    if (typeof val === 'object' && val !== null && !(val instanceof Date)) {
+        const sub = sanitizePayload(val);
+        if (Object.keys(sub).length > 0) cleaned[key] = sub;
+        return;
+    }
+
     cleaned[key] = val;
   });
   return cleaned;
@@ -40,6 +61,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
+  const isSyncInProgress = useRef(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -56,11 +78,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   useEffect(() => {
     if (userId) {
-        // Always load offline items
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
         
-        // Load master cache or clear if switching months
         const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
         const localMaster = localStorage.getItem(cacheKey);
         if (localMaster) {
@@ -100,6 +120,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(fetched));
     } catch (error: any) {
         console.warn("PMR fetch failure:", error.message);
+        if (error.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'coverageEntries',
+                operation: 'list'
+            }));
+        }
     } finally {
         setLoading(false);
     }
@@ -123,14 +149,23 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       submittedAt: new Date().toISOString(),
     };
 
+    const sanitized = sanitizePayload(rawPayload);
+
     if (isOnline) {
         try {
-            const sanitizedPayload = sanitizePayload(rawPayload);
-            const docRef = await addDoc(collection(db!, "coverageEntries"), sanitizedPayload);
-            setMasterEntries(prev => [{ id: docRef.id, ...sanitizedPayload } as CoverageEntry, ...prev]);
+            const docRef = await addDoc(collection(db!, "coverageEntries"), sanitized);
+            const newEntry = { id: docRef.id, ...sanitized } as CoverageEntry;
+            
+            // UI Update: Only add to current list if month matches
+            const entryDate = sanitized.coverageDate ? sanitized.coverageDate.substring(0, 7) : format(new Date(), 'yyyy-MM');
+            if (!selectedMonth || entryDate === selectedMonth) {
+                setMasterEntries(prev => [newEntry, ...prev]);
+            }
+            
             toast({ title: "Report Saved" });
             return true;
         } catch (error) {
+            console.error("Direct save failed, falling back to offline:", error);
             saveEntryOffline(rawPayload);
             return false;
         }
@@ -142,62 +177,99 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const saveEntryOffline = (newEntry: Omit<CoverageEntry, 'id'>) => {
     const entryWithId = { ...newEntry, id: generateUniqueId() };
-    const updatedEntries = [entryWithId, ...offlineEntries];
-    setOfflineEntries(updatedEntries);
-    safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updatedEntries));
+    setOfflineEntries(prev => {
+        const next = [entryWithId, ...prev];
+        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
+        return next;
+    });
     toast({ title: "Saved Locally" });
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
-    if (!isOnline || !userId || !db) return;
+    if (!isOnline || !userId || !db || isSyncInProgress.current) return;
     
-    // If no offline entries, we still allow a "Force Refresh" from the DB
     if (offlineEntries.length === 0) {
         await fetchMasterEntries(true);
         return;
     }
     
+    isSyncInProgress.current = true;
     setIsSyncing(true);
+    
     try {
         const batch = writeBatch(db!);
-        offlineEntries.forEach(entry => {
-            const { id, ...dataToSync } = entry;
+        const currentOffline = [...offlineEntries];
+        
+        currentOffline.forEach(entry => {
+            const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const docRef = doc(collection(db!, "coverageEntries"));
             batch.set(docRef, sanitizePayload(dataToSync));
         });
 
         await batch.commit();
+        
+        // Success: Clear state and cache
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
         
-        // Finalize sync by force-refreshing the list for the current month
+        // Refresh master list for selected month
         await fetchMasterEntries(true);
         toast({ title: "Offline Data Synced" });
     } catch (error: any) {
         console.error("Batch sync failed:", error);
-        toast({ variant: 'destructive', title: 'Sync Failed' });
+        toast({ variant: 'destructive', title: 'Sync Failed', description: "Retrying in background..." });
+        
+        if (error.code === 'permission-denied') {
+             errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'coverageEntries',
+                operation: 'create'
+            }));
+        }
     } finally {
         setIsSyncing(false);
+        isSyncInProgress.current = false;
     }
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries]);
 
+  // Automatic background sync when online
   useEffect(() => {
-    if (isOnline && offlineEntries.length > 0) {
-        syncAllOfflineEntries();
+    if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
+        const timer = setTimeout(() => {
+            syncAllOfflineEntries();
+        }, 1000);
+        return () => clearTimeout(timer);
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    await deleteDoc(doc(db!, "coverageEntries", id));
-    setMasterEntries(prev => prev.filter(e => e.id !== id));
+    try {
+        await deleteDoc(doc(db!, "coverageEntries", id));
+        setMasterEntries(prev => prev.filter(e => e.id !== id));
+        toast({ title: "Report Deleted" });
+    } catch (e: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `coverageEntries/${id}`,
+            operation: 'delete'
+        }));
+    }
   };
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
     const sanitized = sanitizePayload(e);
-    await updateDoc(doc(db!, "coverageEntries", e.id), sanitized);
-    setMasterEntries(prev => prev.map(item => item.id === e.id ? {...item, ...sanitized} : item));
+    const { id, ...data } = sanitized;
+    try {
+        await updateDoc(doc(db!, "coverageEntries", id), data);
+        setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data} : item));
+        toast({ title: "Report Updated" });
+    } catch (err: any) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `coverageEntries/${id}`,
+            operation: 'update',
+            requestResourceData: data
+        }));
+    }
   };
 
   return { 
