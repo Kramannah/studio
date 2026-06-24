@@ -4,10 +4,11 @@
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo } from "react";
 import { Card, CardContent } from "./ui/card";
-import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2 } from "lucide-react";
+import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { PH_HOLIDAYS_2026 } from "@/lib/utils";
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -81,6 +82,17 @@ export function CallSummary({
         const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
+
+        // Calculate theoretical working days (Weekdays - Holidays)
+        const allDaysInMonth = eachDayOfInterval({ start, end });
+        const workingDays = allDaysInMonth.filter(day => {
+            const dayOfWeek = day.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            if (isWeekend) return false;
+            
+            const dateStr = format(day, 'yyyy-MM-dd');
+            return !PH_HOLIDAYS_2026[dateStr];
+        }).length;
 
         const safeEntries = Array.isArray(entries) ? entries : [];
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
@@ -158,6 +170,7 @@ export function CallSummary({
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
         return {
+            workingDays,
             activeDays,
             inbaseCalls,
             outbaseCalls,
@@ -230,7 +243,15 @@ export function CallSummary({
             <div className="space-y-6">
                 <h3 className="text-xl font-black font-headline text-white tracking-tight">Field Activity Statistics</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <SmallStatCard 
+                        title="WORKING DAYS"
+                        value={insights.workingDays}
+                        description="Business days minus holidays"
+                        icon={Briefcase}
+                        color="text-[#f59e0b]"
+                        iconBg="bg-[#f59e0b]/10"
+                    />
                     <SmallStatCard 
                         title="ACTIVE DAYS"
                         value={insights.activeDays}
