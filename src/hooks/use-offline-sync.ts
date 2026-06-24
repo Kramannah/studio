@@ -105,7 +105,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, active, selectedMonth, masterEntries.length]);
 
   useEffect(() => {
-    if (userId && active) {
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
+
+    if (userId && active && isCurrentMonth) {
         fetchMasterEntries();
     }
   }, [userId, active, selectedMonth, fetchMasterEntries]);

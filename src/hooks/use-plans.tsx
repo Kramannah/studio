@@ -100,7 +100,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, selectedMonth, masterPlans.length]);
 
   useEffect(() => {
-    if (user && active) {
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
+
+    if (user && active && isCurrentMonth) {
         fetchData();
     }
   }, [fetchData, active, user, selectedMonth]);

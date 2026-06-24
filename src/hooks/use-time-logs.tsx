@@ -83,7 +83,10 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, timeLogs.length, selectedMonth]);
 
   useEffect(() => {
-    if (user && active) {
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
+
+    if (user && active && isCurrentMonth) {
         fetchTimeLogs();
     }
   }, [fetchTimeLogs, active, user, selectedMonth]);

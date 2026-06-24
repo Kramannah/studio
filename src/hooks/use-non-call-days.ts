@@ -80,7 +80,10 @@ export const useNonCallDays = (active: boolean = true, selectedMonth?: string) =
   }, [user, active, nonCallDays.length, selectedMonth]);
 
   useEffect(() => {
-    if (user && active) {
+    const currentMonth = format(new Date(), 'yyyy-MM');
+    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
+
+    if (user && active && isCurrentMonth) {
         fetchNonCallDays();
     }
   }, [fetchNonCallDays, active, user, selectedMonth]);
