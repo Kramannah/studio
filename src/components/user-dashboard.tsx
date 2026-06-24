@@ -10,6 +10,7 @@ import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 interface UserDashboardProps {
     userId: string;
@@ -66,9 +67,13 @@ export function UserDashboard({
         }
     };
 
+    // Lazy-Loading implementation for Dashboard: Only auto-load data if it's the current month
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            onFetchUserData(userId, selectedMonth);
+            const currentMonth = format(new Date(), 'yyyy-MM');
+            if (selectedMonth === currentMonth) {
+                onFetchUserData(userId, selectedMonth);
+            }
         }
     }, [selectedMonth, userId, onFetchUserData]);
     

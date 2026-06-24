@@ -101,9 +101,13 @@ export default function AdminPage() {
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
+    // Admin Lazy-Loading logic: Only auto-fetch if it's the current month
     useEffect(() => {
         if (mounted && selectedUserId && activeTab === 'district-reports') {
-            fetchUserData(selectedUserId, selectedMonth);
+            const currentMonth = format(new Date(), 'yyyy-MM');
+            if (selectedMonth === currentMonth) {
+                fetchUserData(selectedUserId, selectedMonth);
+            }
         }
     }, [selectedUserId, selectedMonth, activeTab, fetchUserData, mounted]);
 
