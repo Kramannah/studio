@@ -69,7 +69,8 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, fetchMasterEntries: refreshEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage'].includes(activeView), selectedMonth);
+  // LOW-COST FIX: Hook must be active in 'offline' view to process sync confirmations and refresh lists
+  const { offlineEntries, masterEntries, saveEntry, deleteMasterEntry, isSyncing, syncAllOfflineEntries, isOnline, updateMasterEntry, updateOfflineEntry, loading: entriesLoading, fetchMasterEntries: refreshEntries } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage', 'offline'].includes(activeView), selectedMonth);
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);

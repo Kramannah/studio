@@ -72,7 +72,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, selectedMonth]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    if (!userId || !db || !active || !navigator.onLine) return;
+    // LOW-COST FIX: Allow manual sync (force=true) to bypass the 'active' view guard
+    if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
@@ -168,6 +169,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         await batch.commit();
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
+        
+        // Finalize sync by force-refreshing the list for the current month
         await fetchMasterEntries(true);
         toast({ title: "Offline Data Synced" });
     } catch (error: any) {

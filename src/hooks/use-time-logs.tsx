@@ -39,7 +39,8 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user?.uid, selectedMonth]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
-    if (!user || !db || !active || !navigator.onLine) return;
+    // LOW-COST FIX: Allow manual sync (force=true) to bypass the 'active' view guard
+    if (!user || !db || (!active && !force) || !navigator.onLine) return;
 
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && timeLogs.length > 0) return;
