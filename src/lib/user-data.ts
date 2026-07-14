@@ -215,6 +215,12 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Cabangon",
         email: "cjcabangon@hovidinc.com"
     },
+    "SO4jVY3fTwgHAkF0Ysi57phPCyn1": {
+        code: "DSM",
+        firstName: "Carmen Joy",
+        lastName: "Cabangon",
+        email: "cjcabangon@hovidinc.com"
+    },
     "r19lVIqk4xTtzxvbs4W0kprHSvD2": {
         code: "DSM_VIS",
         firstName: "Joey",
