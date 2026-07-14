@@ -14,7 +14,7 @@ export const HELPDESK_EMAIL = "mbustamante@hovidinc.com";
 
 // Defines which users a manager can see in their admin dashboard.
 export const MANAGER_TEAMS: Record<string, string[]> = {
-    "e11qs3XD1vW3JWHfEaJI2DXcCEj2": [
+    "1qQzrIyR2POzuITWF4p8MIfwmfk1": [
         "XNfz4EiMrIRQ4NwLlkdUXUvBzSH2",
         "mdLCjhNVnYas96aW4IkrPWip7RS2",
         "ePVOaPvZYTa9CGj0MpReVnmKhD62",
