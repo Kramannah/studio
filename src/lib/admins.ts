@@ -51,19 +51,15 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
     ],
     "MlE49ceLEDbzvKAsisKnW07fGfW2": [
         "xOQdg23cnOgLQD5IonJtFgAELa13",
-        "Hnr2ehdTK0O8PfSj7Vn2zQksqz63",
         "h2q00DOa3EM870V5RDu2NABcb213",
         "MkQwPWR0wyXrDRzIekEFMzQSu7Y2",
-        "vvLt9N5IzlYs6SHEWaR1Gfw611V2",
-        "1hJYa3yZ3AWZGBWZkCLOHlHuLRI2"
+        "vvLt9N5IzlYs6SHEWaR1Gfw611V2"
     ],
     "SO4jVY3fTwgHAkF0Ysi57phPCyn1": [
         "xOQdg23cnOgLQD5IonJtFgAELa13",
-        "Hnr2ehdTK0O8PfSj7Vn2zQksqz63",
         "h2q00DOa3EM870V5RDu2NABcb213",
         "MkQwPWR0wyXrDRzIekEFMzQSu7Y2",
-        "vvLt9N5IzlYs6SHEWaR1Gfw611V2",
-        "1hJYa3yZ3AWZGBWZkCLOHlHuLRI2"
+        "vvLt9N5IzlYs6SHEWaR1Gfw611V2"
     ],
     "r19lVIqk4xTtzxvbs4W0kprHSvD2": [
         "hM21Pxjwfma3m75pefiM7j23F4f1",

@@ -113,12 +113,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Baldoz",
         email: "mbaldoz@hovidinc.com"
     },
-    "Hnr2ehdTK0O8PfSj7Vn2zQksqz63": {
-        code: "LSL-04",
-        firstName: "Sheena Marie",
-        lastName: "Callejo",
-        email: "smcallejo@hovidinc.com"
-    },
     "h2q00DOa3EM870V5RDu2NABcb213": {
         code: "LSL-05",
         firstName: "Carmel",
@@ -262,12 +256,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Roland",
         lastName: "Ariscon",
         email: "rariscon@hovidinc.com"
-    },
-    "1hJYa3yZ3AWZGBWZkCLOHlHuLRI2": {
-        code: "LSL-01",
-        firstName: "Jessa-Lyn",
-        lastName: "Moring",
-        email: "jmoring@hovidinc.com"
     },
     "zU44zD5vnbdBy6bGHmAPNYXVYhJ2": {
         code: "MIN-07",
