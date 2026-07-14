@@ -65,7 +65,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Gonzales",
         email: "egonzales@hovidinc.com"
     },
-    "I3HkxWKsKZOPdmUT9Hi1G8JUy5t1": {
+    "Z21R5NunJ2aD6wEKNOMPCzWWmzA2": {
         code: "DSM",
         firstName: "Erwin",
         lastName: "Langit",
@@ -202,12 +202,6 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Rizza Mae",
         lastName: "Quinto",
         email: "rmquinto@hovidinc.com"
-    },
-    "MlE49ceLEDbzvKAsisKnW07fGfW2": {
-        code: "LSL-DSM",
-        firstName: "Carmen Joy",
-        lastName: "Cabangon",
-        email: "cjcabangon@hovidinc.com"
     },
     "SO4jVY3fTwgHAkF0Ysi57phPCyn1": {
         code: "DSM",
