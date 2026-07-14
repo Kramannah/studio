@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -83,6 +83,13 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
+    // DSM Dedicated Logic: If the user is a manager (but not an admin), lock the selector to their own UID
+    useEffect(() => {
+        if (mounted && isUserManager && !isUserAdmin && user?.uid) {
+            setSelectedManagerId(user.uid);
+        }
+    }, [mounted, isUserManager, isUserAdmin, user?.uid]);
+
     const { 
         allEntries: individualEntries,
         allDoctors: individualDoctors,
@@ -100,6 +107,27 @@ export default function AdminPage() {
         fetchUserData,
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
+
+    // PMR Managed List Logic
+    const managedUserIds = useMemo(() => {
+        if (!selectedManagerId) return [];
+        const hardcoded = MANAGER_TEAMS[selectedManagerId] || [];
+        const dynamic = Object.entries(profiles)
+            .filter(([_, p]) => p.managerId === selectedManagerId)
+            .map(([uid, _]) => uid);
+        return Array.from(new Set([...hardcoded, ...dynamic]));
+    }, [selectedManagerId, profiles]);
+
+    // Filter Approvals: For Managers, only show requests from their managed users
+    const filteredNonCallDays = useMemo(() => {
+        if (isUserAdmin) return allNonCallDays;
+        return allNonCallDays.filter(day => managedUserIds.includes(day.userId));
+    }, [allNonCallDays, managedUserIds, isUserAdmin]);
+
+    const filteredPlanningRequests = useMemo(() => {
+        if (isUserAdmin) return allPlanningRequests;
+        return allPlanningRequests.filter(req => managedUserIds.includes(req.userId));
+    }, [allPlanningRequests, managedUserIds, isUserAdmin]);
 
     // Admin Lazy-Loading logic: Only auto-fetch if it's the current month
     useEffect(() => {
@@ -175,15 +203,6 @@ export default function AdminPage() {
                    (a.email ?? "").toLowerCase().includes(q);
         });
     }, [accountSearch, profiles, mergedUserMap]);
-
-    const managedUserIds = useMemo(() => {
-        if (!selectedManagerId) return [];
-        const hardcoded = MANAGER_TEAMS[selectedManagerId] || [];
-        const dynamic = Object.entries(profiles)
-            .filter(([_, p]) => p.managerId === selectedManagerId)
-            .map(([uid, _]) => uid);
-        return Array.from(new Set([...hardcoded, ...dynamic]));
-    }, [selectedManagerId, profiles]);
 
     const userMapForSelection = useMemo(() => {
         const map = new Map<string, string>();
@@ -279,9 +298,9 @@ export default function AdminPage() {
         <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
             <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
                 <div className="flex items-center gap-4">
-                    <ShieldCheck className="w-8 h-8 text-primary" />
+                    {isUserAdmin ? <ShieldCheck className="w-8 h-8 text-primary" /> : <Briefcase className="w-8 h-8 text-[#10b981]" />}
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
-                        {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'Manager Dashboard'}
+                        {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'DSM Dashboard'}
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
@@ -308,7 +327,7 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
-                            {!isMarketingOrHR && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
+                            {isUserAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -363,7 +382,7 @@ export default function AdminPage() {
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
                                 <Search className="w-10 h-10 text-primary mb-4" />
                                 <AlertTitle className="font-headline text-xl">Representative Selection Required</AlertTitle>
-                                <AlertDescription className="text-lg">Please select a specific representative from the list above to verify.</AlertDescription>
+                                <AlertDescription className="text-lg">Please select a specific representative from your district list above to verify records.</AlertDescription>
                             </Alert>
                         ) : (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">
@@ -379,12 +398,12 @@ export default function AdminPage() {
                             {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
                                 <>
                                     <NonCallDayApprovals 
-                                        nonCallDays={allNonCallDays} 
+                                        nonCallDays={filteredNonCallDays} 
                                         onUpdateStatus={updateNonCallDayStatus}
                                         userMap={mergedUserMap}
                                     />
                                     <PlanningRequestApprovals 
-                                        requests={allPlanningRequests}
+                                        requests={filteredPlanningRequests}
                                         onUpdateStatus={updatePlanningRequestStatus}
                                         userMap={mergedUserMap}
                                     />
@@ -393,7 +412,7 @@ export default function AdminPage() {
                         </TabsContent>
                     )}
 
-                    {!isMarketingOrHR && (
+                    {isUserAdmin && (
                         <TabsContent value="accounts">
                             <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                                 <CardHeader className="bg-muted/30 border-b pb-6">
