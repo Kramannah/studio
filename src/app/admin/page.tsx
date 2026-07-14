@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -5,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase, CheckCircle2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -302,6 +303,12 @@ export default function AdminPage() {
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
                         {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'DSM Dashboard'}
                     </h1>
+                    {isUserManager && !isUserAdmin && (
+                        <Badge variant="outline" className="border-primary/50 text-primary bg-primary/10 ml-2 hidden sm:flex items-center gap-1.5 px-3 py-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span className="font-headline text-[10px] uppercase tracking-widest">Verified Manager</span>
+                        </Badge>
+                    )}
                 </div>
                 <div className="flex items-center gap-4">
                     <Link href="/admin/inventory">

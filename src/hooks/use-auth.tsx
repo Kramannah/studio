@@ -7,6 +7,7 @@ import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/a
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { useToast } from './use-toast';
 import type { UserProfile } from '@/lib/types';
+import { MANAGER_TEAMS } from '@/lib/admins';
 
 interface AuthContextType {
   user: User | null;
@@ -53,19 +54,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser && db) {
         const profileRef = doc(db, "userProfiles", firebaseUser.uid);
         
-        // VETERAN PROFILE HEALING: Verify existence before listening to prevent rule evaluate errors
+        // VETERAN PROFILE HEALING: Verify existence and correct roles to enable Security Rule access
         try {
             const snap = await getDoc(profileRef);
+            const isManagerUID = Object.keys(MANAGER_TEAMS).includes(firebaseUser.uid);
+            const targetRole = isManagerUID ? "Manager" : "PMR";
+
             if (!snap.exists()) {
-                console.log("Auto-generating missing profile for veteran account...");
+                console.log(`Auto-generating ${targetRole} profile for UID: ${firebaseUser.uid}`);
                 await setDoc(profileRef, {
                     userId: firebaseUser.uid,
                     email: firebaseUser.email,
                     firstName: firebaseUser.displayName?.split(' ')[0] || "User",
                     lastName: firebaseUser.displayName?.split(' ').slice(1).join(' ') || "",
-                    role: "PMR",
+                    role: targetRole,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
+            } else if (isManagerUID && snap.data()?.role !== 'Manager' && snap.data()?.role !== 'Admin') {
+                // AUTO-UPGRADE: If UID is in manager list but role is still PMR, upgrade to allow approvals
+                console.log("Upgrading profile to Manager role for Security Rule compliance...");
+                await setDoc(profileRef, { role: "Manager", updatedAt: new Date().toISOString() }, { merge: true });
             }
         } catch (e) {
             console.warn("Profile heal restricted, proceeding with limited access:", e);
