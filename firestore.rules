@@ -18,15 +18,36 @@ service cloud.firestore {
     function isManagerial() {
       if (!isSignedIn()) return false;
       
-      // Admin whitelist (No DB lookup)
+      // Admin & DSM Whitelist (Direct resolution for provisioned accounts)
       let authorizedEmails = [
         "mbustamante@hovidinc.com", 
         "admin@hovidinc.com", 
-        "wbmaralit@hovidinc.com"
+        "wbmaralit@hovidinc.com",
+        "lsldsm@hovidinc.com",
+        "gmasdsm@hovidinc.com",
+        "mnldsm@hovidinc.com",
+        "visdsm@hovidinc.com",
+        "cldsm@hovidinc.com",
+        "mindsm@hovidinc.com",
+        "nldsm@hovidinc.com"
       ];
       if (request.auth.token.get('email', '').lower() in authorizedEmails) return true;
       
-      // Profile lookup for roles
+      // Explicit UID whitelist to ensure managers can perform approvals immediately
+      let authorizedUids = [
+        "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin
+        "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
+        "SO4jVY3fTwgHAkF0Ysi57phPCyn1", // Cabangon (LSL)
+        "v0OiwmjES5ffpntunx4S6x92FC32", // Daquioag (GMAS)
+        "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", // Gonzales (MNL)
+        "qQULNmXLYSfC8x3G6UuGKjZrimh2", // Ignacio (VIS)
+        "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", // Langit (CL)
+        "mXMrQ6B740TNeC5a1LBDosCa14J2", // Ligutom (MIN)
+        "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // Nonato (NL)
+      ];
+      if (request.auth.uid in authorizedUids) return true;
+      
+      // Profile lookup for dynamic roles (Fallback)
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       return exists(profilePath) && (
         get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
@@ -62,7 +83,6 @@ service cloud.firestore {
     match /nonCallDays/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Managers need update access to change 'status' from pending to approved/rejected
       allow update: if isManagerial() || isOwner(resource.data.userId);
       allow delete: if isManagerial() || isOwner(resource.data.userId);
     }
