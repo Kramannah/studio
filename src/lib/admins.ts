@@ -1,7 +1,7 @@
-// This is a temporary list of admin UIDs.
-export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", "1qQzrIyR2POzuITWF4p8MIfwmfk1", "mXMrQ6B740TNeC5a1LBDosCa14J2", "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", "qQULNmXLYSfC8x3G6UuGKjZrimh2", "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", "v0OiwmjES5ffpntunx4S6x92FC32", "SO4jVY3fTwgHAkF0Ysi57phPCyn1"];
+// Only the true Super Admins (National/IT Level) who have global oversight and directory access.
+export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
 
-// Explicit list of administrator emails (Case-insensitive matching is handled in code)
+// Explicit list of administrator emails for secure session verification.
 export const ADMIN_EMAILS = [
     "mbustamante@hovidinc.com",
     "wbmaralit@hovidinc.com",
@@ -13,6 +13,7 @@ export const HELPDESK_EMAIL = "mbustamante@hovidinc.com";
 
 
 // Defines which users a manager can see in their admin dashboard.
+// These UIDs represent the District Sales Managers (DSMs).
 export const MANAGER_TEAMS: Record<string, string[]> = {
     "1qQzrIyR2POzuITWF4p8MIfwmfk1": [
         "XNfz4EiMrIRQ4NwLlkdUXUvBzSH2",
