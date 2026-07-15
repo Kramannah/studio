@@ -1,5 +1,5 @@
 // This is a temporary list of admin UIDs.
-export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", "1qQzrIyR2POzuITWF4p8MIfwmfk1", "mXMrQ6B740TNeC5a1LBDosCa14J2", "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", "qQULNmXLYSfC8x3G6UuGKjZrimh2", "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", "v0OiwmjES5ffpntunx4S6x92FC32", "SO4jVY3fTwgHAkF0Ysi57phPCyn1"];
 
 // Explicit list of administrator emails (Case-insensitive matching is handled in code)
 export const ADMIN_EMAILS = [
@@ -56,7 +56,8 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "xOQdg23cnOgLQD5IonJtFgAELa13",
         "h2q00DOa3EM870V5RDu2NABcb213",
         "MkQwPWR0wyXrDRzIekEFMzQSu7Y2",
-        "vvLt9N5IzlYs6SHEWaR1Gfw611V2"
+        "vvLt9N5IzlYs6SHEWaR1Gfw611V2",
+        "BjsmUvmlFdUMDKg123iibi5AxZA2"
     ],
     "qQULNmXLYSfC8x3G6UuGKjZrimh2": [
         "hM21Pxjwfma3m75pefiM7j23F4f1",

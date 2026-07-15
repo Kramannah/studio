@@ -42,7 +42,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         email: "ebaluyot@hovidinc.com"
     },
     "BjsmUvmlFdUMDKg123iibi5AxZA2": {
-        code: "LSL-06",
+        code: "GMAS-01",
         firstName: "Richelle M.",
         lastName: "Astor",
         email: "rmastor@hovidinc.com"
@@ -280,5 +280,11 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         firstName: "Rep",
         lastName: "MIN-01",
         email: "min01@hovidinc.com"
+    },
+    "GjbznZ1QOwTfHMExfjsB3QsMpjl2": {
+        code: "GMAS-02",
+        firstName: "Rep",
+        lastName: "GMAS-02",
+        email: "gmas02@hovidinc.com"
     }
 };
