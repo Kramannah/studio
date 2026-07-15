@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { cn, PH_HOLIDAYS_2026, getHolidayName } from "@/lib/utils";
+import { cn, PH_HOLIDAYS_2026, getHolidayName, parseAnyDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const ITEMS_PER_PAGE = 10;
@@ -166,6 +166,7 @@ const EntryRow = ({
 export function SubmittedList({ 
     entries = [], 
     doctors = [], 
+    nonCallDays = [],
     onDelete, 
     onEdit, 
     readOnly = false,
@@ -204,6 +205,13 @@ export function SubmittedList({
         return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
     }, []);
 
+    const nonCallDates = useMemo(() => {
+        return (nonCallDays || [])
+            .filter(n => n.status === 'approved')
+            .map(n => parseAnyDate(n.date))
+            .filter((d): d is Date => d !== null && isValid(d));
+    }, [nonCallDays]);
+
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
 
     const filtered = useMemo(() => (entries || []).filter(e => {
@@ -220,13 +228,12 @@ export function SubmittedList({
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
     
-    // Reset page when search or date selection changes
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, selectedDate, viewMode]);
 
     const paginatedEntries = useMemo(() => {
-        if (viewMode === 'calendar') return filtered; // Show all for specific day in calendar view
+        if (viewMode === 'calendar') return filtered;
         const start = (currentPage - 1) * ITEMS_PER_PAGE;
         return filtered.slice(start, start + ITEMS_PER_PAGE);
     }, [filtered, currentPage, viewMode]);
@@ -350,13 +357,15 @@ export function SubmittedList({
                             modifiers={{ 
                                 submitted: entryDates,
                                 holiday: holidayDates,
+                                nonCall: nonCallDates,
                             }}
                             modifiersStyles={{
                                 submitted: { border: '2px solid hsl(var(--primary))', fontWeight: 'bold' },
-                                holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' }
+                                holiday: { backgroundColor: 'hsl(var(--accent) / 0.3)', color: 'hsl(var(--accent-foreground))', textDecoration: 'underline' },
+                                nonCall: { backgroundColor: 'hsl(var(--destructive) / 0.2)', color: 'hsl(var(--destructive))', fontWeight: 'bold' }
                             }}
                             components={{
-                                DayContent: ({ date }) => {
+                                DayContent: ({ date, activeModifiers }) => {
                                     const dateStr = format(date, 'yyyy-MM-dd');
                                     const count = entriesCountByDate[dateStr];
                                     return (

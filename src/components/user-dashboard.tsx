@@ -67,7 +67,6 @@ export function UserDashboard({
         }
     };
 
-    // Lazy-Loading implementation for Dashboard: Only auto-load data if it's the current month
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             const currentMonth = format(new Date(), 'yyyy-MM');
@@ -138,6 +137,7 @@ export function UserDashboard({
                         <SubmittedList 
                             entries={allEntries || []} 
                             doctors={allDoctors || []} 
+                            nonCallDays={allNonCallDays || []}
                             onDelete={onDeleteEntry} 
                             onEdit={() => {}} 
                             readOnly={!isAdminView} 
