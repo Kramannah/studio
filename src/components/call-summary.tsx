@@ -5,10 +5,11 @@ import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { PH_HOLIDAYS_2026 } from "@/lib/utils";
+import { Badge } from "./ui/badge";
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -169,6 +170,30 @@ export function CallSummary({
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
+        // Aggregate Product Usage
+        const productUsage = filteredEntries.reduce((acc, entry) => {
+            const process = (name?: string, qty?: number) => {
+                const key = (name ?? "").trim();
+                if (!key) return;
+                const q = Math.round(Number(qty || 0));
+                if (!isNaN(q) && q !== 0) {
+                    acc[key] = (acc[key] || 0) + q;
+                }
+            };
+            process(entry.primarySampleName, entry.primaryProductQty);
+            process(entry.secondarySampleName, entry.secondaryProductQty);
+            if (entry.reminderProducts) {
+                entry.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
+            }
+            return acc;
+        }, {} as Record<string, number>);
+
+        const sortedProductUsage = Object.entries(productUsage)
+            .map(([name, quantity]) => ({ name, quantity }))
+            .sort((a, b) => b.quantity - a.quantity);
+
+        const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
+
         return {
             workingDays,
             activeDays,
@@ -180,6 +205,8 @@ export function CallSummary({
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
             coverageReach: { actual: actualVisitedFromList, total: totalDoctorsInList, percentage: percentageReach },
             avgCallsPerDay,
+            productUsage: sortedProductUsage,
+            totalSamplesIssued
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
@@ -231,53 +258,89 @@ export function CallSummary({
                     bgColor="bg-[#0e1d21]" 
                 />
                 <StatCard 
-                    title="EFFICIENCY" 
-                    value={insights.avgCallsPerDay} 
-                    description="Avg daily reports submitted" 
-                    icon={TrendingUp} 
-                    color="text-[#3b82f6]" 
-                    bgColor="bg-[#0f172a]" 
+                    title="SAMPLE VOLUME" 
+                    value={insights.totalSamplesIssued} 
+                    description="Total items issued this month" 
+                    icon={Pill} 
+                    color="text-[#f472b6]" 
+                    bgColor="bg-[#1e1523]" 
                 />
             </div>
 
-            <div className="space-y-6">
-                <h3 className="text-xl font-black font-headline text-white tracking-tight">Field Activity Statistics</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <SmallStatCard 
-                        title="WORKING DAYS"
-                        value={insights.workingDays}
-                        description="Business days minus holidays"
-                        icon={Briefcase}
-                        color="text-[#f59e0b]"
-                        iconBg="bg-[#f59e0b]/10"
-                    />
-                    <SmallStatCard 
-                        title="ACTIVE DAYS"
-                        value={insights.activeDays}
-                        description="Weighted days with filed reports"
-                        icon={CalendarIcon}
-                        color="text-[#10b981]"
-                        iconBg="bg-[#10b981]/10"
-                    />
-                    <SmallStatCard 
-                        title="INBASE CALLS"
-                        value={insights.inbaseCalls}
-                        description="Metropolitan area visits"
-                        icon={Building2}
-                        color="text-[#3b82f6]"
-                        iconBg="bg-[#3b82f6]/10"
-                    />
-                    <SmallStatCard 
-                        title="OUTBASE CALLS"
-                        value={insights.outbaseCalls}
-                        description="Provincial/Out-of-base visits"
-                        icon={MapPin}
-                        color="text-[#ef4444]"
-                        iconBg="bg-[#ef4444]/10"
-                    />
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <div className="xl:col-span-2 space-y-6">
+                    <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                        <CalendarIcon className="w-5 h-5 text-[#10b981]" />
+                        Field Activity Statistics
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <SmallStatCard 
+                            title="WORKING DAYS"
+                            value={insights.workingDays}
+                            description="Business days minus holidays"
+                            icon={Briefcase}
+                            color="text-[#f59e0b]"
+                            iconBg="bg-[#f59e0b]/10"
+                        />
+                        <SmallStatCard 
+                            title="ACTIVE DAYS"
+                            value={insights.activeDays}
+                            description="Weighted days with filed reports"
+                            icon={CalendarIcon}
+                            color="text-[#10b981]"
+                            iconBg="bg-[#10b981]/10"
+                        />
+                        <SmallStatCard 
+                            title="INBASE CALLS"
+                            value={insights.inbaseCalls}
+                            description="Metropolitan area visits"
+                            icon={Building2}
+                            color="text-[#3b82f6]"
+                            iconBg="bg-[#3b82f6]/10"
+                        />
+                        <SmallStatCard 
+                            title="OUTBASE CALLS"
+                            value={insights.outbaseCalls}
+                            description="Provincial/Out-of-base visits"
+                            icon={MapPin}
+                            color="text-[#ef4444]"
+                            iconBg="bg-[#ef4444]/10"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                        <PackageCheck className="w-5 h-5 text-[#f472b6]" />
+                        Sample Distribution
+                    </h3>
+                    <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden h-full">
+                        <CardContent className="p-0">
+                            {insights.productUsage.length > 0 ? (
+                                <div className="divide-y divide-white/5">
+                                    {insights.productUsage.map((item, idx) => (
+                                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                                            <div className="space-y-0.5">
+                                                <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
+                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Distributed Item</p>
+                                            </div>
+                                            <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20">
+                                                {item.quantity}
+                                            </Badge>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-12 text-center">
+                                    <Pill className="w-12 h-12 text-white/10 mx-auto mb-4" />
+                                    <p className="text-white/40 font-medium italic">No samples distributed yet.</p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>
     );
 }
+
