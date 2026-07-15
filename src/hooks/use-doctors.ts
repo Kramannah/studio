@@ -20,13 +20,11 @@ import {
   limit,
 } from "firebase/firestore";
 import { safeStorageSet } from "@/lib/utils";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v5';
 
-/**
- * LOW-COST V2: Optimized for minimum reads by using stricter limits for global masterlist
- * scans and prioritizing local cache for faster UI responsiveness.
- */
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -58,7 +56,6 @@ export const useDoctors = (active: boolean = true) => {
     try {
       let q;
       if (isUserAdmin) {
-        // LOW-COST V2: Stricter limit for global scans to prevent quota spikes
         q = query(collection(db, "doctors"), limit(5000));
       } else {
         q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(2000));
@@ -69,8 +66,13 @@ export const useDoctors = (active: boolean = true) => {
 
       setDoctors(fetchedDoctors);
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(fetchedDoctors));
-    } catch (error) {
-        console.error("Fetch doctors error:", error);
+    } catch (error: any) {
+        if (error.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'doctors',
+                operation: 'list',
+            }));
+        }
     } finally {
       setLoading(false);
     }
@@ -80,12 +82,11 @@ export const useDoctors = (active: boolean = true) => {
     if (active) fetchDoctors();
   }, [fetchDoctors, active]);
 
-  const addDoctor = useCallback(
-    async (doctorData: Omit<Doctor, "id">) => {
-      if (!user || !db) return;
-      const newDoctorData = { ...doctorData, userId: user.uid };
-      try {
-        const docRef = await addDoc(collection(db, "doctors"), newDoctorData);
+  const addDoctor = async (doctorData: Omit<Doctor, "id">) => {
+    if (!user || !db) return;
+    const newDoctorData = { ...doctorData, userId: user.uid };
+    addDoc(collection(db, "doctors"), newDoctorData)
+      .then((docRef) => {
         const created = { id: docRef.id, ...newDoctorData } as Doctor;
         setDoctors((prev) => {
             const next = [...prev, created];
@@ -93,85 +94,105 @@ export const useDoctors = (active: boolean = true) => {
             return next;
         });
         toast({ title: "Doctor Added" });
-      } catch (e) {
-        toast({ variant: 'destructive', title: "Error" });
-      }
-    },
-    [user, toast]
-  );
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'doctors',
+            operation: 'create',
+            requestResourceData: newDoctorData,
+        }));
+      });
+  };
 
-  const addDoctorsBulk = useCallback(
-    async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[]) => {
-      if (!user || !db || doctorsToAdd.length === 0) return;
-      setLoading(true);
-      try {
-        const batch = writeBatch(db);
-        doctorsToAdd.forEach(d => {
-            const docRef = doc(collection(db, "doctors"));
-            batch.set(docRef, { ...d, userId: user.uid });
-        });
-        await batch.commit();
-        await fetchDoctors();
+  const addDoctorsBulk = async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[]) => {
+    if (!user || !db || doctorsToAdd.length === 0) return;
+    setLoading(true);
+    const batch = writeBatch(db);
+    const processedDoctors: any[] = doctorsToAdd.map(d => ({ ...d, userId: user.uid }));
+    
+    processedDoctors.forEach(data => {
+        batch.set(doc(collection(db, "doctors")), data);
+    });
+
+    batch.commit()
+      .then(() => {
+        fetchDoctors();
         toast({ title: "Upload Successful" });
-      } catch (error) {
-        toast({ variant: 'destructive', title: "Upload Failed" });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [user, toast, fetchDoctors]
-  );
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'doctors',
+            operation: 'create',
+            requestResourceData: processedDoctors,
+        }));
+      })
+      .finally(() => setLoading(false));
+  };
 
-  const updateDoctor = useCallback(
-    async (doctorData: Doctor) => {
-      if (!user || !db) return;
-      const { id, userId, ...dataToUpdate } = doctorData;
-      const docRef = doc(db, "doctors", id);
-      try {
-          await updateDoc(docRef, { ...dataToUpdate, userId: user.uid });
-          setDoctors((prev) => {
+  const updateDoctor = async (doctorData: Doctor) => {
+    if (!user || !db) return;
+    const { id, userId, ...dataToUpdate } = doctorData;
+    const docRef = doc(db, "doctors", id);
+    const finalData = { ...dataToUpdate, userId: user.uid };
+    
+    updateDoc(docRef, finalData)
+      .then(() => {
+        setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
-          });
-      } catch (e) {}
-    },
-    [user]
-  );
+        });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: finalData,
+        }));
+      });
+  };
 
-  const deleteDoctor = useCallback(
-    async (id: string) => {
-      if (!user || !db) return;
-      try {
-          await deleteDoc(doc(db, "doctors", id));
-          setDoctors((prev) => {
+  const deleteDoctor = async (id: string) => {
+    if (!user || !db) return;
+    const docRef = doc(db, "doctors", id);
+    deleteDoc(docRef)
+      .then(() => {
+        setDoctors((prev) => {
             const next = prev.filter((d) => d.id !== id);
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
-          });
-          toast({ variant: "destructive", title: "Doctor Removed" });
-      } catch (e) {}
-    },
-    [user, toast]
-  );
+        });
+        toast({ variant: "destructive", title: "Doctor Removed" });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'delete',
+        }));
+      });
+  };
 
-  const deleteDoctorsBulk = useCallback(
-    async (ids: string[]) => {
-      if (!user || !db || ids.length === 0) return;
-      const batch = writeBatch(db);
-      ids.forEach((id) => batch.delete(doc(db, "doctors", id)));
-      try {
-          await batch.commit();
-          setDoctors((prev) => {
+  const deleteDoctorsBulk = async (ids: string[]) => {
+    if (!user || !db || ids.length === 0) return;
+    const batch = writeBatch(db);
+    ids.forEach((id) => batch.delete(doc(db, "doctors", id)));
+    
+    batch.commit()
+      .then(() => {
+        setDoctors((prev) => {
             const next = prev.filter((d) => !ids.includes(d.id));
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
             return next;
-          });
-          toast({ variant: "destructive", title: "Doctors Deleted" });
-      } catch (e) {}
-    },
-    [user, toast]
-  );
+        });
+        toast({ variant: "destructive", title: "Doctors Deleted" });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'doctors',
+            operation: 'delete',
+        }));
+      });
+  };
 
   return {
     doctors,

@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo } from "react";
@@ -9,6 +10,8 @@ import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, Use
 import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
 import { isValid, isWithinInterval, parseISO } from "date-fns";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
@@ -127,13 +130,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 if (snap2.docs.length > 0) return snap2.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
             } catch (e) { console.warn("Admin Stage 2 fail", e); }
 
-            // Stage 3: BROAD SCAN (Required for cases like Ian Natinga where reports might be unindexed or date-shifted)
+            // Stage 3: BROAD SCAN
             try {
                 const q3 = query(colRef, where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(4000));
                 const snap3 = await getDocs(q3);
                 return snap3.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    // If filtering by month fails to show data, return the most recent regardless of month filter for diagnostics
                     if (force) return true; 
                     return d && isValid(d) && isWithinInterval(d, interval);
                 });
@@ -196,6 +198,44 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     }
   }, [active, isAuthorized, toast]);
 
+  const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
+    if (!db) return;
+    const docRef = firestoreDoc(db!, 'nonCallDays', id);
+    const updateData = { status };
+    updateDoc(docRef, updateData)
+      .then(() => {
+        setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
+        delete ADMIN_SESSION_CACHE['approvals_list'];
+        toast({ title: `Request ${status}` });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        }));
+      });
+  };
+
+  const updatePlanningRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
+    if (!db) return;
+    const docRef = firestoreDoc(db!, 'planningRequests', id);
+    const updateData = { status };
+    updateDoc(docRef, updateData)
+      .then(() => {
+        setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
+        delete ADMIN_SESSION_CACHE['approvals_list'];
+        toast({ title: `Request ${status}` });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        }));
+      });
+  };
+
   return { 
     allEntries: individualEntries, 
     allDoctors: individualDoctors, 
@@ -210,17 +250,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     loadingApprovals, 
     fetchUserData, 
     fetchTeamApprovals,
-    updateNonCallDayStatus: async (id: string, status: 'approved' | 'rejected') => {
-        await updateDoc(firestoreDoc(db!, 'nonCallDays', id), { status });
-        setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
-        delete ADMIN_SESSION_CACHE['approvals_list'];
-        toast({ title: `Request ${status}` });
-    },
-    updatePlanningRequestStatus: async (id: string, status: 'approved' | 'rejected') => {
-        await updateDoc(firestoreDoc(db!, 'planningRequests', id), { status });
-        setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
-        delete ADMIN_SESSION_CACHE['approvals_list'];
-        toast({ title: `Request ${status}` });
-    }
+    updateNonCallDayStatus,
+    updatePlanningRequestStatus
   };
 }

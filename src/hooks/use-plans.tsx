@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -8,13 +9,11 @@ import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, 
 import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate, safeStorageSet } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const PLANS_STORAGE_KEY = 'sfe-plans-v5';
 
-/**
- * LOW-COST V3.2: Precision Plan Fetching.
- * Horizon: 3,000 records for plans (Lightweight metadata).
- */
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -38,7 +37,6 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, [user, selectedMonth]);
 
   const fetchData = useCallback(async (force = false) => {
-    // LOW-COST FIX: Allow manual sync (force=true) to bypass the 'active' view guard
     if (!user || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
@@ -120,13 +118,23 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       plannedDate: plannedDate.toISOString(),
       callType: callType as 'planned' | 'unplanned',
     };
-    try {
-        const docRef = await addDoc(collection(db, "plans"), newPlan);
+    
+    addDoc(collection(db, "plans"), newPlan)
+      .then((docRef) => {
         setMasterPlans(prev => [...prev, {id: docRef.id, ...newPlan}]);
         toast({ title: "Scheduled" });
-    } catch (error) {
-        setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlan }]);
-    }
+      })
+      .catch(async (error) => {
+        if (error.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'plans',
+                operation: 'create',
+                requestResourceData: newPlan,
+            }));
+        } else {
+            setOfflinePlans(prev => [...prev, { id: crypto.randomUUID(), ...newPlan }]);
+        }
+      });
   }, [user, toast]);
 
   const addPlansBulk = useCallback(async (doctors: Doctor[], plannedDate: Date) => {
@@ -135,38 +143,71 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     const dateISO = plannedDate.toISOString();
     const callType = (isToday(plannedDate) || isBefore(plannedDate, startOfToday())) ? 'unplanned' : 'planned';
     
-    const newPlans: Plan[] = doctors.map(doctor => {
-        const docRef = doc(collection(db, "plans"));
-        const data = { userId: user.uid, doctorId: doctor.id, doctorFirstName: doctor.firstName, doctorLastName: doctor.lastName, plannedDate: dateISO, callType: callType as 'planned' | 'unplanned' };
-        batch.set(docRef, data);
-        return { id: docRef.id, ...data };
+    const newPlans: any[] = doctors.map(doctor => ({
+      userId: user.uid,
+      doctorId: doctor.id,
+      doctorFirstName: doctor.firstName,
+      doctorLastName: doctor.lastName,
+      plannedDate: dateISO,
+      callType: callType as 'planned' | 'unplanned',
+    }));
+
+    newPlans.forEach(data => {
+        batch.set(doc(collection(db, "plans")), data);
     });
 
-    try {
-        await batch.commit();
-        setMasterPlans(prev => [...prev, ...newPlans]);
+    return batch.commit()
+      .then(() => {
+        setMasterPlans(prev => [...prev, ...newPlans.map((p, i) => ({ id: `new_${i}`, ...p }))]);
         toast({ title: "Visits Scheduled" });
+        fetchData(true);
         return true;
-    } catch (error) {
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'plans',
+            operation: 'create',
+            requestResourceData: newPlans,
+        }));
         return false;
-    }
-  }, [user, toast]);
+      });
+  }, [user, toast, fetchData]);
 
   const removePlan = async (id: string) => {
     if (!db) return;
-    await deleteDoc(doc(db, "plans", id));
-    setMasterPlans(prev => prev.filter(p => p.id !== id));
+    const docRef = doc(db, "plans", id);
+    deleteDoc(docRef)
+      .then(() => {
+        setMasterPlans(prev => prev.filter(p => p.id !== id));
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'delete',
+        }));
+      });
   };
 
   const requestPlanningPermission = async (week: Date, reason: string) => {
     if (!db || !user) return false;
-    const newRequest = { userId: user.uid, weekStartDate: week.toISOString(), reason, status: 'pending', requestedAt: new Date().toISOString() };
-    try {
-        await addDoc(collection(db, 'planningRequests'), newRequest);
-        return true;
-    } catch (e) {
+    const newRequest = { 
+        userId: user.uid, 
+        weekStartDate: week.toISOString(), 
+        reason, 
+        status: 'pending', 
+        requestedAt: new Date().toISOString() 
+    };
+    
+    return addDoc(collection(db, 'planningRequests'), newRequest)
+      .then(() => true)
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'planningRequests',
+            operation: 'create',
+            requestResourceData: newRequest,
+        }));
         return false;
-    }
+      });
   };
 
   const allPlans = useMemo(() => [...masterPlans, ...offlinePlans], [masterPlans, offlinePlans]);

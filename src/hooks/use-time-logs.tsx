@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,6 +9,8 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, limit } from 'firebase/firestore';
 import { isToday, parseISO, isValid, isWithinInterval, format } from 'date-fns';
 import { getMonthRangeISO, safeStorageSet } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const TIME_LOGS_STORAGE_KEY = 'sfe-time-logs-v5';
 
@@ -39,7 +42,6 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
   }, [user?.uid, selectedMonth]);
 
   const fetchTimeLogs = useCallback(async (force = false) => {
-    // LOW-COST FIX: Allow manual sync (force=true) to bypass the 'active' view guard
     if (!user || !db || (!active && !force) || !navigator.onLine) return;
 
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
@@ -76,8 +78,13 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
             .filter(l => l.timeIn && isValid(parseISO(l.timeIn)) && isWithinInterval(parseISO(l.timeIn), interval));
           setTimeLogs(filtered);
       }
-    } catch (serverError: any) {
-        console.error("Time logs fetch error:", serverError);
+    } catch (error: any) {
+        if (error.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'timeLogs',
+                operation: 'list',
+            }));
+        }
     } finally {
       setLoading(false);
     }
@@ -96,29 +103,41 @@ export const useTimeLogs = (active: boolean = true, selectedMonth?: string) => {
     if (!user || !db) return;
     
     const newLog = { userId: user.uid, timeIn: new Date().toISOString(), locationType: loc, timeInPhoto: photo };
-    try {
-        const docRef = await addDoc(collection(db, "timeLogs"), newLog);
+    addDoc(collection(db, "timeLogs"), newLog)
+      .then((docRef) => {
         const created = { id: docRef.id, ...newLog } as TimeLog;
         setTimeLogs(prev => [created, ...prev]);
         setTodaysTimeIn(created);
         toast({ title: "Time In Recorded" });
-    } catch (error) {
-        console.error("Time in failed:", error);
-    }
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'timeLogs',
+            operation: 'create',
+            requestResourceData: newLog,
+        }));
+      });
   };
 
   const addTimeOut = async (photo: string) => {
     if (!user || !db || !todaysTimeIn) return;
 
+    const docRef = doc(db, "timeLogs", todaysTimeIn.id);
     const updateData = { timeOut: new Date().toISOString(), timeOutPhoto: photo };
-    try {
-        await updateDoc(doc(db, "timeLogs", todaysTimeIn.id), updateData);
+    
+    updateDoc(docRef, updateData)
+      .then(() => {
         setTimeLogs(prev => prev.map(l => l.id === todaysTimeIn.id ? {...l, ...updateData} : l));
         setTodaysTimeIn(null);
         toast({ title: "Time Out Recorded" });
-    } catch (error) {
-        console.error("Time out failed:", error);
-    }
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: updateData,
+        }));
+      });
   };
 
   return { timeLogs, addTimeIn, addTimeOut, loading, todaysTimeIn, fetchTimeLogs };
