@@ -9,24 +9,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Ultra-Fast Ownership Check (No DB lookups)
-    // CRITICAL: Used to prevent Rule Engine complexity timeouts for veteran accounts
+    // Ultra-Fast Ownership Check
     function isOwner(docUserId) {
       return isSignedIn() && docUserId == request.auth.uid;
     }
 
-    // Token-based whitelist check (No DB lookups)
-    function isSpecialAuthorizedPMR() {
-      let email = request.auth.token.get('email', '').lower();
-      return email in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
-    }
-
-    // Role-based check (Database lookup - ONLY for managerial oversight)
-    function isManagerialAccess(docUserId) {
+    // Role-based check (Requester-centric for query compatibility)
+    function isManagerial() {
       if (!isSignedIn()) return false;
-      
-      // Ownership check short-circuit
-      if (docUserId == request.auth.uid) return true;
       
       // Admin whitelist (No DB lookup)
       let authorizedEmails = [
@@ -36,68 +26,69 @@ service cloud.firestore {
       ];
       if (request.auth.token.get('email', '').lower() in authorizedEmails) return true;
       
-      // Profile lookup (Only run if ownership/whitelist fails)
+      // Profile lookup for roles
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       return exists(profilePath) && (
         get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
       );
     }
 
+    // Token-based whitelist check for specific PMRs with extra access
+    function isSpecialAuthorizedPMR() {
+      let email = request.auth.token.get('email', '').lower();
+      return email in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
+    }
+
     // --- Collection Rules ---
 
     match /coverageEntries/{id} {
-      // Rule Priority: Owner > Special Whitelist > DSM/Manager
-      allow read, list: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || 
-        isSpecialAuthorizedPMR() || 
-        isManagerialAccess(resource.data.userId)
-      );
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSpecialAuthorizedPMR() || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /doctors/{id} {
-      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId));
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /plans/{id} {
-      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId));
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /nonCallDays/{id} {
-      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId));
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
-    }
-
-    match /timeLogs/{id} {
-      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId));
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
+      // Managers need update access to change 'status' from pending to approved/rejected
+      allow update: if isManagerial() || isOwner(resource.data.userId);
+      allow delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /planningRequests/{id} {
-      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerialAccess(resource.data.userId));
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerialAccess(resource.data.userId);
+      allow update: if isManagerial() || isOwner(resource.data.userId);
+      allow delete: if isManagerial() || isOwner(resource.data.userId);
+    }
+
+    match /timeLogs/{id} {
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isManagerial();
     }
 
     match /marketingSamples/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isSignedIn() && (
-        request.auth.token.get('email', '').lower() in ["mbustamante@hovidinc.com", "admin@hovidinc.com"] ||
-        isManagerialAccess('OVERRIDE_FOR_MARKETING')
-      );
+      allow write: if isManagerial();
     }
     
     match /userProfiles/{id} {
-      allow read: if isSignedIn() && (request.auth.uid == id || isManagerialAccess('MANAGERIAL_OVERRIDE'));
-      allow write: if isSignedIn() && (request.auth.uid == id || isManagerialAccess('MANAGERIAL_OVERRIDE'));
-      allow list: if isSignedIn() && (isManagerialAccess('MANAGERIAL_OVERRIDE'));
+      allow read: if isSignedIn() && (request.auth.uid == id || isManagerial());
+      allow write: if isSignedIn() && (request.auth.uid == id || isManagerial());
+      allow list: if isSignedIn() && isManagerial();
     }
   }
 }

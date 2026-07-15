@@ -16,8 +16,8 @@ import { FirestorePermissionError } from '@/firebase/errors';
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V7.1: Admin-Resilient Targeted Retrieval.
- * Specifically optimized to prevent payload crashes and ensure specific UIDs are reachable.
+ * LOW-COST V7.2: DSM-Enabled Approval Logic.
+ * Optimized for District Managers to perform approvals with full Security Rule compliance.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -66,14 +66,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchTeamApprovals = useCallback(async () => {
     if (!db || !active || !isAuthorized) return;
     
-    const cacheKey = 'approvals_list';
-    const cached = ADMIN_SESSION_CACHE[cacheKey];
-    if (cached && (Date.now() - cached.timestamp < 300000)) {
-        setAllNonCallDays(cached.ncds);
-        setAllPlanningRequests(cached.reqs);
-        return;
-    }
-
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
@@ -86,10 +78,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         setAllNonCallDays(ncds);
         setAllPlanningRequests(reqs);
-        
-        ADMIN_SESSION_CACHE[cacheKey] = { ncds, reqs, timestamp: Date.now() };
-    } catch (e) {
-        console.warn("Approval fetch failure", e);
+    } catch (e: any) {
+        if (e.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'nonCallDays/planningRequests',
+                operation: 'list',
+            }));
+        }
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
@@ -113,55 +108,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const fetchEntriesResilient = async () => {
-            const colRef = collection(db!, "coverageEntries");
-            
-            // Stage 1: Targeted Monthly Query (Coverage Date)
-            try {
-                const q1 = query(colRef, where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000));
-                const snap1 = await getDocs(q1);
-                if (snap1.docs.length > 0) return snap1.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
-            } catch (e) { console.warn("Admin Stage 1 fail", e); }
-
-            // Stage 2: Legacy Monthly Fallback (Submitted At)
-            try {
-                const q2 = query(colRef, where("userId", "==", uid), where("submittedAt", ">=", start), where("submittedAt", "<=", end), limit(2000));
-                const snap2 = await getDocs(q2);
-                if (snap2.docs.length > 0) return snap2.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
-            } catch (e) { console.warn("Admin Stage 2 fail", e); }
-
-            // Stage 3: BROAD SCAN
-            try {
-                const q3 = query(colRef, where("userId", "==", uid), orderBy("submittedAt", "desc"), limit(4000));
-                const snap3 = await getDocs(q3);
-                return snap3.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry)).filter(e => {
-                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    if (force) return true; 
-                    return d && isValid(d) && isWithinInterval(d, interval);
-                });
-            } catch (e) {
-                const q4 = query(colRef, where("userId", "==", uid), limit(5000));
-                const snap4 = await getDocs(q4);
-                return snap4.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
-            }
-        };
-
-        const fetchPlansResilient = async () => {
-            const colRef = collection(db!, "plans");
-            try {
-                const q = query(colRef, where("userId", "==", uid), where("plannedDate", ">=", start), where("plannedDate", "<=", end), limit(1000));
-                const snap = await getDocs(q);
-                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
-            } catch (e) {
-                const qFallback = query(colRef, where("userId", "==", uid), limit(3000));
-                const snap = await getDocs(qFallback);
-                return snap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
-            }
-        };
-
         const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            fetchEntriesResilient(),
-            fetchPlansResilient(),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
@@ -169,8 +118,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ]);
 
         const data = {
-            entries: (entries as CoverageEntry[]).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
-            plans: (plans as Plan[]).sort((a,b) => (b.plannedDate || "").localeCompare(a.plannedDate || "")),
+            entries: (entries as CoverageEntry[]).filter(e => {
+                const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                return d && isValid(d) && isWithinInterval(d, interval);
+            }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
+            plans: (plans as Plan[]).filter(p => {
+                const d = parseAnyDate(p.plannedDate);
+                return d && isValid(d) && isWithinInterval(d, interval);
+            }),
             logs: logs as any[],
             ncds: ncds as NonCallDay[],
             doctors: doctors as Doctor[],
@@ -186,26 +141,26 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(data.requests);
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
-
-        if (force) {
-            toast({ title: "Deep Sync Complete", description: `Found ${entries.length} reports for UID ${uid.substring(0, 6)}...` });
-        }
     } catch (e: any) {
-        console.error("Fetch Failure:", e);
-        toast({ variant: "destructive", title: "Sync Failed", description: e.message || "Could not retrieve records." });
+        if (e.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'managedPersonnelData',
+                operation: 'list',
+            }));
+        }
     } finally { 
         setLoadingIndividual(false); 
     }
-  }, [active, isAuthorized, toast]);
+  }, [active, isAuthorized]);
 
   const updateNonCallDayStatus = async (id: string, status: 'approved' | 'rejected') => {
     if (!db) return;
     const docRef = firestoreDoc(db!, 'nonCallDays', id);
     const updateData = { status };
+    
     updateDoc(docRef, updateData)
       .then(() => {
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
-        delete ADMIN_SESSION_CACHE['approvals_list'];
         toast({ title: `Request ${status}` });
       })
       .catch(async (error) => {
@@ -221,10 +176,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!db) return;
     const docRef = firestoreDoc(db!, 'planningRequests', id);
     const updateData = { status };
+    
     updateDoc(docRef, updateData)
       .then(() => {
         setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
-        delete ADMIN_SESSION_CACHE['approvals_list'];
         toast({ title: `Request ${status}` });
       })
       .catch(async (error) => {
