@@ -5,11 +5,13 @@ import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Badge } from "./ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { ScrollArea } from "./ui/scroll-area";
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -194,6 +196,24 @@ export function CallSummary({
 
         const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
 
+        // Calculate Detailed Doctor Visits for the Month
+        const visitedDoctorList = safeDoctors.map(doctor => {
+            const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
+            const actualVisits = providerVisits[nameKey] || 0;
+            const target = parseInt(String(doctor.frequency || "1x").replace('x', ''), 10) || 1;
+            return {
+                name: `${doctor.firstName} ${doctor.lastName}`,
+                specialty: doctor.specialty || "—",
+                clinic: doctor.clinic || "—",
+                target,
+                actual: actualVisits,
+                isMet: actualVisits >= target
+            };
+        }).sort((a, b) => {
+            if (a.actual !== b.actual) return b.actual - a.actual;
+            return a.name.localeCompare(b.name);
+        });
+
         return {
             workingDays,
             activeDays,
@@ -206,7 +226,8 @@ export function CallSummary({
             coverageReach: { actual: actualVisitedFromList, total: totalDoctorsInList, percentage: percentageReach },
             avgCallsPerDay,
             productUsage: sortedProductUsage,
-            totalSamplesIssued
+            totalSamplesIssued,
+            visitedDoctorList
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
@@ -307,6 +328,60 @@ export function CallSummary({
                             iconBg="bg-[#ef4444]/10"
                         />
                     </div>
+
+                    <div className="space-y-6 pt-4">
+                        <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                            <UserCheck className="w-5 h-5 text-[#3b82f6]" />
+                            Provider Visit Tracking
+                        </h3>
+                        <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
+                            <ScrollArea className="h-[400px]">
+                                <Table>
+                                    <TableHeader className="bg-white/5 sticky top-0 z-10">
+                                        <TableRow className="border-white/10 h-12">
+                                            <TableHead className="font-bold text-white/70 text-[10px] uppercase tracking-widest pl-6">Medical Provider</TableHead>
+                                            <TableHead className="font-bold text-white/70 text-[10px] uppercase tracking-widest hidden md:table-cell">Clinic/Hospital</TableHead>
+                                            <TableHead className="font-bold text-white/70 text-[10px] uppercase tracking-widest text-center">Target</TableHead>
+                                            <TableHead className="font-bold text-white/70 text-[10px] uppercase tracking-widest text-center">Actual</TableHead>
+                                            <TableHead className="font-bold text-white/70 text-[10px] uppercase tracking-widest text-right pr-6">Status</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {insights.visitedDoctorList.length > 0 ? (
+                                            insights.visitedDoctorList.map((doc, idx) => (
+                                                <TableRow key={idx} className="border-white/5 h-14 hover:bg-white/5 transition-colors">
+                                                    <TableCell className="pl-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-sm text-white">{doc.name}</span>
+                                                            <span className="text-[9px] font-black uppercase text-white/40 tracking-tight">{doc.specialty}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="hidden md:table-cell text-xs text-white/50">{doc.clinic}</TableCell>
+                                                    <TableCell className="text-center font-mono font-black text-white/40">{doc.target}x</TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge variant="secondary" className={cn("font-mono font-black h-7 px-3", doc.actual > 0 ? "bg-[#3b82f6]/20 text-[#3b82f6]" : "bg-white/5 text-white/20")}>
+                                                            {doc.actual}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        {doc.isMet ? (
+                                                            <CheckCircle2 className="w-5 h-5 text-[#10b981] ml-auto" />
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full border-2 border-white/5 ml-auto" />
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-32 text-center text-white/20 italic">No masterlist doctors identified.</TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </ScrollArea>
+                        </Card>
+                    </div>
                 </div>
 
                 <div className="space-y-6">
@@ -314,7 +389,7 @@ export function CallSummary({
                         <PackageCheck className="w-5 h-5 text-[#f472b6]" />
                         Sample Distribution
                     </h3>
-                    <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden h-full">
+                    <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden h-fit">
                         <CardContent className="p-0">
                             {insights.productUsage.length > 0 ? (
                                 <div className="divide-y divide-white/5">
@@ -343,4 +418,3 @@ export function CallSummary({
         </div>
     );
 }
-
