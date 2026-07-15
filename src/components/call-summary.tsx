@@ -2,16 +2,17 @@
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { ScrollArea } from "./ui/scroll-area";
+import { Input } from "./ui/input";
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -68,6 +69,8 @@ export function CallSummary({
     selectedMonth?: string,
     onMonthChange?: (m: string) => void
 }) {
+    const [doctorSearch, setDoctorSearch] = useState("");
+
     const months = useMemo(() => {
         const list = [];
         const currentYear = new Date().getFullYear();
@@ -231,6 +234,16 @@ export function CallSummary({
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
+    const filteredVisitedDoctorList = useMemo(() => {
+        if (!doctorSearch.trim()) return insights.visitedDoctorList;
+        const q = doctorSearch.toLowerCase().trim();
+        return insights.visitedDoctorList.filter(doc => 
+            doc.name.toLowerCase().includes(q) || 
+            doc.specialty.toLowerCase().includes(q) || 
+            doc.clinic.toLowerCase().includes(q)
+        );
+    }, [insights.visitedDoctorList, doctorSearch]);
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -330,10 +343,21 @@ export function CallSummary({
                     </div>
 
                     <div className="space-y-6 pt-4">
-                        <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
-                            <UserCheck className="w-5 h-5 text-[#3b82f6]" />
-                            Provider Visit Tracking
-                        </h3>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                                <UserCheck className="w-5 h-5 text-[#3b82f6]" />
+                                Provider Visit Tracking
+                            </h3>
+                            <div className="relative w-full md:w-72">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                                <Input 
+                                    placeholder="Search provider name..." 
+                                    value={doctorSearch}
+                                    onChange={(e) => setDoctorSearch(e.target.value)}
+                                    className="pl-10 bg-[#0a0c14] border-white/10 text-white h-10 rounded-xl focus-visible:ring-[#3b82f6]/50"
+                                />
+                            </div>
+                        </div>
                         <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
                             <ScrollArea className="h-[400px]">
                                 <Table>
@@ -347,8 +371,8 @@ export function CallSummary({
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {insights.visitedDoctorList.length > 0 ? (
-                                            insights.visitedDoctorList.map((doc, idx) => (
+                                        {filteredVisitedDoctorList.length > 0 ? (
+                                            filteredVisitedDoctorList.map((doc, idx) => (
                                                 <TableRow key={idx} className="border-white/5 h-14 hover:bg-white/5 transition-colors">
                                                     <TableCell className="pl-6">
                                                         <div className="flex flex-col">
@@ -374,7 +398,9 @@ export function CallSummary({
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="h-32 text-center text-white/20 italic">No masterlist doctors identified.</TableCell>
+                                                <TableCell colSpan={5} className="h-32 text-center text-white/20 italic">
+                                                    {doctorSearch ? "No providers match your search." : "No masterlist doctors identified."}
+                                                </TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
