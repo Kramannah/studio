@@ -9,15 +9,15 @@ import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
-import { isValid, isWithinInterval, parseISO } from "date-fns";
+import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V7.2: DSM-Enabled Approval Logic.
- * Optimized for District Managers to perform approvals with full Security Rule compliance.
+ * LOW-COST V8.0: Robust Data Retrieval Engine.
+ * Implements strict date-range filtering to prevent "missing data" caused by limit crowding.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -92,11 +92,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!uid || !db || !active || !isAuthorized) return;
     
     const { start, end } = getMonthRangeISO(selectedMonth);
-    const interval = { start: parseISO(start), end: parseISO(end) };
+    const refDate = parseISO(selectedMonth + "-01");
+    // For planning, we fetch a wider range (last month to next month) to ensure visibility
+    const planStart = startOfMonth(subMonths(refDate, 1)).toISOString();
+    const planEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
+
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) {
+    if (!force && cached && (Date.now() - cached.timestamp < 300000)) { // 5 min cache
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -108,28 +112,62 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const [entries, plans, logs, ncds, doctors, requests] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(1500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))).then(s => s.docs.map(d => ({id: d.id, ...d.data()}))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500))).then(s => s.docs.map(d => ({id: d.id, ...d.data()})))
+        // PERFORMANCE FIX: Use date-range queries in Firestore to avoid "limit crowding" by old records
+        const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
+            getDocs(query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", uid), 
+                where("coverageDate", ">=", start),
+                where("coverageDate", "<=", end),
+                limit(2000)
+            )).catch(async () => {
+                // Fallback for unindexed range
+                return getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(3000)));
+            }),
+            getDocs(query(
+                collection(db!, "plans"), 
+                where("userId", "==", uid),
+                where("plannedDate", ">=", planStart),
+                where("plannedDate", "<=", planEnd),
+                limit(2000)
+            )).catch(async () => {
+                return getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000)));
+            }),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
         ]);
 
+        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
+        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
+        const logs = logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any));
+        const ncds = ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay));
+        const doctors = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor));
+        const requests = requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest));
+
+        const interval = { start: parseISO(start), end: parseISO(end) };
+        const planInterval = { start: parseISO(planStart), end: parseISO(planEnd) };
+
         const data = {
-            entries: (entries as CoverageEntry[]).filter(e => {
+            entries: entries.filter(e => {
                 const d = parseAnyDate(e.coverageDate || e.submittedAt);
                 return d && isValid(d) && isWithinInterval(d, interval);
             }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
-            plans: (plans as Plan[]).filter(p => {
+            plans: plans.filter(p => {
                 const d = parseAnyDate(p.plannedDate);
+                return d && isValid(d) && isWithinInterval(d, planInterval);
+            }),
+            logs: logs.filter(l => {
+                const d = parseAnyDate(l.timeIn);
                 return d && isValid(d) && isWithinInterval(d, interval);
             }),
-            logs: logs as any[],
-            ncds: ncds as NonCallDay[],
-            doctors: doctors as Doctor[],
-            requests: requests as PlanningPermissionRequest[],
+            ncds: ncds.filter(n => {
+                const d = parseAnyDate(n.date);
+                return d && isValid(d) && isWithinInterval(d, interval);
+            }),
+            doctors,
+            requests,
             timestamp: Date.now()
         };
 
@@ -142,6 +180,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e: any) {
+        console.error("Admin fetch failure:", e);
         if (e.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'managedPersonnelData',
