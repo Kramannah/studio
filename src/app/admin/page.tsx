@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -64,19 +63,31 @@ export default function AdminPage() {
         setMounted(true);
     }, []);
 
-    const isUserAdmin = useMemo(() => {
+    // Super Admin: Has access to EVERYTHING including User Accounts directory
+    const isSuperAdmin = useMemo(() => {
         if (!user) return false;
         const email = (user.email ?? "").toLowerCase();
         return ADMIN_UIDS.includes(user.uid) || 
                email === 'mbustamante@hovidinc.com' || 
-               ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) ||
-               profile?.role === 'Admin';
-    }, [user, profile]);
+               ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
+    }, [user]);
+
+    // Restricted Admin: Has Admin role but is locked to their territory and cannot see Accounts
+    const isUserAdmin = useMemo(() => {
+        if (!user) return false;
+        return isSuperAdmin || profile?.role === 'Admin';
+    }, [user, isSuperAdmin, profile]);
+
+    // Check if the current user is a Territory Manager (DSM)
+    const isTerritoryManager = useMemo(() => {
+        if (!user) return false;
+        return Object.keys(MANAGER_TEAMS).includes(user.uid);
+    }, [user]);
 
     const isUserManager = useMemo(() => {
         if (!user) return false;
-        return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
-    }, [user, profile]);
+        return isTerritoryManager || profile?.role === 'Manager';
+    }, [user, isTerritoryManager, profile]);
 
     const isMarketingOrHR = useMemo(() => {
         return profile?.role === 'Marketing' || profile?.role === 'HR';
@@ -84,12 +95,12 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-    // DSM Dedicated Logic: If the user is a manager (but not an admin), lock the selector to their own UID
+    // DSM Lock Logic: If the user is a DSM (even if upgraded to Admin), lock the territory selector to them
     useEffect(() => {
-        if (mounted && isUserManager && !isUserAdmin && user?.uid) {
+        if (mounted && isTerritoryManager && user?.uid) {
             setSelectedManagerId(user.uid);
         }
-    }, [mounted, isUserManager, isUserAdmin, user?.uid]);
+    }, [mounted, isTerritoryManager, user?.uid]);
 
     const { 
         allEntries: individualEntries,
@@ -121,14 +132,14 @@ export default function AdminPage() {
 
     // Filter Approvals: For Managers, only show requests from their managed users
     const filteredNonCallDays = useMemo(() => {
-        if (isUserAdmin) return allNonCallDays;
+        if (isSuperAdmin || isMarketingOrHR) return allNonCallDays;
         return allNonCallDays.filter(day => managedUserIds.includes(day.userId));
-    }, [allNonCallDays, managedUserIds, isUserAdmin]);
+    }, [allNonCallDays, managedUserIds, isSuperAdmin, isMarketingOrHR]);
 
     const filteredPlanningRequests = useMemo(() => {
-        if (isUserAdmin) return allPlanningRequests;
+        if (isSuperAdmin || isMarketingOrHR) return allPlanningRequests;
         return allPlanningRequests.filter(req => managedUserIds.includes(req.userId));
-    }, [allPlanningRequests, managedUserIds, isUserAdmin]);
+    }, [allPlanningRequests, managedUserIds, isSuperAdmin, isMarketingOrHR]);
 
     // Admin Lazy-Loading logic: Only auto-fetch if it's the current month
     useEffect(() => {
@@ -299,14 +310,14 @@ export default function AdminPage() {
         <div className="flex flex-col min-h-screen bg-background text-foreground w-full">
             <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b md:px-6 bg-background/80 backdrop-blur-sm w-full">
                 <div className="flex items-center gap-4">
-                    {isUserAdmin ? <ShieldCheck className="w-8 h-8 text-primary" /> : <Briefcase className="w-8 h-8 text-[#10b981]" />}
+                    {isSuperAdmin ? <ShieldCheck className="w-8 h-8 text-primary" /> : <Briefcase className="w-8 h-8 text-[#10b981]" />}
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
-                        {isUserAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : 'DSM Dashboard'}
+                        {isSuperAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : isUserAdmin ? 'Admin Dashboard (DSM)' : 'DSM Dashboard'}
                     </h1>
-                    {isUserManager && !isUserAdmin && (
+                    {isTerritoryManager && (
                         <Badge variant="outline" className="border-primary/50 text-primary bg-primary/10 ml-2 hidden sm:flex items-center gap-1.5 px-3 py-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            <span className="font-headline text-[10px] uppercase tracking-widest">Verified Manager</span>
+                            <span className="font-headline text-[10px] uppercase tracking-widest">Verified Territory Lead</span>
                         </Badge>
                     )}
                 </div>
@@ -334,7 +345,7 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
-                            {isUserAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
+                            {isSuperAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
                     </div>
 
@@ -344,7 +355,7 @@ export default function AdminPage() {
                                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                                      <div className="space-y-3">
                                         <CardTitle className="font-headline text-xl">District Manager</CardTitle>
-                                        <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isUserAdmin && !isMarketingOrHR} />
+                                        <OpenSelector onValueChange={setSelectedManagerId} value={selectedManagerId} disabled={!isSuperAdmin && !isMarketingOrHR} />
                                     </div>
                                     <div className={cn("space-y-3", !selectedManagerId && "opacity-50 pointer-events-none")}>
                                         <CardTitle className="font-headline text-xl">Representative</CardTitle>
@@ -419,7 +430,7 @@ export default function AdminPage() {
                         </TabsContent>
                     )}
 
-                    {isUserAdmin && (
+                    {isSuperAdmin && (
                         <TabsContent value="accounts">
                             <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                                 <CardHeader className="bg-muted/30 border-b pb-6">
