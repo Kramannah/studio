@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -49,6 +48,7 @@ const leaveReasons = [
     "Sales/Marketing Event",
     "Paternity/Maternity Leave",
     "District Meeting",
+    "Enroute",
 ]
 
 export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }: NonCallDayDialogProps) {
