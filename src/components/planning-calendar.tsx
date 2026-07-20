@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -363,7 +362,15 @@ export function PlanningCalendar({
                                         <StatusIcon status={day.status} />
                                         <div>
                                             <p className="font-black font-headline text-lg text-orange-500 leading-none">{day.reason}</p>
-                                            <p className="text-[10px] text-muted-foreground mt-1 font-bold uppercase tracking-widest">{dayTypeLabels[day.dayType]}</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">{dayTypeLabels[day.dayType]}</p>
+                                                {day.remarks && (
+                                                    <>
+                                                        <span className="text-white/20 text-[10px]">•</span>
+                                                        <p className="text-[10px] text-white/60 italic lowercase">{day.remarks}</p>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <Badge variant="outline" className="capitalize font-black border-2">{day.status}</Badge>
