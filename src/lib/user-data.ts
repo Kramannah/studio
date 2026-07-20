@@ -29,6 +29,12 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         lastName: "Clement",
         email: "maclement@hovidinc.com"
     },
+    "vc3H0WWzmWQcEdjiTV4nzgd3neB2": {
+        code: "GMAS-04",
+        firstName: "Mikka Amielle",
+        lastName: "Clement",
+        email: "maclement@hovidinc.com"
+    },
     "l5GMEE0OxpMOObd5qguyJtrVUi42": {
         code: "GMAS-03",
         firstName: "Jacquelyn",
