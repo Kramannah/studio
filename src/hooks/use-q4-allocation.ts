@@ -20,9 +20,18 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 
+// SINGLETON CACHE: Shared across all instances of the hook to prevent redundant master list downloads
+let cachedGlobalSamples: Q4Allocation[] | null = null;
+let lastGlobalFetch = 0;
+const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+
+// USAGE CACHE: Stores calculated balances per user to prevent heavy re-scans of coverageEntries
+const USAGE_CACHE: Record<string, { used: Record<string, number>, timestamp: number }> = {};
+const USAGE_CACHE_TTL = 5 * 60 * 1000; // 5 Minutes
+
 /**
  * Hook for managing inventory allocations.
- * Supports Global Template and Individual PMR Overrides.
+ * Supports Global Template and Individual PMR Overrides with optimized caching.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user } = useAuth();
@@ -40,99 +49,115 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     setLoading(true);
 
     try {
-        // 1. Fetch Global Template
-        const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
-            .catch(async (error) => {
-                const permissionError = new FirestorePermissionError({
-                    path: 'marketingSamples',
-                    operation: 'list',
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-                throw error;
-            });
-
-        const masterList = samplesSnapshot.docs.map(docSnap => {
-            const data = docSnap.data();
-            return { 
-                id: docSnap.id, 
-                prodGroupProdSubGroup: (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim(), 
-                displayMaterialName: (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim(), 
-                allocationQuantity: Number(data.allocationQuantity || 0) 
-            } as Q4Allocation;
-        });
-
-        // 2. Fetch Individual Overrides for effective user (Only if session exists)
-        let finalAllocations = [...masterList];
-        if (effectiveUserId) {
-            const individualSnapshot = await getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
+        const now = Date.now();
+        
+        // 1. Resolve Global Template (with Cache)
+        let masterList: Q4Allocation[] = [];
+        if (!force && cachedGlobalSamples && (now - lastGlobalFetch < GLOBAL_CACHE_TTL)) {
+            masterList = cachedGlobalSamples;
+        } else {
+            const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
                 .catch(async (error) => {
                     const permissionError = new FirestorePermissionError({
-                        path: 'individualAllocations',
+                        path: 'marketingSamples',
                         operation: 'list',
                     } satisfies SecurityRuleContext);
                     errorEmitter.emit('permission-error', permissionError);
                     throw error;
                 });
 
-            const overrides = new Map<string, number>();
-            individualSnapshot.docs.forEach(d => {
-                const data = d.data() as IndividualAllocation;
-                if (data.sampleId) overrides.set(data.sampleId, data.quantity);
+            masterList = samplesSnapshot.docs.map(docSnap => {
+                const data = docSnap.data();
+                return { 
+                    id: docSnap.id, 
+                    prodGroupProdSubGroup: (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim(), 
+                    displayMaterialName: (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim(), 
+                    allocationQuantity: Number(data.allocationQuantity || 0) 
+                } as Q4Allocation;
             });
-
-            if (overrides.size > 0) {
-                finalAllocations = masterList.map(sample => ({
-                    ...sample,
-                    allocationQuantity: overrides.has(sample.id) ? overrides.get(sample.id)! : sample.allocationQuantity,
-                    isOverridden: overrides.has(sample.id)
-                }));
-            }
-        }
-
-        setAllocations(finalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase())));
-
-        // 3. Fetch Usage if requested
-        if (includeUsage && effectiveUserId) {
-            const used: Record<string, number> = {};
-            const startOfYear = getStartOfYearISO();
-            const startOfYearDate = parseISO(startOfYear);
             
-            const entriesCol = collection(db!, "coverageEntries");
-            const q = query(entriesCol, where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000));
-
-            const entriesSnap = await getDocs(q).catch(async (error) => {
-                const permissionError = new FirestorePermissionError({
-                    path: 'coverageEntries',
-                    operation: 'list',
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-                throw error;
-            });
-
-            entriesSnap.docs.forEach(d => {
-                const data = d.data() as CoverageEntry;
-                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
-                if (!cDate || !isAfter(cDate, startOfYearDate)) return;
-
-                const process = (name?: string, qty?: number) => {
-                    const key = String(name ?? "").toLowerCase().trim();
-                    if (!key) return;
-                    const qVal = Math.round(Number(qty || 0));
-                    if (!isNaN(qVal) && qVal !== 0) {
-                        used[key] = (used[key] || 0) + qVal;
-                    }
-                };
-                process(data.primarySampleName, data.primaryProductQty);
-                process(data.secondarySampleName, data.secondaryProductQty);
-                if (data.reminderProducts) {
-                    data.reminderProducts.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
-                }
-            });
-            setUsedQuantities(used);
+            cachedGlobalSamples = masterList;
+            lastGlobalFetch = now;
         }
+
+        // 2. Parallel Resolve: Individual Overrides and Usage
+        const fetchPromises: Promise<any>[] = [];
+
+        // Individual Overrides Promise
+        if (effectiveUserId) {
+            fetchPromises.push(
+                getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
+                    .then(snap => {
+                        const overrides = new Map<string, number>();
+                        snap.docs.forEach(d => {
+                            const data = d.data() as IndividualAllocation;
+                            if (data.sampleId) overrides.set(data.sampleId, data.quantity);
+                        });
+                        return overrides;
+                    })
+                    .catch(() => new Map<string, number>())
+            );
+        } else {
+            fetchPromises.push(Promise.resolve(new Map<string, number>()));
+        }
+
+        // Usage Promise (with Cache)
+        const usageCacheKey = effectiveUserId || 'anonymous';
+        if (includeUsage && effectiveUserId) {
+            const cachedUsage = USAGE_CACHE[usageCacheKey];
+            if (!force && cachedUsage && (now - cachedUsage.timestamp < USAGE_CACHE_TTL)) {
+                fetchPromises.push(Promise.resolve(cachedUsage.used));
+            } else {
+                const startOfYear = getStartOfYearISO();
+                const startOfYearDate = parseISO(startOfYear);
+                
+                fetchPromises.push(
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000)))
+                        .then(entriesSnap => {
+                            const used: Record<string, number> = {};
+                            entriesSnap.docs.forEach(d => {
+                                const data = d.data() as CoverageEntry;
+                                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                                if (!cDate || !isAfter(cDate, startOfYearDate)) return;
+
+                                const process = (name?: string, qty?: number) => {
+                                    const key = String(name ?? "").toLowerCase().trim();
+                                    if (!key) return;
+                                    const qVal = Math.round(Number(qty || 0));
+                                    if (!isNaN(qVal) && qVal !== 0) {
+                                        used[key] = (used[key] || 0) + qVal;
+                                    }
+                                };
+                                process(data.primarySampleName, data.primaryProductQty);
+                                process(data.secondarySampleName, data.secondaryProductQty);
+                                if (data.reminderProducts) {
+                                    data.reminderProducts.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
+                                }
+                            });
+                            USAGE_CACHE[usageCacheKey] = { used, timestamp: Date.now() };
+                            return used;
+                        })
+                        .catch(() => ({}))
+                );
+            }
+        } else {
+            fetchPromises.push(Promise.resolve({}));
+        }
+
+        const [overrides, used] = await Promise.all(fetchPromises);
+
+        // 3. Merge and Sort
+        const finalAllocations = masterList.map(sample => ({
+            ...sample,
+            allocationQuantity: overrides.has(sample.id) ? overrides.get(sample.id)! : sample.allocationQuantity,
+            isOverridden: overrides.has(sample.id)
+        })).sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+
+        setAllocations(finalAllocations);
+        setUsedQuantities(used);
 
     } catch (error) {
-        // Errors already emitted via catch-and-emit pattern inside sub-queries
+        console.error("Allocation fetch error:", error);
     } finally {
         setLoading(false);
     }
@@ -157,6 +182,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
     
+    // Invalidate master cache on write
+    lastGlobalFetch = 0;
     performFetch(true);
     return true;
   };
@@ -201,6 +228,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
 
+    lastGlobalFetch = 0;
     performFetch(true);
     return true;
   };
@@ -219,6 +247,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
 
+    lastGlobalFetch = 0;
     performFetch(true);
     return true;
   };

@@ -13,11 +13,12 @@ import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonth
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
+// ADMIN SESSION CACHE: Prevents costly re-fetching when switching between admin tabs or PMR profiles
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V8.0: Robust Data Retrieval Engine.
- * Implements strict date-range filtering to prevent "missing data" caused by limit crowding.
+ * LOW-COST V9.0: High-Performance Data Retrieval Engine.
+ * Optimized for speed with parallel resolving and aggressive session caching.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -69,24 +70,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'nonCallDays',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
             getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'planningRequests',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                })
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
@@ -95,7 +80,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setAllNonCallDays(ncds);
         setAllPlanningRequests(reqs);
     } catch (e) {
-        // Errors emitted via catch blocks
+        console.error("Approval fetch error", e);
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
@@ -110,7 +95,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && cached && (Date.now() - cached.timestamp < 300000)) { // 5 min cache
+    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { // 10 min cache
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -122,92 +107,42 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
+        // Run all queries in parallel for maximum speed
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'coverageEntries',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", planStart), where("plannedDate", "<=", planEnd), limit(2000)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'plans',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'timeLogs',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'nonCallDays',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'doctors',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                }),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", planStart), where("plannedDate", "<=", planEnd), limit(2000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
-                .catch(async (e) => {
-                    const permissionError = new FirestorePermissionError({
-                        path: 'planningRequests',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext);
-                    errorEmitter.emit('permission-error', permissionError);
-                    throw e;
-                })
         ]);
-
-        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
-        const plans = plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan));
-        const logs = logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any));
-        const ncds = ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay));
-        const doctors = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor));
-        const requests = requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest));
 
         const interval = { start: parseISO(start), end: parseISO(end) };
         const planInterval = { start: parseISO(planStart), end: parseISO(planEnd) };
 
         const data = {
-            entries: entries.filter(e => {
-                const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                return d && isValid(d) && isWithinInterval(d, interval);
-            }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
-            plans: plans.filter(p => {
-                const d = parseAnyDate(p.plannedDate);
-                return d && isValid(d) && isWithinInterval(d, planInterval);
-            }),
-            logs: logs.filter(l => {
-                const d = parseAnyDate(l.timeIn);
-                return d && isValid(d) && isWithinInterval(d, interval);
-            }),
-            ncds: ncds.filter(n => {
-                const d = parseAnyDate(n.date);
-                return d && isValid(d) && isWithinInterval(d, interval);
-            }),
-            doctors,
-            requests,
+            entries: entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry))
+                .filter(e => {
+                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
+            plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan))
+                .filter(p => {
+                    const d = parseAnyDate(p.plannedDate);
+                    return d && isValid(d) && isWithinInterval(d, planInterval);
+                }),
+            logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any))
+                .filter(l => {
+                    const d = parseAnyDate(l.timeIn);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                }),
+            ncds: ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay))
+                .filter(n => {
+                    const d = parseAnyDate(n.date);
+                    return d && isValid(d) && isWithinInterval(d, interval);
+                }),
+            doctors: doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor)),
+            requests: requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest)),
             timestamp: Date.now()
         };
 
@@ -220,7 +155,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        // Errors handled via catch blocks
+        console.error("User data fetch failed", e);
     } finally { 
         setLoadingIndividual(false); 
     }
@@ -231,7 +166,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const docRef = firestoreDoc(db!, 'nonCallDays', id);
     const updateData = { status };
     
-    // CRITICAL: NO await here. Chain .catch() and emit error.
     updateDoc(docRef, updateData)
       .then(() => {
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
@@ -252,7 +186,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const docRef = firestoreDoc(db!, 'planningRequests', id);
     const updateData = { status };
     
-    // CRITICAL: NO await here. Chain .catch() and emit error.
     updateDoc(docRef, updateData)
       .then(() => {
         setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
