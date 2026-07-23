@@ -20,7 +20,8 @@ import {
     Package,
     Plus,
     Edit,
-    Globe
+    Globe,
+    FileSpreadsheet
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +30,7 @@ import type { Q4Allocation, MarketingSample } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
+import { format } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +100,31 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
         XLSX.writeFile(workbook, `Marketing_Samples_Template.xlsx`);
+    };
+
+    const handleExportExcel = () => {
+        const dataToExport = filteredSamples.map(sample => {
+            const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
+            const used = usedQuantities[name.toLowerCase()] || 0;
+            const allocated = sample.allocationQuantity || 0;
+            const balance = Math.max(0, allocated - used);
+            return {
+                "Product Group": (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim(),
+                "Material Name": name,
+                "Allocated Quantity": allocated,
+                "Used Quantity": used,
+                "Remaining Balance": balance
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Report");
+        
+        const fileName = `Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        toast({ title: "Report Exported", description: "The Excel file has been generated successfully." });
     };
 
     const handleUploadClick = () => fileInputRef.current?.click();
@@ -196,6 +223,9 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                             onChange={(e) => setSearch(e.target.value)}
                                         />
                                     </div>
+                                    <Button variant="outline" size="icon" onClick={handleExportExcel} className="h-11 w-11 shrink-0 rounded-xl" title="Export to Excel">
+                                        <FileSpreadsheet className="h-5 w-5" />
+                                    </Button>
                                     {selectedIds.length > 0 && !readOnly && (
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
