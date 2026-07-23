@@ -11,7 +11,7 @@ import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
 import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
@@ -69,8 +69,24 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'nonCallDays',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
             getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'planningRequests',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                })
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
@@ -78,13 +94,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
         setAllNonCallDays(ncds);
         setAllPlanningRequests(reqs);
-    } catch (e: any) {
-        if (e.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'nonCallDays/planningRequests',
-                operation: 'list',
-            }));
-        }
+    } catch (e) {
+        // Errors emitted via catch blocks
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
@@ -93,7 +104,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     const { start, end } = getMonthRangeISO(selectedMonth);
     const refDate = parseISO(selectedMonth + "-01");
-    // For planning, we fetch a wider range (last month to next month) to ensure visibility
     const planStart = startOfMonth(subMonths(refDate, 1)).toISOString();
     const planEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
 
@@ -112,31 +122,61 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // PERFORMANCE FIX: Use date-range queries in Firestore to avoid "limit crowding" by old records
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(
-                collection(db!, "coverageEntries"), 
-                where("userId", "==", uid), 
-                where("coverageDate", ">=", start),
-                where("coverageDate", "<=", end),
-                limit(2000)
-            )).catch(async () => {
-                // Fallback for unindexed range
-                return getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(3000)));
-            }),
-            getDocs(query(
-                collection(db!, "plans"), 
-                where("userId", "==", uid),
-                where("plannedDate", ">=", planStart),
-                where("plannedDate", "<=", planEnd),
-                limit(2000)
-            )).catch(async () => {
-                return getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(3000)));
-            }),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'coverageEntries',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", planStart), where("plannedDate", "<=", planEnd), limit(2000)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'plans',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'timeLogs',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'nonCallDays',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'doctors',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                }),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
+                .catch(async (e) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'planningRequests',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw e;
+                })
         ]);
 
         const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry));
@@ -179,14 +219,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualPlanningRequests(data.requests);
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
-    } catch (e: any) {
-        console.error("Admin fetch failure:", e);
-        if (e.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'managedPersonnelData',
-                operation: 'list',
-            }));
-        }
+    } catch (e) {
+        // Errors handled via catch blocks
     } finally { 
         setLoadingIndividual(false); 
     }
@@ -197,17 +231,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const docRef = firestoreDoc(db!, 'nonCallDays', id);
     const updateData = { status };
     
+    // CRITICAL: NO await here. Chain .catch() and emit error.
     updateDoc(docRef, updateData)
       .then(() => {
         setAllNonCallDays(prev => prev.map(d => d.id === id ? {...d, status} : d));
         toast({ title: `Request ${status}` });
       })
       .catch(async (error) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
+        const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'update',
           requestResourceData: updateData,
-        }));
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       });
   };
 
@@ -216,17 +252,19 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const docRef = firestoreDoc(db!, 'planningRequests', id);
     const updateData = { status };
     
+    // CRITICAL: NO await here. Chain .catch() and emit error.
     updateDoc(docRef, updateData)
       .then(() => {
         setAllPlanningRequests(prev => prev.map(r => r.id === id ? {...r, status} : r));
         toast({ title: `Request ${status}` });
       })
       .catch(async (error) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
+        const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'update',
           requestResourceData: updateData,
-        }));
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       });
   };
 

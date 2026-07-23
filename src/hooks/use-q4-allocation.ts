@@ -1,15 +1,27 @@
 
-"use client"
+'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  addDoc, 
+  deleteDoc, 
+  writeBatch, 
+  limit 
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 
 const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
@@ -26,26 +38,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(active);
   
-  const usageFetchedForRef = useRef<string | null>(null);
-
-  useEffect(() => {
-      if (effectiveUserId) {
-          try {
-              const localAlloc = localStorage.getItem(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`);
-              const localUsed = localStorage.getItem(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`);
-              if (localAlloc) setAllocations(JSON.parse(localAlloc));
-              if (localUsed) setUsedQuantities(JSON.parse(localUsed));
-          } catch (e) {}
-      }
-  }, [effectiveUserId]);
-
   const performFetch = useCallback(async (force = false) => {
-    if (!db || !active) {
-        setLoading(false);
-        return;
-    }
-
-    if (!navigator.onLine) {
+    if (!db || !active || !navigator.onLine) {
         setLoading(false);
         return;
     }
@@ -56,12 +50,11 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         // 1. Fetch Global Template (Marketing Samples)
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (error) => {
-                if (error.code === 'permission-denied') {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: 'marketingSamples',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext));
-                }
+                const permissionError = new FirestorePermissionError({
+                    path: 'marketingSamples',
+                    operation: 'list',
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
                 throw error;
             });
 
@@ -82,7 +75,14 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             const assignmentSnap = await getDocs(query(
                 collection(db!, "individualAllocations"), 
                 where("userId", "==", effectiveUserId)
-            ));
+            )).catch(async (error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: 'individualAllocations',
+                    operation: 'list',
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+                throw error;
+            });
             
             const assignments = assignmentSnap.docs.map(d => ({ id: d.id, ...d.data() } as IndividualAllocation));
             setIndividualAssignments(assignments);
@@ -106,7 +106,14 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                 const entriesCol = collection(db!, "coverageEntries");
                 const q = query(entriesCol, where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000));
 
-                const entriesSnap = await getDocs(q);
+                const entriesSnap = await getDocs(q).catch(async (error) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'coverageEntries',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw error;
+                });
 
                 entriesSnap.docs.forEach(d => {
                     const data = d.data() as CoverageEntry;
@@ -116,9 +123,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     const process = (name?: string, qty?: number) => {
                         const key = String(name ?? "").toLowerCase().trim();
                         if (!key) return;
-                        const q = Math.round(Number(qty || 0));
-                        if (!isNaN(q) && q !== 0) {
-                            used[key] = (used[key] || 0) + q;
+                        const qVal = Math.round(Number(qty || 0));
+                        if (!isNaN(qVal) && qVal !== 0) {
+                            used[key] = (used[key] || 0) + qVal;
                         }
                     };
                     process(data.primarySampleName, data.primaryProductQty);
@@ -128,7 +135,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     }
                 });
                 setUsedQuantities(used);
-                usageFetchedForRef.current = effectiveUserId;
                 safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(used));
             }
         }
@@ -139,8 +145,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(finalAllocations));
         }
 
-    } catch (error: any) {
-        console.error("Inventory Fetch Error:", error);
+    } catch (error) {
+        // Errors handled via catch-and-emit pattern
     } finally {
         setLoading(false);
     }
@@ -155,13 +161,15 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
+    // CRITICAL: NO await here. Chain .catch() and emit error.
     setDoc(docRef, rest, { merge: true })
-      .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
           path: docRef.path,
           operation: 'write',
           requestResourceData: rest,
-        } satisfies SecurityRuleContext));
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       });
     
     performFetch(true);
@@ -177,7 +185,15 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
           where("sampleId", "==", sampleId)
       );
       
-      const snap = await getDocs(q);
+      const snap = await getDocs(q).catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+              path: 'individualAllocations',
+              operation: 'list',
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
+          throw error;
+      });
+
       const payload = {
           userId: effectiveUserId,
           sampleId,
@@ -187,20 +203,25 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
       if (!snap.empty) {
           const docRef = doc(db!, "individualAllocations", snap.docs[0].id);
-          updateDoc(docRef, payload).catch(e => {
-              errorEmitter.emit('permission-error', new FirestorePermissionError({
+          // CRITICAL: NO await here.
+          updateDoc(docRef, payload).catch(async (error) => {
+              const permissionError = new FirestorePermissionError({
                   path: docRef.path,
                   operation: 'update',
                   requestResourceData: payload
-              }));
+              } satisfies SecurityRuleContext);
+              errorEmitter.emit('permission-error', permissionError);
           });
       } else {
-          addDoc(collection(db!, "individualAllocations"), payload).catch(e => {
-              errorEmitter.emit('permission-error', new FirestorePermissionError({
+          const colRef = collection(db!, "individualAllocations");
+          // CRITICAL: NO await here.
+          addDoc(colRef, payload).catch(async (error) => {
+              const permissionError = new FirestorePermissionError({
                   path: 'individualAllocations',
                   operation: 'create',
                   requestResourceData: payload
-              }));
+              } satisfies SecurityRuleContext);
+              errorEmitter.emit('permission-error', permissionError);
           });
       }
 
@@ -211,11 +232,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const deleteAssignment = async (assignmentId: string) => {
       if (!db) return false;
       const docRef = doc(db!, "individualAllocations", assignmentId);
-      deleteDoc(docRef).catch(e => {
-          errorEmitter.emit('permission-error', new FirestorePermissionError({
+      // CRITICAL: NO await here.
+      deleteDoc(docRef).catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
               path: docRef.path,
               operation: 'delete'
-          }));
+          } satisfies SecurityRuleContext);
+          errorEmitter.emit('permission-error', permissionError);
       });
       performFetch(true);
       return true;
@@ -226,13 +249,15 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const batch = writeBatch(db!);
     data.forEach(item => batch.set(doc(collection(db!, "marketingSamples")), item));
     
+    // CRITICAL: NO await here.
     batch.commit()
       .catch(async (error) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
+        const permissionError = new FirestorePermissionError({
             path: 'marketingSamples',
-            operation: 'create',
+            operation: 'write',
             requestResourceData: data,
-        } satisfies SecurityRuleContext));
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       });
 
     performFetch(true);
@@ -244,12 +269,14 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const batch = writeBatch(db!);
     ids.forEach(id => batch.delete(doc(db!, "marketingSamples", id)));
     
+    // CRITICAL: NO await here.
     batch.commit()
       .catch(async (error) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
+        const permissionError = new FirestorePermissionError({
             path: 'marketingSamples',
             operation: 'delete',
-        } satisfies SecurityRuleContext));
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
       });
 
     performFetch(true);

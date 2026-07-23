@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
@@ -6,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 // SINGLETON CACHE: Prevents re-reading the entire user list on every tab switch
 let cachedProfiles: Record<string, UserProfile> | null = null;
@@ -32,10 +33,11 @@ export function useUserProfiles() {
         try {
             const snapshot = await getDocs(query(collection(db, "userProfiles")))
               .catch(async (e: FirestoreError) => {
-                  errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  const permissionError = new FirestorePermissionError({
                       path: 'userProfiles',
                       operation: 'list',
-                  }));
+                  } satisfies SecurityRuleContext);
+                  errorEmitter.emit('permission-error', permissionError);
                   throw e;
               });
               
@@ -49,7 +51,7 @@ export function useUserProfiles() {
             lastFetch = now;
             setProfiles(data);
         } catch (error) {
-            console.error("Profiles fetch error:", error);
+            // Error already emitted via catch block
         } finally {
             setLoading(false);
         }
@@ -66,23 +68,25 @@ export function useUserProfiles() {
             ...data,
             updatedAt: new Date().toISOString()
         };
-        try {
-            await setDoc(docRef, payload, { merge: true });
-            const newProfile = { id: data.userId, ...payload } as UserProfile;
+        
+        // CRITICAL: NO await here. Chain .catch() and emit error.
+        setDoc(docRef, payload, { merge: true })
+            .catch(async (error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'write',
+                    requestResourceData: payload,
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+            });
             
-            if (cachedProfiles) cachedProfiles[data.userId] = newProfile;
-            setProfiles(prev => ({ ...prev, [data.userId]: newProfile }));
-            
-            toast({ title: "Account Created", description: "Successfully added new personnel record." });
-            return true;
-        } catch (serverError: any) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: docRef.path,
-                operation: 'write',
-                requestResourceData: payload,
-            }));
-            return false;
-        }
+        // Optimistic update
+        const newProfile = { id: data.userId, ...payload } as UserProfile;
+        if (cachedProfiles) cachedProfiles[data.userId] = newProfile;
+        setProfiles(prev => ({ ...prev, [data.userId]: newProfile }));
+        
+        toast({ title: "Account Created", description: "Successfully added new personnel record." });
+        return true;
     };
 
     const updateProfile = async (userId: string, firstName: string, lastName: string, managerId?: string, email?: string, role?: 'Admin' | 'Manager' | 'PMR' | 'Marketing' | 'HR') => {
@@ -105,47 +109,48 @@ export function useUserProfiles() {
         if (email) payload.email = email;
         if (role) payload.role = role;
 
-        try {
-            await setDoc(docRef, payload, { merge: true });
-            const updatedProfile = { id: userId, ...payload } as UserProfile;
+        // CRITICAL: NO await here. Chain .catch() and emit error.
+        setDoc(docRef, payload, { merge: true })
+            .catch(async (error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'write',
+                    requestResourceData: payload,
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+            });
             
-            if (cachedProfiles) cachedProfiles[userId] = updatedProfile;
-            setProfiles(prev => ({ ...prev, [userId]: updatedProfile }));
-            
-            toast({ title: "Account Updated", description: "The employee record has been successfully modified." });
-            return true;
-        } catch (serverError: any) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: docRef.path,
-                operation: 'write',
-                requestResourceData: payload,
-            }));
-            return false;
-        }
+        const updatedProfile = { id: userId, ...payload } as UserProfile;
+        if (cachedProfiles) cachedProfiles[userId] = updatedProfile;
+        setProfiles(prev => ({ ...prev, [userId]: updatedProfile }));
+        
+        toast({ title: "Account Updated", description: "The employee record has been successfully modified." });
+        return true;
     };
 
     const deleteProfile = async (userId: string) => {
         if (!db) return false;
         const docRef = doc(db, "userProfiles", userId);
-        try {
-            await deleteDoc(docRef);
-            
-            if (cachedProfiles) delete cachedProfiles[userId];
-            setProfiles(prev => {
-                const next = { ...prev };
-                delete next[userId];
-                return next;
+        
+        // CRITICAL: NO await here. Chain .catch() and emit error.
+        deleteDoc(docRef)
+            .catch(async (error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'delete',
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             });
             
-            toast({ variant: 'destructive', title: "Account Removed", description: "Personnel record has been deleted." });
-            return true;
-        } catch (serverError: any) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: docRef.path,
-                operation: 'delete',
-            }));
-            return false;
-        }
+        if (cachedProfiles) delete cachedProfiles[userId];
+        setProfiles(prev => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+        });
+        
+        toast({ variant: 'destructive', title: "Account Removed", description: "Personnel record has been deleted." });
+        return true;
     };
 
     return { profiles, loading, addProfile, updateProfile, deleteProfile, refetch: () => fetchProfiles(true) };
