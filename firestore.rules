@@ -13,11 +13,11 @@ service cloud.firestore {
       return isSignedIn() && docUserId == request.auth.uid;
     }
 
-    // Robust Administrative Check (Safe boolean expression)
+    // Robust Administrative Check using standard logic chain
     function isManagerial() {
       return isSignedIn() && (
         // Email Whitelist (DSM/Admin)
-        (request.auth.token.get('email', '').toLower() in [
+        (request.auth.token.email != null && request.auth.token.email.toLower() in [
           "mbustamante@hovidinc.com", 
           "admin@hovidinc.com", 
           "wbmaralit@hovidinc.com",
@@ -43,7 +43,7 @@ service cloud.firestore {
         ]) ||
         // Profile-based dynamic role check
         (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"])
+         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing", "HR"])
       );
     }
 
