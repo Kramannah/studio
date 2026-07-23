@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -96,12 +95,6 @@ export function UserDashboard({
                             Reports
                         </TabsTrigger>
                         <TabsTrigger 
-                            value="allocation" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center"
-                        >
-                            Samples
-                        </TabsTrigger>
-                        <TabsTrigger 
                             value="planning" 
                             className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
                         >
@@ -112,6 +105,12 @@ export function UserDashboard({
                             className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
                         >
                             Masterlist
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="allocation" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center"
+                        >
+                            Samples
                         </TabsTrigger>
                     </TabsList>
 
@@ -153,10 +152,6 @@ export function UserDashboard({
                             onMonthChange={onMonthChange}
                         />
                     </TabsContent>
-
-                    <TabsContent value="allocation" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <Q4AllocationView readOnly={true} userId={userId} />
-                    </TabsContent>
                     
                     <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <PlanningCalendar 
@@ -188,6 +183,10 @@ export function UserDashboard({
                             onDeleteDoctorsBulk={onDeleteDoctorsBulk} 
                             readOnly={true} 
                         />
+                    </TabsContent>
+
+                    <TabsContent value="allocation" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <Q4AllocationView readOnly={true} userId={userId} />
                     </TabsContent>
                 </div>
             </Tabs>
