@@ -108,7 +108,7 @@ export function UserDashboard({
                         </TabsTrigger>
                         <TabsTrigger 
                             value="allocation" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center"
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
                         >
                             Samples
                         </TabsTrigger>
@@ -186,7 +186,7 @@ export function UserDashboard({
                     </TabsContent>
 
                     <TabsContent value="allocation" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <Q4AllocationView readOnly={!isAdminView} userId={userId} />
+                        <Q4AllocationView readOnly={true} userId={userId} />
                     </TabsContent>
                 </div>
             </Tabs>
