@@ -13,11 +13,11 @@ service cloud.firestore {
       return isSignedIn() && docUserId == request.auth.uid;
     }
 
-    // Robust Administrative Check using standard logic chain
-    // Refactored to prevent circular dependencies and handle null tokens gracefully
+    // Robust Administrative Check
+    // Prioritizes whitelists to avoid recursion during profile lookups
     function isManagerial() {
       return isSignedIn() && (
-        // 1. Explicit UID whitelist (Checked first to avoid recursion for Super Admins)
+        // 1. Explicit UID whitelist (Super Admins)
         (request.auth.uid in [
           "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin (mbustamante)
           "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
@@ -29,7 +29,7 @@ service cloud.firestore {
           "mXMrQ6B740TNeC5a1LBDosCa14J2", // DSM
           "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // DSM
         ]) ||
-        // 2. Email Whitelist (Handled with null safety)
+        // 2. Email Whitelist (Null-safe check)
         (request.auth.token.email != null && request.auth.token.email.toLower() in [
           "mbustamante@hovidinc.com", 
           "admin@hovidinc.com", 
@@ -42,15 +42,15 @@ service cloud.firestore {
           "mindsm@hovidinc.com",
           "nldsm@hovidinc.com"
         ]) ||
-        // 3. Profile-based dynamic role check
-        // Only attempted if not already verified by hardcoded lists
+        // 3. Dynamic Profile Role Check
         (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing", "HR"])
       );
     }
 
     match /coverageEntries/{id} {
-      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
@@ -96,8 +96,12 @@ service cloud.firestore {
     }
     
     match /userProfiles/{id} {
-      allow read: if isSignedIn() && (request.auth.uid == id || isManagerial());
+      // BREAK RECURSION: Allow any signed-in user to get (read) individual profiles.
+      // Dynamic role lookups in isManagerial() call get() on this path.
+      allow read: if isSignedIn();
+      // Only Admins or the User themselves can modify profiles
       allow write: if isSignedIn() && (request.auth.uid == id || isManagerial());
+      // Listing the directory remains restricted to management
       allow list: if isSignedIn() && isManagerial();
     }
   }

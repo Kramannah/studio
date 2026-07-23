@@ -66,7 +66,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         if (effectiveUserId) {
             const individualSnapshot = await getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
                 .catch(async (error) => {
-                    // Diagnostic logging for Permission Error
                     const permissionError = new FirestorePermissionError({
                         path: 'individualAllocations',
                         operation: 'list',
@@ -78,7 +77,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             const overrides = new Map<string, number>();
             individualSnapshot.docs.forEach(d => {
                 const data = d.data() as IndividualAllocation;
-                overrides.set(data.sampleId, data.quantity);
+                if (data.sampleId) overrides.set(data.sampleId, data.quantity);
             });
 
             if (overrides.size > 0) {
@@ -133,7 +132,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
     } catch (error) {
-        // Errors handled via catch-and-emit pattern
+        // Errors already emitted via catch-and-emit pattern inside sub-queries
     } finally {
         setLoading(false);
     }
