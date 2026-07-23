@@ -151,9 +151,12 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   }, [profiles]);
 
   const getDisplayName = (p: any) => {
-      const name = `${p.lastName || ''}, ${p.firstName || ''}`.trim();
-      if (name === ',' || !name) return p.email || "Unknown User";
-      return name;
+    const last = (p.lastName || "").trim();
+    const first = (p.firstName || "").trim();
+    if (!last && !first) return p.email || "Unknown User";
+    if (!last) return first;
+    if (!first) return last;
+    return `${last}, ${first}`;
   };
 
   return (
@@ -229,7 +232,11 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                         </Button>
                                     </FormControl>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <PopoverContent 
+                                    className="w-[--radix-popover-trigger-width] p-0" 
+                                    align="start"
+                                    onOpenAutoFocus={(e) => e.preventDefault()}
+                                >
                                     <Command shouldFilter={true}>
                                         <CommandInput placeholder="Type name, email, or code..." />
                                         <CommandList>
@@ -240,7 +247,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                                         key={p.userId}
                                                         value={`${p.lastName} ${p.firstName} ${p.code || ''} ${p.email || ''}`.toLowerCase()}
                                                         onSelect={() => {
-                                                            form.setValue("userId", p.userId);
+                                                            field.onChange(p.userId);
                                                             setPopoverOpen(false);
                                                         }}
                                                     >
