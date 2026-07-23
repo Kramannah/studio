@@ -10,7 +10,6 @@ import { useQ4Allocation } from './use-q4-allocation';
 export const useMarketingSamples = () => {
   const { allocations, usedQuantities, loading, refetch } = useQ4Allocation();
   
-  // Maps the shared Q4Allocation data to the MarketingSample format
   return { 
     marketingSamples: allocations.map(a => ({
         id: a.id,
@@ -25,7 +24,7 @@ export const useMarketingSamples = () => {
 };
 
 export const useAdminMarketingSamples = () => {
-  const { addAllocationsBulk, deleteAllocationsBulk, refetch } = useQ4Allocation();
+  const { addAllocationsBulk, saveAllocation, deleteAllocationsBulk, refetch } = useQ4Allocation();
 
   return { 
     addMarketingSamplesBulk: async (data: any[]) => {
@@ -38,18 +37,19 @@ export const useAdminMarketingSamples = () => {
     }, 
     deleteSample: async (id: string) => deleteAllocationsBulk([id]), 
     updateSample: async (id: string, data: any) => {
-        return addAllocationsBulk([{
+        return saveAllocation({
+            id,
             prodGroupProdSubGroup: data.productGroup,
             displayMaterialName: data.materialName,
             allocationQuantity: data.allocationQuantity
-        }]);
+        });
     },
     addSample: async (data: any) => {
-        return addAllocationsBulk([{
+        return saveAllocation({
             prodGroupProdSubGroup: data.productGroup,
             displayMaterialName: data.materialName,
             allocationQuantity: data.allocationQuantity
-        }]);
+        });
     }
   };
 };

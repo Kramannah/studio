@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input"
 import type { MarketingSample } from "@/lib/types"
 import { useAdminMarketingSamples } from "@/hooks/use-marketing-samples"
-import { Loader2 } from "lucide-react"
+import { Loader2, Globe } from "lucide-react"
 
 const formSchema = z.object({
   productGroup: z.string().min(1, "Product group is required"),
@@ -92,9 +92,11 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-headline">{sample ? "Edit Sample Product" : "Add New Sample Product"}</DialogTitle>
+          <DialogTitle className="font-headline flex items-center gap-2">
+            {sample ? "Edit Global Assignment" : "Assign New Global Sample"}
+          </DialogTitle>
           <DialogDescription>
-            Enter the details for the marketing material below.
+            Setting this sample will make it available to <strong>all PMRs</strong> in the system.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -104,7 +106,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
               name="productGroup"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Product Group</FormLabel>
+                  <FormLabel className="font-headline">Product Category</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. Antihistamine" {...field} />
                   </FormControl>
@@ -117,7 +119,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
               name="materialName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Material Name</FormLabel>
+                  <FormLabel className="font-headline">Material / Sample Name</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g. PQ3_Frutos Candy" {...field} />
                   </FormControl>
@@ -130,7 +132,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
               name="allocationQuantity"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Allocation Quantity</FormLabel>
+                  <FormLabel className="font-headline">Quantity Assigned (Per PMR)</FormLabel>
                   <FormControl>
                     <Input type="number" {...field} />
                   </FormControl>
@@ -138,9 +140,17 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 </FormItem>
               )}
             />
+            
+            <div className="bg-muted p-3 rounded-lg flex items-start gap-3">
+                <Globe className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest leading-tight">
+                    This allocation acts as a template. Every active representative will receive this quantity in their individual balance.
+                </p>
+            </div>
+
             <DialogFooter className="pt-4">
               <Button type="submit" disabled={isSubmitting} className="w-full h-12 font-headline text-lg">
-                {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : "Save Product"}
+                {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Updating Records...</> : sample ? "Update Global Assignment" : "Assign to All PMRs"}
               </Button>
             </DialogFooter>
           </form>

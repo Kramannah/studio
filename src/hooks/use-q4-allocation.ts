@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc, addDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
@@ -17,8 +17,8 @@ const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * LOW-COST V2.1: Optimized read logic with resilient fallback for usage scans.
- * Guarded against managerial broad scans for standard PMRs.
+ * LOW-COST V2.2: Optimized read logic with resilient fallback for usage scans.
+ * Supports single and bulk master list updates.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
@@ -105,7 +105,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             
             let entriesSnap;
             try {
-                // DEFENSIVE: Strict check to avoid permission errors on PMR accounts
                 if (isManagerial) {
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
@@ -121,7 +120,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     ));
                 }
             } catch (indexError) {
-                // Fallback for unindexed broad scans (UID-locked for PMRs)
                 const q = isManagerial 
                     ? query(collection(db!, "coverageEntries"), limit(3000)) 
                     : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(3000));
@@ -163,6 +161,23 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (active) performFetch();
   }, [performFetch, active]);
 
+  const saveAllocation = async (data: Omit<Q4Allocation, 'id'> & { id?: string }) => {
+    if (!db) return false;
+    const { id, ...rest } = data;
+    try {
+        if (id) {
+            await updateDoc(doc(db!, "marketingSamples", id), rest);
+        } else {
+            await addDoc(collection(db!, "marketingSamples"), rest);
+        }
+        await performFetch(true);
+        return true;
+    } catch (e) {
+        console.error("Save allocation error:", e);
+        return false;
+    }
+  };
+
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
@@ -193,6 +208,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         usageFetchedRef.current = false;
         performFetch(true);
     },
+    saveAllocation,
     addAllocationsBulk,
     deleteAllocationsBulk
   };

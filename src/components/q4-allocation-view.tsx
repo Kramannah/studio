@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect } from "react";
@@ -18,14 +19,17 @@ import {
     ChevronRight,
     TrendingUp,
     Package,
-    ShieldAlert
+    Plus,
+    Edit,
+    Globe
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
-import type { Q4Allocation } from "@/lib/types";
+import type { Q4Allocation, MarketingSample } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MarketingSampleDialog } from "./marketing-sample-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +47,6 @@ interface Q4AllocationViewProps {
 }
 
 export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    // includeUsage is only true for the PMR view (readOnly=true)
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, readOnly);
     const { toast } = useToast();
     
@@ -54,6 +57,9 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     const [mounted, setMounted] = useState(false);
     const itemsPerPage = 15;
     
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [editingSample, setEditingSample] = useState<MarketingSample | undefined>(undefined);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -64,7 +70,6 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         if (!mounted || !allocations) return [];
         const q = (search ?? "").toString().toLowerCase().trim();
         
-        // Deduplicate allocations by ID to prevent key errors
         const uniqueMap = new Map<string, Q4Allocation>();
         allocations.forEach(s => { if (s && s.id) uniqueMap.set(s.id, s); });
 
@@ -142,6 +147,21 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
         reader.readAsArrayBuffer(file);
     };
 
+    const handleEdit = (sample: Q4Allocation) => {
+        setEditingSample({
+            id: sample.id,
+            productGroup: sample.prodGroupProdSubGroup,
+            materialName: sample.displayMaterialName,
+            allocationQuantity: sample.allocationQuantity
+        });
+        setIsDialogOpen(true);
+    };
+
+    const handleAdd = () => {
+        setEditingSample(undefined);
+        setIsDialogOpen(true);
+    };
+
     if (!mounted) {
         return (
             <div className="flex flex-col items-center justify-center p-20 gap-4">
@@ -159,8 +179,10 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                         <CardHeader className="bg-muted/30 border-b pb-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
-                                    <CardTitle className="text-2xl font-black font-headline text-primary">Marketing Samples</CardTitle>
-                                    <CardDescription>Real-time distribution tracking for 2026.</CardDescription>
+                                    <CardTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
+                                        <Package className="w-6 h-6" /> Master Material List
+                                    </CardTitle>
+                                    <CardDescription>Items defined here are automatically assigned to all PMRs in the system.</CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2 w-full max-w-md">
                                     <div className="relative flex-1">
@@ -202,11 +224,13 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             {!readOnly && <TableHead className="w-12 pl-6" />}
                                             <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
-                                            {readOnly && (
+                                            {readOnly ? (
                                                 <>
                                                     <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
                                                     <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
                                                 </>
+                                            ) : (
+                                                <TableHead className="text-right pr-6">Actions</TableHead>
                                             )}
                                         </TableRow>
                                     </TableHeader>
@@ -238,7 +262,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-center font-mono font-bold">{sample.allocationQuantity}</TableCell>
-                                                        {readOnly && (
+                                                        {readOnly ? (
                                                             <>
                                                                 <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
                                                                 <TableCell className="text-center">
@@ -247,6 +271,12 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                     </Badge>
                                                                 </TableCell>
                                                             </>
+                                                        ) : (
+                                                            <TableCell className="text-right pr-6">
+                                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
+                                                                    <Edit className="w-4 h-4 text-muted-foreground" />
+                                                                </Button>
+                                                            </TableCell>
                                                         )}
                                                     </TableRow>
                                                 );
@@ -273,10 +303,18 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
 
                 {!readOnly && (
                     <div className="space-y-6">
+                        <div className="grid grid-cols-1 gap-4">
+                            <Button onClick={handleAdd} className="h-14 text-lg font-black font-headline shadow-lg rounded-2xl gap-2 w-full">
+                                <Plus className="w-5 h-5" /> Assign Single Item
+                            </Button>
+                        </div>
+
                         <Card className="border-2 shadow-lg bg-muted/20">
                             <CardHeader>
-                                <CardTitle className="font-black font-headline text-lg">Bulk Sample Upload</CardTitle>
-                                <CardDescription>Update the master material list via Excel.</CardDescription>
+                                <CardTitle className="font-black font-headline text-lg flex items-center gap-2">
+                                    <PackagePlus className="w-5 h-5 text-primary" /> Bulk Global Upload
+                                </CardTitle>
+                                <CardDescription>Mass assign items to all PMRs via Excel.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <Button onClick={handleDownloadTemplate} variant="outline" className="w-full border-2 h-12 font-headline">
@@ -288,12 +326,29 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 </Button>
                             </CardContent>
                         </Card>
+
+                        <div className="bg-primary/5 border-2 border-primary/20 p-4 rounded-2xl space-y-2">
+                            <div className="flex items-center gap-2 text-primary font-black uppercase text-[10px] tracking-widest">
+                                <Globe className="w-3 h-3" /> System Logic
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                Any item added here will be immediately available to <strong>every representative</strong> in the system. Usage is tracked individually per PMR against this global allocation.
+                            </p>
+                        </div>
+
                         <Button variant="outline" onClick={() => refetch()} disabled={dataLoading} className="w-full border-2 h-12 font-headline shadow-sm">
-                            <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh All
+                            <RefreshCw className={cn("mr-2 h-4 w-4", dataLoading && "animate-spin")} /> Refresh Database
                         </Button>
                     </div>
                 )}
             </div>
+
+            <MarketingSampleDialog 
+                isOpen={isDialogOpen} 
+                onOpenChange={setIsDialogOpen} 
+                onSave={refetch} 
+                sample={editingSample}
+            />
         </div>
     );
 }
