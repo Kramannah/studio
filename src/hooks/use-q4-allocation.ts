@@ -2,29 +2,27 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Q4Allocation, CoverageEntry } from '@/lib/types';
+import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-let cachedAllocations: Q4Allocation[] | null = null;
-let lastAllocationFetch: number = 0;
-const ALLOCATION_CACHE_TTL = 30 * 60 * 1000;
 const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
  * Hook for managing inventory allocations.
- * Supports global templates and individual PMR bag overrides.
+ * Supports global templates and explicit individual PMR assignments.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
+  const [individualAssignments, setIndividualAssignments] = useState<IndividualAllocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(active);
   
@@ -79,24 +77,27 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         let finalAllocations = globalAllocations;
 
-        // 2. Handle Individual Overrides if a specific user is targeted
+        // 2. Fetch Individual Assignments
         if (effectiveUserId) {
-            const overrideSnap = await getDocs(query(
+            const assignmentSnap = await getDocs(query(
                 collection(db!, "individualAllocations"), 
                 where("userId", "==", effectiveUserId)
             ));
             
-            const overridesMap = new Map();
-            overrideSnap.docs.forEach(d => overridesMap.set(d.data().sampleId, d.data().quantity));
+            const assignments = assignmentSnap.docs.map(d => ({ id: d.id, ...d.data() } as IndividualAllocation));
+            setIndividualAssignments(assignments);
+
+            const assignmentsMap = new Map();
+            assignments.forEach(a => assignmentsMap.set(a.sampleId, a.quantity));
 
             finalAllocations = globalAllocations.map(s => {
-                if (overridesMap.has(s.id)) {
-                    return { ...s, allocationQuantity: overridesMap.get(s.id), isOverridden: true };
+                if (assignmentsMap.has(s.id)) {
+                    return { ...s, allocationQuantity: assignmentsMap.get(s.id), isOverridden: true };
                 }
                 return s;
             });
 
-            // 3. Fetch Targeted User Usage
+            // 3. Fetch Usage
             if (includeUsage) {
                 const used: Record<string, number> = {};
                 const startOfYear = getStartOfYearISO();
@@ -167,7 +168,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     return true;
   };
 
-  const saveOverride = async (sampleId: string, quantity: number) => {
+  const saveAssignment = async (sampleId: string, quantity: number) => {
       if (!db || !effectiveUserId) return false;
       
       const q = query(
@@ -203,6 +204,19 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
           });
       }
 
+      performFetch(true);
+      return true;
+  };
+
+  const deleteAssignment = async (assignmentId: string) => {
+      if (!db) return false;
+      const docRef = doc(db!, "individualAllocations", assignmentId);
+      deleteDoc(docRef).catch(e => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+              path: docRef.path,
+              operation: 'delete'
+          }));
+      });
       performFetch(true);
       return true;
   };
@@ -244,11 +258,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
   return { 
     allocations, 
+    individualAssignments,
     usedQuantities, 
     loading, 
     refetch: () => performFetch(true),
     saveAllocation,
-    saveOverride,
+    saveAssignment,
+    deleteAssignment,
     addAllocationsBulk,
     deleteAllocationsBulk
   };

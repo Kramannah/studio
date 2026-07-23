@@ -73,14 +73,14 @@ export default function AdminInventoryPage() {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
                         <div className="space-y-1">
                             <h2 className="text-3xl font-black font-headline text-primary">Inventory Management</h2>
-                            <p className="text-muted-foreground">Manage global distribution templates or set individual PMR sample quantities.</p>
+                            <p className="text-muted-foreground">Manage global distribution templates or set individual PMR bag assignments.</p>
                         </div>
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[400px]">
                             <TabsTrigger value="global" className="rounded-lg font-headline flex items-center gap-2">
                                 <Package className="w-4 h-4" /> Global Template
                             </TabsTrigger>
                             <TabsTrigger value="individual" className="rounded-lg font-headline flex items-center gap-2">
-                                <Users className="w-4 h-4" /> PMR Overrides
+                                <Users className="w-4 h-4" /> Individual Bags
                             </TabsTrigger>
                         </TabsList>
                     </div>

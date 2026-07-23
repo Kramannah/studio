@@ -7,23 +7,21 @@ import { useQ4Allocation } from '@/hooks/use-q4-allocation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserCheck, RefreshCw, Edit, Save, X, Globe, UserCircle2, Loader2 } from 'lucide-react';
+import { Search, UserCheck, RefreshCw, Plus, Trash2, UserCircle2, Loader2, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { IndividualAllocationDialog } from './individual-allocation-dialog';
 
 export function IndividualAllocationManager() {
     const { profiles, loading: profilesLoading } = useUserProfiles();
     const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
     const [search, setSearch] = useState('');
-    const [editingSampleId, setEditingSampleId] = useState<string | null>(null);
-    const [editValue, setEditValue] = useState<string>('');
-    const [isSaving, setIsSubmitting] = useState(false);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
     const { toast } = useToast();
 
-    const { allocations, usedQuantities, loading: dataLoading, saveOverride, refetch } = useQ4Allocation(true, true, selectedUserId);
+    const { allocations: globalAllocations, individualAssignments, loading: dataLoading, saveAssignment, deleteAssignment, refetch } = useQ4Allocation(true, false, selectedUserId);
 
     const pmrList = useMemo(() => {
         return Object.values(profiles)
@@ -31,41 +29,42 @@ export function IndividualAllocationManager() {
             .sort((a, b) => (a.lastName || "").localeCompare(b.lastName || ""));
     }, [profiles]);
 
-    const filteredAllocations = useMemo(() => {
+    const activeAssignments = useMemo(() => {
         const q = search.toLowerCase().trim();
-        return allocations.filter(a => 
-            a.displayMaterialName.toLowerCase().includes(q) || 
-            a.prodGroupProdSubGroup.toLowerCase().includes(q)
-        );
-    }, [allocations, search]);
+        return individualAssignments.map(a => {
+            const sample = globalAllocations.find(s => s.id === a.sampleId);
+            return {
+                ...a,
+                materialName: sample?.displayMaterialName || "Deleted Product",
+                productGroup: sample?.prodGroupProdSubGroup || "Unknown Group"
+            };
+        }).filter(a => 
+            a.materialName.toLowerCase().includes(q) || 
+            a.productGroup.toLowerCase().includes(q)
+        ).sort((a, b) => a.materialName.localeCompare(b.materialName));
+    }, [individualAssignments, globalAllocations, search]);
 
-    const handleStartEdit = (sampleId: string, currentQty: number) => {
-        setEditingSampleId(sampleId);
-        setEditValue(currentQty.toString());
+    const handleAddAssignment = async (sampleId: string, quantity: number) => {
+        if (!selectedUserId) return;
+        const success = await saveAssignment(sampleId, quantity);
+        if (success) {
+            toast({ title: "Assignment Saved", description: "Representative bag updated." });
+            setIsDialogOpen(false);
+        }
     };
 
-    const handleSaveOverride = async (sampleId: string) => {
-        if (!selectedUserId) return;
-        const qty = parseInt(editValue, 10);
-        if (isNaN(qty)) {
-            toast({ variant: "destructive", title: "Invalid Quantity" });
-            return;
-        }
-
-        setIsSubmitting(true);
-        const success = await saveOverride(sampleId, qty);
+    const handleDelete = async (id: string) => {
+        const success = await deleteAssignment(id);
         if (success) {
-            toast({ title: "Override Saved", description: "Representative bag updated." });
-            setEditingSampleId(null);
+            toast({ variant: "destructive", title: "Assignment Removed" });
         }
-        setIsSubmitting(false);
     };
 
     return (
         <Card className="border-none shadow-none bg-transparent">
             <CardHeader className="px-6 py-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-3">
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+                    <div className="space-y-3 w-full lg:max-w-md">
                         <CardTitle className="font-headline text-xl flex items-center gap-2">
                             <UserCheck className="text-primary" /> Target Representative
                         </CardTitle>
@@ -82,110 +81,101 @@ export function IndividualAllocationManager() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className={cn("space-y-3", !selectedUserId && "opacity-50 pointer-events-none")}>
-                        <CardTitle className="font-headline text-xl">Quick Search</CardTitle>
-                        <div className="relative">
+
+                    <div className={cn("flex flex-col sm:flex-row items-center gap-3 w-full lg:max-w-2xl", !selectedUserId && "opacity-50 pointer-events-none")}>
+                        <div className="relative flex-1 w-full">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                            <Input 
-                                placeholder="Search by product or group..." 
-                                className="pl-10 h-12 border-2"
+                            <input 
+                                placeholder="Search assigned materials..." 
+                                className="pl-10 h-12 w-full border-2 rounded-xl focus:outline-none focus:border-primary bg-background"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
                         </div>
+                        <Button 
+                            onClick={() => setIsDialogOpen(true)} 
+                            className="h-12 rounded-xl font-headline px-6 shadow-lg whitespace-nowrap w-full sm:w-auto"
+                        >
+                            <Plus className="mr-2 h-5 w-5" /> Assign Product
+                        </Button>
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="px-6">
                 {!selectedUserId ? (
-                    <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed rounded-3xl bg-muted/20">
-                        <Users className="w-12 h-12 text-muted-foreground mb-4" />
-                        <p className="text-muted-foreground font-headline">Please select a representative to manage their bag overrides.</p>
+                    <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed rounded-[2rem] bg-muted/20">
+                        <UserCircle2 className="w-16 h-16 text-muted-foreground/30 mb-4" />
+                        <p className="text-muted-foreground font-headline text-lg">Select a representative to view their specific bag assignments.</p>
                     </div>
                 ) : (
-                    <div className="border-2 rounded-3xl overflow-hidden bg-background shadow-xl">
+                    <div className="border-2 rounded-[2rem] overflow-hidden bg-background shadow-xl">
                         <Table>
                             <TableHeader className="bg-muted/30">
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Material Name</TableHead>
-                                    <TableHead className="text-center font-bold">Allocation Status</TableHead>
-                                    <TableHead className="text-center font-bold">PMR Usage</TableHead>
-                                    <TableHead className="text-center font-bold">Remaining</TableHead>
-                                    <TableHead className="text-right pr-6">Manage Bag</TableHead>
+                                    <TableHead className="font-bold">Product Group</TableHead>
+                                    <TableHead className="text-center font-bold">Assigned Quantity</TableHead>
+                                    <TableHead className="text-right pr-6">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {dataLoading && filteredAllocations.length === 0 ? (
-                                    <TableRow><TableCell colSpan={5} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                                ) : filteredAllocations.length > 0 ? (
-                                    filteredAllocations.map((sample) => {
-                                        const isEditing = editingSampleId === sample.id;
-                                        const used = usedQuantities[sample.displayMaterialName.toLowerCase()] || 0;
-                                        const bal = Math.max(0, sample.allocationQuantity - used);
-                                        
-                                        return (
-                                            <TableRow key={sample.id} className="h-20 hover:bg-muted/30 transition-colors">
-                                                <TableCell className="pl-6">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm">{sample.displayMaterialName}</span>
-                                                        <span className="text-[10px] font-black uppercase text-primary opacity-60 tracking-widest">{sample.prodGroupProdSubGroup}</span>
+                                {dataLoading ? (
+                                    <TableRow><TableCell colSpan={4} className="h-64 text-center"><RefreshCw className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                ) : activeAssignments.length > 0 ? (
+                                    activeAssignments.map((assignment) => (
+                                        <TableRow key={assignment.id} className="h-20 hover:bg-muted/10 transition-colors">
+                                            <TableCell className="pl-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center">
+                                                        <Package className="w-5 h-5 text-primary/40" />
                                                     </div>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    {isEditing ? (
-                                                        <Input 
-                                                            type="number" 
-                                                            value={editValue} 
-                                                            onChange={(e) => setEditValue(e.target.value)}
-                                                            className="w-24 mx-auto font-mono font-bold text-center border-2 border-primary"
-                                                            autoFocus
-                                                        />
-                                                    ) : (
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <span className="font-mono font-black text-lg">{sample.allocationQuantity}</span>
-                                                            {sample.isOverridden ? (
-                                                                <Badge variant="outline" className="text-[9px] uppercase font-black bg-orange-500/10 text-orange-600 border-orange-200">
-                                                                    <UserCircle2 className="w-2.5 h-2.5 mr-1" /> Individual
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="text-[9px] uppercase font-black bg-blue-500/10 text-blue-600 border-blue-200">
-                                                                    <Globe className="w-2.5 h-2.5 mr-1" /> Global
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-center font-mono font-bold text-muted-foreground">{used}</TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-8 px-4 text-base">
-                                                        {bal}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6">
-                                                    {isEditing ? (
-                                                        <div className="flex justify-end gap-2">
-                                                            <Button size="icon" variant="ghost" onClick={() => setEditingSampleId(null)} disabled={isSaving}><X className="w-4 h-4" /></Button>
-                                                            <Button size="icon" onClick={() => handleSaveOverride(sample.id)} disabled={isSaving}>
-                                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <Button variant="ghost" size="icon" onClick={() => handleStartEdit(sample.id, sample.allocationQuantity)} className="rounded-full h-10 w-10">
-                                                            <Edit className="w-4 h-4 text-muted-foreground" />
-                                                        </Button>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
+                                                    <span className="font-bold text-sm">{assignment.materialName}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-[10px] font-black uppercase text-primary/60 border-primary/20">
+                                                    {assignment.productGroup}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <span className="font-mono font-black text-2xl">{assignment.quantity}</span>
+                                            </TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    onClick={() => handleDelete(assignment.id)}
+                                                    className="text-destructive hover:bg-destructive/10 h-10 w-10 rounded-full"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
                                 ) : (
-                                    <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No materials matching search.</TableCell></TableRow>
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-64 text-center py-20">
+                                            <div className="max-w-xs mx-auto space-y-2">
+                                                <p className="text-muted-foreground font-headline text-lg">No specific assignments found.</p>
+                                                <p className="text-xs text-muted-foreground uppercase font-black tracking-widest leading-relaxed">
+                                                    This representative is currently using the global distribution template for all materials.
+                                                </p>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 )}
                             </TableBody>
                         </Table>
                     </div>
                 )}
             </CardContent>
+
+            <IndividualAllocationDialog 
+                isOpen={isDialogOpen}
+                onOpenChange={setIsDialogOpen}
+                onSave={handleAddAssignment}
+                globalAllocations={globalAllocations}
+            />
         </Card>
     );
 }
