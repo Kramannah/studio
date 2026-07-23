@@ -9,7 +9,8 @@ import {
   doc, 
   setDoc, 
   writeBatch, 
-  limit 
+  limit,
+  addDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from './use-auth';
@@ -63,9 +64,42 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
         
-        setAllocations(globalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase())));
+        // 2. Fetch Individual Overrides if a specific user is targeted
+        let finalAllocations = globalAllocations;
+        if (effectiveUserId) {
+            try {
+                const individualSnapshot = await getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
+                    .catch(async (error) => {
+                        const permissionError = new FirestorePermissionError({
+                            path: 'individualAllocations',
+                            operation: 'list',
+                        } satisfies SecurityRuleContext);
+                        errorEmitter.emit('permission-error', permissionError);
+                        throw error;
+                    });
+                
+                const overrides = new Map<string, number>();
+                individualSnapshot.docs.forEach(d => {
+                    const data = d.data();
+                    if (data.sampleId) overrides.set(data.sampleId, Number(data.quantity || 0));
+                });
 
-        // 2. Fetch Usage for effective user
+                if (overrides.size > 0) {
+                    finalAllocations = globalAllocations.map(s => {
+                        if (overrides.has(s.id)) {
+                            return { ...s, allocationQuantity: overrides.get(s.id)!, isOverridden: true };
+                        }
+                        return s;
+                    });
+                }
+            } catch (e) {
+                console.warn("Individual allocations fetch failed", e);
+            }
+        }
+
+        setAllocations(finalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase())));
+
+        // 3. Fetch Usage for effective user
         if (includeUsage && effectiveUserId) {
             const used: Record<string, number> = {};
             const startOfYear = getStartOfYearISO();
@@ -107,7 +141,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
         if (effectiveUserId) {
-            safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(globalAllocations));
+            safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(finalAllocations));
         }
 
     } catch (error) {
@@ -132,6 +166,26 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
           path: docRef.path,
           operation: 'write',
           requestResourceData: rest,
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
+    
+    performFetch(true);
+    return true;
+  };
+
+  const saveIndividualAllocation = async (userId: string, sampleId: string, quantity: number) => {
+    if (!db) return false;
+    const docId = `${userId}_${sampleId}`;
+    const docRef = doc(db!, "individualAllocations", docId);
+    const data = { userId, sampleId, quantity, updatedAt: new Date().toISOString() };
+    
+    setDoc(docRef, data, { merge: true })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'write',
+          requestResourceData: data,
         } satisfies SecurityRuleContext);
         errorEmitter.emit('permission-error', permissionError);
       });
@@ -183,6 +237,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     loading, 
     refetch: () => performFetch(true),
     saveAllocation,
+    saveIndividualAllocation,
     addAllocationsBulk,
     deleteAllocationsBulk
   };
