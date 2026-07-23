@@ -33,10 +33,10 @@ service cloud.firestore {
         "nldsm@hovidinc.com"
       ];
       
-      // Use toLower() instead of lower()
+      // Explicit email whitelist check
       if (email != null && email.toLower() in authorizedEmails) return true;
       
-      // Explicit UID whitelist to ensure managers can perform approvals immediately
+      // Explicit UID whitelist to ensure managers can perform actions immediately
       let authorizedUids = [
         "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin
         "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
@@ -53,7 +53,7 @@ service cloud.firestore {
       // Profile lookup for dynamic roles (Fallback)
       let profilePath = /databases/$(database)/documents/userProfiles/$(request.auth.uid);
       return exists(profilePath) && (
-        get(profilePath).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"]
+        get(profilePath).data.role in ["Admin", "Manager", "Marketing", "HR"]
       );
     }
 
@@ -87,15 +87,13 @@ service cloud.firestore {
     match /nonCallDays/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isManagerial() || isOwner(resource.data.userId);
-      allow delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /planningRequests/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isManagerial() || isOwner(resource.data.userId);
-      allow delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
     match /timeLogs/{id} {

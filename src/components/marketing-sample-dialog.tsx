@@ -152,7 +152,6 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                 onValueChange={field.onChange}
                                 defaultValue={field.value}
                                 className="flex flex-col space-y-1"
-                                disabled={!sample && assignmentType === 'individual'} // Individual assignment requires a product context
                             >
                                 <FormItem className="flex items-center space-x-3 space-y-0 p-3 border rounded-xl hover:bg-muted/50 transition-colors">
                                     <FormControl><RadioGroupItem value="global" /></FormControl>
