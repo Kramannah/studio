@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -18,10 +19,6 @@ const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 };
 
-/**
- * Deep sanitization to ensure Firestore compatibility.
- * Removes undefined, empty strings, and empty arrays to prevent batch failures.
- */
 const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
   if (!data || typeof data !== 'object') return cleaned;
@@ -96,7 +93,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const currentMonth = format(new Date(), 'yyyy-MM');
     const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
 
-    // LOW-COST FIX: Only auto-fetch if current month. Force bypasses for manual sync.
     if (!userId || !db || (!active && !force) || (!isCurrentMonth && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
@@ -123,7 +119,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(fetched));
     } catch (error: any) {
-        console.warn("PMR fetch failure:", error.message);
         if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'coverageEntries',
@@ -142,7 +137,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
-    // TABLET FIX: Compress photos before any processing to ensure payload is within 1MB limit
     let processedPhotos = entry.photos;
     if (entry.photos && entry.photos.length > 0) {
         try {
@@ -160,23 +154,25 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const sanitized = sanitizePayload(rawPayload);
 
     if (isOnline) {
-        try {
-            const docRef = await addDoc(collection(db!, "coverageEntries"), sanitized);
+        const colRef = collection(db!, "coverageEntries");
+        addDoc(colRef, sanitized)
+          .then((docRef) => {
             const newEntry = { id: docRef.id, ...sanitized } as CoverageEntry;
-            
-            // UI Update: Only add to current list if month matches
             const entryDate = sanitized.coverageDate ? sanitized.coverageDate.substring(0, 7) : format(new Date(), 'yyyy-MM');
             if (!selectedMonth || entryDate === selectedMonth) {
                 setMasterEntries(prev => [newEntry, ...prev]);
             }
-            
             toast({ title: "Report Saved" });
-            return true;
-        } catch (error) {
-            console.error("Direct save failed, falling back to offline:", error);
+          })
+          .catch(async (error) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'coverageEntries',
+                operation: 'create',
+                requestResourceData: sanitized,
+            }));
             saveEntryOffline(rawPayload);
-            return false;
-        }
+          });
+        return true;
     } else {
         saveEntryOffline(rawPayload);
         return false;
@@ -216,68 +212,68 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
         await batch.commit();
         
-        // Success: Clear state and cache
         setOfflineEntries([]);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
         
-        // Refresh master list for selected month
         await fetchMasterEntries(true);
         toast({ title: "Offline Data Synced" });
     } catch (error: any) {
-        console.error("Batch sync failed:", error);
-        toast({ variant: 'destructive', title: 'Sync Failed', description: "Retrying in background..." });
-        
         if (error.code === 'permission-denied') {
              errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'coverageEntries',
                 operation: 'create'
             }));
         }
+        toast({ variant: 'destructive', title: 'Sync Failed', description: "Retrying in background..." });
     } finally {
         setIsSyncing(false);
         isSyncInProgress.current = false;
     }
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries]);
 
-  // Automatic background sync when online
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
         const timer = setTimeout(() => {
             syncAllOfflineEntries();
-        }, 3000); // 3 second delay to ensure connection is warm
+        }, 3000);
         return () => clearTimeout(timer);
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);
 
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
-    try {
-        await deleteDoc(doc(db!, "coverageEntries", id));
+    const docRef = doc(db!, "coverageEntries", id);
+    deleteDoc(docRef)
+      .then(() => {
         setMasterEntries(prev => prev.filter(e => e.id !== id));
         toast({ title: "Report Deleted" });
-    } catch (e: any) {
+      })
+      .catch(async (e: any) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `coverageEntries/${id}`,
+            path: docRef.path,
             operation: 'delete'
         }));
-    }
+      });
   };
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
     const sanitized = sanitizePayload(e);
     const { id, ...data } = sanitized;
-    try {
-        await updateDoc(doc(db!, "coverageEntries", id), data);
+    const docRef = doc(db!, "coverageEntries", id);
+    
+    updateDoc(docRef, data)
+      .then(() => {
         setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data} : item));
         toast({ title: "Report Updated" });
-    } catch (err: any) {
+      })
+      .catch(async (err: any) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `coverageEntries/${id}`,
+            path: docRef.path,
             operation: 'update',
             requestResourceData: data
         }));
-    }
+      });
   };
 
   return { 

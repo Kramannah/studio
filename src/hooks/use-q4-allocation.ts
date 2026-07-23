@@ -9,6 +9,8 @@ import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 let cachedAllocations: Q4Allocation[] | null = null;
 let lastAllocationFetch: number = 0;
@@ -17,7 +19,7 @@ const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * LOW-COST V3.0: Implemented Individual Allocation Override Logic.
+ * LOW-COST V3.1: Refactored to implement contextual error handling.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user, profile } = useAuth();
@@ -88,7 +90,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
         
-        // OVERRIDE LOGIC: Fetch specific user overrides if we are in a personalized view
         const effectiveUserId = targetUserId || (profile?.role === 'PMR' ? user?.uid : undefined);
         let mergedAllocations = [...globalAllocations];
 
@@ -180,8 +181,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             safeStorageSet(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
         }
 
-    } catch (error) {
-        console.warn("Allocation fetch error:", error);
+    } catch (error: any) {
+        if (error.code === 'permission-denied') {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'marketingSamples',
+                operation: 'list',
+            }));
+        }
     } finally {
         setLoading(false);
     }
@@ -194,59 +200,82 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const saveAllocation = async (data: Omit<Q4Allocation, 'id'> & { id?: string }) => {
     if (!db) return false;
     const { id, ...rest } = data;
-    try {
-        if (id) {
-            await updateDoc(doc(db!, "marketingSamples", id), rest);
-        } else {
-            await addDoc(collection(db!, "marketingSamples"), rest);
-        }
-        await performFetch(true);
-        return true;
-    } catch (e) {
-        console.error("Save allocation error:", e);
-        return false;
-    }
+    const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
+    const operation = id ? 'update' : 'create';
+
+    const promise = id 
+        ? updateDoc(docRef as any, rest)
+        : setDoc(docRef, rest);
+
+    promise.catch(async (serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation,
+            requestResourceData: rest,
+        }));
+    });
+    
+    performFetch(true);
+    return true;
   };
 
   const setIndividualAllocation = async (userId: string, sampleId: string, quantity: number) => {
     if (!db) return false;
-    try {
-        const docId = `${userId}_${sampleId}`;
-        const docRef = doc(db!, "individualAllocations", docId);
-        await setDoc(docRef, {
-            userId,
-            sampleId,
-            quantity: Math.round(quantity),
-            updatedAt: new Date().toISOString()
-        }, { merge: true });
-        await performFetch(true);
-        return true;
-    } catch (e) {
-        console.error("Set individual allocation error:", e);
-        return false;
-    }
+    const docId = `${userId}_${sampleId}`;
+    const docRef = doc(db!, "individualAllocations", docId);
+    const payload = {
+        userId,
+        sampleId,
+        quantity: Math.round(quantity),
+        updatedAt: new Date().toISOString()
+    };
+    
+    setDoc(docRef, payload, { merge: true })
+      .catch(async (serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'write',
+            requestResourceData: payload,
+        }));
+      });
+    
+    performFetch(true);
+    return true;
   };
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
     data.forEach(item => batch.set(doc(collection(db!, "marketingSamples")), item));
-    try {
-        await batch.commit();
-        await performFetch(true);
-        return true;
-    } catch (e) { return false; }
+    
+    batch.commit()
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'marketingSamples',
+            operation: 'create',
+            requestResourceData: data,
+        }));
+      });
+
+    performFetch(true);
+    return true;
   };
 
   const deleteAllocationsBulk = async (ids: string[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
     ids.forEach(id => batch.delete(doc(db!, "marketingSamples", id)));
-    try {
-        await batch.commit();
-        await performFetch(true);
-        return true;
-    } catch (e) { return false; }
+    
+    batch.commit()
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: 'marketingSamples',
+            operation: 'delete',
+        }));
+      });
+
+    performFetch(true);
+    return true;
   };
 
   return { 
