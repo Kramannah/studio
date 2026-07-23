@@ -9,17 +9,15 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Ultra-Fast Ownership Check
     function isOwner(docUserId) {
       return isSignedIn() && docUserId == request.auth.uid;
     }
 
-    // Role-based check (Requester-centric for query compatibility)
-    // Corrected logic: Single boolean expression using logical operators.
+    // Robust Administrative Check (Safe boolean expression)
     function isManagerial() {
       return isSignedIn() && (
-        // Admin & DSM Email Whitelist
-        (request.auth.token.email != null && request.auth.token.email.toLower() in [
+        // Email Whitelist (DSM/Admin)
+        (request.auth.token.get('email', '').toLower() in [
           "mbustamante@hovidinc.com", 
           "admin@hovidinc.com", 
           "wbmaralit@hovidinc.com",
@@ -35,31 +33,22 @@ service cloud.firestore {
         (request.auth.uid in [
           "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin
           "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
-          "SO4jVY3fTwgHAkF0Ysi57phPCyn1", // Cabangon (LSL)
-          "v0OiwmjES5ffpntunx4S6x92FC32", // Daquioag (GMAS)
-          "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", // Gonzales (MNL)
-          "qQULNmXLYSfC8x3G6UuGKjZrimh2", // Ignacio (VIS)
-          "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", // Langit (CL)
-          "mXMrQ6B740TNeC5a1LBDosCa14J2", // Ligutom (MIN)
-          "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // Nonato (NL)
+          "SO4jVY3fTwgHAkF0Ysi57phPCyn1", // DSM
+          "v0OiwmjES5ffpntunx4S6x92FC32", // DSM
+          "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", // DSM
+          "qQULNmXLYSfC8x3G6UuGKjZrimh2", // DSM
+          "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", // DSM
+          "mXMrQ6B740TNeC5a1LBDosCa14J2", // DSM
+          "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // DSM
         ]) ||
-        // Profile lookup for dynamic roles
+        // Profile-based dynamic role check
         (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing", "HR"])
+         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.get('role', 'PMR') in ["Admin", "Manager", "Marketing", "HR"])
       );
     }
 
-    // Token-based whitelist check for specific PMRs with extra access
-    function isSpecialAuthorizedPMR() {
-      return isSignedIn() && 
-             request.auth.token.email != null && 
-             request.auth.token.email.toLower() in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
-    }
-
-    // --- Collection Rules ---
-
     match /coverageEntries/{id} {
-      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSpecialAuthorizedPMR() || isManagerial());
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }

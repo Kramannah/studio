@@ -20,9 +20,6 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 
-const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
-const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
-
 /**
  * Hook for managing inventory allocations.
  * Supports Global Template and Individual PMR Overrides.
@@ -64,11 +61,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
 
-        // 2. Fetch Individual Overrides for effective user
+        // 2. Fetch Individual Overrides for effective user (Only if session exists)
         let finalAllocations = [...masterList];
         if (effectiveUserId) {
             const individualSnapshot = await getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
                 .catch(async (error) => {
+                    // Diagnostic logging for Permission Error
                     const permissionError = new FirestorePermissionError({
                         path: 'individualAllocations',
                         operation: 'list',
