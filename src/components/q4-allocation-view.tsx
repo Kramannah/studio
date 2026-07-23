@@ -43,10 +43,11 @@ import {
 
 interface Q4AllocationViewProps {
     readOnly?: boolean;
+    userId?: string;
 }
 
-export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true);
+export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId);
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');

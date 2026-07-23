@@ -21,35 +21,39 @@ const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
  * Hook for managing inventory allocations.
  * Focuses exclusively on global master templates as per updated requirements.
  */
-export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
-  const { user, profile } = useAuth();
+export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
+  const { user } = useAuth();
+  const effectiveUserId = targetUserId || user?.uid;
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(!cachedAllocations && active);
   
-  const usageFetchedRef = useRef(false);
+  const usageFetchedForRef = useRef<string | null>(null);
 
   useEffect(() => {
-      if (user?.uid) {
+      if (effectiveUserId) {
           try {
               const localAlloc = localStorage.getItem(`${ALLOCATIONS_STORAGE_KEY}_global`);
-              const localUsed = localStorage.getItem(`${USED_QUANTITIES_STORAGE_KEY}_${user.uid}`);
+              const localUsed = localStorage.getItem(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`);
               if (localAlloc) setAllocations(JSON.parse(localAlloc));
               if (localUsed) setUsedQuantities(JSON.parse(localUsed));
           } catch (e) {}
       }
-  }, [user?.uid]);
+  }, [effectiveUserId]);
 
   const performFetch = useCallback(async (force = false) => {
-    if (!db || !user || !active) {
+    if (!db || !effectiveUserId || !active) {
         setLoading(false);
         return;
     }
 
     const now = Date.now();
-    if (!force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL)) {
-        setAllocations(cachedAllocations);
-        if (!includeUsage || usageFetchedRef.current) {
+    const isGlobalCached = !force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL);
+    const isUsageCached = !force && includeUsage && usageFetchedForRef.current === effectiveUserId;
+
+    if (isGlobalCached) {
+        setAllocations(cachedAllocations!);
+        if (!includeUsage || isUsageCached) {
             setLoading(false);
             return;
         }
@@ -60,9 +64,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         return;
     }
 
-    if (allocations.length === 0) setLoading(true);
+    if (allocations.length === 0 || !isUsageCached) setLoading(true);
 
     try {
+        // 1. Fetch Master Template (Marketing Samples)
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (error) => {
                 if (error.code === 'permission-denied') {
@@ -94,13 +99,14 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         setAllocations(globalAllocations);
         safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_global`, JSON.stringify(globalAllocations));
 
+        // 2. Fetch Targeted User Usage
         if (includeUsage) {
             const used: Record<string, number> = {};
             const startOfYear = getStartOfYearISO();
             const startOfYearDate = parseISO(startOfYear);
             
             const entriesCol = collection(db!, "coverageEntries");
-            const q = query(entriesCol, where("userId", "==", user.uid), where("coverageDate", ">=", startOfYear), limit(3000));
+            const q = query(entriesCol, where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000));
 
             const entriesSnap = await getDocs(q).catch(async (error) => {
                 if (error.code === 'permission-denied') {
@@ -132,16 +138,16 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                 }
             });
             setUsedQuantities(used);
-            usageFetchedRef.current = true;
-            safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${user.uid}`, JSON.stringify(used));
+            usageFetchedForRef.current = effectiveUserId;
+            safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(used));
         }
 
     } catch (error: any) {
-        // Errors are already emitted in sub-calls
+        console.error("Inventory Fetch Error:", error);
     } finally {
         setLoading(false);
     }
-  }, [user, active, includeUsage, allocations.length]);
+  }, [effectiveUserId, active, includeUsage, allocations.length]);
 
   useEffect(() => {
     if (active) performFetch();
@@ -205,7 +211,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     usedQuantities, 
     loading, 
     refetch: () => {
-        usageFetchedRef.current = false;
+        usageFetchedForRef.current = null;
         performFetch(true);
     },
     saveAllocation,
