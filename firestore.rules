@@ -14,9 +14,22 @@ service cloud.firestore {
     }
 
     // Robust Administrative Check using standard logic chain
+    // Refactored to prevent circular dependencies and handle null tokens gracefully
     function isManagerial() {
       return isSignedIn() && (
-        // Email Whitelist (DSM/Admin)
+        // 1. Explicit UID whitelist (Checked first to avoid recursion for Super Admins)
+        (request.auth.uid in [
+          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin (mbustamante)
+          "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
+          "SO4jVY3fTwgHAkF0Ysi57phPCyn1", // DSM
+          "v0OiwmjES5ffpntunx4S6x92FC32", // DSM
+          "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", // DSM
+          "qQULNmXLYSfC8x3G6UuGKjZrimh2", // DSM
+          "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", // DSM
+          "mXMrQ6B740TNeC5a1LBDosCa14J2", // DSM
+          "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // DSM
+        ]) ||
+        // 2. Email Whitelist (Handled with null safety)
         (request.auth.token.email != null && request.auth.token.email.toLower() in [
           "mbustamante@hovidinc.com", 
           "admin@hovidinc.com", 
@@ -29,19 +42,8 @@ service cloud.firestore {
           "mindsm@hovidinc.com",
           "nldsm@hovidinc.com"
         ]) ||
-        // Explicit UID whitelist
-        (request.auth.uid in [
-          "SgOR5cjCC6dZ0oABv4nXdntu6pI3", // Admin
-          "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", // Admin
-          "SO4jVY3fTwgHAkF0Ysi57phPCyn1", // DSM
-          "v0OiwmjES5ffpntunx4S6x92FC32", // DSM
-          "OU7hbPEFg7gaYfg1qHFOjNpBJLe2", // DSM
-          "qQULNmXLYSfC8x3G6UuGKjZrimh2", // DSM
-          "Z21R5NunJ2aD6wEKNOMPCzWWmzA2", // DSM
-          "mXMrQ6B740TNeC5a1LBDosCa14J2", // DSM
-          "1qQzrIyR2POzuITWF4p8MIfwmfk1"  // DSM
-        ]) ||
-        // Profile-based dynamic role check
+        // 3. Profile-based dynamic role check
+        // Only attempted if not already verified by hardcoded lists
         (exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role in ["Admin", "Manager", "Marketing", "HR"])
       );
@@ -89,7 +91,7 @@ service cloud.firestore {
     }
 
     match /individualAllocations/{id} {
-      allow read, list: if isSignedIn();
+      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
       allow write: if isManagerial();
     }
     
