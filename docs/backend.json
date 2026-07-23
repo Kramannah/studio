@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Doctor": {
@@ -142,6 +143,18 @@
       },
       "required": ["displayMaterialName", "allocationQuantity"]
     },
+    "IndividualAllocation": {
+      "title": "IndividualAllocation",
+      "description": "Specific sample allocation for a single PMR override.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sampleId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sampleId", "quantity"]
+    },
     "UserProfile": {
       "title": "UserProfile",
       "description": "Custom profile overrides for users (e.g. edited names).",
@@ -168,6 +181,7 @@
     "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs." },
     "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Legacy inventory allocations." },
     "/marketingSamples/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Official marketing items and samples." },
+    "/individualAllocations/{id}": { "schema": { "$ref": "#/backend/entities/IndividualAllocation" }, "description": "PMR-specific overrides for sample quantities." },
     "/userProfiles/{id}": { "schema": { "$ref": "#/backend/entities/UserProfile" }, "description": "User profile overrides." }
   }
 }

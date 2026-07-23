@@ -2,9 +2,9 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Q4Allocation, CoverageEntry } from '@/lib/types';
+import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc, addDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
@@ -17,7 +17,7 @@ const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * LOW-COST V2.3: Added targetUserId support for individual PMR monitoring in Admin view.
+ * LOW-COST V3.0: Implemented Individual Allocation Override Logic.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user, profile } = useAuth();
@@ -75,7 +75,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     try {
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)));
 
-        const fetchedAllocations = samplesSnapshot.docs.map(docSnap => {
+        const globalAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
             const materialName = (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim();
             const group = (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim();
@@ -88,13 +88,35 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
         
-        fetchedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+        // OVERRIDE LOGIC: Fetch specific user overrides if we are in a personalized view
+        const effectiveUserId = targetUserId || (profile?.role === 'PMR' ? user?.uid : undefined);
+        let mergedAllocations = [...globalAllocations];
 
-        cachedAllocations = fetchedAllocations;
+        if (effectiveUserId) {
+            const indSnap = await getDocs(query(
+                collection(db!, "individualAllocations"),
+                where("userId", "==", effectiveUserId)
+            ));
+            
+            const overrides: Record<string, number> = {};
+            indSnap.docs.forEach(d => {
+                const data = d.data();
+                if (data.sampleId) overrides[data.sampleId] = data.quantity;
+            });
+
+            mergedAllocations = globalAllocations.map(a => ({
+                ...a,
+                allocationQuantity: overrides[a.id] !== undefined ? overrides[a.id] : a.allocationQuantity
+            }));
+        }
+
+        mergedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+
+        cachedAllocations = mergedAllocations;
         lastAllocationFetch = now;
-        setAllocations(fetchedAllocations);
+        setAllocations(mergedAllocations);
         
-        safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
+        safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(mergedAllocations));
 
         if (includeUsage) {
             const used: Record<string, number> = {};
@@ -104,7 +126,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             
             let entriesSnap;
             try {
-                // If targetUserId is provided, we specifically want THAT user's usage
                 if (targetUserId) {
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
@@ -113,14 +134,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                         limit(3000)
                     ));
                 } else if (isManagerial) {
-                    // Global view for admin (company-wide usage)
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("coverageDate", ">=", startOfYear),
                         limit(3000) 
                     ));
                 } else {
-                    // Representative viewing their own usage
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("userId", "==", user.uid),
@@ -137,7 +156,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
-                // Only count if it's the correct user in case of fallback scan
                 if (targetUserId && data.userId !== targetUserId) return;
 
                 const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
@@ -190,6 +208,25 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     }
   };
 
+  const setIndividualAllocation = async (userId: string, sampleId: string, quantity: number) => {
+    if (!db) return false;
+    try {
+        const docId = `${userId}_${sampleId}`;
+        const docRef = doc(db!, "individualAllocations", docId);
+        await setDoc(docRef, {
+            userId,
+            sampleId,
+            quantity: Math.round(quantity),
+            updatedAt: new Date().toISOString()
+        }, { merge: true });
+        await performFetch(true);
+        return true;
+    } catch (e) {
+        console.error("Set individual allocation error:", e);
+        return false;
+    }
+  };
+
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
@@ -221,6 +258,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         performFetch(true);
     },
     saveAllocation,
+    setIndividualAllocation,
     addAllocationsBulk,
     deleteAllocationsBulk
   };

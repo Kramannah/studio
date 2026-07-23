@@ -104,6 +104,12 @@ service cloud.firestore {
       allow read, list: if isSignedIn();
       allow write: if isManagerial();
     }
+
+    match /individualAllocations/{id} {
+      allow read: if isSignedIn();
+      allow list: if isSignedIn();
+      allow write: if isManagerial();
+    }
     
     match /userProfiles/{id} {
       allow read: if isSignedIn() && (request.auth.uid == id || isManagerial());

@@ -1,3 +1,4 @@
+
 export interface ReminderProduct {
     productName?: string;
     sampleName?: string;
@@ -104,6 +105,14 @@ export interface Q4Allocation {
     displayMaterialName: string;
     allocationQuantity: number;
     quarter?: 'Q3' | 'Q4';
+}
+
+export interface IndividualAllocation {
+    id: string;
+    userId: string;
+    sampleId: string;
+    quantity: number;
+    updatedAt: string;
 }
 
 export interface MarketingSample {
