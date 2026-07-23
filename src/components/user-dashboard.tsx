@@ -9,7 +9,7 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, PackageCheck } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Q4AllocationView } from "./q4-allocation-view";
@@ -97,9 +97,9 @@ export function UserDashboard({
                         </TabsTrigger>
                         <TabsTrigger 
                             value="allocation" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center gap-2"
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center"
                         >
-                            <PackageCheck size={14} /> Samples
+                            Samples
                         </TabsTrigger>
                         <TabsTrigger 
                             value="planning" 
