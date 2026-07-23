@@ -13,14 +13,7 @@ import {
   LogIn, 
   LogOut, 
   Notebook, 
-  LifeBuoy, 
-  LayoutDashboard,
-  Calendar,
-  ClipboardList,
-  FileCheck,
-  BarChart3,
-  Users,
-  Package
+  LayoutDashboard
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -28,7 +21,7 @@ import { isToday, parseISO, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { LoginPage } from "@/components/login-page";
-import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS, HELPDESK_EMAIL } from "@/lib/admins";
+import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from "@/lib/admins";
 import Link from "next/link";
 import { useTimeLogs } from "@/hooks/use-time-logs";
 import { SidebarProvider, Sidebar, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarContent, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton } from '@/components/ui/sidebar';
@@ -43,7 +36,6 @@ import { CallSummary } from '@/components/call-summary';
 import { SubmittedList } from '@/components/submitted-list';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { TimeLogDialog } from '@/components/time-log-dialog';
-import { HelpdeskDialog } from '@/components/helpdesk-dialog';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
 
@@ -66,7 +58,6 @@ export default function Home() {
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
-  const [isHelpdeskOpen, setIsHelpdeskOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
   useEffect(() => { setMounted(true); }, []);
@@ -84,7 +75,6 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
-  // LOW-COST FIX: Sync hook handles offline entries and master list refreshes. Scoped by view and month.
   const { 
     offlineEntries, 
     masterEntries, 
@@ -108,7 +98,6 @@ export default function Home() {
   const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
       try {
-          // Manual Sync forces a fresh fetch from the server for whatever month is currently selected
           await Promise.all([
               syncAllOfflineEntries(), 
               refreshEntries(true),
@@ -142,7 +131,6 @@ export default function Home() {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
     setEntryToEdit(null);
-    // If not saved online, we go to offline view to show it's pending sync
     setActiveView(savedOnline ? 'submitted' : 'offline');
   }, []);
 
@@ -212,53 +200,48 @@ export default function Home() {
 
         <div className="flex flex-1 w-full">
           <Sidebar>
-            <SidebarContent>
+            <SidebarContent className="px-3 py-4">
               <SidebarMenu>
                 <SidebarMenuItem isActive={true}>
-                  <SidebarMenuButton onClick={() => {}} hasSubmenu><Notebook />CRM</SidebarMenuButton>
+                  <SidebarMenuButton onClick={() => {}} hasSubmenu size="lg"><Notebook /><span>CRM</span></SidebarMenuButton>
                   <SidebarMenuSub>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('planning')} isActive={activeView === 'planning'}>
-                          <Calendar size={14} /> Call Planning
+                          Call Planning
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('coverage')} isActive={activeView === 'coverage'}>
-                          <ClipboardList size={14} /> Call Reporting
+                          Call Reporting
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('offline')} isActive={activeView === 'offline'}>
-                          <WifiOff size={14} /> Offline Calls {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}
+                          Offline Calls {offlineEntries.length > 0 && <Badge className="ml-auto" variant="destructive">{offlineEntries.length}</Badge>}
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>
-                          <FileCheck size={14} /> Submitted Coverage
+                          Submitted Coverage
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('summary')} isActive={activeView === 'summary'}>
-                          <BarChart3 size={14} /> Call Summary
+                          Call Summary
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('master')} isActive={activeView === 'master'}>
-                          <Users size={14} /> Doctor Masterlist
+                          Doctor Masterlist
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('allocation')} isActive={activeView === 'allocation'}>
-                          <Package size={14} /> Marketing Samples
+                          Marketing Samples
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                   </SidebarMenuSub>
                 </SidebarMenuItem>
-                 <SidebarMenuItem>
-                   <SidebarMenuButton onClick={() => setIsHelpdeskOpen(true)}>
-                     <LifeBuoy />Helpdesk
-                   </SidebarMenuButton>
-                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter className="p-4 border-t bg-muted/20">
@@ -275,7 +258,6 @@ export default function Home() {
         </div>
       </div>
       <TimeLogDialog isOpen={isTimeLogDialogOpen} onOpenChange={setIsTimeLogDialogOpen} mode={timeLogMode} onTimeIn={addTimeIn} onTimeOut={addTimeOut} />
-      <HelpdeskDialog isOpen={isHelpdeskOpen} onOpenChange={setIsHelpdeskOpen} adminEmail={HELPDESK_EMAIL} userEmail={user?.email || ''} />
     </SidebarProvider>
   );
 }
