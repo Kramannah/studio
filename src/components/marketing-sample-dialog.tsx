@@ -108,11 +108,9 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 allocationQuantity: values.allocationQuantity
             });
         } else if (values.userId) {
-            // 1. Ensure the product exists in the master list first
             let targetSampleId = sample?.id;
             
             if (!targetSampleId) {
-                // Find existing sample by name
                 const existing = allocations.find(a => 
                     a.displayMaterialName.toLowerCase() === values.materialName.toLowerCase()
                 );
@@ -120,15 +118,11 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 if (existing) {
                     targetSampleId = existing.id;
                 } else {
-                    // This is a new product - we must add it to master list with 0 global qty first
                     const result = await saveAllocation({
                         prodGroupProdSubGroup: values.productGroup,
                         displayMaterialName: values.materialName,
                         allocationQuantity: 0
                     });
-                    // For simplicity in this non-blocking flow, we assume the product is created.
-                    // Real-time listener in hook will pick it up, but for the immediate write
-                    // we'll advise the user to ensure products are in master list.
                 }
             }
             
@@ -149,8 +143,18 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   const sortedUsers = useMemo(() => {
     return Object.values(profiles)
         .filter(p => p.role === 'PMR' || !p.role)
-        .sort((a, b) => (a.lastName || "").localeCompare(b.lastName || ""));
+        .sort((a, b) => {
+            const nameA = `${a.lastName || ''} ${a.firstName || ''}`.trim() || a.email || '';
+            const nameB = `${b.lastName || ''} ${b.firstName || ''}`.trim() || b.email || '';
+            return nameA.localeCompare(nameB);
+        });
   }, [profiles]);
+
+  const getDisplayName = (p: any) => {
+      const name = `${p.lastName || ''}, ${p.firstName || ''}`.trim();
+      if (name === ',' || !name) return p.email || "Unknown User";
+      return name;
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -218,8 +222,8 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                         >
                                             <span className="truncate">
                                                 {field.value && profiles[field.value]
-                                                    ? `${profiles[field.value].lastName}, ${profiles[field.value].firstName} (${profiles[field.value].code || 'PMR'})`
-                                                    : "Search by name or code..."}
+                                                    ? `${getDisplayName(profiles[field.value])} (${profiles[field.value].code || 'PMR'})`
+                                                    : "Search by name, code, or email..."}
                                             </span>
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
@@ -227,14 +231,14 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                                     <Command shouldFilter={true}>
-                                        <CommandInput placeholder="Type name or code (e.g. NL-01)..." />
+                                        <CommandInput placeholder="Type name, email, or code..." />
                                         <CommandList>
                                             <CommandEmpty>No matching personnel found.</CommandEmpty>
                                             <CommandGroup>
                                                 {sortedUsers.map((p) => (
                                                     <CommandItem
                                                         key={p.userId}
-                                                        value={`${p.lastName} ${p.firstName} ${p.code || ''}`.toLowerCase()}
+                                                        value={`${p.lastName} ${p.firstName} ${p.code || ''} ${p.email || ''}`.toLowerCase()}
                                                         onSelect={() => {
                                                             form.setValue("userId", p.userId);
                                                             setPopoverOpen(false);
@@ -242,8 +246,11 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                                     >
                                                         <Check className={cn("mr-2 h-4 w-4", p.userId === field.value ? "opacity-100" : "opacity-0")} />
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-sm">{p.lastName}, {p.firstName}</span>
-                                                            <span className="text-[10px] uppercase font-black text-primary tracking-widest">{p.code || "PMR"}</span>
+                                                            <span className="font-bold text-sm">{getDisplayName(p)}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] uppercase font-black text-primary tracking-widest">{p.code || "PMR"}</span>
+                                                                {p.email && <span className="text-[9px] text-muted-foreground truncate max-w-[150px]">{p.email}</span>}
+                                                            </div>
                                                         </div>
                                                     </CommandItem>
                                                 ))}
