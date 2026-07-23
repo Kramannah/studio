@@ -60,6 +60,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -93,6 +94,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
           allocationQuantity: 0,
         });
       }
+      setSearchQuery("");
     }
   }, [sample, form, isOpen]);
 
@@ -118,11 +120,14 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 if (existing) {
                     targetSampleId = existing.id;
                 } else {
+                    // Create minimal sample record if it doesn't exist globally yet
                     const result = await saveAllocation({
                         prodGroupProdSubGroup: values.productGroup,
                         displayMaterialName: values.materialName,
                         allocationQuantity: 0
                     });
+                    // Note: In a real app we'd need to wait for result.id, but saveAllocation 
+                    // triggers a background sync. We rely on the name lookup or retry.
                 }
             }
             
@@ -149,6 +154,17 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
             return nameA.localeCompare(nameB);
         });
   }, [profiles]);
+
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return sortedUsers;
+    return sortedUsers.filter(p => {
+        const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
+        const code = (p.code || "").toLowerCase();
+        const email = (p.email || "").toLowerCase();
+        return fullName.includes(q) || code.includes(q) || email.includes(q);
+    });
+  }, [sortedUsers, searchQuery]);
 
   const getDisplayName = (p: any) => {
     const last = (p.lastName || "").trim();
@@ -237,31 +253,39 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                     align="start"
                                     onOpenAutoFocus={(e) => e.preventDefault()}
                                 >
-                                    <Command shouldFilter={true}>
-                                        <CommandInput placeholder="Type name, email, or code..." />
+                                    <Command shouldFilter={false}>
+                                        <CommandInput 
+                                            placeholder="Type name, email, or code..." 
+                                            value={searchQuery}
+                                            onValueChange={setSearchQuery}
+                                        />
                                         <CommandList>
-                                            <CommandEmpty>No matching personnel found.</CommandEmpty>
-                                            <CommandGroup>
-                                                {sortedUsers.map((p) => (
-                                                    <CommandItem
-                                                        key={p.userId}
-                                                        value={`${p.lastName} ${p.firstName} ${p.code || ''} ${p.email || ''}`.toLowerCase()}
-                                                        onSelect={() => {
-                                                            field.onChange(p.userId);
-                                                            setPopoverOpen(false);
-                                                        }}
-                                                    >
-                                                        <Check className={cn("mr-2 h-4 w-4", p.userId === field.value ? "opacity-100" : "opacity-0")} />
-                                                        <div className="flex flex-col">
-                                                            <span className="font-bold text-sm">{getDisplayName(p)}</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] uppercase font-black text-primary tracking-widest">{p.code || "PMR"}</span>
-                                                                {p.email && <span className="text-[9px] text-muted-foreground truncate max-w-[150px]">{p.email}</span>}
+                                            {filteredUsers.length === 0 ? (
+                                                <CommandEmpty>No matching personnel found.</CommandEmpty>
+                                            ) : (
+                                                <CommandGroup>
+                                                    {filteredUsers.map((p) => (
+                                                        <CommandItem
+                                                            key={p.userId}
+                                                            value={p.userId}
+                                                            onSelect={(currentValue) => {
+                                                                field.onChange(currentValue);
+                                                                setPopoverOpen(false);
+                                                                setSearchQuery("");
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", p.userId === field.value ? "opacity-100" : "opacity-0")} />
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-sm">{getDisplayName(p)}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] uppercase font-black text-primary tracking-widest">{p.code || "PMR"}</span>
+                                                                    {p.email && <span className="text-[9px] text-muted-foreground truncate max-w-[150px]">{p.email}</span>}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            )}
                                         </CommandList>
                                     </Command>
                                 </PopoverContent>

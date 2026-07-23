@@ -15,6 +15,7 @@ service cloud.firestore {
     }
 
     // Role-based check (Requester-centric for query compatibility)
+    // Corrected logic: Single boolean expression using logical operators.
     function isManagerial() {
       return isSignedIn() && (
         // Admin & DSM Email Whitelist
