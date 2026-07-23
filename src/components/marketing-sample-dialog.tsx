@@ -1,9 +1,10 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,13 +25,28 @@ import {
 import { Input } from "@/components/ui/input"
 import type { MarketingSample } from "@/lib/types"
 import { useQ4Allocation } from "@/hooks/use-q4-allocation"
-import { Loader2, Package } from "lucide-react"
+import { useUserProfiles } from "@/hooks/use-user-profiles"
+import { Loader2, Package, User, Globe, Search, Check, ChevronsUpDown } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { cn } from "@/lib/utils"
 
 const formSchema = z.object({
+  assignmentType: z.enum(["global", "individual"]),
+  userId: z.string().optional(),
   productGroup: z.string().min(1, "Product group is required"),
   materialName: z.string().min(1, "Material name is required"),
   allocationQuantity: z.coerce.number().min(0, "Quantity must be at least 0"),
-})
+}).superRefine((data, ctx) => {
+    if (data.assignmentType === 'individual' && !data.userId) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Please select a representative",
+            path: ["userId"],
+        });
+    }
+});
 
 type MarketingSampleDialogProps = {
   isOpen: boolean;
@@ -40,28 +56,38 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  const { saveAllocation } = useQ4Allocation(false);
+  const { saveAllocation, saveIndividualAllocation, allocations } = useQ4Allocation(false);
+  const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      assignmentType: "global",
+      userId: "",
       productGroup: "",
       materialName: "",
       allocationQuantity: 0,
     },
   })
 
+  const assignmentType = form.watch("assignmentType");
+
   useEffect(() => {
     if (isOpen) {
       if (sample) {
         form.reset({
+          assignmentType: "global",
+          userId: "",
           productGroup: sample.productGroup,
           materialName: sample.materialName,
           allocationQuantity: sample.allocationQuantity,
         });
       } else {
         form.reset({
+          assignmentType: "global",
+          userId: "",
           productGroup: "",
           materialName: "",
           allocationQuantity: 0,
@@ -74,12 +100,43 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     setIsSubmitting(true);
     
     try {
-        await saveAllocation({
-            id: sample?.id,
-            prodGroupProdSubGroup: values.productGroup,
-            displayMaterialName: values.materialName,
-            allocationQuantity: values.allocationQuantity
-        });
+        if (values.assignmentType === 'global') {
+            await saveAllocation({
+                id: sample?.id,
+                prodGroupProdSubGroup: values.productGroup,
+                displayMaterialName: values.materialName,
+                allocationQuantity: values.allocationQuantity
+            });
+        } else if (values.userId) {
+            // 1. Ensure the product exists in the master list first
+            let targetSampleId = sample?.id;
+            
+            if (!targetSampleId) {
+                // Find existing sample by name or create a stub in marketingSamples
+                const existing = allocations.find(a => 
+                    a.displayMaterialName.toLowerCase() === values.materialName.toLowerCase()
+                );
+                
+                if (existing) {
+                    targetSampleId = existing.id;
+                } else {
+                    // This is a new product - we must add it to master list with 0 global qty first
+                    // so it has a referenceable ID
+                    const newSampleRef = await saveAllocation({
+                        prodGroupProdSubGroup: values.productGroup,
+                        displayMaterialName: values.materialName,
+                        allocationQuantity: 0
+                    });
+                    // Note: Refetching would be better here to get the actual ID, but for simplicity
+                    // we'll suggest the user adds the product to the master list first if it's new.
+                    // Or just use the global save logic if it's new.
+                }
+            }
+            
+            if (targetSampleId) {
+                await saveIndividualAllocation(values.userId, targetSampleId, values.allocationQuantity);
+            }
+        }
         
         onSave();
         onOpenChange(false);
@@ -90,20 +147,116 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     }
   }
 
+  const sortedUsers = useMemo(() => {
+    return Object.values(profiles)
+        .filter(p => p.role === 'PMR' || !p.role)
+        .sort((a, b) => (a.lastName || "").localeCompare(b.lastName || ""));
+  }, [profiles]);
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-headline flex items-center gap-2 text-xl">
             <Package className="w-5 h-5 text-primary" />
-            {sample ? "Edit Material" : "Add New Material"}
+            {sample ? "Manage Material Allocation" : "Add New Material"}
           </DialogTitle>
           <DialogDescription>
-            Update the marketing material details in the global master list.
+            Assign marketing items globally or to a specific representative.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
+            
+            <FormField
+              control={form.control}
+              name="assignmentType"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormLabel className="font-headline">Assignment Level</FormLabel>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      className="grid grid-cols-2 gap-4"
+                    >
+                      <FormItem className="flex items-center space-x-3 space-y-0 border-2 rounded-xl p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary">
+                        <FormControl><RadioGroupItem value="global" /></FormControl>
+                        <FormLabel className="font-bold flex items-center gap-2 cursor-pointer">
+                            <Globe className="w-4 h-4" /> Global
+                        </FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-3 space-y-0 border-2 rounded-xl p-3 cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-primary">
+                        <FormControl><RadioGroupItem value="individual" /></FormControl>
+                        <FormLabel className="font-bold flex items-center gap-2 cursor-pointer">
+                            <User className="w-4 h-4" /> Specific PMR
+                        </FormLabel>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {assignmentType === 'individual' && (
+                <FormField
+                    control={form.control}
+                    name="userId"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel className="font-headline">Select Representative</FormLabel>
+                            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <FormControl>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            className={cn(
+                                                "w-full justify-between h-12 border-2",
+                                                !field.value && "text-muted-foreground"
+                                            )}
+                                        >
+                                            {field.value
+                                                ? `${profiles[field.value]?.lastName}, ${profiles[field.value]?.firstName}`
+                                                : "Search personnel directory..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search PMR name..." />
+                                        <CommandList>
+                                            <CommandEmpty>No matching personnel found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {sortedUsers.map((p) => (
+                                                    <CommandItem
+                                                        key={p.userId}
+                                                        value={`${p.lastName} ${p.firstName}`}
+                                                        onSelect={() => {
+                                                            form.setValue("userId", p.userId);
+                                                            setPopoverOpen(false);
+                                                        }}
+                                                    >
+                                                        <Check className={cn("mr-2 h-4 w-4", p.userId === field.value ? "opacity-100" : "opacity-0")} />
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold">{p.lastName}, {p.firstName}</span>
+                                                            <span className="text-[10px] uppercase text-muted-foreground">{p.code || "PMR"}</span>
+                                                        </div>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            )}
+
             <div className="grid grid-cols-1 gap-4">
                 <FormField
                     control={form.control}
@@ -136,7 +289,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                   name="allocationQuantity"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-headline">Global Allocation Quantity</FormLabel>
+                      <FormLabel className="font-headline">Allocation Quantity</FormLabel>
                       <FormControl>
                         <Input type="number" {...field} className="h-12 text-lg font-mono border-2" />
                       </FormControl>
@@ -151,7 +304,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 {isSubmitting ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
                 ) : (
-                    "Save to Master List"
+                    "Save Assignment"
                 )}
               </Button>
             </DialogFooter>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,14 +18,14 @@ import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
-import type { Q4Allocation, CoverageEntry } from '@/lib/types';
+import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/types';
 
 const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * Hook for managing global inventory allocations.
- * Restored to strictly Global Model.
+ * Hook for managing inventory allocations.
+ * Supports Global Template and Individual PMR Overrides.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user } = useAuth();
@@ -42,7 +43,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     setLoading(true);
 
     try {
-        // Fetch Global Template (Marketing Samples)
+        // 1. Fetch Global Template
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (error) => {
                 const permissionError = new FirestorePermissionError({
@@ -63,9 +64,37 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
 
-        setAllocations(masterList.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase())));
+        // 2. Fetch Individual Overrides for effective user
+        let finalAllocations = [...masterList];
+        if (effectiveUserId) {
+            const individualSnapshot = await getDocs(query(collection(db!, "individualAllocations"), where("userId", "==", effectiveUserId)))
+                .catch(async (error) => {
+                    const permissionError = new FirestorePermissionError({
+                        path: 'individualAllocations',
+                        operation: 'list',
+                    } satisfies SecurityRuleContext);
+                    errorEmitter.emit('permission-error', permissionError);
+                    throw error;
+                });
 
-        // Fetch Usage for effective user if requested (used for dashboard balances)
+            const overrides = new Map<string, number>();
+            individualSnapshot.docs.forEach(d => {
+                const data = d.data() as IndividualAllocation;
+                overrides.set(data.sampleId, data.quantity);
+            });
+
+            if (overrides.size > 0) {
+                finalAllocations = masterList.map(sample => ({
+                    ...sample,
+                    allocationQuantity: overrides.has(sample.id) ? overrides.get(sample.id)! : sample.allocationQuantity,
+                    isOverridden: overrides.has(sample.id)
+                }));
+            }
+        }
+
+        setAllocations(finalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase())));
+
+        // 3. Fetch Usage if requested
         if (includeUsage && effectiveUserId) {
             const used: Record<string, number> = {};
             const startOfYear = getStartOfYearISO();
@@ -103,7 +132,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                 }
             });
             setUsedQuantities(used);
-            safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(used));
         }
 
     } catch (error) {
@@ -132,6 +160,31 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
     
+    performFetch(true);
+    return true;
+  };
+
+  const saveIndividualAllocation = async (userId: string, sampleId: string, quantity: number) => {
+    if (!db) return false;
+    const docId = `${userId}_${sampleId}`;
+    const docRef = doc(db!, "individualAllocations", docId);
+    const payload = {
+        userId,
+        sampleId,
+        quantity,
+        updatedAt: new Date().toISOString()
+    };
+
+    setDoc(docRef, payload, { merge: true })
+        .catch(async (error) => {
+            const permissionError = new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'write',
+                requestResourceData: payload,
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
     performFetch(true);
     return true;
   };
@@ -179,6 +232,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     loading, 
     refetch: () => performFetch(true),
     saveAllocation,
+    saveIndividualAllocation,
     addAllocationsBulk,
     deleteAllocationsBulk
   };
