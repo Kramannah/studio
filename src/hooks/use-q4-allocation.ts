@@ -17,10 +17,9 @@ const ALLOCATIONS_STORAGE_KEY = 'sfe-allocations-v5';
 const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
- * LOW-COST V2.2: Optimized read logic with resilient fallback for usage scans.
- * Supports single and bulk master list updates.
+ * LOW-COST V2.3: Added targetUserId support for individual PMR monitoring in Admin view.
  */
-export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
+export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
@@ -28,7 +27,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   
   const usageFetchedRef = useRef(false);
 
-  const getStoreKey = (base: string) => `${base}_${user?.uid}`;
+  const getStoreKey = (base: string) => `${base}_${targetUserId || user?.uid}`;
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
@@ -47,7 +46,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
               if (localUsed) setUsedQuantities(JSON.parse(localUsed));
           } catch (e) {}
       }
-  }, [user?.uid]);
+  }, [user?.uid, targetUserId]);
 
   const performFetch = useCallback(async (force = false) => {
     if (!db || !user || !active) {
@@ -97,7 +96,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         
         safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(fetchedAllocations));
 
-        if (includeUsage && !usageFetchedRef.current) {
+        if (includeUsage) {
             const used: Record<string, number> = {};
             const isManagerial = profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role);
             const startOfYear = getStartOfYearISO();
@@ -105,13 +104,23 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             
             let entriesSnap;
             try {
-                if (isManagerial) {
+                // If targetUserId is provided, we specifically want THAT user's usage
+                if (targetUserId) {
+                    entriesSnap = await getDocs(query(
+                        collection(db!, "coverageEntries"), 
+                        where("userId", "==", targetUserId),
+                        where("coverageDate", ">=", startOfYear),
+                        limit(3000)
+                    ));
+                } else if (isManagerial) {
+                    // Global view for admin (company-wide usage)
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("coverageDate", ">=", startOfYear),
                         limit(3000) 
                     ));
                 } else {
+                    // Representative viewing their own usage
                     entriesSnap = await getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("userId", "==", user.uid),
@@ -120,7 +129,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     ));
                 }
             } catch (indexError) {
-                const q = isManagerial 
+                const q = (targetUserId || (isManagerial && !targetUserId))
                     ? query(collection(db!, "coverageEntries"), limit(3000)) 
                     : query(collection(db!, "coverageEntries"), where("userId", "==", user.uid), limit(3000));
                 entriesSnap = await getDocs(q);
@@ -128,6 +137,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             entriesSnap.docs.forEach(d => {
                 const data = d.data() as CoverageEntry;
+                // Only count if it's the correct user in case of fallback scan
+                if (targetUserId && data.userId !== targetUserId) return;
+
                 const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
                 if (!cDate || !isAfter(cDate, startOfYearDate)) return;
 
@@ -155,7 +167,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, profile, active, includeUsage, allocations.length]);
+  }, [user, profile, active, includeUsage, allocations.length, targetUserId]);
 
   useEffect(() => {
     if (active) performFetch();

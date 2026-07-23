@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -8,9 +9,10 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, PackageCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Q4AllocationView } from "./q4-allocation-view";
 
 interface UserDashboardProps {
     userId: string;
@@ -94,6 +96,12 @@ export function UserDashboard({
                             Reports
                         </TabsTrigger>
                         <TabsTrigger 
+                            value="allocation" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9 flex items-center gap-2"
+                        >
+                            <PackageCheck size={14} /> Samples
+                        </TabsTrigger>
+                        <TabsTrigger 
                             value="planning" 
                             className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
                         >
@@ -144,6 +152,10 @@ export function UserDashboard({
                             selectedMonth={selectedMonth}
                             onMonthChange={onMonthChange}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="allocation" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <Q4AllocationView readOnly={true} userId={userId} />
                     </TabsContent>
                     
                     <TabsContent value="planning" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">

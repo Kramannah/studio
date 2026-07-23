@@ -44,10 +44,11 @@ import {
 
 interface Q4AllocationViewProps {
     readOnly?: boolean;
+    userId?: string;
 }
 
-export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
-    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, readOnly);
+export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId);
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');
@@ -89,7 +90,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     useEffect(() => {
         setCurrentPage(1);
         setSelectedIds([]);
-    }, [search]);
+    }, [search, userId]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -174,15 +175,17 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
+                <div className={cn("space-y-6", (readOnly || !!userId) ? "lg:col-span-3" : "lg:col-span-2")}>
                     <Card className="border-2 shadow-lg overflow-hidden">
                         <CardHeader className="bg-muted/30 border-b pb-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <CardTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                                        <Package className="w-6 h-6" /> Master Material List
+                                        <Package className="w-6 h-6" /> {userId ? 'Representative Inventory Balance' : 'Master Material List'}
                                     </CardTitle>
-                                    <CardDescription>Items defined here are automatically assigned to all PMRs in the system.</CardDescription>
+                                    <CardDescription>
+                                        {userId ? 'View real-time sample usage and current balances for this user.' : 'Items defined here are automatically assigned to all PMRs in the system.'}
+                                    </CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2 w-full max-w-md">
                                     <div className="relative flex-1">
@@ -194,11 +197,11 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                             onChange={(e) => setSearch(e.target.value)}
                                         />
                                     </div>
-                                    {selectedIds.length > 0 && !readOnly && (
+                                    {selectedIds.length > 0 && !readOnly && !userId && (
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl">
-                                                    <Trash2 className="h-5 w-5" />
+                                                    <Trash2 className="h-5 v-5" />
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
@@ -221,22 +224,17 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                 <Table>
                                     <TableHeader className="bg-muted/20">
                                         <TableRow className="h-12 hover:bg-transparent">
-                                            {!readOnly && <TableHead className="w-12 pl-6" />}
-                                            <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
+                                            {!readOnly && !userId && <TableHead className="w-12 pl-6" />}
+                                            <TableHead className={cn("font-bold text-foreground", (readOnly || !!userId) && "pl-6")}>Material Name</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
-                                            {readOnly ? (
-                                                <>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
-                                                </>
-                                            ) : (
-                                                <TableHead className="text-right pr-6">Actions</TableHead>
-                                            )}
+                                            <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                                            <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
+                                            {!readOnly && !userId && <TableHead className="text-right pr-6">Actions</TableHead>}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {dataLoading ? (
-                                            <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                                         ) : paginatedSamples.length > 0 ? (
                                             paginatedSamples.map((sample) => {
                                                 const sId = sample.id;
@@ -247,7 +245,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 
                                                 return (
                                                     <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                        {!readOnly && (
+                                                        {!readOnly && !userId && (
                                                             <TableCell className="pl-6">
                                                                 <Checkbox 
                                                                     checked={selectedIds.includes(sId)}
@@ -255,23 +253,20 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                                 />
                                                             </TableCell>
                                                         )}
-                                                        <TableCell className={cn(readOnly && "pl-6")}>
+                                                        <TableCell className={cn((readOnly || !!userId) && "pl-6")}>
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-sm">{name}</span>
                                                                 <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-center font-mono font-bold">{sample.allocationQuantity}</TableCell>
-                                                        {readOnly ? (
-                                                            <>
-                                                                <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
-                                                                <TableCell className="text-center">
-                                                                    <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
-                                                                        {bal}
-                                                                    </Badge>
-                                                                </TableCell>
-                                                            </>
-                                                        ) : (
+                                                        <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
+                                                        <TableCell className="text-center">
+                                                            <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
+                                                                {bal}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        {!readOnly && !userId && (
                                                             <TableCell className="text-right pr-6">
                                                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
                                                                     <Edit className="w-4 h-4 text-muted-foreground" />
@@ -282,7 +277,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                                                 );
                                             })
                                         ) : (
-                                            <TableRow><TableCell colSpan={readOnly ? 4 : 5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
@@ -301,7 +296,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                     )}
                 </div>
 
-                {!readOnly && (
+                {!readOnly && !userId && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 gap-4">
                             <Button onClick={handleAdd} className="h-14 text-lg font-black font-headline shadow-lg rounded-2xl gap-2 w-full">
