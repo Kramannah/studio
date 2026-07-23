@@ -265,7 +265,7 @@ export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
                             <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
                             <div className="flex items-center gap-2">
                                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10 px-4"><ChevronLeft className="h-4 w-4 mr-1" /> Prev</Button>
-                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10 px-4">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10 px-4">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
                             </div>
                         </div>
                     )}
