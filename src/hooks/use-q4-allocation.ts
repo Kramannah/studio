@@ -6,7 +6,6 @@ import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
-import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -20,9 +19,9 @@ const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
  * Hook for managing inventory allocations.
- * Implements standard error reporting for both reads and writes.
+ * Focuses exclusively on global master templates as per updated requirements.
  */
-export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
+export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false) => {
   const { user, profile } = useAuth();
   const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
@@ -30,18 +29,16 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   
   const usageFetchedRef = useRef(false);
 
-  const getStoreKey = (base: string) => `${base}_${targetUserId || user?.uid}`;
-
   useEffect(() => {
       if (user?.uid) {
           try {
-              const localAlloc = localStorage.getItem(getStoreKey(ALLOCATIONS_STORAGE_KEY));
-              const localUsed = localStorage.getItem(getStoreKey(USED_QUANTITIES_STORAGE_KEY));
+              const localAlloc = localStorage.getItem(`${ALLOCATIONS_STORAGE_KEY}_global`);
+              const localUsed = localStorage.getItem(`${USED_QUANTITIES_STORAGE_KEY}_${user.uid}`);
               if (localAlloc) setAllocations(JSON.parse(localAlloc));
               if (localUsed) setUsedQuantities(JSON.parse(localUsed));
           } catch (e) {}
       }
-  }, [user?.uid, targetUserId]);
+  }, [user?.uid]);
 
   const performFetch = useCallback(async (force = false) => {
     if (!db || !user || !active) {
@@ -90,57 +87,22 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             } as Q4Allocation;
         });
         
-        const effectiveUserId = targetUserId || (profile?.role === 'PMR' ? user?.uid : undefined);
-        let mergedAllocations = [...globalAllocations];
+        globalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
-        if (effectiveUserId) {
-            const indSnap = await getDocs(query(
-                collection(db!, "individualAllocations"),
-                where("userId", "==", effectiveUserId)
-            )).catch(async (error) => {
-                if (error.code === 'permission-denied') {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: 'individualAllocations',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext));
-                }
-                throw error;
-            });
-            
-            const overrides: Record<string, number> = {};
-            indSnap.docs.forEach(d => {
-                const data = d.data();
-                if (data.sampleId) overrides[data.sampleId] = data.quantity;
-            });
-
-            mergedAllocations = globalAllocations.map(a => ({
-                ...a,
-                allocationQuantity: overrides[a.id] !== undefined ? overrides[a.id] : a.allocationQuantity
-            }));
-        }
-
-        mergedAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
-
-        cachedAllocations = mergedAllocations;
+        cachedAllocations = globalAllocations;
         lastAllocationFetch = now;
-        setAllocations(mergedAllocations);
-        safeStorageSet(getStoreKey(ALLOCATIONS_STORAGE_KEY), JSON.stringify(mergedAllocations));
+        setAllocations(globalAllocations);
+        safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_global`, JSON.stringify(globalAllocations));
 
         if (includeUsage) {
             const used: Record<string, number> = {};
-            const isManagerial = profile?.role && ['Manager', 'Admin', 'Marketing'].includes(profile.role);
             const startOfYear = getStartOfYearISO();
             const startOfYearDate = parseISO(startOfYear);
             
-            let entriesSnap;
             const entriesCol = collection(db!, "coverageEntries");
-            const q = targetUserId 
-                ? query(entriesCol, where("userId", "==", targetUserId), where("coverageDate", ">=", startOfYear), limit(3000))
-                : (isManagerial 
-                    ? query(entriesCol, where("coverageDate", ">=", startOfYear), limit(3000))
-                    : query(entriesCol, where("userId", "==", user.uid), where("coverageDate", ">=", startOfYear), limit(3000)));
+            const q = query(entriesCol, where("userId", "==", user.uid), where("coverageDate", ">=", startOfYear), limit(3000));
 
-            entriesSnap = await getDocs(q).catch(async (error) => {
+            const entriesSnap = await getDocs(q).catch(async (error) => {
                 if (error.code === 'permission-denied') {
                     errorEmitter.emit('permission-error', new FirestorePermissionError({
                         path: 'coverageEntries',
@@ -171,7 +133,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             });
             setUsedQuantities(used);
             usageFetchedRef.current = true;
-            safeStorageSet(getStoreKey(USED_QUANTITIES_STORAGE_KEY), JSON.stringify(used));
+            safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${user.uid}`, JSON.stringify(used));
         }
 
     } catch (error: any) {
@@ -179,7 +141,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [user, profile, active, includeUsage, allocations.length, targetUserId]);
+  }, [user, active, includeUsage, allocations.length]);
 
   useEffect(() => {
     if (active) performFetch();
@@ -190,37 +152,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
-    // Pattern 1: Non-blocking mutation with chained catch for permissions
     setDoc(docRef, rest, { merge: true })
       .catch(async (serverError) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: docRef.path,
           operation: 'write',
           requestResourceData: rest,
-        } satisfies SecurityRuleContext));
-      });
-    
-    performFetch(true);
-    return true;
-  };
-
-  const setIndividualAllocation = async (userId: string, sampleId: string, quantity: number) => {
-    if (!db) return false;
-    const docId = `${userId}_${sampleId}`;
-    const docRef = doc(db!, "individualAllocations", docId);
-    const payload = {
-        userId,
-        sampleId,
-        quantity: Math.round(quantity),
-        updatedAt: new Date().toISOString()
-    };
-    
-    setDoc(docRef, payload, { merge: true })
-      .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: docRef.path,
-            operation: 'write',
-            requestResourceData: payload,
         } satisfies SecurityRuleContext));
       });
     
@@ -272,7 +209,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         performFetch(true);
     },
     saveAllocation,
-    setIndividualAllocation,
     addAllocationsBulk,
     deleteAllocationsBulk
   };

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -186,7 +187,7 @@ export function UserDashboard({
                     </TabsContent>
 
                     <TabsContent value="allocation" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <Q4AllocationView readOnly={true} userId={userId} />
+                        <Q4AllocationView readOnly={true} />
                     </TabsContent>
                 </div>
             </Tabs>

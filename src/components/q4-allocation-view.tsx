@@ -17,12 +17,10 @@ import {
     Trash2,
     ChevronLeft,
     ChevronRight,
-    TrendingUp,
     Package,
     Plus,
     Edit,
-    Globe,
-    UserCircle2
+    Globe
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
@@ -31,7 +29,6 @@ import type { Q4Allocation, MarketingSample } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
-import { IndividualAllocationDialog } from "./individual-allocation-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,11 +43,10 @@ import {
 
 interface Q4AllocationViewProps {
     readOnly?: boolean;
-    userId?: string;
 }
 
-export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
-    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk, setIndividualAllocation } = useQ4Allocation(true, true, userId);
+export function Q4AllocationView({ readOnly = false }: Q4AllocationViewProps) {
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true);
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');
@@ -61,9 +57,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
     const itemsPerPage = 15;
     
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [isOverrideDialogOpen, setIsOverrideDialogOpen] = useState(false);
     const [editingSample, setEditingSample] = useState<MarketingSample | undefined>(undefined);
-    const [overridingSample, setOverrideSample] = useState<Q4Allocation | undefined>(undefined);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +88,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
     useEffect(() => {
         setCurrentPage(1);
         setSelectedIds([]);
-    }, [search, userId]);
+    }, [search]);
 
     const handleDownloadTemplate = () => {
         const headers = ['ProdGroupProdSubGroup', 'DisplayMaterialName', 'AllocationQuantity'];
@@ -153,34 +147,18 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
     };
 
     const handleEdit = (sample: Q4Allocation) => {
-        if (userId) {
-            // If in individual user view, we want to override their specific quantity
-            setOverrideSample(sample);
-            setIsOverrideDialogOpen(true);
-        } else {
-            // Global template edit
-            setEditingSample({
-                id: sample.id,
-                productGroup: sample.prodGroupProdSubGroup,
-                materialName: sample.displayMaterialName,
-                allocationQuantity: sample.allocationQuantity
-            });
-            setIsDialogOpen(true);
-        }
+        setEditingSample({
+            id: sample.id,
+            productGroup: sample.prodGroupProdSubGroup,
+            materialName: sample.displayMaterialName,
+            allocationQuantity: sample.allocationQuantity
+        });
+        setIsDialogOpen(true);
     };
 
     const handleAdd = () => {
         setEditingSample(undefined);
         setIsDialogOpen(true);
-    };
-
-    const handleSaveOverride = async (qty: number) => {
-        if (!userId || !overridingSample) return;
-        const success = await setIndividualAllocation(userId, overridingSample.id, qty);
-        if (success) {
-            toast({ title: "Individual Balance Updated" });
-            setIsOverrideDialogOpen(false);
-        }
     };
 
     if (!mounted) {
@@ -195,16 +173,16 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className={cn("space-y-6", (readOnly || !!userId) ? "lg:col-span-3" : "lg:col-span-2")}>
+                <div className={cn("space-y-6", readOnly ? "lg:col-span-3" : "lg:col-span-2")}>
                     <Card className="border-2 shadow-lg overflow-hidden">
                         <CardHeader className="bg-muted/30 border-b pb-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <CardTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                                        <Package className="w-6 h-6" /> {userId ? 'Representative Inventory Balance' : 'Master Material List'}
+                                        <Package className="w-6 h-6" /> Master Material List
                                     </CardTitle>
                                     <CardDescription>
-                                        {userId ? 'View real-time sample usage and individual balances. Tap edit to override quantities.' : 'Items defined here are automatically assigned to all PMRs in the system.'}
+                                        Items defined here are automatically assigned to all PMRs in the system.
                                     </CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2 w-full max-w-md">
@@ -217,7 +195,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                             onChange={(e) => setSearch(e.target.value)}
                                         />
                                     </div>
-                                    {selectedIds.length > 0 && !readOnly && !userId && (
+                                    {selectedIds.length > 0 && !readOnly && (
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button variant="destructive" size="icon" className="h-11 w-11 shrink-0 rounded-xl">
@@ -244,12 +222,12 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                 <Table>
                                     <TableHeader className="bg-muted/20">
                                         <TableRow className="h-12 hover:bg-transparent">
-                                            {!readOnly && !userId && <TableHead className="w-12 pl-6" />}
-                                            <TableHead className={cn("font-bold text-foreground", (readOnly || !!userId) && "pl-6")}>Material Name</TableHead>
+                                            {!readOnly && <TableHead className="w-12 pl-6" />}
+                                            <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
                                             <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
-                                            {( (!readOnly && !userId) || (!!userId && !readOnly) ) && <TableHead className="text-right pr-6">Actions</TableHead>}
+                                            {!readOnly && <TableHead className="text-right pr-6">Actions</TableHead>}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -265,7 +243,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                                 
                                                 return (
                                                     <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                        {!readOnly && !userId && (
+                                                        {!readOnly && (
                                                             <TableCell className="pl-6">
                                                                 <Checkbox 
                                                                     checked={selectedIds.includes(sId)}
@@ -273,7 +251,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                                                 />
                                                             </TableCell>
                                                         )}
-                                                        <TableCell className={cn((readOnly || !!userId) && "pl-6")}>
+                                                        <TableCell className={cn(readOnly && "pl-6")}>
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-sm">{name}</span>
                                                                 <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
@@ -290,7 +268,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                                                 {bal}
                                                             </Badge>
                                                         </TableCell>
-                                                        {( (!readOnly && !userId) || (!!userId && !readOnly) ) && (
+                                                        {!readOnly && (
                                                             <TableCell className="text-right pr-6">
                                                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
                                                                     <Edit className="w-4 h-4 text-muted-foreground" />
@@ -320,7 +298,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                     )}
                 </div>
 
-                {!readOnly && !userId && (
+                {!readOnly && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 gap-4">
                             <Button onClick={handleAdd} className="h-14 text-lg font-black font-headline shadow-lg rounded-2xl gap-2 w-full">
@@ -367,13 +345,6 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 onOpenChange={setIsDialogOpen} 
                 onSave={refetch} 
                 sample={editingSample}
-            />
-
-            <IndividualAllocationDialog
-                isOpen={isOverrideDialogOpen}
-                onOpenChange={setIsOverrideDialogOpen}
-                onSave={handleSaveOverride}
-                sample={overridingSample}
             />
         </div>
     );
