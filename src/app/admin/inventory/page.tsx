@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, PackageCheck, RefreshCw, User } from 'lucide-react';
+import { ChevronLeft, PackageCheck, RefreshCw, User, Package, Users } from 'lucide-react';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { IndividualAllocationManager } from '@/components/individual-allocation-manager';
 
 export default function AdminInventoryPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -50,7 +52,7 @@ export default function AdminInventoryPage() {
                     <div className="flex items-center gap-2">
                         <PackageCheck className="w-8 h-8 text-primary" />
                         <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
-                            Marketing Samples
+                            Inventory Center
                         </h1>
                     </div>
                 </div>
@@ -67,16 +69,34 @@ export default function AdminInventoryPage() {
             </header>
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1600px] mx-auto">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-                    <div className="space-y-1">
-                        <h2 className="text-3xl font-black font-headline text-primary">Inventory Management</h2>
-                        <p className="text-muted-foreground">Manage the global distribution template for all representatives.</p>
+                <Tabs defaultValue="global" className="w-full">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+                        <div className="space-y-1">
+                            <h2 className="text-3xl font-black font-headline text-primary">Inventory Management</h2>
+                            <p className="text-muted-foreground">Manage global distribution templates or set individual PMR sample quantities.</p>
+                        </div>
+                        <TabsList className="bg-muted/50 p-1 rounded-xl border-2 grid grid-cols-2 w-full md:w-[400px]">
+                            <TabsTrigger value="global" className="rounded-lg font-headline flex items-center gap-2">
+                                <Package className="w-4 h-4" /> Global Template
+                            </TabsTrigger>
+                            <TabsTrigger value="individual" className="rounded-lg font-headline flex items-center gap-2">
+                                <Users className="w-4 h-4" /> PMR Overrides
+                            </TabsTrigger>
+                        </TabsList>
                     </div>
-                </div>
 
-                <div className="bg-muted/5 rounded-[2rem] border-2 border-dashed border-primary/10 p-1">
-                    <Q4AllocationView readOnly={false} />
-                </div>
+                    <TabsContent value="global">
+                        <div className="bg-muted/5 rounded-[2rem] border-2 border-dashed border-primary/10 p-1">
+                            <Q4AllocationView readOnly={false} />
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="individual">
+                        <div className="bg-muted/5 rounded-[2rem] border-2 border-dashed border-primary/10 p-1">
+                            <IndividualAllocationManager />
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     );

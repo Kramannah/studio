@@ -105,6 +105,7 @@ export interface Q4Allocation {
     displayMaterialName: string;
     allocationQuantity: number;
     quarter?: 'Q3' | 'Q4';
+    isOverridden?: boolean;
 }
 
 export interface IndividualAllocation {

@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Q4Allocation, CoverageEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where, writeBatch, doc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { getStartOfYearISO, safeStorageSet, parseAnyDate } from '@/lib/utils';
 import { isValid, parseISO, isAfter } from 'date-fns';
@@ -19,21 +19,21 @@ const USED_QUANTITIES_STORAGE_KEY = 'sfe-used-quantities-v5';
 
 /**
  * Hook for managing inventory allocations.
- * Focuses exclusively on global master templates as per updated requirements.
+ * Supports global templates and individual PMR bag overrides.
  */
 export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
   const { user } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
-  const [allocations, setAllocations] = useState<Q4Allocation[]>(cachedAllocations || []);
+  const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
   const [usedQuantities, setUsedQuantities] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(!cachedAllocations && active);
+  const [loading, setLoading] = useState(active);
   
   const usageFetchedForRef = useRef<string | null>(null);
 
   useEffect(() => {
       if (effectiveUserId) {
           try {
-              const localAlloc = localStorage.getItem(`${ALLOCATIONS_STORAGE_KEY}_global`);
+              const localAlloc = localStorage.getItem(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`);
               const localUsed = localStorage.getItem(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`);
               if (localAlloc) setAllocations(JSON.parse(localAlloc));
               if (localUsed) setUsedQuantities(JSON.parse(localUsed));
@@ -42,21 +42,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   }, [effectiveUserId]);
 
   const performFetch = useCallback(async (force = false) => {
-    if (!db || !effectiveUserId || !active) {
+    if (!db || !active) {
         setLoading(false);
         return;
-    }
-
-    const now = Date.now();
-    const isGlobalCached = !force && cachedAllocations && (now - lastAllocationFetch < ALLOCATION_CACHE_TTL);
-    const isUsageCached = !force && includeUsage && usageFetchedForRef.current === effectiveUserId;
-
-    if (isGlobalCached) {
-        setAllocations(cachedAllocations!);
-        if (!includeUsage || isUsageCached) {
-            setLoading(false);
-            return;
-        }
     }
 
     if (!navigator.onLine) {
@@ -64,10 +52,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         return;
     }
 
-    if (allocations.length === 0 || !isUsageCached) setLoading(true);
+    setLoading(true);
 
     try {
-        // 1. Fetch Master Template (Marketing Samples)
+        // 1. Fetch Global Template (Marketing Samples)
         const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
             .catch(async (error) => {
                 if (error.code === 'permission-denied') {
@@ -81,65 +69,73 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
         const globalAllocations = samplesSnapshot.docs.map(docSnap => {
             const data = docSnap.data();
-            const materialName = (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim();
-            const group = (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim();
-            const qty = Number(data.allocationQuantity || 0);
             return { 
                 id: docSnap.id, 
-                prodGroupProdSubGroup: group, 
-                displayMaterialName: materialName, 
-                allocationQuantity: isNaN(qty) ? 0 : qty 
+                prodGroupProdSubGroup: (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim(), 
+                displayMaterialName: (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim(), 
+                allocationQuantity: Number(data.allocationQuantity || 0) 
             } as Q4Allocation;
         });
         
-        globalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+        let finalAllocations = globalAllocations;
 
-        cachedAllocations = globalAllocations;
-        lastAllocationFetch = now;
-        setAllocations(globalAllocations);
-        safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_global`, JSON.stringify(globalAllocations));
-
-        // 2. Fetch Targeted User Usage
-        if (includeUsage) {
-            const used: Record<string, number> = {};
-            const startOfYear = getStartOfYearISO();
-            const startOfYearDate = parseISO(startOfYear);
+        // 2. Handle Individual Overrides if a specific user is targeted
+        if (effectiveUserId) {
+            const overrideSnap = await getDocs(query(
+                collection(db!, "individualAllocations"), 
+                where("userId", "==", effectiveUserId)
+            ));
             
-            const entriesCol = collection(db!, "coverageEntries");
-            const q = query(entriesCol, where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000));
+            const overridesMap = new Map();
+            overrideSnap.docs.forEach(d => overridesMap.set(d.data().sampleId, d.data().quantity));
 
-            const entriesSnap = await getDocs(q).catch(async (error) => {
-                if (error.code === 'permission-denied') {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: 'coverageEntries',
-                        operation: 'list',
-                    } satisfies SecurityRuleContext));
+            finalAllocations = globalAllocations.map(s => {
+                if (overridesMap.has(s.id)) {
+                    return { ...s, allocationQuantity: overridesMap.get(s.id), isOverridden: true };
                 }
-                throw error;
+                return s;
             });
 
-            entriesSnap.docs.forEach(d => {
-                const data = d.data() as CoverageEntry;
-                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
-                if (!cDate || !isAfter(cDate, startOfYearDate)) return;
+            // 3. Fetch Targeted User Usage
+            if (includeUsage) {
+                const used: Record<string, number> = {};
+                const startOfYear = getStartOfYearISO();
+                const startOfYearDate = parseISO(startOfYear);
+                
+                const entriesCol = collection(db!, "coverageEntries");
+                const q = query(entriesCol, where("userId", "==", effectiveUserId), where("coverageDate", ">=", startOfYear), limit(3000));
 
-                const process = (name?: string, qty?: number) => {
-                    const key = String(name ?? "").toLowerCase().trim();
-                    if (!key) return;
-                    const q = Math.round(Number(qty || 0));
-                    if (!isNaN(q) && q !== 0) {
-                        used[key] = (used[key] || 0) + q;
+                const entriesSnap = await getDocs(q);
+
+                entriesSnap.docs.forEach(d => {
+                    const data = d.data() as CoverageEntry;
+                    const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                    if (!cDate || !isAfter(cDate, startOfYearDate)) return;
+
+                    const process = (name?: string, qty?: number) => {
+                        const key = String(name ?? "").toLowerCase().trim();
+                        if (!key) return;
+                        const q = Math.round(Number(qty || 0));
+                        if (!isNaN(q) && q !== 0) {
+                            used[key] = (used[key] || 0) + q;
+                        }
+                    };
+                    process(data.primarySampleName, data.primaryProductQty);
+                    process(data.secondarySampleName, data.secondaryProductQty);
+                    if (data.reminderProducts) {
+                        data.reminderProducts.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
                     }
-                };
-                process(data.primarySampleName, data.primaryProductQty);
-                process(data.secondarySampleName, data.secondaryProductQty);
-                if (data.reminderProducts) {
-                    data.reminderProducts.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
-                }
-            });
-            setUsedQuantities(used);
-            usageFetchedForRef.current = effectiveUserId;
-            safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(used));
+                });
+                setUsedQuantities(used);
+                usageFetchedForRef.current = effectiveUserId;
+                safeStorageSet(`${USED_QUANTITIES_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(used));
+            }
+        }
+
+        finalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+        setAllocations(finalAllocations);
+        if (effectiveUserId) {
+            safeStorageSet(`${ALLOCATIONS_STORAGE_KEY}_${effectiveUserId}`, JSON.stringify(finalAllocations));
         }
 
     } catch (error: any) {
@@ -147,7 +143,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [effectiveUserId, active, includeUsage, allocations.length]);
+  }, [effectiveUserId, active, includeUsage]);
 
   useEffect(() => {
     if (active) performFetch();
@@ -169,6 +165,46 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     
     performFetch(true);
     return true;
+  };
+
+  const saveOverride = async (sampleId: string, quantity: number) => {
+      if (!db || !effectiveUserId) return false;
+      
+      const q = query(
+          collection(db!, "individualAllocations"), 
+          where("userId", "==", effectiveUserId), 
+          where("sampleId", "==", sampleId)
+      );
+      
+      const snap = await getDocs(q);
+      const payload = {
+          userId: effectiveUserId,
+          sampleId,
+          quantity,
+          updatedAt: new Date().toISOString()
+      };
+
+      if (!snap.empty) {
+          const docRef = doc(db!, "individualAllocations", snap.docs[0].id);
+          updateDoc(docRef, payload).catch(e => {
+              errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  path: docRef.path,
+                  operation: 'update',
+                  requestResourceData: payload
+              }));
+          });
+      } else {
+          addDoc(collection(db!, "individualAllocations"), payload).catch(e => {
+              errorEmitter.emit('permission-error', new FirestorePermissionError({
+                  path: 'individualAllocations',
+                  operation: 'create',
+                  requestResourceData: payload
+              }));
+          });
+      }
+
+      performFetch(true);
+      return true;
   };
 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
@@ -210,11 +246,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: () => {
-        usageFetchedForRef.current = null;
-        performFetch(true);
-    },
+    refetch: () => performFetch(true),
     saveAllocation,
+    saveOverride,
     addAllocationsBulk,
     deleteAllocationsBulk
   };
