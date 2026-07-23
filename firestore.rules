@@ -19,7 +19,6 @@ service cloud.firestore {
       if (!isSignedIn()) return false;
       
       // Admin & DSM Whitelist (Direct resolution for provisioned accounts)
-      // Accessing email directly from the token object is more reliable across rules versions
       let email = request.auth.token.email;
       let authorizedEmails = [
         "mbustamante@hovidinc.com", 
@@ -34,7 +33,8 @@ service cloud.firestore {
         "nldsm@hovidinc.com"
       ];
       
-      if (email != null && email.lower() in authorizedEmails) return true;
+      // Use toLower() instead of lower()
+      if (email != null && email.toLower() in authorizedEmails) return true;
       
       // Explicit UID whitelist to ensure managers can perform approvals immediately
       let authorizedUids = [
@@ -61,7 +61,7 @@ service cloud.firestore {
     function isSpecialAuthorizedPMR() {
       if (!isSignedIn()) return false;
       let email = request.auth.token.email;
-      return email != null && email.lower() in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
+      return email != null && email.toLower() in ["kgpangan@hovidinc.com", "pjramos@hovidinc.com"];
     }
 
     // --- Collection Rules ---
