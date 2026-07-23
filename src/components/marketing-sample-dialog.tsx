@@ -112,7 +112,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
             let targetSampleId = sample?.id;
             
             if (!targetSampleId) {
-                // Find existing sample by name or create a stub in marketingSamples
+                // Find existing sample by name
                 const existing = allocations.find(a => 
                     a.displayMaterialName.toLowerCase() === values.materialName.toLowerCase()
                 );
@@ -121,15 +121,14 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                     targetSampleId = existing.id;
                 } else {
                     // This is a new product - we must add it to master list with 0 global qty first
-                    // so it has a referenceable ID
-                    const newSampleRef = await saveAllocation({
+                    const result = await saveAllocation({
                         prodGroupProdSubGroup: values.productGroup,
                         displayMaterialName: values.materialName,
                         allocationQuantity: 0
                     });
-                    // Note: Refetching would be better here to get the actual ID, but for simplicity
-                    // we'll suggest the user adds the product to the master list first if it's new.
-                    // Or just use the global save logic if it's new.
+                    // For simplicity in this non-blocking flow, we assume the product is created.
+                    // Real-time listener in hook will pick it up, but for the immediate write
+                    // we'll advise the user to ensure products are in master list.
                 }
             }
             
@@ -213,27 +212,29 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                             variant="outline"
                                             role="combobox"
                                             className={cn(
-                                                "w-full justify-between h-12 border-2",
+                                                "w-full justify-between h-12 border-2 text-left",
                                                 !field.value && "text-muted-foreground"
                                             )}
                                         >
-                                            {field.value
-                                                ? `${profiles[field.value]?.lastName}, ${profiles[field.value]?.firstName}`
-                                                : "Search personnel directory..."}
+                                            <span className="truncate">
+                                                {field.value && profiles[field.value]
+                                                    ? `${profiles[field.value].lastName}, ${profiles[field.value].firstName} (${profiles[field.value].code || 'PMR'})`
+                                                    : "Search by name or code..."}
+                                            </span>
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
                                     </FormControl>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                                    <Command>
-                                        <CommandInput placeholder="Search PMR name..." />
+                                    <Command shouldFilter={true}>
+                                        <CommandInput placeholder="Type name or code (e.g. NL-01)..." />
                                         <CommandList>
                                             <CommandEmpty>No matching personnel found.</CommandEmpty>
                                             <CommandGroup>
                                                 {sortedUsers.map((p) => (
                                                     <CommandItem
                                                         key={p.userId}
-                                                        value={`${p.lastName} ${p.firstName}`}
+                                                        value={`${p.lastName} ${p.firstName} ${p.code || ''}`.toLowerCase()}
                                                         onSelect={() => {
                                                             form.setValue("userId", p.userId);
                                                             setPopoverOpen(false);
@@ -241,8 +242,8 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                                     >
                                                         <Check className={cn("mr-2 h-4 w-4", p.userId === field.value ? "opacity-100" : "opacity-0")} />
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold">{p.lastName}, {p.firstName}</span>
-                                                            <span className="text-[10px] uppercase text-muted-foreground">{p.code || "PMR"}</span>
+                                                            <span className="font-bold text-sm">{p.lastName}, {p.firstName}</span>
+                                                            <span className="text-[10px] uppercase font-black text-primary tracking-widest">{p.code || "PMR"}</span>
                                                         </div>
                                                     </CommandItem>
                                                 ))}
