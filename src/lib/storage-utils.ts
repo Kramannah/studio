@@ -1,3 +1,4 @@
+
 'use client';
 
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
@@ -7,7 +8,7 @@ import { storage, auth } from "./firebase";
  * Client-side utility to resize and compress images before storage or local caching.
  * Targets ~100KB-150KB per photo and <20KB for signatures.
  */
-export async function compressImage(base64: string, maxWidth: number = 1024, quality: number = 0.5): Promise<string> {
+export async function compressImage(base64: string, maxWidth: number = 800, quality: number = 0.5): Promise<string> {
     if (typeof window === 'undefined' || !base64 || !base64.startsWith('data:image')) return base64;
     
     return new Promise((resolve) => {

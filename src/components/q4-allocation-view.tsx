@@ -109,25 +109,37 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
     };
 
     const handleExportExcel = () => {
+        const pmr = userId ? profiles[userId] : null;
+        const pmrName = pmr ? `${pmr.lastName}, ${pmr.firstName}` : null;
+        const pmrCode = pmr?.code || null;
+
         const dataToExport = filteredSamples.map(sample => {
             const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
             const used = usedQuantities[name.toLowerCase()] || 0;
             const allocated = sample.allocationQuantity || 0;
             const balance = Math.max(0, allocated - used);
-            return {
-                "Product Group": (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim(),
-                "Material Name": name,
-                "Allocated Quantity": allocated,
-                "Used Quantity": used,
-                "Remaining Balance": balance
-            };
+            
+            const row: any = {};
+            if (userId) {
+                row["PMR Code"] = pmrCode || "N/A";
+                row["PMR Name"] = pmrName || "Unknown User";
+            }
+            row["Product Group"] = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
+            row["Material Name"] = name;
+            row["Allocated Quantity"] = allocated;
+            row["Used Quantity"] = used;
+            row["Remaining Balance"] = balance;
+            return row;
         });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Report");
         
-        const fileName = `Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        const fileName = userId && pmrCode 
+            ? `Inventory_${pmrCode}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`
+            : `Inventory_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+            
         XLSX.writeFile(workbook, fileName);
 
         toast({ title: "Report Exported", description: "The Excel file has been generated successfully." });
@@ -209,10 +221,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 totalFetched += snap.docs.length;
                 lastVisible = snap.docs[snap.docs.length - 1];
                 
-                // If we got fewer results than requested, we've reached the end
                 if (snap.docs.length < 1000) finished = true;
-                
-                // Safety break for extremely large organizations to prevent browser crash
                 if (totalFetched >= 15000) finished = true;
             }
 
@@ -242,7 +251,6 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 });
             });
 
-            // 4. Generate Excel
             const worksheet = XLSX.utils.json_to_sheet(exportRows);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "PMR Inventory Audit");
@@ -529,4 +537,3 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         </div>
     );
 }
-

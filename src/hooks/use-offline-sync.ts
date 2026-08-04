@@ -140,7 +140,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     let processedPhotos = entry.photos;
     if (entry.photos && entry.photos.length > 0) {
         try {
-            processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 1024, 0.6)));
+            // PROACTIVE COMPRESSION: Compress before any storage action (online or offline)
+            processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 800, 0.5)));
         } catch (e) { console.warn("Compression failed, using raw", e); }
     }
 
@@ -193,7 +194,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || !db || isSyncInProgress.current) return;
     
-    if (offlineEntries.length === 0) {
+    const entriesToSync = [...offlineEntries];
+    if (entriesToSync.length === 0) {
         await fetchMasterEntries(true);
         return;
     }
@@ -201,43 +203,55 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     isSyncInProgress.current = true;
     setIsSyncing(true);
     
-    try {
-        const batch = writeBatch(db!);
-        const currentOffline = [...offlineEntries];
-        
-        currentOffline.forEach(entry => {
-            const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
-            const docRef = doc(collection(db!, "coverageEntries"));
-            batch.set(docRef, sanitizePayload(dataToSync));
-        });
+    let successCount = 0;
+    let failedEntries: CoverageEntry[] = [];
 
-        await batch.commit();
-        
-        setOfflineEntries([]);
-        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
-        
+    // INDIVIDUAL PROCESSING: Process reports one-by-one to prevent batch blocking
+    for (const entry of entriesToSync) {
+        try {
+            const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
+            const sanitized = sanitizePayload(dataToSync);
+            await addDoc(collection(db!, "coverageEntries"), sanitized);
+            successCount++;
+        } catch (error: any) {
+            console.error("Single report sync failed:", error);
+            failedEntries.push(entry);
+            
+            if (error.code === 'permission-denied') {
+                 errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: 'coverageEntries',
+                    operation: 'create'
+                }));
+            }
+        }
+    }
+
+    if (successCount > 0) {
+        setOfflineEntries(failedEntries);
+        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(failedEntries));
         await fetchMasterEntries(true);
         if (onSyncSuccess) onSyncSuccess();
-        toast({ title: "Offline Data Synced" });
-    } catch (error: any) {
-        if (error.code === 'permission-denied') {
-             errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'coverageEntries',
-                operation: 'create'
-            }));
-        }
-        toast({ variant: 'destructive', title: 'Sync Failed', description: "Retrying in background..." });
-    } finally {
-        setIsSyncing(false);
-        isSyncInProgress.current = false;
     }
+
+    if (failedEntries.length > 0) {
+        toast({ 
+            variant: 'destructive', 
+            title: 'Sync Partial', 
+            description: `${failedEntries.length} reports could not be uploaded. Retrying...` 
+        });
+    } else {
+        toast({ title: "Sync Complete" });
+    }
+
+    setIsSyncing(false);
+    isSyncInProgress.current = false;
   }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, onSyncSuccess]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
         const timer = setTimeout(() => {
             syncAllOfflineEntries();
-        }, 3000);
+        }, 5000);
         return () => clearTimeout(timer);
     }
   }, [isOnline, offlineEntries.length, syncAllOfflineEntries]);
