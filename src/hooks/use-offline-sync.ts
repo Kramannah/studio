@@ -50,7 +50,7 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string) => {
+export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string, onSyncSuccess?: () => void) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
@@ -163,6 +163,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 setMasterEntries(prev => [newEntry, ...prev]);
             }
             toast({ title: "Report Saved" });
+            if (onSyncSuccess) onSyncSuccess();
           })
           .catch(async (error) => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -216,6 +217,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify([]));
         
         await fetchMasterEntries(true);
+        if (onSyncSuccess) onSyncSuccess();
         toast({ title: "Offline Data Synced" });
     } catch (error: any) {
         if (error.code === 'permission-denied') {
@@ -229,7 +231,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setIsSyncing(false);
         isSyncInProgress.current = false;
     }
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries]);
+  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, onSyncSuccess]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
@@ -247,6 +249,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       .then(() => {
         setMasterEntries(prev => prev.filter(e => e.id !== id));
         toast({ title: "Report Deleted" });
+        if (onSyncSuccess) onSyncSuccess();
       })
       .catch(async (e: any) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -266,6 +269,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       .then(() => {
         setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data} : item));
         toast({ title: "Report Updated" });
+        if (onSyncSuccess) onSyncSuccess();
       })
       .catch(async (err: any) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({

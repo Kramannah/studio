@@ -167,6 +167,15 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (active) performFetch();
   }, [performFetch, active]);
 
+  const refetch = useCallback(() => {
+    // Force a fresh fetch and invalidate both global and specific user usage cache
+    lastGlobalFetch = 0;
+    if (effectiveUserId) {
+        delete USAGE_CACHE[effectiveUserId];
+    }
+    return performFetch(true);
+  }, [effectiveUserId, performFetch]);
+
   const saveAllocation = async (data: Omit<Q4Allocation, 'id'> & { id?: string }) => {
     if (!db) return false;
     const { id, ...rest } = data;
@@ -182,9 +191,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
     
-    // Invalidate master cache on write
-    lastGlobalFetch = 0;
-    performFetch(true);
+    refetch();
     return true;
   };
 
@@ -209,7 +216,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             errorEmitter.emit('permission-error', permissionError);
         });
 
-    performFetch(true);
+    refetch();
     return true;
   };
 
@@ -228,8 +235,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
 
-    lastGlobalFetch = 0;
-    performFetch(true);
+    refetch();
     return true;
   };
 
@@ -247,8 +253,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         errorEmitter.emit('permission-error', permissionError);
       });
 
-    lastGlobalFetch = 0;
-    performFetch(true);
+    refetch();
     return true;
   };
 
@@ -256,7 +261,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     allocations, 
     usedQuantities, 
     loading, 
-    refetch: () => performFetch(true),
+    refetch,
     saveAllocation,
     saveIndividualAllocation,
     addAllocationsBulk,

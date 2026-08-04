@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -75,6 +76,8 @@ export default function Home() {
 
   const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
+  const { allocations, usedQuantities: globalUsedQuantities, refetch: refetchAllocations } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', activeView === 'allocation' || activeView === 'coverage');
+
   const { 
     offlineEntries, 
     masterEntries, 
@@ -87,13 +90,12 @@ export default function Home() {
     updateOfflineEntry, 
     loading: entriesLoading, 
     fetchMasterEntries: refreshEntries 
-  } = useOfflineSync(user?.uid, ['submitted', 'summary', 'planning', 'coverage', 'offline'].includes(activeView), selectedMonth);
+  } = useOfflineSync(user?.uid, activeView !== 'master' && activeView !== 'allocation', selectedMonth, refetchAllocations);
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning', selectedMonth);
-  const { allocations, usedQuantities: globalUsedQuantities } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', activeView === 'allocation' || activeView === 'coverage');
   
   const handleManualSync = useCallback(async () => {
       setIsManualSyncing(true);
@@ -103,7 +105,8 @@ export default function Home() {
               refreshEntries(true),
               refreshPlans(true), 
               fetchTimeLogs(true), 
-              fetchNonCallDays(true)
+              fetchNonCallDays(true),
+              refetchAllocations()
           ]);
           toast({ title: "Sync Finished", description: "All records updated from server." });
       } catch (e) { 
@@ -111,7 +114,7 @@ export default function Home() {
       } finally { 
           setIsManualSyncing(false); 
       }
-  }, [syncAllOfflineEntries, refreshEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, toast]);
+  }, [syncAllOfflineEntries, refreshEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchAllocations, toast]);
 
   const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
     setDoctorToLog(doctor);
@@ -132,7 +135,10 @@ export default function Home() {
     setPlannedDateToLog(null);
     setEntryToEdit(null);
     setActiveView(savedOnline ? 'submitted' : 'offline');
-  }, []);
+    if (savedOnline) {
+        refetchAllocations();
+    }
+  }, [refetchAllocations]);
 
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...globalUsedQuantities };
