@@ -21,16 +21,20 @@ import {
     Plus,
     Edit,
     Globe,
-    FileSpreadsheet
+    FileSpreadsheet,
+    FileUp
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
-import type { Q4Allocation, MarketingSample } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { Q4Allocation, MarketingSample, CoverageEntry, IndividualAllocation } from "@/lib/types";
+import { cn, getStartOfYearISO, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
-import { format } from "date-fns";
+import { format, parseISO, isAfter } from "date-fns";
+import { useUserProfiles } from "@/hooks/use-user-profiles";
+import { collection, getDocs, query, where, limit } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,10 +54,12 @@ interface Q4AllocationViewProps {
 
 export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId);
+    const { profiles, loading: profilesLoading } = useUserProfiles();
     const { toast } = useToast();
     
     const [search, setSearch] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [isExportingAll, setIsExportingAll] = useState(false);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [mounted, setMounted] = useState(false);
@@ -125,6 +131,116 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         XLSX.writeFile(workbook, fileName);
 
         toast({ title: "Report Exported", description: "The Excel file has been generated successfully." });
+    };
+
+    const handleDownloadAllPMRData = async () => {
+        if (!db) return;
+        setIsExportingAll(true);
+        
+        try {
+            const startOfYear = getStartOfYearISO();
+            const startOfYearDate = parseISO(startOfYear);
+
+            // 1. Fetch All Data in Parallel
+            const [entriesSnap, overridesSnap, samplesSnap] = await Promise.all([
+                getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", startOfYear))),
+                getDocs(collection(db, "individualAllocations")),
+                getDocs(collection(db, "marketingSamples"))
+            ]);
+
+            // 2. Prepare Global Template
+            const globalSamples = samplesSnap.docs.map(d => ({ 
+                id: d.id, 
+                name: (d.data().displayMaterialName || d.data().materialName || "Unknown").toString().trim(),
+                group: (d.data().prodGroupProdSubGroup || d.data().productGroup || "Uncategorized").toString().trim(),
+                qty: Number(d.data().allocationQuantity || 0)
+            }));
+
+            // 3. Map Overrides & Usage per PMR
+            const overridesMap = new Map<string, number>(); // key: userId_sampleId
+            overridesSnap.docs.forEach(d => {
+                const data = d.data();
+                overridesMap.set(`${data.userId}_${data.sampleId}`, data.quantity);
+            });
+
+            const usageMap = new Map<string, Map<string, number>>(); // userId -> { materialName: total }
+            entriesSnap.docs.forEach(d => {
+                const data = d.data() as CoverageEntry;
+                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                if (!cDate || !isAfter(cDate, startOfYearDate) || !data.userId) return;
+
+                if (!usageMap.has(data.userId)) usageMap.set(data.userId, new Map());
+                const userUsage = usageMap.get(data.userId)!;
+
+                const process = (name?: string, qty?: number) => {
+                    const key = String(name ?? "").toLowerCase().trim();
+                    if (!key) return;
+                    const qVal = Math.round(Number(qty || 0));
+                    if (!isNaN(qVal) && qVal !== 0) {
+                        userUsage.set(key, (userUsage.get(key) || 0) + qVal);
+                    }
+                };
+
+                process(data.primarySampleName, data.primaryProductQty);
+                process(data.secondarySampleName, data.secondaryProductQty);
+                data.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
+            });
+
+            // 4. Compile Final Export Rows
+            const exportRows: any[] = [];
+            const pmrProfiles = Object.values(profiles).filter(p => p.role === 'PMR' || !p.role);
+
+            pmrProfiles.forEach(pmr => {
+                const userUsage = usageMap.get(pmr.userId);
+                
+                globalSamples.forEach(sample => {
+                    const overrideKey = `${pmr.userId}_${sample.id}`;
+                    const allocated = overridesMap.has(overrideKey) ? overridesMap.get(overrideKey)! : sample.qty;
+                    const used = userUsage?.get(sample.name.toLowerCase()) || 0;
+                    const balance = Math.max(0, allocated - used);
+
+                    exportRows.push({
+                        "Employee Code": pmr.code || "PMR",
+                        "PMR Name": `${pmr.lastName}, ${pmr.firstName}`,
+                        "Email": pmr.email || "",
+                        "Product Category": sample.group,
+                        "Material Name": sample.name,
+                        "Allocated Qty": allocated,
+                        "Used Qty": used,
+                        "Remaining Balance": balance
+                    });
+                });
+            });
+
+            // 5. Generate Excel
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "PMR Inventory Audit");
+            
+            // Auto-size columns for better readability
+            const wscols = [
+                { wch: 15 }, // Code
+                { wch: 25 }, // Name
+                { wch: 25 }, // Email
+                { wch: 25 }, // Category
+                { wch: 30 }, // Material
+                { wch: 12 }, // Allocated
+                { wch: 10 }, // Used
+                { wch: 15 }, // Balance
+            ];
+            worksheet['!cols'] = wscols;
+
+            const fileName = `All_PMR_Sample_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+
+            toast({ title: "Audit Exported", description: `Report generated for ${pmrProfiles.length} representatives.` });
+
+        } catch (error) {
+            console.error("Export all error:", error);
+            toast({ variant: "destructive", title: "Export Failed", description: "Could not aggregate all field records." });
+        } finally {
+            setIsExportingAll(false);
+        }
     };
 
     const handleUploadClick = () => fileInputRef.current?.click();
@@ -213,8 +329,8 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                         Items defined here are automatically assigned to all PMRs in the system.
                                     </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-2 w-full max-w-md">
-                                    <div className="relative flex-1">
+                                <div className="flex flex-wrap items-center gap-2 w-full max-w-lg justify-end">
+                                    <div className="relative flex-1 min-w-[200px]">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                         <Input 
                                             placeholder="Search materials or groups..." 
@@ -223,9 +339,20 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                             onChange={(e) => setSearch(e.target.value)}
                                         />
                                     </div>
-                                    <Button variant="outline" size="icon" onClick={handleExportExcel} className="h-11 w-11 shrink-0 rounded-xl" title="Export to Excel">
+                                    <Button variant="outline" size="icon" onClick={handleExportExcel} className="h-11 w-11 shrink-0 rounded-xl" title="Export current view to Excel">
                                         <FileSpreadsheet className="h-5 w-5" />
                                     </Button>
+                                    {!readOnly && (
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={handleDownloadAllPMRData} 
+                                            disabled={isExportingAll || profilesLoading} 
+                                            className="h-11 font-headline border-2 gap-2 rounded-xl"
+                                        >
+                                            {isExportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                            Download All PMR Data
+                                        </Button>
+                                    )}
                                     {selectedIds.length > 0 && !readOnly && (
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
@@ -270,7 +397,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                                 const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
                                                 const group = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
                                                 const used = usedQuantities[name.toLowerCase()] || 0;
-                                                const bal = Math.max(0, sample.allocationQuantity - used);
+                                                const bal = Math.max(0, (sample.allocationQuantity || 0) - used);
                                                 
                                                 return (
                                                     <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
@@ -350,7 +477,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                 </Button>
                                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
                                 <Button onClick={handleUploadClick} disabled={isUploading} className="w-full h-12 font-headline shadow-lg transition-all active:scale-95 bg-primary text-primary-foreground">
-                                    {isUploading ? <><Loader2 className="mr-2 animate-spin" /> Processing...</> : <><Download className="mr-2 h-5 w-5 rotate-180" /> Import Material File</>}
+                                    {isUploading ? <><Loader2 className="mr-2 animate-spin" /> Processing...</> : <><FileUp className="mr-2 h-5 w-5" /> Import Material File</>}
                                 </Button>
                             </CardContent>
                         </Card>
@@ -380,3 +507,4 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         </div>
     );
 }
+
