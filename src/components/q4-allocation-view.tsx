@@ -27,13 +27,13 @@ import {
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
-import type { Q4Allocation, MarketingSample, CoverageEntry, IndividualAllocation } from "@/lib/types";
+import type { Q4Allocation, MarketingSample, CoverageEntry } from "@/lib/types";
 import { cn, getStartOfYearISO, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
 import { format, parseISO, isAfter } from "date-fns";
 import { useUserProfiles } from "@/hooks/use-user-profiles";
-import { collection, getDocs, query, where, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, limit, orderBy, startAfter } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
   AlertDialog,
@@ -141,14 +141,12 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
             const startOfYear = getStartOfYearISO();
             const startOfYearDate = parseISO(startOfYear);
 
-            // 1. Fetch All Data in Parallel
-            const [entriesSnap, overridesSnap, samplesSnap] = await Promise.all([
-                getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", startOfYear))),
-                getDocs(collection(db, "individualAllocations")),
-                getDocs(collection(db, "marketingSamples"))
+            // 1. Fetch Metadata first (smaller datasets)
+            const [overridesSnap, samplesSnap] = await Promise.all([
+                getDocs(query(collection(db, "individualAllocations"), limit(5000))),
+                getDocs(query(collection(db, "marketingSamples"), limit(1000)))
             ]);
 
-            // 2. Prepare Global Template
             const globalSamples = samplesSnap.docs.map(d => ({ 
                 id: d.id, 
                 name: (d.data().displayMaterialName || d.data().materialName || "Unknown").toString().trim(),
@@ -156,37 +154,69 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 qty: Number(d.data().allocationQuantity || 0)
             }));
 
-            // 3. Map Overrides & Usage per PMR
-            const overridesMap = new Map<string, number>(); // key: userId_sampleId
+            const overridesMap = new Map<string, number>();
             overridesSnap.docs.forEach(d => {
                 const data = d.data();
                 overridesMap.set(`${data.userId}_${data.sampleId}`, data.quantity);
             });
 
+            // 2. Fetch Coverage Entries in Batches to avoid Firestore Timeout
             const usageMap = new Map<string, Map<string, number>>(); // userId -> { materialName: total }
-            entriesSnap.docs.forEach(d => {
-                const data = d.data() as CoverageEntry;
-                const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
-                if (!cDate || !isAfter(cDate, startOfYearDate) || !data.userId) return;
+            let lastVisible = null;
+            let finished = false;
+            let totalFetched = 0;
 
-                if (!usageMap.has(data.userId)) usageMap.set(data.userId, new Map());
-                const userUsage = usageMap.get(data.userId)!;
+            while (!finished) {
+                let q = query(
+                    collection(db, "coverageEntries"),
+                    where("coverageDate", ">=", startOfYear),
+                    orderBy("coverageDate"), // Required for pagination
+                    limit(1000)
+                );
 
-                const process = (name?: string, qty?: number) => {
-                    const key = String(name ?? "").toLowerCase().trim();
-                    if (!key) return;
-                    const qVal = Math.round(Number(qty || 0));
-                    if (!isNaN(qVal) && qVal !== 0) {
-                        userUsage.set(key, (userUsage.get(key) || 0) + qVal);
-                    }
-                };
+                if (lastVisible) {
+                    q = query(q, startAfter(lastVisible));
+                }
 
-                process(data.primarySampleName, data.primaryProductQty);
-                process(data.secondarySampleName, data.secondaryProductQty);
-                data.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
-            });
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                    finished = true;
+                    break;
+                }
 
-            // 4. Compile Final Export Rows
+                snap.docs.forEach(d => {
+                    const data = d.data() as CoverageEntry;
+                    const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                    if (!cDate || !isAfter(cDate, startOfYearDate) || !data.userId) return;
+
+                    if (!usageMap.has(data.userId)) usageMap.set(data.userId, new Map());
+                    const userUsage = usageMap.get(data.userId)!;
+
+                    const process = (name?: string, qty?: number) => {
+                        const key = String(name ?? "").toLowerCase().trim();
+                        if (!key) return;
+                        const qVal = Math.round(Number(qty || 0));
+                        if (!isNaN(qVal) && qVal !== 0) {
+                            userUsage.set(key, (userUsage.get(key) || 0) + qVal);
+                        }
+                    };
+
+                    process(data.primarySampleName, data.primaryProductQty);
+                    process(data.secondarySampleName, data.secondaryProductQty);
+                    data.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
+                });
+
+                totalFetched += snap.docs.length;
+                lastVisible = snap.docs[snap.docs.length - 1];
+                
+                // If we got fewer results than requested, we've reached the end
+                if (snap.docs.length < 1000) finished = true;
+                
+                // Safety break for extremely large organizations to prevent browser crash
+                if (totalFetched >= 15000) finished = true;
+            }
+
+            // 3. Compile Final Export Rows
             const exportRows: any[] = [];
             const pmrProfiles = Object.values(profiles).filter(p => p.role === 'PMR' || !p.role);
 
@@ -212,32 +242,24 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 });
             });
 
-            // 5. Generate Excel
+            // 4. Generate Excel
             const worksheet = XLSX.utils.json_to_sheet(exportRows);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "PMR Inventory Audit");
             
-            // Auto-size columns for better readability
             const wscols = [
-                { wch: 15 }, // Code
-                { wch: 25 }, // Name
-                { wch: 25 }, // Email
-                { wch: 25 }, // Category
-                { wch: 30 }, // Material
-                { wch: 12 }, // Allocated
-                { wch: 10 }, // Used
-                { wch: 15 }, // Balance
+                { wch: 15 }, { wch: 25 }, { wch: 25 }, { wch: 25 }, { wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 15 },
             ];
             worksheet['!cols'] = wscols;
 
             const fileName = `All_PMR_Sample_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
-            toast({ title: "Audit Exported", description: `Report generated for ${pmrProfiles.length} representatives.` });
+            toast({ title: "Audit Exported", description: `Processed ${totalFetched} records for ${pmrProfiles.length} representatives.` });
 
         } catch (error) {
             console.error("Export all error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "Could not aggregate all field records." });
+            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out while aggregating organization data." });
         } finally {
             setIsExportingAll(false);
         }
