@@ -26,7 +26,6 @@ const sanitizePayload = (data: any): any => {
   Object.keys(data).forEach(key => {
     const val = data[key];
     if (val === undefined || val === "") return;
-    // Keep IDs and specific booleans even if they look "empty" to JS
     if (val === null && (key === 'id' || key === 'isOffline')) return;
     
     if (Array.isArray(val)) {
@@ -97,12 +96,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
 
     setLoading(true);
-    
-    // BROAD SCAN: Remove restrictive server-side range queries for specific user views to find "lost" reports
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
     
     try {
-      // We query primarily by userId and limit. This is more resilient to metadata issues.
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
@@ -110,11 +106,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       );
       
       const querySnapshot = await getDocs(q);
-      const allFetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      const selectedMonthStart = startOfOfMonth(refDate);
+      // ACCURACY FIX: Mandatory document ID deduplication to prevent metric shifts
+      const uniqueMap = new Map<string, CoverageEntry>();
+      querySnapshot.docs.forEach(docSnap => {
+          uniqueMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as CoverageEntry);
+      });
+      
+      const allFetched = Array.from(uniqueMap.values());
       const selectedMonthEnd = endOfMonth(refDate);
-      // In Admin/Summary view, we want a small window. In List view, we show the month.
       const trendStart = startOfOfMonth(subMonths(refDate, 3));
 
       const filtered = allFetched.filter(e => {
@@ -149,8 +149,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     let processedPhotos = entry.photos;
     if (entry.photos && entry.photos.length > 0) {
         try {
-            // PROACTIVE COMPRESSION: Compress before any storage action (online or offline)
-            // This prevents LocalStorage overflow and ensures uploads are small (~100KB)
             processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 800, 0.5)));
         } catch (e) { console.warn("Compression failed, using raw", e); }
     }
@@ -201,7 +199,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || !db || isSyncInProgress.current) return;
     
-    // Create a working copy of the queue
     let currentOfflineQueue = [...offlineEntries];
     if (currentOfflineQueue.length === 0) return;
     
@@ -210,18 +207,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     let successCount = 0;
 
-    // RESILIENT SYNC: Process each report individually. 
-    // If one fails, it is skipped and remains in the queue, but the rest continue.
-    // We update LocalStorage AFTER EACH SUCCESSFUL UPLOAD to prevent getting "stuck".
     for (const entry of currentOfflineQueue) {
         try {
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
             
-            // Attempt upload
             await addDoc(collection(db!, "coverageEntries"), sanitized);
             
-            // SUCCESS: Remove this specific item from the local state immediately
             successCount++;
             setOfflineEntries(prev => {
                 const next = prev.filter(item => item.id !== entry.id);
@@ -231,7 +223,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
         } catch (error: any) {
             console.error(`Sync failed for report ${entry.id}:`, error);
-            // If it's a security rule error, we still skip it so it doesn't block the rest
             if (error.code === 'permission-denied') {
                  errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'coverageEntries',

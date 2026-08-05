@@ -17,9 +17,8 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V10: Deep Recovery Retrieval.
- * Specialized for finding "lost" reports like Anne Alberto's July records.
- * Broadens search criteria to capture all user activity, ignoring strict range queries on the server.
+ * LOW-COST V11: High-Precision Identity Resolution.
+ * Resolves metric shifting issues by implementing composite identity keys and ID-level deduplication.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -92,7 +91,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
+    if (!force && cached && (Date.now() - cached.timestamp < 300000)) { 
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -104,8 +103,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // RECOVERY SCAN: Remove 'coverageDate' filter to find hidden or mis-dated reports for this UID
-        // We use a high limit (5000) to ensure we get Anne's records even if she is a high-volume user.
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
             getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
@@ -116,13 +113,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ]);
 
         const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
-        // Increase memory filter window to catch the 3-month trend graph data
         const trendInterval = { start: startOfMonth(subMonths(refDate, 3)), end: endOfMonth(refDate) };
 
-        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry))
+        // ACCURACY FIX: Mandatory document ID deduplication to prevent metrics shifting during sync
+        const entriesMap = new Map<string, CoverageEntry>();
+        entriesSnap.docs.forEach(d => entriesMap.set(d.id, { id: d.id, ...d.data() } as CoverageEntry));
+        
+        const entries = Array.from(entriesMap.values())
             .filter(e => {
                 const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
-                // We show records in the 3-month trend window
                 return d && isValid(d) && isWithinInterval(d, trendInterval);
             }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 

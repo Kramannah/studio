@@ -100,7 +100,11 @@ export function CallSummary({
             return !PH_HOLIDAYS_2026[dateStr];
         }).length;
 
-        const safeEntries = Array.isArray(entries) ? entries : [];
+        // ACCURACY FIX: Deduplicate entries by ID to ensure sync artifacts don't double-count metrics
+        const safeEntriesMap = new Map<string, CoverageEntry>();
+        (entries || []).forEach(e => { if (e.id) safeEntriesMap.set(e.id, e); });
+        const safeEntries = Array.from(safeEntriesMap.values());
+        
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
@@ -160,15 +164,18 @@ export function CallSummary({
             }
         });
 
-        // Base Calls Calculation
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        // Provider Visit Logic: Use names from reports to ensure stability if masterlist is edited/deleted
+        // ACCURACY FIX: Group by composite key (Name + Specialty + Clinic) to distinguish between same-named providers
         const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
-            if (!acc[providerName]) {
-                acc[providerName] = {
+            const providerName = `${entry.firstName || ""} ${entry.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
+            const specialty = (entry.specialty || "").toLowerCase().trim();
+            const clinic = (entry.clinic || "").toLowerCase().trim();
+            const compositeKey = `${providerName}|${specialty}|${clinic}`;
+            
+            if (!acc[compositeKey]) {
+                acc[compositeKey] = {
                     count: 0,
                     firstName: entry.firstName || "",
                     lastName: entry.lastName || "",
@@ -176,12 +183,10 @@ export function CallSummary({
                     clinic: entry.clinic || "—"
                 };
             }
-            acc[providerName].count += 1;
+            acc[compositeKey].count += 1;
             return acc;
         }, {} as Record<string, { count: number, firstName: string, lastName: string, specialty: string, clinic: string }>);
         
-        // CONCENTRATION (3X) RESILIENCE: 
-        // If masterlist is deleted, we use the number of people who actually achieved 3x as a baseline.
         const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
         const targetHighFreqFromList = safeDoctors.filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
@@ -192,8 +197,6 @@ export function CallSummary({
         const totalHighFreqTarget = Math.max(targetHighFreqFromList, actualHighFreqAchieved);
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // CALL REACH RESILIENCE:
-        // Use the union of visited doctors and masterlist doctors to ensure reach doesn't drop to 0/0.
         const actualUniqueVisited = Object.keys(providerVisits).length;
         const totalDoctorsInUniverse = Math.max(safeDoctors.length, actualUniqueVisited);
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
@@ -236,17 +239,19 @@ export function CallSummary({
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
 
-        // STABLE VISIT LIST: Ensure doctors who were visited but later deleted from masterlist still appear in the summary
         const visitedDoctorListMap = new Map<string, any>();
 
-        // 1. Start with current masterlist
         safeDoctors.forEach(doctor => {
-            const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
-            const visitData = providerVisits[nameKey];
+            const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
+            const specialty = (doctor.specialty || "").toLowerCase().trim();
+            const clinic = (doctor.clinic || "").toLowerCase().trim();
+            const compositeKey = `${providerName}|${specialty}|${clinic}`;
+            
+            const visitData = providerVisits[compositeKey];
             const actual = visitData?.count || 0;
             const target = parseInt(String(doctor.frequency || "1x").replace('x', ''), 10) || 1;
             
-            visitedDoctorListMap.set(nameKey, {
+            visitedDoctorListMap.set(compositeKey, {
                 name: `${doctor.firstName} ${doctor.lastName}`,
                 specialty: doctor.specialty || "—",
                 clinic: doctor.clinic || "—",
@@ -257,10 +262,9 @@ export function CallSummary({
             });
         });
 
-        // 2. Add visited doctors who are NOT in current masterlist (e.g. deleted or name changed)
-        Object.entries(providerVisits).forEach(([nameKey, data]) => {
-            if (!visitedDoctorListMap.has(nameKey)) {
-                visitedDoctorListMap.set(nameKey, {
+        Object.entries(providerVisits).forEach(([compositeKey, data]) => {
+            if (!visitedDoctorListMap.has(compositeKey)) {
+                visitedDoctorListMap.set(compositeKey, {
                     name: `${data.firstName} ${data.lastName}`,
                     specialty: data.specialty,
                     clinic: data.clinic,
