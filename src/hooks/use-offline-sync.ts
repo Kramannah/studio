@@ -26,6 +26,7 @@ const sanitizePayload = (data: any): any => {
   Object.keys(data).forEach(key => {
     const val = data[key];
     if (val === undefined || val === "") return;
+    // Keep IDs and specific booleans even if they look "empty" to JS
     if (val === null && (key === 'id' || key === 'isOffline')) return;
     
     if (Array.isArray(val)) {
@@ -97,27 +98,25 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     
-    // BROAD SCAN: Fetch several months of data to ensure all synced reports are visible
+    // BROAD SCAN: Remove restrictive server-side range queries for specific user views to find "lost" reports
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    const scanStart = startOfMonth(subMonths(refDate, 3)).toISOString();
-    const { end: monthEnd } = getMonthRangeISO(selectedMonth);
     
     try {
+      // We query primarily by userId and limit. This is more resilient to metadata issues.
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", scanStart),
         limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
       const allFetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      const selectedMonthStart = startOfMonth(refDate);
+      const selectedMonthStart = startOfOfMonth(refDate);
       const selectedMonthEnd = endOfMonth(refDate);
-      const trendStart = startOfMonth(subMonths(refDate, 2));
+      // In Admin/Summary view, we want a small window. In List view, we show the month.
+      const trendStart = startOfOfMonth(subMonths(refDate, 3));
 
-      // In-memory filter handles both coverageDate and submittedAt, catching Anne Alberto's "lost" reports
       const filtered = allFetched.filter(e => {
           const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
           return d && isValid(d) && isWithinInterval(d, { start: trendStart, end: selectedMonthEnd });
@@ -151,6 +150,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (entry.photos && entry.photos.length > 0) {
         try {
             // PROACTIVE COMPRESSION: Compress before any storage action (online or offline)
+            // This prevents LocalStorage overflow and ensures uploads are small (~100KB)
             processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 800, 0.5)));
         } catch (e) { console.warn("Compression failed, using raw", e); }
     }
@@ -201,29 +201,37 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const syncAllOfflineEntries = useCallback(async () => {
     if (!isOnline || !userId || !db || isSyncInProgress.current) return;
     
-    const entriesToSync = [...offlineEntries];
-    if (entriesToSync.length === 0) {
-        await fetchMasterEntries(true);
-        return;
-    }
+    // Create a working copy of the queue
+    let currentOfflineQueue = [...offlineEntries];
+    if (currentOfflineQueue.length === 0) return;
     
     isSyncInProgress.current = true;
     setIsSyncing(true);
     
     let successCount = 0;
-    let failedEntries: CoverageEntry[] = [];
 
-    // INDIVIDUAL PROCESSING: Process reports one-by-one to prevent batch blocking
-    for (const entry of entriesToSync) {
+    // RESILIENT SYNC: Process each report individually. 
+    // If one fails, it is skipped and remains in the queue, but the rest continue.
+    // We update LocalStorage AFTER EACH SUCCESSFUL UPLOAD to prevent getting "stuck".
+    for (const entry of currentOfflineQueue) {
         try {
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
-            await addDoc(collection(db!, "coverageEntries"), sanitized);
-            successCount++;
-        } catch (error: any) {
-            console.error("Single report sync failed:", error);
-            failedEntries.push(entry);
             
+            // Attempt upload
+            await addDoc(collection(db!, "coverageEntries"), sanitized);
+            
+            // SUCCESS: Remove this specific item from the local state immediately
+            successCount++;
+            setOfflineEntries(prev => {
+                const next = prev.filter(item => item.id !== entry.id);
+                safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
+                return next;
+            });
+
+        } catch (error: any) {
+            console.error(`Sync failed for report ${entry.id}:`, error);
+            // If it's a security rule error, we still skip it so it doesn't block the rest
             if (error.code === 'permission-denied') {
                  errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'coverageEntries',
@@ -234,20 +242,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
 
     if (successCount > 0) {
-        setOfflineEntries(failedEntries);
-        safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(failedEntries));
         await fetchMasterEntries(true);
         if (onSyncSuccess) onSyncSuccess();
-    }
-
-    if (failedEntries.length > 0) {
-        toast({ 
-            variant: 'destructive', 
-            title: 'Sync Partial', 
-            description: `${failedEntries.length} reports could not be uploaded. Retrying...` 
-        });
-    } else {
-        toast({ title: "Sync Complete" });
+        toast({ title: successCount === currentOfflineQueue.length ? "Sync Complete" : `Synced ${successCount} reports.` });
     }
 
     setIsSyncing(false);
@@ -319,3 +316,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   };
 };
+
+function startOfOfMonth(date: Date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}

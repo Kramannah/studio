@@ -17,8 +17,9 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V9.5: Inclusive Data Retrieval Engine.
- * Optimized for reliability. Uses broader queries to ensure "mis-dated" reports (like Anne Alberto's July 20-31 reports) reflect correctly.
+ * LOW-COST V10: Deep Recovery Retrieval.
+ * Specialized for finding "lost" reports like Anne Alberto's July records.
+ * Broadens search criteria to capture all user activity, ignoring strict range queries on the server.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -88,10 +89,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!uid || !db || !active || !isAuthorized) return;
     
     const refDate = parseISO(selectedMonth + "-01");
-    // DEEP SCAN: Go back 4 months to catch any late-synced or incorrectly dated reports
-    const scanStart = startOfOfMonth(subMonths(refDate, 3)).toISOString();
-    const { end: monthEnd } = getMonthRangeISO(selectedMonth);
-    
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
@@ -107,9 +104,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // BROAD QUERY: Fetch by userId primarily to prevent range-query skipping of metadata-poor documents
+        // RECOVERY SCAN: Remove 'coverageDate' filter to find hidden or mis-dated reports for this UID
+        // We use a high limit (5000) to ensure we get Anne's records even if she is a high-volume user.
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", scanStart), limit(3000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
@@ -118,11 +116,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ]);
 
         const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
-        const trendInterval = { start: startOfMonth(subMonths(refDate, 2)), end: endOfMonth(refDate) };
+        // Increase memory filter window to catch the 3-month trend graph data
+        const trendInterval = { start: startOfMonth(subMonths(refDate, 3)), end: endOfMonth(refDate) };
 
         const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry))
             .filter(e => {
                 const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+                // We show records in the 3-month trend window
                 return d && isValid(d) && isWithinInterval(d, trendInterval);
             }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 
@@ -131,7 +131,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan))
                 .filter(p => {
                     const d = parseAnyDate(p.plannedDate);
-                    // Show plans within 1 month buffer
                     return d && isValid(d) && isWithinInterval(d, { start: subMonths(refDate, 1), end: addMonths(refDate, 1) });
                 }),
             logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any))
@@ -158,7 +157,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("User deep scan failed", e);
+        console.error("User recovery scan failed", e);
     } finally { 
         setLoadingIndividual(false); 
     }
@@ -221,8 +220,4 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     updateNonCallDayStatus,
     updatePlanningRequestStatus
   };
-}
-
-function startOfOfMonth(date: Date) {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
 }
