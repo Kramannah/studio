@@ -6,8 +6,8 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError } from 'firebase/firestore';
-import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
-import { format, subMonths, startOfMonth } from 'date-fns';
+import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
+import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
@@ -90,38 +90,44 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, selectedMonth]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
-
-    if (!userId || !db || (!active && !force) || (!isCurrentMonth && !force) || !navigator.onLine) return;
+    if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
 
     setLoading(true);
     
-    // EXTENDED FETCH: Get 3 months of data for trend visualization
-    const refDate = selectedMonth ? startOfMonth(new Date(selectedMonth + "-01")) : startOfMonth(new Date());
-    const trendStart = startOfMonth(subMonths(refDate, 2)).toISOString();
-    const { end } = getMonthRangeISO(selectedMonth);
+    // BROAD SCAN: Fetch several months of data to ensure all synced reports are visible
+    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+    const scanStart = startOfMonth(subMonths(refDate, 3)).toISOString();
+    const { end: monthEnd } = getMonthRangeISO(selectedMonth);
     
     try {
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", trendStart),
-        where("coverageDate", "<=", end),
-        limit(2500)
+        where("coverageDate", ">=", scanStart),
+        limit(3000)
       );
       
       const querySnapshot = await getDocs(q);
-      const fetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
+      const allFetched: CoverageEntry[] = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       
-      fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
-      setMasterEntries(fetched);
+      const selectedMonthStart = startOfMonth(refDate);
+      const selectedMonthEnd = endOfMonth(refDate);
+      const trendStart = startOfMonth(subMonths(refDate, 2));
+
+      // In-memory filter handles both coverageDate and submittedAt, catching Anne Alberto's "lost" reports
+      const filtered = allFetched.filter(e => {
+          const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+          return d && isValid(d) && isWithinInterval(d, { start: trendStart, end: selectedMonthEnd });
+      });
+
+      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+      setMasterEntries(filtered);
       lastFetchedKeyRef.current = fetchKey;
       
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(fetched));
+      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(filtered));
     } catch (error: any) {
         if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({

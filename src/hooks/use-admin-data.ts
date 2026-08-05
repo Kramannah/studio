@@ -9,7 +9,7 @@ import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
 import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
-import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from "date-fns";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
@@ -17,8 +17,8 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
 /**
- * LOW-COST V9.0: High-Performance Data Retrieval Engine.
- * Optimized for speed with parallel resolving and aggressive session caching.
+ * LOW-COST V9.5: Inclusive Data Retrieval Engine.
+ * Optimized for reliability. Uses broader queries to ensure "mis-dated" reports (like Anne Alberto's July 20-31 reports) reflect correctly.
  */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -88,17 +88,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     if (!uid || !db || !active || !isAuthorized) return;
     
     const refDate = parseISO(selectedMonth + "-01");
-    // EXTENDED FETCH: Get 3 months of data to support trend visualization
-    const trendStart = startOfMonth(subMonths(refDate, 2)).toISOString();
-    const { end } = getMonthRangeISO(selectedMonth);
+    // DEEP SCAN: Go back 4 months to catch any late-synced or incorrectly dated reports
+    const scanStart = startOfOfMonth(subMonths(refDate, 3)).toISOString();
+    const { end: monthEnd } = getMonthRangeISO(selectedMonth);
     
-    const planStart = startOfMonth(subMonths(refDate, 1)).toISOString();
-    const planEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
-
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { // 10 min cache
+    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -110,39 +107,42 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // Run all queries in parallel for maximum speed
+        // BROAD QUERY: Fetch by userId primarily to prevent range-query skipping of metadata-poor documents
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", trendStart), where("coverageDate", "<=", end), limit(3000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", planStart), where("plannedDate", "<=", planEnd), limit(2000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", scanStart), limit(3000))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
         ]);
 
-        const interval = { start: parseISO(trendStart), end: parseISO(end) };
-        const planInterval = { start: parseISO(planStart), end: parseISO(planEnd) };
+        const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
+        const trendInterval = { start: startOfMonth(subMonths(refDate, 2)), end: endOfMonth(refDate) };
+
+        const entries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry))
+            .filter(e => {
+                const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+                return d && isValid(d) && isWithinInterval(d, trendInterval);
+            }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 
         const data = {
-            entries: entriesSnap.docs.map(d => ({id: d.id, ...d.data()} as CoverageEntry))
-                .filter(e => {
-                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    return d && isValid(d) && isWithinInterval(d, interval);
-                }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || "")),
+            entries,
             plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan))
                 .filter(p => {
                     const d = parseAnyDate(p.plannedDate);
-                    return d && isValid(d) && isWithinInterval(d, planInterval);
+                    // Show plans within 1 month buffer
+                    return d && isValid(d) && isWithinInterval(d, { start: subMonths(refDate, 1), end: addMonths(refDate, 1) });
                 }),
             logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any))
                 .filter(l => {
                     const d = parseAnyDate(l.timeIn);
-                    return d && isValid(d) && isWithinInterval(d, interval);
+                    return d && isValid(d) && isWithinInterval(d, selectedInterval);
                 }),
             ncds: ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay))
                 .filter(n => {
                     const d = parseAnyDate(n.date);
-                    return d && isValid(d) && isWithinInterval(d, interval);
+                    return d && isValid(d) && isWithinInterval(d, selectedInterval);
                 }),
             doctors: doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor)),
             requests: requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest)),
@@ -158,7 +158,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("User data fetch failed", e);
+        console.error("User deep scan failed", e);
     } finally { 
         setLoadingIndividual(false); 
     }
@@ -221,4 +221,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     updateNonCallDayStatus,
     updatePlanningRequestStatus
   };
+}
+
+function startOfOfMonth(date: Date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
 }
