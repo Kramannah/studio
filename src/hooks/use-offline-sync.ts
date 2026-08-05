@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, subMonths, startOfMonth } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
@@ -99,15 +99,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
 
     setLoading(true);
-    const { start, end } = getMonthRangeISO(selectedMonth);
+    
+    // EXTENDED FETCH: Get 3 months of data for trend visualization
+    const refDate = selectedMonth ? startOfMonth(new Date(selectedMonth + "-01")) : startOfMonth(new Date());
+    const trendStart = startOfMonth(subMonths(refDate, 2)).toISOString();
+    const { end } = getMonthRangeISO(selectedMonth);
     
     try {
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", start),
+        where("coverageDate", ">=", trendStart),
         where("coverageDate", "<=", end),
-        limit(1500)
+        limit(2500)
       );
       
       const querySnapshot = await getDocs(q);
@@ -159,10 +163,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         addDoc(colRef, sanitized)
           .then((docRef) => {
             const newEntry = { id: docRef.id, ...sanitized } as CoverageEntry;
-            const entryDate = sanitized.coverageDate ? sanitized.coverageDate.substring(0, 7) : format(new Date(), 'yyyy-MM');
-            if (!selectedMonth || entryDate === selectedMonth) {
-                setMasterEntries(prev => [newEntry, ...prev]);
-            }
+            setMasterEntries(prev => [newEntry, ...prev]);
             toast({ title: "Report Saved" });
             if (onSyncSuccess) onSyncSuccess();
           })

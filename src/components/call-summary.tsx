@@ -4,8 +4,8 @@
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
-import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity } from "lucide-react";
+import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { PH_HOLIDAYS_2026 } from "@/lib/utils";
@@ -13,6 +13,7 @@ import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -103,6 +104,25 @@ export function CallSummary({
         const safeEntries = Array.isArray(entries) ? entries : [];
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
+
+        // Trend Calculation (3 Months)
+        const m0 = referenceDate;
+        const m1 = subMonths(referenceDate, 1);
+        const m2 = subMonths(referenceDate, 2);
+
+        const trendData = [m2, m1, m0].map(m => {
+            const count = safeEntries.filter(e => {
+                try {
+                    const d = parseISO(e.coverageDate || e.submittedAt);
+                    return isValid(d) && isSameMonth(d, m);
+                } catch { return false; }
+            }).length;
+            return {
+                name: format(m, 'MMM'),
+                calls: count,
+                fullDate: format(m, 'MMMM yyyy')
+            };
+        });
 
         const filteredEntries = safeEntries.filter(e => {
             try { 
@@ -210,7 +230,7 @@ export function CallSummary({
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
 
-        // Calculate Detailed Doctor Visits for the Month
+        // Detailed Provider Visited List
         const visitedDoctorList = safeDoctors.map(doctor => {
             const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
             const actualVisits = providerVisits[nameKey] || 0;
@@ -242,7 +262,8 @@ export function CallSummary({
             productUsage: sortedProductUsage,
             totalSamplesIssued,
             visitedDoctorList,
-            specialtyDistribution: sortedSpecialties
+            specialtyDistribution: sortedSpecialties,
+            trendData
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
@@ -277,10 +298,10 @@ export function CallSummary({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
-                    title="TOTAL CALLS" 
-                    value={insights.totalCalls}
-                    subValue={`/ ${Math.round(insights.targetCalls)}`}
-                    description={`Performance: ${insights.callRatePercentage}%`} 
+                    title="CALL RATE" 
+                    value={`${insights.callRatePercentage}%`}
+                    subValue={`(${insights.totalCalls}/${Math.round(insights.targetCalls)})`}
+                    description="Monthly target achievement" 
                     icon={Activity} 
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
@@ -315,6 +336,42 @@ export function CallSummary({
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 space-y-6">
+                    <div className="space-y-6">
+                        <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                            <ChartIcon className="w-5 h-5 text-[#f59e0b]" />
+                            Performance Trend (3 Months)
+                        </h3>
+                        <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl p-6 h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={insights.trendData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 'bold' }} 
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} 
+                                    />
+                                    <Tooltip 
+                                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                        contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                        itemStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                        labelStyle={{ color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}
+                                    />
+                                    <Bar dataKey="calls" radius={[6, 6, 0, 0]} barSize={45}>
+                                        {insights.trendData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={index === 2 ? '#f59e0b' : '#3b82f6'} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Card>
+                    </div>
+
                     <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
                         <CalendarIcon className="w-5 h-5 text-[#10b981]" />
                         Field Activity Statistics

@@ -87,8 +87,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const { start, end } = getMonthRangeISO(selectedMonth);
     const refDate = parseISO(selectedMonth + "-01");
+    // EXTENDED FETCH: Get 3 months of data to support trend visualization
+    const trendStart = startOfMonth(subMonths(refDate, 2)).toISOString();
+    const { end } = getMonthRangeISO(selectedMonth);
+    
     const planStart = startOfMonth(subMonths(refDate, 1)).toISOString();
     const planEnd = endOfMonth(addMonths(refDate, 1)).toISOString();
 
@@ -109,15 +112,15 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         // Run all queries in parallel for maximum speed
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(2000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", trendStart), where("coverageDate", "<=", end), limit(3000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", planStart), where("plannedDate", "<=", planEnd), limit(2000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(4000))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
         ]);
 
-        const interval = { start: parseISO(start), end: parseISO(end) };
+        const interval = { start: parseISO(trendStart), end: parseISO(end) };
         const planInterval = { start: parseISO(planStart), end: parseISO(planEnd) };
 
         const data = {
