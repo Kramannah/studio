@@ -160,6 +160,10 @@ export function CallSummary({
             }
         });
 
+        // Base Calls Calculation
+        const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
+        const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
+
         // Provider Visit Logic: Use names from reports to ensure stability if masterlist is edited/deleted
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
