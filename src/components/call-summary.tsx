@@ -180,24 +180,23 @@ export function CallSummary({
             return acc;
         }, {} as Record<string, { count: number, firstName: string, lastName: string, specialty: string, clinic: string }>);
         
-        const targetHighFreqDoctors = safeDoctors.filter(d => {
+        // CONCENTRATION (3X) RESILIENCE: 
+        // If masterlist is deleted, we use the number of people who actually achieved 3x as a baseline.
+        const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
+        const targetHighFreqFromList = safeDoctors.filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
             const freqVal = parseInt(freqStr, 10);
             return freqVal >= 3;
-        });
-        const totalHighFreqTarget = targetHighFreqDoctors.length;
-        const actualHighFreqAchieved = targetHighFreqDoctors.filter(d => {
-            const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
-            return (providerVisits[name]?.count || 0) >= 3;
         }).length;
+        
+        const totalHighFreqTarget = Math.max(targetHighFreqFromList, actualHighFreqAchieved);
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        const totalDoctorsInList = safeDoctors.length;
-        const actualVisitedFromList = safeDoctors.filter(d => {
-            const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
-            return (providerVisits[name]?.count || 0) >= 1;
-        }).length;
-        const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedFromList / totalDoctorsInList) * 100) : 0;
+        // CALL REACH RESILIENCE:
+        // Use the union of visited doctors and masterlist doctors to ensure reach doesn't drop to 0/0.
+        const actualUniqueVisited = Object.keys(providerVisits).length;
+        const totalDoctorsInUniverse = Math.max(safeDoctors.length, actualUniqueVisited);
+        const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
 
         const totalCalls = filteredEntries.length;
         const targetCalls = activeDays * 12;
@@ -287,7 +286,7 @@ export function CallSummary({
             targetCalls,
             callRatePercentage,
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
-            coverageReach: { actual: actualVisitedFromList, total: totalDoctorsInList, percentage: percentageReach },
+            coverageReach: { actual: actualUniqueVisited, total: totalDoctorsInUniverse, percentage: percentageReach },
             avgCallsPerDay,
             productUsage: sortedProductUsage,
             totalSamplesIssued,
@@ -364,7 +363,7 @@ export function CallSummary({
                 />
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
                 <div className="xl:col-span-2 space-y-6">
                     <div className="space-y-6">
                         <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
