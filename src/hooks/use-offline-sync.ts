@@ -110,15 +110,16 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     setLoading(true);
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    const trendStart = startOfMonth(subMonths(refDate, 3)); // Fixed 4-month rolling window for efficiency
-    const trendStartISO = trendStart.toISOString();
+    // WIDE SCAN: Fetch 4 months of data to ensure recovery of late syncs
+    const wideScanStart = startOfMonth(subMonths(refDate, 3));
+    const wideScanStartISO = wideScanStart.toISOString();
     
     try {
-      // TARGETED PERFORMANCE QUERY: Use date filter to reduce document scan load
+      // TARGETED PERFORMANCE QUERY: Use submission date for wider, more reliable discovery
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("coverageDate", ">=", trendStartISO),
+        where("submittedAt", ">=", wideScanStartISO),
         limit(1500)
       );
       
@@ -131,10 +132,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       
       const allFetched = Array.from(uniqueMap.values());
       const selectedMonthEnd = endOfMonth(refDate);
+      const wideInterval = { start: wideScanStart, end: selectedMonthEnd };
 
       const filtered = allFetched.filter(e => {
           const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
-          return d && isValid(d) && isWithinInterval(d, { start: trendStart, end: selectedMonthEnd });
+          return d && isValid(d) && isWithinInterval(d, wideInterval);
       });
 
       filtered.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));

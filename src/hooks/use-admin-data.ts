@@ -88,7 +88,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
     // Cache TTL check for speed
-    if (!force && cached && (Date.now() - cached.timestamp < 900000)) { // 15 Minute cache
+    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { // 10 Minute cache for faster UI
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -100,10 +100,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const trendStartISO = startOfMonth(subMonths(refDate, 3)).toISOString();
+        // WIDE SCAN: 4 Months rolling window (Current + 3 Previous)
+        const wideScanStart = startOfMonth(subMonths(refDate, 3));
+        const wideScanStartISO = wideScanStart.toISOString();
 
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", trendStartISO), limit(1500))),
+            getDocs(query(
+                collection(db!, "coverageEntries"), 
+                where("userId", "==", uid), 
+                where("submittedAt", ">=", wideScanStartISO), // Scan by submission time for reliability
+                limit(1500)
+            )),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1500))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
@@ -112,7 +119,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         ]);
 
         const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
-        const trendInterval = { start: startOfMonth(subMonths(refDate, 3)), end: endOfMonth(refDate) };
+        const wideInterval = { start: wideScanStart, end: endOfMonth(refDate) };
 
         const entriesMap = new Map<string, CoverageEntry>();
         entriesSnap.docs.forEach(d => {
@@ -123,7 +130,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const entries = Array.from(entriesMap.values())
             .filter(e => {
                 const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
-                return d && isValid(d) && isWithinInterval(d, trendInterval);
+                return d && isValid(d) && isWithinInterval(d, wideInterval);
             }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 
         const data = {
@@ -157,7 +164,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("Deep scan failed:", e);
+        console.error("Wide Scan failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }
