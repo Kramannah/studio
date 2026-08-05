@@ -160,14 +160,21 @@ export function CallSummary({
             }
         });
 
-        const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase' || !e.coverageType).length;
-        const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
-
+        // Provider Visit Logic: Use names from reports to ensure stability if masterlist is edited/deleted
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName} ${entry.lastName}`.toLowerCase().trim();
-            acc[providerName] = (acc[providerName] || 0) + 1;
+            if (!acc[providerName]) {
+                acc[providerName] = {
+                    count: 0,
+                    firstName: entry.firstName || "",
+                    lastName: entry.lastName || "",
+                    specialty: entry.specialty || "—",
+                    clinic: entry.clinic || "—"
+                };
+            }
+            acc[providerName].count += 1;
             return acc;
-        }, {} as Record<string, number>);
+        }, {} as Record<string, { count: number, firstName: string, lastName: string, specialty: string, clinic: string }>);
         
         const targetHighFreqDoctors = safeDoctors.filter(d => {
             const freqStr = String(d.frequency || "1x").replace('x', '');
@@ -177,14 +184,14 @@ export function CallSummary({
         const totalHighFreqTarget = targetHighFreqDoctors.length;
         const actualHighFreqAchieved = targetHighFreqDoctors.filter(d => {
             const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
-            return (providerVisits[name] || 0) >= 3;
+            return (providerVisits[name]?.count || 0) >= 3;
         }).length;
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
         const totalDoctorsInList = safeDoctors.length;
         const actualVisitedFromList = safeDoctors.filter(d => {
             const name = `${d.firstName} ${d.lastName}`.toLowerCase().trim();
-            return (providerVisits[name] || 0) >= 1;
+            return (providerVisits[name]?.count || 0) >= 1;
         }).length;
         const percentageReach = totalDoctorsInList > 0 ? Math.round((actualVisitedFromList / totalDoctorsInList) * 100) : 0;
 
@@ -226,19 +233,43 @@ export function CallSummary({
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
 
-        const visitedDoctorList = safeDoctors.map(doctor => {
+        // STABLE VISIT LIST: Ensure doctors who were visited but later deleted from masterlist still appear in the summary
+        const visitedDoctorListMap = new Map<string, any>();
+
+        // 1. Start with current masterlist
+        safeDoctors.forEach(doctor => {
             const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
-            const actualVisits = providerVisits[nameKey] || 0;
+            const visitData = providerVisits[nameKey];
+            const actual = visitData?.count || 0;
             const target = parseInt(String(doctor.frequency || "1x").replace('x', ''), 10) || 1;
-            return {
+            
+            visitedDoctorListMap.set(nameKey, {
                 name: `${doctor.firstName} ${doctor.lastName}`,
                 specialty: doctor.specialty || "—",
                 clinic: doctor.clinic || "—",
                 target,
-                actual: actualVisits,
-                isMet: actualVisits >= target
-            };
-        }).sort((a, b) => {
+                actual,
+                isMet: actual >= target,
+                inMasterlist: true
+            });
+        });
+
+        // 2. Add visited doctors who are NOT in current masterlist (e.g. deleted or name changed)
+        Object.entries(providerVisits).forEach(([nameKey, data]) => {
+            if (!visitedDoctorListMap.has(nameKey)) {
+                visitedDoctorListMap.set(nameKey, {
+                    name: `${data.firstName} ${data.lastName}`,
+                    specialty: data.specialty,
+                    clinic: data.clinic,
+                    target: 0,
+                    actual: data.count,
+                    isMet: true,
+                    inMasterlist: false
+                });
+            }
+        });
+
+        const visitedDoctorList = Array.from(visitedDoctorListMap.values()).sort((a, b) => {
             if (a.actual !== b.actual) return b.actual - a.actual;
             return a.name.localeCompare(b.name);
         });
@@ -440,12 +471,15 @@ export function CallSummary({
                                                 <TableRow key={idx} className="border-white/5 h-14 hover:bg-white/5 transition-colors">
                                                     <TableCell className="pl-6">
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-sm text-white">{doc.name}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-sm text-white">{doc.name}</span>
+                                                                {!doc.inMasterlist && <Badge variant="outline" className="text-[8px] h-4 px-1.5 opacity-50 uppercase">Deleted</Badge>}
+                                                            </div>
                                                             <span className="text-[9px] font-black uppercase text-white/40 tracking-tight">{doc.specialty}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="hidden md:table-cell text-xs text-white/50">{doc.clinic}</TableCell>
-                                                    <TableCell className="text-center font-mono font-black text-white/40">{doc.target}x</TableCell>
+                                                    <TableCell className="text-center font-mono font-black text-white/40">{doc.target > 0 ? `${doc.target}x` : "—"}</TableCell>
                                                     <TableCell className="text-center">
                                                         <Badge variant="secondary" className={cn("font-mono font-black h-7 px-3", doc.actual > 0 ? "bg-[#3b82f6]/20 text-[#3b82f6]" : "bg-white/5 text-white/20")}>
                                                             {doc.actual}
