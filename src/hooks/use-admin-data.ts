@@ -16,10 +16,6 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 // ADMIN SESSION CACHE: Prevents costly re-fetching when switching between admin tabs or PMR profiles
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 
-/**
- * LOW-COST V11: High-Precision Identity Resolution.
- * Resolves metric shifting issues by implementing composite identity keys and ID-level deduplication.
- */
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
@@ -91,7 +87,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && cached && (Date.now() - cached.timestamp < 300000)) { 
+    // Increased Cache TTL to 10 minutes for better responsiveness
+    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -104,7 +101,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(5000))),
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(3000))),
             getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
             getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
@@ -115,9 +112,12 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
         const trendInterval = { start: startOfMonth(subMonths(refDate, 3)), end: endOfMonth(refDate) };
 
-        // ACCURACY FIX: Mandatory document ID deduplication to prevent metrics shifting during sync
+        // ACCURACY FIX: Mandatory document ID deduplication to prevent metrics shifting
         const entriesMap = new Map<string, CoverageEntry>();
-        entriesSnap.docs.forEach(d => entriesMap.set(d.id, { id: d.id, ...d.data() } as CoverageEntry));
+        entriesSnap.docs.forEach(d => {
+            const data = d.data() as CoverageEntry;
+            entriesMap.set(d.id, { id: d.id, ...data });
+        });
         
         const entries = Array.from(entriesMap.values())
             .filter(e => {
@@ -156,7 +156,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("User recovery scan failed", e);
+        console.error("Deep scan failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }

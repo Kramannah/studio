@@ -6,9 +6,8 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
 import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, parseAnyDate, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { ScrollArea } from "./ui/scroll-area";
@@ -26,7 +25,7 @@ const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgCo
                 <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                         <h4 className="text-2xl font-black font-headline text-white tracking-tight">{value}</h4>
-                        {subValue && <span className="text-sm font-bold text-white/60">{subValue}</span>}
+                        {subValue && <span className="text-xs font-bold text-white/60">{subValue}</span>}
                     </div>
                     <p className="text-[10px] text-white/40 font-bold uppercase tracking-tight">{description}</p>
                 </div>
@@ -100,7 +99,7 @@ export function CallSummary({
             return !PH_HOLIDAYS_2026[dateStr];
         }).length;
 
-        // ACCURACY FIX: Deduplicate entries by ID to ensure sync artifacts don't double-count metrics
+        // ID-LEVEL DEDUPLICATION: Ensures data doesn't shift due to sync artifacts
         const safeEntriesMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e.id) safeEntriesMap.set(e.id, e); });
         const safeEntries = Array.from(safeEntriesMap.values());
@@ -108,16 +107,15 @@ export function CallSummary({
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
+        // TREND DATA (3 MONTHS)
         const m0 = referenceDate;
         const m1 = subMonths(referenceDate, 1);
         const m2 = subMonths(referenceDate, 2);
 
         const trendData = [m2, m1, m0].map(m => {
             const count = safeEntries.filter(e => {
-                try {
-                    const d = parseISO(e.coverageDate || e.submittedAt);
-                    return isValid(d) && isSameMonth(d, m);
-                } catch { return false; }
+                const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+                return d && isValid(d) && isSameMonth(d, m);
             }).length;
             return {
                 name: format(m, 'MMM'),
@@ -126,52 +124,48 @@ export function CallSummary({
             };
         });
 
+        // MONTHLY FILTERED DATA
         const filteredEntries = safeEntries.filter(e => {
-            try { 
-                const d = parseISO(e.coverageDate || e.submittedAt); 
-                return isValid(d) && isWithinInterval(d, { start, end }); 
-            } catch { return false; }
+            const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+            return d && isValid(d) && isWithinInterval(d, { start, end });
         });
 
         const approvedNCDs = safeNCDs.filter(n => {
-            try {
-                const d = parseISO(n.date);
-                return n.status === 'approved' && isValid(d) && isWithinInterval(d, { start, end });
-            } catch { return false; }
+            const d = parseAnyDate(n.date);
+            return n.status === 'approved' && d && isValid(d) && isWithinInterval(d, { start, end });
         });
 
         const ncdMap = new Map<string, string>();
         approvedNCDs.forEach(n => {
-            try {
-                const dateStr = format(parseISO(n.date), 'yyyy-MM-dd');
-                ncdMap.set(dateStr, n.dayType);
-            } catch {}
+            const d = parseAnyDate(n.date);
+            if (d) ncdMap.set(format(d, 'yyyy-MM-dd'), n.dayType);
         });
 
         const activeDaysSet = new Set(filteredEntries.map(e => {
-            try { return format(parseISO(e.coverageDate || e.submittedAt), 'yyyy-MM-dd'); } catch { return ""; }
+            const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
+            return d ? format(d, 'yyyy-MM-dd') : "";
         }).filter(Boolean));
         
         let activeDays = 0;
         activeDaysSet.forEach(dateStr => {
             const leaveType = ncdMap.get(dateStr);
-            if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') {
-                activeDays += 0.5;
-            } else if (leaveType === 'wholeday') {
-                activeDays += 0;
-            } else {
-                activeDays += 1.0;
-            }
+            if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') activeDays += 0.5;
+            else if (leaveType === 'wholeday') activeDays += 0;
+            else activeDays += 1.0;
         });
 
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        // ACCURACY FIX: Group by composite key (Name + Specialty + Clinic) to distinguish between same-named providers
+        // IDENTITY NORMALIZATION HELPER
+        const normalizeStr = (s?: string) => (s ?? "").toLowerCase().trim().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+
+        // STABLE PROVIDER GROUPING
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName || ""} ${entry.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
-            const specialty = (entry.specialty || "").toLowerCase().trim();
-            const clinic = (entry.clinic || "").toLowerCase().trim();
+            const specialty = normalizeStr(entry.specialty);
+            const clinic = normalizeStr(entry.clinic);
+            // Composite key ensures stability even if masterlist changes
             const compositeKey = `${providerName}|${specialty}|${clinic}`;
             
             if (!acc[compositeKey]) {
@@ -189,8 +183,7 @@ export function CallSummary({
         
         const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
         const targetHighFreqFromList = safeDoctors.filter(d => {
-            const freqStr = String(d.frequency || "1x").replace('x', '');
-            const freqVal = parseInt(freqStr, 10);
+            const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
             return freqVal >= 3;
         }).length;
         
@@ -206,28 +199,19 @@ export function CallSummary({
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
+        // AGGREGATE STAT BREAKDOWNS
         const productUsage = filteredEntries.reduce((acc, entry) => {
             const process = (name?: string, qty?: number) => {
                 const key = (name ?? "").trim();
                 if (!key) return;
                 const q = Math.round(Number(qty || 0));
-                if (!isNaN(q) && q !== 0) {
-                    acc[key] = (acc[key] || 0) + q;
-                }
+                if (!isNaN(q) && q !== 0) acc[key] = (acc[key] || 0) + q;
             };
             process(entry.primarySampleName, entry.primaryProductQty);
             process(entry.secondarySampleName, entry.secondaryProductQty);
-            if (entry.reminderProducts) {
-                entry.reminderProducts.forEach(rp => process(rp.sampleName, rp.quantity));
-            }
+            entry.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
             return acc;
         }, {} as Record<string, number>);
-
-        const sortedProductUsage = Object.entries(productUsage)
-            .map(([name, quantity]) => ({ name, quantity }))
-            .sort((a, b) => b.quantity - a.quantity);
-
-        const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
 
         const specialtyCounts = filteredEntries.reduce((acc, entry) => {
             const specialty = (entry.specialty || "Unspecified").trim();
@@ -235,16 +219,16 @@ export function CallSummary({
             return acc;
         }, {} as Record<string, number>);
 
-        const sortedSpecialties = Object.entries(specialtyCounts)
-            .map(([name, count]) => ({ name, count }))
-            .sort((a, b) => b.count - a.count);
+        const sortedProductUsage = Object.entries(productUsage).map(([name, quantity]) => ({ name, quantity })).sort((a, b) => b.quantity - a.quantity);
+        const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
+        const sortedSpecialties = Object.entries(specialtyCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
+        // TRACKING TABLE LOGIC
         const visitedDoctorListMap = new Map<string, any>();
-
         safeDoctors.forEach(doctor => {
             const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
-            const specialty = (doctor.specialty || "").toLowerCase().trim();
-            const clinic = (doctor.clinic || "").toLowerCase().trim();
+            const specialty = normalizeStr(doctor.specialty);
+            const clinic = normalizeStr(doctor.clinic);
             const compositeKey = `${providerName}|${specialty}|${clinic}`;
             
             const visitData = providerVisits[compositeKey];
@@ -262,9 +246,9 @@ export function CallSummary({
             });
         });
 
-        Object.entries(providerVisits).forEach(([compositeKey, data]) => {
-            if (!visitedDoctorListMap.has(compositeKey)) {
-                visitedDoctorListMap.set(compositeKey, {
+        Object.entries(providerVisits).forEach(([key, data]) => {
+            if (!visitedDoctorListMap.has(key)) {
+                visitedDoctorListMap.set(key, {
                     name: `${data.firstName} ${data.lastName}`,
                     specialty: data.specialty,
                     clinic: data.clinic,
@@ -274,11 +258,6 @@ export function CallSummary({
                     inMasterlist: false
                 });
             }
-        });
-
-        const visitedDoctorList = Array.from(visitedDoctorListMap.values()).sort((a, b) => {
-            if (a.actual !== b.actual) return b.actual - a.actual;
-            return a.name.localeCompare(b.name);
         });
 
         return {
@@ -294,19 +273,17 @@ export function CallSummary({
             avgCallsPerDay,
             productUsage: sortedProductUsage,
             totalSamplesIssued,
-            visitedDoctorList,
+            visitedDoctorList: Array.from(visitedDoctorListMap.values()).sort((a, b) => b.actual - a.actual || a.name.localeCompare(b.name)),
             specialtyDistribution: sortedSpecialties,
             trendData
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
     const filteredVisitedDoctorList = useMemo(() => {
-        if (!doctorSearch.trim()) return insights.visitedDoctorList;
-        const q = doctorSearch.toLowerCase().trim();
+        const q = (doctorSearch || "").toLowerCase().trim();
+        if (!q) return insights.visitedDoctorList;
         return insights.visitedDoctorList.filter(doc => 
-            doc.name.toLowerCase().includes(q) || 
-            doc.specialty.toLowerCase().includes(q) || 
-            doc.clinic.toLowerCase().includes(q)
+            doc.name.toLowerCase().includes(q) || doc.specialty.toLowerCase().includes(q) || doc.clinic.toLowerCase().includes(q)
         );
     }, [insights.visitedDoctorList, doctorSearch]);
 
@@ -315,7 +292,7 @@ export function CallSummary({
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Monthly analytics synchronization for individual field performance.</p>
+                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Historical analytics and real-time field activity metrics.</p>
                 </div>
                 <div className="w-[240px] shrink-0">
                     <Select value={selectedMonth} onValueChange={onMonthChange}>
@@ -343,7 +320,7 @@ export function CallSummary({
                     title="CONCENTRATION (3X)" 
                     value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total}`}
                     subValue={`(${insights.completedHighFreq.percentage}%)`}
-                    description="High frequency retention (3+ visits)" 
+                    description="Providers visited 3+ times" 
                     icon={Target} 
                     color="text-[#10b981]" 
                     bgColor="bg-[#0d1e18]" 
@@ -352,7 +329,7 @@ export function CallSummary({
                     title="CALL REACH" 
                     value={`${insights.coverageReach.actual}/${insights.coverageReach.total}`}
                     subValue={`(${insights.coverageReach.percentage}%)`}
-                    description="Unique doctors visited vs masterlist" 
+                    description="Coverage against masterlist" 
                     icon={Users} 
                     color="text-[#06b6d4]" 
                     bgColor="bg-[#0e1d21]" 
@@ -360,7 +337,7 @@ export function CallSummary({
                 <StatCard 
                     title="SAMPLE VOLUME" 
                     value={insights.totalSamplesIssued} 
-                    description="Total items issued this month" 
+                    description="Total items issued" 
                     icon={Pill} 
                     color="text-[#f472b6]" 
                     bgColor="bg-[#1e1523]" 
@@ -372,7 +349,7 @@ export function CallSummary({
                     <div className="space-y-6">
                         <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
                             <ChartIcon className="w-5 h-5 text-[#f59e0b]" />
-                            Performance Trend (3 Months)
+                            Activity Trend (Rolling 3 Months)
                         </h3>
                         <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl p-6 h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
@@ -384,11 +361,7 @@ export function CallSummary({
                                         tickLine={false} 
                                         tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 'bold' }} 
                                     />
-                                    <YAxis 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} 
-                                    />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
                                     <Tooltip 
                                         cursor={{ fill: 'rgba(255,255,255,0.02)' }}
                                         contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
@@ -405,43 +378,11 @@ export function CallSummary({
                         </Card>
                     </div>
 
-                    <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
-                        <CalendarIcon className="w-5 h-5 text-[#10b981]" />
-                        Field Activity Statistics
-                    </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <SmallStatCard 
-                            title="WORKING DAYS"
-                            value={insights.workingDays}
-                            description="Business days minus holidays"
-                            icon={Briefcase}
-                            color="text-[#f59e0b]"
-                            iconBg="bg-[#f59e0b]/10"
-                        />
-                        <SmallStatCard 
-                            title="ACTIVE DAYS"
-                            value={insights.activeDays}
-                            description="Weighted days with filed reports"
-                            icon={CalendarIcon}
-                            color="text-[#10b981]"
-                            iconBg="bg-[#10b981]/10"
-                        />
-                        <SmallStatCard 
-                            title="INBASE CALLS"
-                            value={insights.inbaseCalls}
-                            description="Metropolitan area visits"
-                            icon={Building2}
-                            color="text-[#3b82f6]"
-                            iconBg="bg-[#3b82f6]/10"
-                        />
-                        <SmallStatCard 
-                            title="OUTBASE CALLS"
-                            value={insights.outbaseCalls}
-                            description="Provincial/Out-of-base visits"
-                            icon={MapPin}
-                            color="text-[#ef4444]"
-                            iconBg="bg-[#ef4444]/10"
-                        />
+                        <SmallStatCard title="WORKING DAYS" value={insights.workingDays} description="Business days this period" icon={Briefcase} color="text-[#f59e0b]" iconBg="bg-[#f59e0b]/10" />
+                        <SmallStatCard title="ACTIVE DAYS" value={insights.activeDays} description="Weighted report days" icon={CalendarIcon} color="text-[#10b981]" iconBg="bg-[#10b981]/10" />
+                        <SmallStatCard title="INBASE CALLS" value={insights.inbaseCalls} description="Metropolitan area" icon={Building2} color="text-[#3b82f6]" iconBg="bg-[#3b82f6]/10" />
+                        <SmallStatCard title="OUTBASE CALLS" value={insights.outbaseCalls} description="Provincial/Out-of-base" icon={MapPin} color="text-[#ef4444]" iconBg="bg-[#ef4444]/10" />
                     </div>
 
                     <div className="space-y-6 pt-4">
@@ -452,12 +393,7 @@ export function CallSummary({
                             </h3>
                             <div className="relative w-full md:w-72">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                                <Input 
-                                    placeholder="Search provider name..." 
-                                    value={doctorSearch}
-                                    onChange={(e) => setDoctorSearch(e.target.value)}
-                                    className="pl-10 bg-[#0a0c14] border-white/10 text-white h-10 rounded-xl focus-visible:ring-[#3b82f6]/50"
-                                />
+                                <Input placeholder="Search provider name..." value={doctorSearch} onChange={(e) => setDoctorSearch(e.target.value)} className="pl-10 bg-[#0a0c14] border-white/10 h-10 rounded-xl" />
                             </div>
                         </div>
                         <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
@@ -480,7 +416,7 @@ export function CallSummary({
                                                         <div className="flex flex-col">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-bold text-sm text-white">{doc.name}</span>
-                                                                {!doc.inMasterlist && <Badge variant="outline" className="text-[8px] h-4 px-1.5 opacity-50 uppercase">Deleted</Badge>}
+                                                                {!doc.inMasterlist && <Badge variant="outline" className="text-[8px] h-4 px-1.5 opacity-50 uppercase">Ghost</Badge>}
                                                             </div>
                                                             <span className="text-[9px] font-black uppercase text-white/40 tracking-tight">{doc.specialty}</span>
                                                         </div>
@@ -488,25 +424,15 @@ export function CallSummary({
                                                     <TableCell className="hidden md:table-cell text-xs text-white/50">{doc.clinic}</TableCell>
                                                     <TableCell className="text-center font-mono font-black text-white/40">{doc.target > 0 ? `${doc.target}x` : "—"}</TableCell>
                                                     <TableCell className="text-center">
-                                                        <Badge variant="secondary" className={cn("font-mono font-black h-7 px-3", doc.actual > 0 ? "bg-[#3b82f6]/20 text-[#3b82f6]" : "bg-white/5 text-white/20")}>
-                                                            {doc.actual}
-                                                        </Badge>
+                                                        <Badge variant="secondary" className={cn("font-mono font-black h-7 px-3", doc.actual > 0 ? "bg-[#3b82f6]/20 text-[#3b82f6]" : "bg-white/5 text-white/20")}>{doc.actual}</Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        {doc.isMet ? (
-                                                            <CheckCircle2 className="w-5 h-5 text-[#10b981] ml-auto" />
-                                                        ) : (
-                                                            <div className="w-5 h-5 rounded-full border-2 border-white/5 ml-auto" />
-                                                        )}
+                                                        {doc.isMet ? <CheckCircle2 className="w-5 h-5 text-[#10b981] ml-auto" /> : <div className="w-5 h-5 rounded-full border-2 border-white/5 ml-auto" />}
                                                     </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="h-32 text-center text-white/20 italic">
-                                                    {doctorSearch ? "No providers match your search." : "No masterlist doctors identified."}
-                                                </TableCell>
-                                            </TableRow>
+                                            <TableRow><TableCell colSpan={5} className="h-32 text-center text-white/20 italic">No activity recorded.</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
@@ -519,7 +445,7 @@ export function CallSummary({
                     <div className="space-y-6">
                         <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
                             <Stethoscope className="w-5 h-5 text-[#3b82f6]" />
-                            Specialty Counter
+                            Specialty Distribution
                         </h3>
                         <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
                             <CardContent className="p-0">
@@ -531,9 +457,7 @@ export function CallSummary({
                                                     <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
                                                     <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Medical Specialty</p>
                                                 </div>
-                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20">
-                                                    {item.count}
-                                                </Badge>
+                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20">{item.count}</Badge>
                                             </div>
                                         ))}
                                     </div>
@@ -550,7 +474,7 @@ export function CallSummary({
                     <div className="space-y-6">
                         <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
                             <PackageCheck className="w-5 h-5 text-[#f472b6]" />
-                            Sample Distribution
+                            Sample Breakdown
                         </h3>
                         <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
                             <CardContent className="p-0">
@@ -562,16 +486,14 @@ export function CallSummary({
                                                     <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
                                                     <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Distributed Item</p>
                                                 </div>
-                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20">
-                                                    {item.quantity}
-                                                </Badge>
+                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20">{item.quantity}</Badge>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="p-12 text-center">
                                         <Pill className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                                        <p className="text-white/40 font-medium italic">No samples distributed yet.</p>
+                                        <p className="text-white/40 font-medium italic">No samples distributed.</p>
                                     </div>
                                 )}
                             </CardContent>
