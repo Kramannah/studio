@@ -15,7 +15,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: string | number, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
+const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: React.ReactNode, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
         <CardContent className="p-6">
             <div className="flex flex-col space-y-4">
@@ -90,7 +90,6 @@ export function CallSummary({
         const start = startOfMonth(referenceDate);
         const end = endOfMonth(referenceDate);
 
-        // Calculate theoretical working days (Weekdays - Holidays)
         const allDaysInMonth = eachDayOfInterval({ start, end });
         const workingDays = allDaysInMonth.filter(day => {
             const dayOfWeek = day.getDay();
@@ -105,7 +104,6 @@ export function CallSummary({
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
-        // Trend Calculation (3 Months)
         const m0 = referenceDate;
         const m1 = subMonths(referenceDate, 1);
         const m2 = subMonths(referenceDate, 2);
@@ -195,7 +193,6 @@ export function CallSummary({
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
-        // Aggregate Product Usage
         const productUsage = filteredEntries.reduce((acc, entry) => {
             const process = (name?: string, qty?: number) => {
                 const key = (name ?? "").trim();
@@ -219,7 +216,6 @@ export function CallSummary({
 
         const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
 
-        // Specialty Counter Logic
         const specialtyCounts = filteredEntries.reduce((acc, entry) => {
             const specialty = (entry.specialty || "Unspecified").trim();
             acc[specialty] = (acc[specialty] || 0) + 1;
@@ -230,7 +226,6 @@ export function CallSummary({
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
 
-        // Detailed Provider Visited List
         const visitedDoctorList = safeDoctors.map(doctor => {
             const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
             const actualVisits = providerVisits[nameKey] || 0;
@@ -299,7 +294,7 @@ export function CallSummary({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
-                    value={`${insights.callRatePercentage}%`}
+                    value={<div className="flex items-baseline"><span>{insights.callRatePercentage}</span><span className="text-xs font-bold opacity-60 ml-0.5">%</span></div>}
                     subValue={`(${insights.totalCalls}/${Math.round(insights.targetCalls)})`}
                     description="Monthly target achievement" 
                     icon={Activity} 
