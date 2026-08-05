@@ -5,7 +5,7 @@ import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { PH_HOLIDAYS_2026 } from "@/lib/utils";
@@ -199,6 +199,17 @@ export function CallSummary({
 
         const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
 
+        // Specialty Counter Logic
+        const specialtyCounts = filteredEntries.reduce((acc, entry) => {
+            const specialty = (entry.specialty || "Unspecified").trim();
+            acc[specialty] = (acc[specialty] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+
+        const sortedSpecialties = Object.entries(specialtyCounts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
+
         // Calculate Detailed Doctor Visits for the Month
         const visitedDoctorList = safeDoctors.map(doctor => {
             const nameKey = `${doctor.firstName} ${doctor.lastName}`.toLowerCase().trim();
@@ -230,7 +241,8 @@ export function CallSummary({
             avgCallsPerDay,
             productUsage: sortedProductUsage,
             totalSamplesIssued,
-            visitedDoctorList
+            visitedDoctorList,
+            specialtyDistribution: sortedSpecialties
         };
     }, [entries, doctors, nonCallDays, selectedMonth]);
 
@@ -265,11 +277,11 @@ export function CallSummary({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
-                    title="CALL RATE" 
-                    value={`${insights.totalCalls}/${Math.round(insights.targetCalls)}`}
-                    subValue={`(${insights.callRatePercentage}%)`}
-                    description="Target: 12 reports per active day" 
-                    icon={Percent} 
+                    title="TOTAL CALLS" 
+                    value={insights.totalCalls}
+                    subValue={`/ ${Math.round(insights.targetCalls)}`}
+                    description={`Performance: ${insights.callRatePercentage}%`} 
+                    icon={Activity} 
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
                 />
@@ -411,34 +423,67 @@ export function CallSummary({
                 </div>
 
                 <div className="space-y-6">
-                    <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
-                        <PackageCheck className="w-5 h-5 text-[#f472b6]" />
-                        Sample Distribution
-                    </h3>
-                    <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden h-fit">
-                        <CardContent className="p-0">
-                            {insights.productUsage.length > 0 ? (
-                                <div className="divide-y divide-white/5">
-                                    {insights.productUsage.map((item, idx) => (
-                                        <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-                                            <div className="space-y-0.5">
-                                                <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
-                                                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Distributed Item</p>
+                    <div className="space-y-6">
+                        <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                            <Stethoscope className="w-5 h-5 text-[#3b82f6]" />
+                            Specialty Counter
+                        </h3>
+                        <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
+                            <CardContent className="p-0">
+                                {insights.specialtyDistribution.length > 0 ? (
+                                    <div className="divide-y divide-white/5">
+                                        {insights.specialtyDistribution.map((item, idx) => (
+                                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
+                                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Medical Specialty</p>
+                                                </div>
+                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20">
+                                                    {item.count}
+                                                </Badge>
                                             </div>
-                                            <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20">
-                                                {item.quantity}
-                                            </Badge>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="p-12 text-center">
-                                    <Pill className="w-12 h-12 text-white/10 mx-auto mb-4" />
-                                    <p className="text-white/40 font-medium italic">No samples distributed yet.</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-12 text-center">
+                                        <Stethoscope className="w-12 h-12 text-white/10 mx-auto mb-4" />
+                                        <p className="text-white/40 font-medium italic">No specialty data recorded.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div className="space-y-6">
+                        <h3 className="text-xl font-black font-headline text-white tracking-tight flex items-center gap-2">
+                            <PackageCheck className="w-5 h-5 text-[#f472b6]" />
+                            Sample Distribution
+                        </h3>
+                        <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl overflow-hidden">
+                            <CardContent className="p-0">
+                                {insights.productUsage.length > 0 ? (
+                                    <div className="divide-y divide-white/5">
+                                        {insights.productUsage.map((item, idx) => (
+                                            <div key={idx} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                                                <div className="space-y-0.5">
+                                                    <p className="text-sm font-bold text-white truncate max-w-[200px]">{item.name}</p>
+                                                    <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Distributed Item</p>
+                                                </div>
+                                                <Badge variant="secondary" className="h-8 px-4 font-mono font-black text-lg bg-[#f472b6]/10 text-[#f472b6] border-[#f472b6]/20">
+                                                    {item.quantity}
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-12 text-center">
+                                        <Pill className="w-12 h-12 text-white/10 mx-auto mb-4" />
+                                        <p className="text-white/40 font-medium italic">No samples distributed yet.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
             </div>
         </div>
