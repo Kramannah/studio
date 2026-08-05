@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { Doctor } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "./use-auth";
@@ -23,19 +23,25 @@ import { safeStorageSet } from "@/lib/utils";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const DOCTORS_STORAGE_KEY = 'sfe-doctors-v5';
+const DOCTORS_STORAGE_KEY = 'sfe-doctors-v6';
+const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
 
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(false);
+  const lastFetchTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (user?.uid) {
         try {
             const cached = localStorage.getItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`);
-            if (cached) setDoctors(JSON.parse(cached));
+            if (cached) {
+                const { data, timestamp } = JSON.parse(cached);
+                setDoctors(data || []);
+                lastFetchTimeRef.current = timestamp || 0;
+            }
         } catch (e) {}
     }
   }, [user?.uid]);
@@ -49,8 +55,13 @@ export const useDoctors = (active: boolean = true) => {
            profile?.role === 'Admin';
   }, [user, profile]);
 
-  const fetchDoctors = useCallback(async () => {
+  const fetchDoctors = useCallback(async (force = false) => {
     if (!user || !db || !active || !navigator.onLine) return;
+
+    const now = Date.now();
+    if (!force && (now - lastFetchTimeRef.current < CACHE_TTL) && doctors.length > 0) {
+        return;
+    }
 
     setLoading(true);
     try {
@@ -65,8 +76,10 @@ export const useDoctors = (active: boolean = true) => {
       const fetchedDoctors: Doctor[] = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
 
       setDoctors(fetchedDoctors);
-      safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(fetchedDoctors));
+      lastFetchTimeRef.current = now;
+      safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: fetchedDoctors, timestamp: now }));
     } catch (error: any) {
+        console.error("Fetch doctors failed:", error);
         if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'doctors',
@@ -76,11 +89,11 @@ export const useDoctors = (active: boolean = true) => {
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, active]);
+  }, [user, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
-    if (active) fetchDoctors();
-  }, [fetchDoctors, active]);
+    if (active && user) fetchDoctors();
+  }, [fetchDoctors, active, user]);
 
   const addDoctor = async (doctorData: Omit<Doctor, "id">) => {
     if (!user || !db) return;
@@ -90,7 +103,7 @@ export const useDoctors = (active: boolean = true) => {
         const created = { id: docRef.id, ...newDoctorData } as Doctor;
         setDoctors((prev) => {
             const next = [...prev, created];
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
         toast({ title: "Doctor Added" });
@@ -116,7 +129,7 @@ export const useDoctors = (active: boolean = true) => {
 
     batch.commit()
       .then(() => {
-        fetchDoctors();
+        fetchDoctors(true);
         toast({ title: "Upload Successful" });
       })
       .catch(async (error) => {
@@ -139,7 +152,7 @@ export const useDoctors = (active: boolean = true) => {
       .then(() => {
         setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
       })
@@ -159,7 +172,7 @@ export const useDoctors = (active: boolean = true) => {
       .then(() => {
         setDoctors((prev) => {
             const next = prev.filter((d) => d.id !== id);
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
         toast({ variant: "destructive", title: "Doctor Removed" });
@@ -181,7 +194,7 @@ export const useDoctors = (active: boolean = true) => {
       .then(() => {
         setDoctors((prev) => {
             const next = prev.filter((d) => !ids.includes(d.id));
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify(next));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
         toast({ variant: "destructive", title: "Doctors Deleted" });
@@ -202,5 +215,6 @@ export const useDoctors = (active: boolean = true) => {
     addDoctorsBulk,
     deleteDoctorsBulk,
     loading,
+    refetch: () => fetchDoctors(true)
   };
 };

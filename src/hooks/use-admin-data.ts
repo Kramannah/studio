@@ -66,8 +66,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
-            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(500))),
+            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(500)))
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
@@ -87,8 +87,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    // Increased Cache TTL to 10 minutes for better responsiveness
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
+    // Cache TTL check for speed
+    if (!force && cached && (Date.now() - cached.timestamp < 900000)) { // 15 Minute cache
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -100,19 +100,20 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
+        const trendStartISO = startOfMonth(subMonths(refDate, 3)).toISOString();
+
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), limit(3000))),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(2000))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(1000))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(5000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)))
+            getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", trendStartISO), limit(1500))),
+            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1500))),
+            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(300)))
         ]);
 
         const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
         const trendInterval = { start: startOfMonth(subMonths(refDate, 3)), end: endOfMonth(refDate) };
 
-        // ACCURACY FIX: Mandatory document ID deduplication to prevent metrics shifting
         const entriesMap = new Map<string, CoverageEntry>();
         entriesSnap.docs.forEach(d => {
             const data = d.data() as CoverageEntry;

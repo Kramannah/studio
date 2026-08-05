@@ -12,7 +12,8 @@ import { getMonthRangeISO, parseAnyDate, safeStorageSet } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-const PLANS_STORAGE_KEY = 'sfe-plans-v5';
+const PLANS_STORAGE_KEY = 'sfe-plans-v6';
+const CACHE_TTL = 20 * 60 * 1000; // 20 Minutes
 
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -23,13 +24,21 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (user) {
         const cacheKey = `${PLANS_STORAGE_KEY}_${user.uid}_${selectedMonth || 'current'}`;
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
-            setMasterPlans(JSON.parse(cached));
+            try {
+                const { data, requests, timestamp } = JSON.parse(cached);
+                setMasterPlans(data || []);
+                setPlanningRequests(requests || []);
+                lastFetchTimeRef.current = timestamp || 0;
+            } catch (e) {
+                setMasterPlans([]);
+            }
         } else {
             setMasterPlans([]);
         }
@@ -40,7 +49,11 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     if (!user || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${user.uid}_${selectedMonth || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterPlans.length > 0) return;
+    const now = Date.now();
+    
+    if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterPlans.length > 0) {
+        return;
+    }
 
     setLoading(true);
     
@@ -55,19 +68,19 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(3000)
+        limit(1500)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(500)
+        limit(300)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
-           console.warn("Plans fallback for quota resilience:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(3000));
+           console.warn("Plans fallback:", error.message);
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(1500));
            const snap = await getDocs(fallbackQ);
            
            const filtered = snap.docs
@@ -86,11 +99,18 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
       const requests = (requestsSnapshot.docs || []).map(doc => ({ id: doc.id, ...doc.data() } as PlanningPermissionRequest));
       
       const sortedPlans = plans.sort((a, b) => (b.plannedDate || "").localeCompare(a.plannedDate || ""));
+      const sortedRequests = requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || ""));
+      
       setMasterPlans(sortedPlans);
-      setPlanningRequests(requests.sort((a, b) => (b.requestedAt || "").localeCompare(a.requestedAt || "")));
+      setPlanningRequests(sortedRequests);
       lastFetchedKeyRef.current = fetchKey;
+      lastFetchTimeRef.current = now;
 
-      safeStorageSet(`${PLANS_STORAGE_KEY}_${user.uid}_${selectedMonth || 'current'}`, JSON.stringify(sortedPlans));
+      safeStorageSet(`${PLANS_STORAGE_KEY}_${user.uid}_${selectedMonth || 'current'}`, JSON.stringify({ 
+          data: sortedPlans, 
+          requests: sortedRequests,
+          timestamp: now 
+      }));
     } catch (error) {
         console.error("Fetch plans failure:", error);
     } finally {
@@ -99,13 +119,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   }, [user, active, selectedMonth, masterPlans.length]);
 
   useEffect(() => {
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    const isCurrentMonth = !selectedMonth || selectedMonth === currentMonth;
-
-    if (user && active && isCurrentMonth) {
+    if (active && user) {
         fetchData();
     }
-  }, [fetchData, active, user, selectedMonth]);
+  }, [fetchData, active, user]);
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;

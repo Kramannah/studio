@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError, orderBy, startAt, endAt } from 'firebase/firestore';
 import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isWithinInterval } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -13,7 +13,8 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
-const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v5';
+const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v6';
+const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes cache TTL
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -59,6 +60,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [loading, setLoading] = useState(false);
   
   const lastFetchedKeyRef = useRef<string | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
   const isSyncInProgress = useRef(false);
 
   useEffect(() => {
@@ -82,7 +84,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
         const localMaster = localStorage.getItem(cacheKey);
         if (localMaster) {
-            setMasterEntries(JSON.parse(localMaster));
+            try {
+                const { data, timestamp } = JSON.parse(localMaster);
+                setMasterEntries(data || []);
+                lastFetchTimeRef.current = timestamp || 0;
+            } catch (e) {
+                setMasterEntries([]);
+            }
         } else {
             setMasterEntries([]);
         }
@@ -93,21 +101,29 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) return;
+    const now = Date.now();
+    
+    // PERFORMANCE GUARD: Don't re-fetch if we have cached data and it's fresh
+    if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterEntries.length > 0) {
+        return;
+    }
 
     setLoading(true);
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+    const trendStart = startOfMonth(subMonths(refDate, 3)); // Fixed 4-month rolling window for efficiency
+    const trendStartISO = trendStart.toISOString();
     
     try {
+      // TARGETED PERFORMANCE QUERY: Use date filter to reduce document scan load
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        limit(3000)
+        where("coverageDate", ">=", trendStartISO),
+        limit(1500)
       );
       
       const querySnapshot = await getDocs(q);
       
-      // ACCURACY FIX: Mandatory document ID deduplication to prevent metric shifts
       const uniqueMap = new Map<string, CoverageEntry>();
       querySnapshot.docs.forEach(docSnap => {
           uniqueMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as CoverageEntry);
@@ -115,7 +131,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       
       const allFetched = Array.from(uniqueMap.values());
       const selectedMonthEnd = endOfMonth(refDate);
-      const trendStart = startOfOfMonth(subMonths(refDate, 3));
 
       const filtered = allFetched.filter(e => {
           const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
@@ -123,11 +138,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       });
 
       filtered.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+      
       setMasterEntries(filtered);
       lastFetchedKeyRef.current = fetchKey;
+      lastFetchTimeRef.current = now;
       
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(filtered));
+      const cacheData = { data: filtered, timestamp: now };
+      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(cacheData));
     } catch (error: any) {
+        console.error("Fetch coverage failed:", error);
         if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'coverageEntries',
@@ -140,8 +159,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   }, [userId, active, selectedMonth, masterEntries.length]);
 
   useEffect(() => {
-    fetchMasterEntries();
-  }, [fetchMasterEntries]);
+    if (active && userId) {
+        fetchMasterEntries();
+    }
+  }, [fetchMasterEntries, active, userId]);
 
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
@@ -307,7 +328,3 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   };
 };
-
-function startOfOfMonth(date: Date) {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-}
