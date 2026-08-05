@@ -26,7 +26,7 @@ const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgCo
                 <div className="space-y-1">
                     <div className="flex items-baseline gap-2">
                         <h4 className="text-2xl font-black font-headline text-white tracking-tight">{value}</h4>
-                        {subValue && <span className="text-sm font-bold text-white/40">{subValue}</span>}
+                        {subValue && <span className="text-sm font-bold text-white/60">{subValue}</span>}
                     </div>
                     <p className="text-[10px] text-white/40 font-bold uppercase tracking-tight">{description}</p>
                 </div>
@@ -294,8 +294,8 @@ export function CallSummary({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
-                    value={<div className="flex items-baseline"><span>{insights.callRatePercentage}</span><span className="text-xs font-bold opacity-60 ml-0.5">%</span></div>}
-                    subValue={`(${insights.totalCalls}/${Math.round(insights.targetCalls)})`}
+                    value={`${insights.totalCalls}/${Math.round(insights.targetCalls)}`}
+                    subValue={`(${insights.callRatePercentage}%)`}
                     description="Monthly target achievement" 
                     icon={Activity} 
                     color="text-[#f59e0b]" 
