@@ -1,18 +1,19 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon, Download } from "lucide-react";
 import { cn, parseAnyDate, PH_HOLIDAYS_2026 } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import * as XLSX from 'xlsx';
 
 const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: React.ReactNode, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
@@ -287,6 +288,31 @@ export function CallSummary({
         );
     }, [insights.visitedDoctorList, doctorSearch]);
 
+    const handleExportInsights = () => {
+        // Sheet 1: Activity Trend
+        const trendSheetData = insights.trendData.map(t => ({
+            "Period": t.fullDate,
+            "Total Sales Calls": t.calls
+        }));
+
+        // Sheet 2: Specialty Counter
+        const specialtySheetData = insights.specialtyDistribution.map(s => ({
+            "Medical Specialty": s.name,
+            "Total Visits": s.count
+        }));
+
+        const wb = XLSX.utils.book_new();
+        
+        const wsTrend = XLSX.utils.json_to_sheet(trendSheetData);
+        XLSX.utils.book_append_sheet(wb, wsTrend, "Activity Trend");
+        
+        const wsSpecialty = XLSX.utils.json_to_sheet(specialtySheetData);
+        XLSX.utils.book_append_sheet(wb, wsSpecialty, "Specialty Distribution");
+
+        const fileName = `PMR_Insights_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -294,23 +320,38 @@ export function CallSummary({
                     <h3 className="text-2xl font-black font-headline text-[#10b981]">Performance Oversight</h3>
                     <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Historical analytics and real-time field activity metrics.</p>
                 </div>
-                <div className="w-[240px] shrink-0">
-                    <Select value={selectedMonth} onValueChange={onMonthChange}>
-                        <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
-                            <SelectValue placeholder="Select Month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
+                <div className="flex items-center gap-3 shrink-0">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleExportInsights}
+                        className="h-11 font-headline border-white/10 text-white hover:bg-white/5 rounded-xl gap-2 px-4 bg-[#0a0c14]"
+                    >
+                        <Download size={16} />
+                        Export Insights
+                    </Button>
+                    <div className="w-[240px]">
+                        <Select value={selectedMonth} onValueChange={onMonthChange}>
+                            <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
+                                <SelectValue placeholder="Select Month" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
-                    value={`${insights.totalCalls}/${Math.round(insights.targetCalls)}`}
-                    subValue={`(${insights.callRatePercentage}%)`}
+                    value={
+                        <div className="flex items-baseline gap-1">
+                            <span>{insights.totalCalls}/{Math.round(insights.targetCalls)}</span>
+                            <span className="text-sm font-bold text-white/50">({insights.callRatePercentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                        </div>
+                    }
                     description="Monthly target achievement" 
                     icon={Activity} 
                     color="text-[#f59e0b]" 
@@ -318,8 +359,12 @@ export function CallSummary({
                 />
                 <StatCard 
                     title="CONCENTRATION (3X)" 
-                    value={`${insights.completedHighFreq.actual}/${insights.completedHighFreq.total}`}
-                    subValue={`(${insights.completedHighFreq.percentage}%)`}
+                    value={
+                        <div className="flex items-baseline gap-1">
+                            <span>{insights.completedHighFreq.actual}/{insights.completedHighFreq.total}</span>
+                            <span className="text-sm font-bold text-white/50">({insights.completedHighFreq.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                        </div>
+                    }
                     description="Providers visited 3+ times" 
                     icon={Target} 
                     color="text-[#10b981]" 
@@ -327,8 +372,12 @@ export function CallSummary({
                 />
                 <StatCard 
                     title="CALL REACH" 
-                    value={`${insights.coverageReach.actual}/${insights.coverageReach.total}`}
-                    subValue={`(${insights.coverageReach.percentage}%)`}
+                    value={
+                        <div className="flex items-baseline gap-1">
+                            <span>{insights.coverageReach.actual}/{insights.coverageReach.total}</span>
+                            <span className="text-sm font-bold text-white/50">({insights.coverageReach.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                        </div>
+                    }
                     description="Coverage against masterlist" 
                     icon={Users} 
                     color="text-[#06b6d4]" 
