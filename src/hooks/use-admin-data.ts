@@ -100,50 +100,51 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const { start, end } = getMonthRangeISO(selectedMonth);
-        const refDate = parseISO(selectedMonth + "-01");
 
-        // STRICT SCAN: Query exactly the month requested for maximum speed
+        // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
+        const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
+            try {
+                const q = query(
+                    collection(db!, collName), 
+                    where("userId", "==", uid), 
+                    where(dateField, ">=", filterStart),
+                    where(dateField, "<=", filterEnd),
+                    limit(maxLimit)
+                );
+                return await getDocs(q);
+            } catch (err: any) {
+                // Check for index requirement error
+                if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
+                    const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(maxLimit));
+                    const snap = await getDocs(fallbackQ);
+                    return {
+                        docs: snap.docs.filter(doc => {
+                            const val = String(doc.data()[dateField] || "");
+                            return val >= filterStart && val <= filterEnd;
+                        })
+                    };
+                }
+                throw err;
+            }
+        };
+
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            getDocs(query(
-                collection(db!, "coverageEntries"), 
-                where("userId", "==", uid), 
-                where("coverageDate", ">=", start),
-                where("coverageDate", "<=", end),
-                limit(1000)
-            )),
-            getDocs(query(
-                collection(db!, "plans"), 
-                where("userId", "==", uid), 
-                where("plannedDate", ">=", start),
-                where("plannedDate", "<=", end),
-                limit(1000)
-            )),
-            getDocs(query(
-                collection(db!, "timeLogs"), 
-                where("userId", "==", uid), 
-                where("timeIn", ">=", start),
-                where("timeIn", "<=", end),
-                limit(500)
-            )),
-            getDocs(query(
-                collection(db!, "nonCallDays"), 
-                where("userId", "==", uid), 
-                where("date", ">=", start),
-                where("date", "<=", end),
-                limit(200)
-            )),
+            resilientGetDocs("coverageEntries", "coverageDate", start, end, 1000),
+            resilientGetDocs("plans", "plannedDate", start, end, 1000),
+            resilientGetDocs("timeLogs", "timeIn", start, end, 500),
+            resilientGetDocs("nonCallDays", "date", start, end, 200),
             getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
         ]);
 
-        const entries = entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry))
+        const entries = (entriesSnap.docs || []).map((d: any) => ({ id: d.id, ...d.data() } as CoverageEntry))
             .sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 
         const data = {
             entries,
-            plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan)),
-            logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any)),
-            ncds: ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay)),
+            plans: (plansSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as Plan)),
+            logs: (logsSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as any)),
+            ncds: (ncdsSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as NonCallDay)),
             doctors: doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor)),
             requests: requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest)),
             timestamp: Date.now()
@@ -158,7 +159,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("Strict Scan failed:", e);
+        console.error("Resilient scan failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }

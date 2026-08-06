@@ -111,18 +111,32 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // STRICT SCAN: Fast query restricted to the selected month's range
-      const q = query(
-        collection(db!, "coverageEntries"), 
-        where("userId", "==", userId),
-        where("coverageDate", ">=", start),
-        where("coverageDate", "<=", end),
-        limit(1000)
-      );
+      // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
+      let snapDocs: any[] = [];
+      try {
+        const q = query(
+          collection(db!, "coverageEntries"), 
+          where("userId", "==", userId),
+          where("coverageDate", ">=", start),
+          where("coverageDate", "<=", end),
+          limit(1000)
+        );
+        const querySnapshot = await getDocs(q);
+        snapDocs = querySnapshot.docs;
+      } catch (err: any) {
+        if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
+          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(1000));
+          const snap = await getDocs(fallbackQ);
+          snapDocs = snap.docs.filter(d => {
+            const dateVal = String(d.data().coverageDate || "");
+            return dateVal >= start && dateVal <= end;
+          });
+        } else {
+          throw err;
+        }
+      }
       
-      const querySnapshot = await getDocs(q);
-      
-      const allFetched = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
+      const allFetched = snapDocs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
       allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
       
       setMasterEntries(allFetched);
