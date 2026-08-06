@@ -83,7 +83,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const refDate = parseISO(selectedMonth + "-01");
     const cacheKey = `user_${uid}_${selectedMonth}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
@@ -100,56 +99,51 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        // WIDE SCAN: 4 Months rolling window (Current + 3 Previous)
-        const wideScanStart = startOfMonth(subMonths(refDate, 3));
-        const wideScanStartISO = wideScanStart.toISOString();
+        const { start, end } = getMonthRangeISO(selectedMonth);
+        const refDate = parseISO(selectedMonth + "-01");
 
+        // STRICT SCAN: Query exactly the month requested for maximum speed
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
             getDocs(query(
                 collection(db!, "coverageEntries"), 
                 where("userId", "==", uid), 
-                where("submittedAt", ">=", wideScanStartISO), // Scan by submission time for reliability
-                limit(1500)
+                where("coverageDate", ">=", start),
+                where("coverageDate", "<=", end),
+                limit(1000)
             )),
-            getDocs(query(collection(db!, "plans"), where("userId", "==", uid), limit(1500))),
-            getDocs(query(collection(db!, "timeLogs"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), limit(500))),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(3000))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(300)))
+            getDocs(query(
+                collection(db!, "plans"), 
+                where("userId", "==", uid), 
+                where("plannedDate", ">=", start),
+                where("plannedDate", "<=", end),
+                limit(1000)
+            )),
+            getDocs(query(
+                collection(db!, "timeLogs"), 
+                where("userId", "==", uid), 
+                where("timeIn", ">=", start),
+                where("timeIn", "<=", end),
+                limit(500)
+            )),
+            getDocs(query(
+                collection(db!, "nonCallDays"), 
+                where("userId", "==", uid), 
+                where("date", ">=", start),
+                where("date", "<=", end),
+                limit(200)
+            )),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
+            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
         ]);
 
-        const selectedInterval = { start: startOfMonth(refDate), end: endOfMonth(refDate) };
-        const wideInterval = { start: wideScanStart, end: endOfMonth(refDate) };
-
-        const entriesMap = new Map<string, CoverageEntry>();
-        entriesSnap.docs.forEach(d => {
-            const data = d.data() as CoverageEntry;
-            entriesMap.set(d.id, { id: d.id, ...data });
-        });
-        
-        const entries = Array.from(entriesMap.values())
-            .filter(e => {
-                const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
-                return d && isValid(d) && isWithinInterval(d, wideInterval);
-            }).sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+        const entries = entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry))
+            .sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
 
         const data = {
             entries,
-            plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan))
-                .filter(p => {
-                    const d = parseAnyDate(p.plannedDate);
-                    return d && isValid(d) && isWithinInterval(d, { start: subMonths(refDate, 1), end: addMonths(refDate, 1) });
-                }),
-            logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any))
-                .filter(l => {
-                    const d = parseAnyDate(l.timeIn);
-                    return d && isValid(d) && isWithinInterval(d, selectedInterval);
-                }),
-            ncds: ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay))
-                .filter(n => {
-                    const d = parseAnyDate(n.date);
-                    return d && isValid(d) && isWithinInterval(d, selectedInterval);
-                }),
+            plans: plansSnap.docs.map(d => ({id: d.id, ...d.data()} as Plan)),
+            logs: logsSnap.docs.map(d => ({id: d.id, ...d.data()} as any)),
+            ncds: ncdsSnap.docs.map(d => ({id: d.id, ...d.data()} as NonCallDay)),
             doctors: doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor)),
             requests: requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest)),
             timestamp: Date.now()
@@ -164,7 +158,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("Wide Scan failed:", e);
+        console.error("Strict Scan failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }

@@ -103,49 +103,33 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     const now = Date.now();
     
-    // PERFORMANCE GUARD: Don't re-fetch if we have cached data and it's fresh
     if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterEntries.length > 0) {
         return;
     }
 
     setLoading(true);
-    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    // WIDE SCAN: Fetch 4 months of data to ensure recovery of late syncs
-    const wideScanStart = startOfMonth(subMonths(refDate, 3));
-    const wideScanStartISO = wideScanStart.toISOString();
+    const { start, end } = getMonthRangeISO(selectedMonth);
     
     try {
-      // TARGETED PERFORMANCE QUERY: Use submission date for wider, more reliable discovery
+      // STRICT SCAN: Fast query restricted to the selected month's range
       const q = query(
         collection(db!, "coverageEntries"), 
         where("userId", "==", userId),
-        where("submittedAt", ">=", wideScanStartISO),
-        limit(1500)
+        where("coverageDate", ">=", start),
+        where("coverageDate", "<=", end),
+        limit(1000)
       );
       
       const querySnapshot = await getDocs(q);
       
-      const uniqueMap = new Map<string, CoverageEntry>();
-      querySnapshot.docs.forEach(docSnap => {
-          uniqueMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as CoverageEntry);
-      });
+      const allFetched = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
+      allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
       
-      const allFetched = Array.from(uniqueMap.values());
-      const selectedMonthEnd = endOfMonth(refDate);
-      const wideInterval = { start: wideScanStart, end: selectedMonthEnd };
-
-      const filtered = allFetched.filter(e => {
-          const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
-          return d && isValid(d) && isWithinInterval(d, wideInterval);
-      });
-
-      filtered.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
-      
-      setMasterEntries(filtered);
+      setMasterEntries(allFetched);
       lastFetchedKeyRef.current = fetchKey;
       lastFetchTimeRef.current = now;
       
-      const cacheData = { data: filtered, timestamp: now };
+      const cacheData = { data: allFetched, timestamp: now };
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(cacheData));
     } catch (error: any) {
         console.error("Fetch coverage failed:", error);
