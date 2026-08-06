@@ -61,14 +61,16 @@ export function CallSummary({
     nonCallDays = [], 
     timeLogs = [],
     selectedMonth,
-    onMonthChange 
+    onMonthChange,
+    pmrName
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
     nonCallDays: NonCallDay[], 
     timeLogs: TimeLog[],
     selectedMonth?: string,
-    onMonthChange?: (m: string) => void
+    onMonthChange?: (m: string) => void,
+    pmrName?: string
 }) {
     const [doctorSearch, setDoctorSearch] = useState("");
 
@@ -289,14 +291,18 @@ export function CallSummary({
     }, [insights.visitedDoctorList, doctorSearch]);
 
     const handleExportInsights = () => {
-        // Sheet 1: Activity Trend
+        const safePmrName = pmrName || "N/A";
+
+        // Sheet 1: Calls 3 months
         const trendSheetData = insights.trendData.map(t => ({
+            "PMR Name": safePmrName,
             "Period": t.fullDate,
             "Total Sales Calls": t.calls
         }));
 
-        // Sheet 2: Specialty Counter
+        // Sheet 2: Visits per specialty
         const specialtySheetData = insights.specialtyDistribution.map(s => ({
+            "PMR Name": safePmrName,
             "Medical Specialty": s.name,
             "Total Visits": s.count
         }));
@@ -304,12 +310,12 @@ export function CallSummary({
         const wb = XLSX.utils.book_new();
         
         const wsTrend = XLSX.utils.json_to_sheet(trendSheetData);
-        XLSX.utils.book_append_sheet(wb, wsTrend, "Activity Trend");
+        XLSX.utils.book_append_sheet(wb, wsTrend, "Calls 3 months");
         
         const wsSpecialty = XLSX.utils.json_to_sheet(specialtySheetData);
-        XLSX.utils.book_append_sheet(wb, wsSpecialty, "Specialty Distribution");
+        XLSX.utils.book_append_sheet(wb, wsSpecialty, "Visits per specialty");
 
-        const fileName = `PMR_Insights_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+        const fileName = `${safePmrName.replace(/\s+/g, '_')}_Insights_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
         XLSX.writeFile(wb, fileName);
     };
 

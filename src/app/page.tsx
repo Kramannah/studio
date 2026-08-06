@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -173,7 +172,9 @@ export default function Home() {
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
-      case 'summary': return <CallSummary entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
+      case 'summary': 
+        const currentPmrName = profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
+        return <CallSummary pmrName={currentPmrName} entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': return <Q4AllocationView readOnly={true} />;
       default: return null;

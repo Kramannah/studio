@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -77,6 +76,9 @@ export function UserDashboard({
             }
         }
     }, [selectedMonth, userId, onFetchUserData]);
+
+    const pmrInfo = userMap?.[userId];
+    const dashboardPmrName = pmrInfo ? `${pmrInfo.firstName} ${pmrInfo.lastName}` : (userId || "PMR");
     
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
@@ -132,6 +134,7 @@ export function UserDashboard({
                 <div className="pt-2 min-h-[400px]">
                     <TabsContent value="summary" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <CallSummary 
+                            pmrName={dashboardPmrName}
                             entries={allEntries || []} 
                             doctors={allDoctors || []} 
                             nonCallDays={allNonCallDays || []} 
