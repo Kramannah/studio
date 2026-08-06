@@ -292,6 +292,7 @@ export function CallSummary({
 
     const handleExportInsights = () => {
         const safePmrName = pmrName || "N/A";
+        const displayMonth = selectedMonth ? format(parseISO(selectedMonth + "-01"), "MMMM yyyy") : "N/A";
 
         // Sheet 1: Calls 3 months
         const trendSheetData = insights.trendData.map(t => ({
@@ -303,6 +304,7 @@ export function CallSummary({
         // Sheet 2: Visits per specialty
         const specialtySheetData = insights.specialtyDistribution.map(s => ({
             "PMR Name": safePmrName,
+            "Period": displayMonth,
             "Medical Specialty": s.name,
             "Total Visits": s.count
         }));
