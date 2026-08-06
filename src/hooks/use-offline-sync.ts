@@ -108,7 +108,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
 
     setLoading(true);
-    const { start, end } = getMonthRangeISO(selectedMonth);
+    
+    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+    // STRICT 3-MONTH WINDOW: Support Activity Trend charts
+    const start = startOfMonth(subMonths(refDate, 2)).toISOString();
+    const end = endOfMonth(refDate).toISOString();
     
     try {
       // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
@@ -119,13 +123,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           where("userId", "==", userId),
           where("coverageDate", ">=", start),
           where("coverageDate", "<=", end),
-          limit(1000)
+          limit(2000)
         );
         const querySnapshot = await getDocs(q);
         snapDocs = querySnapshot.docs;
       } catch (err: any) {
         if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(1000));
+          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(2000));
           const snap = await getDocs(fallbackQ);
           snapDocs = snap.docs.filter(d => {
             const dateVal = String(d.data().coverageDate || "");

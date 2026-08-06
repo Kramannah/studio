@@ -87,7 +87,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
     // Cache TTL check for speed
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { // 10 Minute cache for faster UI
+    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -99,7 +99,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     try {
-        const { start, end } = getMonthRangeISO(selectedMonth);
+        const refDate = parseISO(selectedMonth + "-01");
+        // STRICT 3-MONTH SCAN: Current + 2 Previous to support Activity Trend perfectly
+        const start = startOfMonth(subMonths(refDate, 2)).toISOString();
+        const end = endOfMonth(refDate).toISOString();
 
         // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
         const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
@@ -129,7 +132,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            resilientGetDocs("coverageEntries", "coverageDate", start, end, 1000),
+            resilientGetDocs("coverageEntries", "coverageDate", start, end, 2000),
             resilientGetDocs("plans", "plannedDate", start, end, 1000),
             resilientGetDocs("timeLogs", "timeIn", start, end, 500),
             resilientGetDocs("nonCallDays", "date", start, end, 200),
@@ -159,7 +162,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("Resilient scan failed:", e);
+        console.error("Strict Scan failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }
