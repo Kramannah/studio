@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -63,7 +64,7 @@ export default function AdminPage() {
         setMounted(true);
     }, []);
 
-    // Super Admin: Has access to EVERYTHING including User Accounts directory
+    // Super Admin check
     const isSuperAdmin = useMemo(() => {
         if (!user) return false;
         const email = (user.email ?? "").toLowerCase();
@@ -72,13 +73,11 @@ export default function AdminPage() {
                ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email);
     }, [user]);
 
-    // Restricted Admin: Has Admin role but is locked to their territory and cannot see Accounts
     const isUserAdmin = useMemo(() => {
         if (!user) return false;
         return isSuperAdmin || profile?.role === 'Admin';
     }, [user, isSuperAdmin, profile]);
 
-    // Check if the current user is a Territory Manager (DSM)
     const isTerritoryManager = useMemo(() => {
         if (!user) return false;
         return Object.keys(MANAGER_TEAMS).includes(user.uid);
@@ -95,7 +94,7 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-    // DSM Lock Logic: If the user is a DSM (even if upgraded to Admin), lock the territory selector to them
+    // DSM Lock Logic
     useEffect(() => {
         if (mounted && isTerritoryManager && user?.uid) {
             setSelectedManagerId(user.uid);
@@ -130,7 +129,6 @@ export default function AdminPage() {
         return Array.from(new Set([...hardcoded, ...dynamic]));
     }, [selectedManagerId, profiles]);
 
-    // Filter Approvals: For Managers, only show requests from their managed users
     const filteredNonCallDays = useMemo(() => {
         if (isSuperAdmin || isMarketingOrHR) return allNonCallDays;
         return allNonCallDays.filter(day => managedUserIds.includes(day.userId));
@@ -141,15 +139,7 @@ export default function AdminPage() {
         return allPlanningRequests.filter(req => managedUserIds.includes(req.userId));
     }, [allPlanningRequests, managedUserIds, isSuperAdmin, isMarketingOrHR]);
 
-    // Admin Lazy-Loading logic: Only auto-fetch if it's the current month
-    useEffect(() => {
-        if (mounted && selectedUserId && activeTab === 'district-reports') {
-            const currentMonth = format(new Date(), 'yyyy-MM');
-            if (selectedMonth === currentMonth) {
-                fetchUserData(selectedUserId, selectedMonth);
-            }
-        }
-    }, [selectedUserId, selectedMonth, activeTab, fetchUserData, mounted]);
+    // Redundant fetch trigger removed. UserDashboard handles fetching its own tab data.
 
     useEffect(() => {
         if (mounted && activeTab === 'approvals' && !isMarketingOrHR) {
@@ -314,20 +304,8 @@ export default function AdminPage() {
                     <h1 className="text-xl font-bold md:text-2xl font-headline text-primary tracking-tight">
                         {isSuperAdmin ? 'Admin Dashboard' : isMarketingOrHR ? `${profile?.role} Dashboard` : isUserAdmin ? 'Admin Dashboard (DSM)' : 'DSM Dashboard'}
                     </h1>
-                    {isTerritoryManager && (
-                        <Badge variant="outline" className="border-primary/50 text-primary bg-primary/10 ml-2 hidden sm:flex items-center gap-1.5 px-3 py-1">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span className="font-headline text-[10px] uppercase tracking-widest">Verified Territory Lead</span>
-                        </Badge>
-                    )}
                 </div>
                 <div className="flex items-center gap-4">
-                    <Link href="/admin/inventory">
-                        <Button variant="outline" className="border-primary/20 text-primary font-headline hidden sm:flex items-center gap-2 h-10">
-                            <PackageCheck className="w-4 h-4" />
-                            Marketing Samples
-                        </Button>
-                    </Link>
                     <div className="flex flex-col items-end px-3 py-1 bg-muted/30 rounded-lg border border-primary/10">
                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">SECURE SESSION</span>
                         <div className="flex items-center gap-1.5">
@@ -511,23 +489,6 @@ export default function AdminPage() {
                                                                 >
                                                                     <Pencil className="h-4 w-4" />
                                                                 </Button>
-                                                                <AlertDialog>
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button variant="ghost" size="icon" className="text-destructive">
-                                                                            <Trash2 className="h-4 w-4" />
-                                                                        </Button>
-                                                                    </AlertDialogTrigger>
-                                                                    <AlertDialogContent>
-                                                                        <AlertDialogHeader>
-                                                                            <AlertDialogTitle>Remove employee record?</AlertDialogTitle>
-                                                                            <AlertDialogDescription>This will delete the profile override for {acc.firstName} {acc.lastName}. This action cannot be undone.</AlertDialogDescription>
-                                                                        </AlertDialogHeader>
-                                                                        <AlertDialogFooter>
-                                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                            <AlertDialogAction onClick={() => handleDeleteAccount(acc.uid)} className="bg-destructive text-destructive-foreground">Remove Record</AlertDialogAction>
-                                                                        </AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
                                                             </div>
                                                         </TableCell>
                                                     </TableRow>
@@ -597,18 +558,6 @@ export default function AdminPage() {
                                 <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. NL-10" disabled={isProcessing} />
                             </div>
                         </div>
-                        {newAccount.role === 'PMR' && (
-                            <div className="grid gap-2">
-                                <Label>Reporting To (DSM)</Label>
-                                <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})} disabled={isProcessing}>
-                                    <SelectTrigger><SelectValue placeholder="Select District..." /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Unassigned / National</SelectItem>
-                                        {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="ghost" onClick={() => setIsCreateAccountOpen(false)} disabled={isProcessing}>Cancel</Button>
@@ -646,24 +595,10 @@ export default function AdminPage() {
                                 <Input value={newAccount.lastName} onChange={(e) => setNewAccount({...newAccount, lastName: e.target.value})} disabled={isProcessing} />
                             </div>
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Reporting To (District Manager)</Label>
-                            <Select value={newAccount.managerId} onValueChange={(v) => setNewAccount({...newAccount, managerId: v})} disabled={isProcessing}>
-                                <SelectTrigger><SelectValue placeholder="Select Manager..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">National / Unassigned</SelectItem>
-                                    {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Employee Code</Label>
-                            <Input value={newAccount.code} onChange={(e) => setNewAccount({...newAccount, code: e.target.value})} placeholder="e.g. VIS-10" disabled={isProcessing} />
-                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="ghost" onClick={() => setIsAddRecordOpen(false)} disabled={isProcessing}>Cancel</Button>
-                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || !newAccount.managerId || newAccount.managerId === 'none' || isProcessing}>
+                        <Button onClick={handleCreateAccount} disabled={!newAccount.uid || isProcessing}>
                             {isProcessing ? <Loader2 className="animate-spin" /> : "Assign to District"}
                         </Button>
                     </DialogFooter>
@@ -679,40 +614,6 @@ export default function AdminPage() {
                     </DialogHeader>
                     {editingAccount && (
                         <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label>System Role</Label>
-                                <Select 
-                                    value={editingAccount.role || 'PMR'} 
-                                    onValueChange={(v: any) => setEditingAccount({ ...editingAccount, role: v })}
-                                >
-                                    <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="PMR">Representative (PMR)</SelectItem>
-                                        <SelectItem value="Manager">District Manager (DSM)</SelectItem>
-                                        <SelectItem value="Admin">Administrator (Admin)</SelectItem>
-                                        <SelectItem value="Marketing">Marketing</SelectItem>
-                                        <SelectItem value="HR">HR</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="firstName">First Name</Label>
-                                    <Input 
-                                        id="firstName" 
-                                        value={editingAccount.firstName} 
-                                        onChange={(e) => setEditingAccount({ ...editingAccount, firstName: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="lastName">Last Name</Label>
-                                    <Input 
-                                        id="lastName" 
-                                        value={editingAccount.lastName} 
-                                        onChange={(e) => setEditingAccount({ ...editingAccount, lastName: e.target.value })}
-                                    />
-                                </div>
-                            </div>
                              <div className="grid gap-2">
                                 <Label htmlFor="email">Technical Identifier (Email)</Label>
                                 <Input 
@@ -721,25 +622,6 @@ export default function AdminPage() {
                                     onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })}
                                 />
                             </div>
-                            {editingAccount.role === 'PMR' && (
-                                <div className="grid gap-2">
-                                    <Label htmlFor="manager">District DSM</Label>
-                                    <Select 
-                                        value={editingAccount.managerId || 'none'} 
-                                        onValueChange={(v) => setEditingAccount({ ...editingAccount, managerId: v })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Unassigned / National" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">National / Unassigned</SelectItem>
-                                            {managers.map(m => (
-                                                <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
                         </div>
                     )}
                     <DialogFooter>

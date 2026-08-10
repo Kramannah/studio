@@ -60,14 +60,16 @@ export function UserDashboard({
     const [isRefreshing, setIsRefreshing] = useState(false);
     const lastFetchedRef = useRef<string>("");
 
-    // SPEED OPTIMIZATION: Trigger fetch logic based on tab priority
+    // PERFORMANCE: Only fetch Trend data if user is on the Summary tab.
+    // Fetch 1 month only if user is on Reports or Planning to save costs and increase speed.
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            const fetchKey = `${userId}_${selectedMonth}_${activeTab === 'summary' ? 'trend' : 'base'}`;
-            // Prevent duplicate triggers if we already hit this month/tab combo
+            const isTrendNeeded = activeTab === 'summary';
+            const fetchKey = `${userId}_${selectedMonth}_${isTrendNeeded ? 'trend' : 'base'}`;
+            
             if (lastFetchedRef.current !== fetchKey) {
                 lastFetchedRef.current = fetchKey;
-                onFetchUserData(userId, selectedMonth, false, activeTab === 'summary');
+                onFetchUserData(userId, selectedMonth, false, isTrendNeeded);
             }
         }
     }, [selectedMonth, userId, activeTab, onFetchUserData]);

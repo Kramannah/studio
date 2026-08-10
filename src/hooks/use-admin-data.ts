@@ -13,7 +13,7 @@ import { isValid, parseISO, startOfMonth, endOfMonth, subMonths } from "date-fns
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-// COST SAVING: Shared session cache
+// SHARED CACHE: Persists data for the duration of the session to prevent re-downloads
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 const DOCTOR_MASTER_CACHE: Record<string, { data: Doctor[], timestamp: number }> = {};
 const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
@@ -87,7 +87,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, includeTrend = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const fetchId = `${uid}_${selectedMonth}_${Date.now()}`;
+    const fetchId = `${uid}_${selectedMonth}_${includeTrend ? 'trend' : 'base'}`;
     activeFetchIdRef.current = fetchId;
 
     // SPEED OPTIMIZATION: Check for unified cache (Trend data satisfies Base data)
@@ -105,7 +105,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualNonCallDays(activeCache.ncds);
         setIndividualPlanningRequests(activeCache.requests);
         
-        // Identity data might be in a separate cache
         const cachedDocs = DOCTOR_MASTER_CACHE[uid];
         if (cachedDocs) setIndividualDoctors(cachedDocs.data);
         return;
@@ -127,9 +126,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             );
             return await getDocs(q);
         } catch (err: any) {
-            // COST SAVING FALLBACK: If index missing, fetch last 1000 and filter in JS
-            if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-                const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(1000));
+            // COST SAVING FALLBACK: Prevent full collection scans if index is missing
+            const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(maxLimit));
+            try {
                 const snap = await getDocs(fallbackQ);
                 return {
                     docs: snap.docs.filter(doc => {
@@ -137,13 +136,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                         return val >= filterStart && val <= filterEnd;
                     })
                 };
+            } catch (e) {
+                // If even the simple sort fails, fetch last 100 and filter
+                const desperateQ = query(collection(db!, collName), where("userId", "==", uid), limit(200));
+                const snap = await getDocs(desperateQ);
+                return {
+                    docs: snap.docs.filter(doc => {
+                        const val = String(doc.data()[dateField] || "");
+                        return val >= filterStart && val <= filterEnd;
+                    })
+                };
             }
-            throw err;
         }
     };
 
     try {
-        // INCREMENTAL LOADING: Fetch identity and activity in parallel but update UI as they arrive
         const fetchCollection = async (name: string, field: string, limitVal: number, setter: (val: any[]) => void) => {
             const snap = await resilientGetDocs(name, field, start, end, limitVal);
             if (activeFetchIdRef.current === fetchId) {
@@ -157,13 +164,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return [];
         };
 
-        // Parallel trigger but independent awaits
-        const pEntries = fetchCollection("coverageEntries", "coverageDate", includeTrend ? 1500 : 800, setIndividualEntries);
-        const pPlans = fetchCollection("plans", "plannedDate", 800, setIndividualPlans);
-        const pLogs = fetchCollection("timeLogs", "timeIn", 300, setIndividualTimeLogs);
+        // START PARALLEL FETCHES
+        const pEntries = fetchCollection("coverageEntries", "coverageDate", includeTrend ? 1000 : 500, setIndividualEntries);
+        const pPlans = fetchCollection("plans", "plannedDate", 500, setIndividualPlans);
+        const pLogs = fetchCollection("timeLogs", "timeIn", 200, setIndividualTimeLogs);
         const pNcds = fetchCollection("nonCallDays", "date", 100, setIndividualNonCallDays);
         
-        // Masterlist Identity (Independent Cache)
+        // MASTERLIST INDEPENDENT CACHE
         let doctorsData: Doctor[] = [];
         if (!force && DOCTOR_MASTER_CACHE[uid] && (Date.now() - DOCTOR_MASTER_CACHE[uid].timestamp < CACHE_TTL)) {
             doctorsData = DOCTOR_MASTER_CACHE[uid].data;
@@ -181,7 +188,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const requestsData = requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest));
         if (activeFetchIdRef.current === fetchId) setIndividualPlanningRequests(requestsData);
 
-        // Finalize Cache once critical activity data is back
+        // Await activity results to finalize session cache
         const [entries, plans, logs, ncds] = await Promise.all([pEntries, pPlans, pLogs, pNcds]);
         
         if (activeFetchIdRef.current === fetchId) {
