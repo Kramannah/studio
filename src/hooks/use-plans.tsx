@@ -13,7 +13,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 const PLANS_STORAGE_KEY = 'sfe-plans-v6';
-const CACHE_TTL = 20 * 60 * 1000; // 20 Minutes
+const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
 
 export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
@@ -68,19 +68,19 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
         where("userId", "==", user.uid),
         where("plannedDate", ">=", rangeStart),
         where("plannedDate", "<=", rangeEnd),
-        limit(1500)
+        limit(2000)
       );
       
       const requestsQuery = query(
         collection(db, "planningRequests"), 
         where("userId", "==", user.uid),
-        limit(300)
+        limit(500)
       );
       
       const [plansSnapshot, requestsSnapshot] = await Promise.all([
         getDocs(plansQuery).catch(async (error) => {
            console.warn("Plans fallback:", error.message);
-           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(1500));
+           const fallbackQ = query(collection(db, "plans"), where("userId", "==", user.uid), limit(2000));
            const snap = await getDocs(fallbackQ);
            
            const filtered = snap.docs

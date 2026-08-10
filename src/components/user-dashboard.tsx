@@ -31,7 +31,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string, force?: boolean, includeTrend?: boolean) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string, force?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
 }
@@ -60,25 +60,23 @@ export function UserDashboard({
     const [isRefreshing, setIsRefreshing] = useState(false);
     const lastFetchedRef = useRef<string>("");
 
-    // PERFORMANCE: Only fetch Trend data if user is on the Summary tab.
-    // Fetch 1 month only if user is on Reports or Planning to save costs and increase speed.
+    // Undone "Cost Saving": Remove lazy loading by tab. Always fetch broad data for accuracy.
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            const isTrendNeeded = activeTab === 'summary';
-            const fetchKey = `${userId}_${selectedMonth}_${isTrendNeeded ? 'trend' : 'base'}`;
+            const fetchKey = `${userId}_${selectedMonth}`;
             
             if (lastFetchedRef.current !== fetchKey) {
                 lastFetchedRef.current = fetchKey;
-                onFetchUserData(userId, selectedMonth, false, isTrendNeeded);
+                onFetchUserData(userId, selectedMonth, false);
             }
         }
-    }, [selectedMonth, userId, activeTab, onFetchUserData]);
+    }, [selectedMonth, userId, onFetchUserData]);
 
     const handleRefresh = async () => {
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth, true, activeTab === 'summary');
+            await onFetchUserData(userId, selectedMonth, true);
         } finally {
             setIsRefreshing(false);
         }

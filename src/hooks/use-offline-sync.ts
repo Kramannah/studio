@@ -14,7 +14,7 @@ import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v6';
-const CACHE_TTL = 30 * 60 * 1000; // Increased to 30 Minutes for "Cost Saving"
+const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -97,10 +97,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, selectedMonth]);
 
-  const fetchMasterEntries = useCallback(async (force = false, includeTrend = false) => {
+  const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
-    const fetchKey = `${userId}_${selectedMonth || 'current'}_${includeTrend ? 'trend' : 'base'}`;
+    const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     const now = Date.now();
     
     if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterEntries.length > 0) {
@@ -110,8 +110,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     setLoading(true);
     
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    // COST SAVING: Only fetch 3 months if Specifically requested (Summary view). Otherwise 1 month.
-    const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
+    // Restored Broad Scoping: Always pull 4 months for accuracy and trend prep
+    const start = startOfMonth(subMonths(refDate, 3)).toISOString();
     const end = endOfMonth(refDate).toISOString();
     
     try {
@@ -122,21 +122,18 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           where("userId", "==", userId),
           where("coverageDate", ">=", start),
           where("coverageDate", "<=", end),
-          limit(1000)
+          limit(2000)
         );
         const querySnapshot = await getDocs(q);
         snapDocs = querySnapshot.docs;
       } catch (err: any) {
-        if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(500));
-          const snap = await getDocs(fallbackQ);
-          snapDocs = snap.docs.filter(d => {
-            const dateVal = String(d.data().coverageDate || "");
-            return dateVal >= start && dateVal <= end;
-          });
-        } else {
-          throw err;
-        }
+        // Broad Fallback logic restored
+        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(1500));
+        const snap = await getDocs(fallbackQ);
+        snapDocs = snap.docs.filter(d => {
+          const dateVal = String(d.data().coverageDate || "");
+          return dateVal >= start && dateVal <= end;
+        });
       }
       
       const allFetched = snapDocs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));

@@ -16,7 +16,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 // SHARED CACHE: Persists data for the duration of the session to prevent re-downloads
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 const DOCTOR_MASTER_CACHE: Record<string, { data: Doctor[], timestamp: number }> = {};
-const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -70,8 +70,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingApprovals(true);
     try {
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(500))),
-            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(500)))
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
+            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
@@ -84,26 +84,21 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, includeTrend = false) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const fetchId = `${uid}_${selectedMonth}_${includeTrend ? 'trend' : 'base'}`;
+    const fetchId = `${uid}_${selectedMonth}`;
     activeFetchIdRef.current = fetchId;
 
-    // SPEED OPTIMIZATION: Check for unified cache (Trend data satisfies Base data)
-    const trendKey = `user_${uid}_${selectedMonth}_trend`;
-    const baseKey = `user_${uid}_${selectedMonth}_base`;
-    
-    const cachedTrend = ADMIN_SESSION_CACHE[trendKey];
-    const cachedBase = ADMIN_SESSION_CACHE[baseKey];
-    const activeCache = includeTrend ? cachedTrend : (cachedTrend || cachedBase);
+    const cacheKey = `user_${uid}_${selectedMonth}`;
+    const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    if (!force && activeCache && (Date.now() - activeCache.timestamp < CACHE_TTL)) { 
-        setIndividualEntries(activeCache.entries);
-        setIndividualPlans(activeCache.plans);
-        setIndividualTimeLogs(activeCache.logs);
-        setIndividualNonCallDays(activeCache.ncds);
-        setIndividualPlanningRequests(activeCache.requests);
+    if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL)) { 
+        setIndividualEntries(cached.entries);
+        setIndividualPlans(cached.plans);
+        setIndividualTimeLogs(cached.logs);
+        setIndividualNonCallDays(cached.ncds);
+        setIndividualPlanningRequests(cached.requests);
         
         const cachedDocs = DOCTOR_MASTER_CACHE[uid];
         if (cachedDocs) setIndividualDoctors(cachedDocs.data);
@@ -112,22 +107,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     const refDate = parseISO(selectedMonth + "-01");
-    const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
+    // WIDE SCAN: Restore 4-month rolling window for accuracy
+    const start = startOfMonth(subMonths(refDate, 3)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
-    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
+    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string) => {
         try {
             const q = query(
                 collection(db!, collName), 
                 where("userId", "==", uid), 
                 where(dateField, ">=", filterStart),
                 where(dateField, "<=", filterEnd),
-                limit(maxLimit)
+                limit(3000)
             );
             return await getDocs(q);
         } catch (err: any) {
-            // COST SAVING FALLBACK: Prevent full collection scans if index is missing
-            const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(maxLimit));
+            // Revert to full per-user scan on index error (Deep discovery)
+            const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(2000));
             try {
                 const snap = await getDocs(fallbackQ);
                 return {
@@ -137,8 +133,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     })
                 };
             } catch (e) {
-                // If even the simple sort fails, fetch last 100 and filter
-                const desperateQ = query(collection(db!, collName), where("userId", "==", uid), limit(200));
+                const desperateQ = query(collection(db!, collName), where("userId", "==", uid), limit(2000));
                 const snap = await getDocs(desperateQ);
                 return {
                     docs: snap.docs.filter(doc => {
@@ -151,8 +146,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     };
 
     try {
-        const fetchCollection = async (name: string, field: string, limitVal: number, setter: (val: any[]) => void) => {
-            const snap = await resilientGetDocs(name, field, start, end, limitVal);
+        const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void) => {
+            const snap = await resilientGetDocs(name, field, start, end);
             if (activeFetchIdRef.current === fetchId) {
                 const data = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() }));
                 if (name === 'coverageEntries') {
@@ -164,19 +159,17 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return [];
         };
 
-        // START PARALLEL FETCHES
-        const pEntries = fetchCollection("coverageEntries", "coverageDate", includeTrend ? 1000 : 500, setIndividualEntries);
-        const pPlans = fetchCollection("plans", "plannedDate", 500, setIndividualPlans);
-        const pLogs = fetchCollection("timeLogs", "timeIn", 200, setIndividualTimeLogs);
-        const pNcds = fetchCollection("nonCallDays", "date", 100, setIndividualNonCallDays);
+        const pEntries = fetchCollection("coverageEntries", "coverageDate", setIndividualEntries);
+        const pPlans = fetchCollection("plans", "plannedDate", setIndividualPlans);
+        const pLogs = fetchCollection("timeLogs", "timeIn", setIndividualTimeLogs);
+        const pNcds = fetchCollection("nonCallDays", "date", setIndividualNonCallDays);
         
-        // MASTERLIST INDEPENDENT CACHE
         let doctorsData: Doctor[] = [];
         if (!force && DOCTOR_MASTER_CACHE[uid] && (Date.now() - DOCTOR_MASTER_CACHE[uid].timestamp < CACHE_TTL)) {
             doctorsData = DOCTOR_MASTER_CACHE[uid].data;
             setIndividualDoctors(doctorsData);
         } else {
-            const doctorsSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500)));
+            const doctorsSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000)));
             doctorsData = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor));
             if (activeFetchIdRef.current === fetchId) {
                 setIndividualDoctors(doctorsData);
@@ -184,15 +177,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             }
         }
 
-        const requestsSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)));
+        const requestsSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(500)));
         const requestsData = requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest));
         if (activeFetchIdRef.current === fetchId) setIndividualPlanningRequests(requestsData);
 
-        // Await activity results to finalize session cache
         const [entries, plans, logs, ncds] = await Promise.all([pEntries, pPlans, pLogs, pNcds]);
         
         if (activeFetchIdRef.current === fetchId) {
-            ADMIN_SESSION_CACHE[includeTrend ? trendKey : baseKey] = {
+            ADMIN_SESSION_CACHE[cacheKey] = {
                 entries, plans, logs, ncds, requests: requestsData, timestamp: Date.now()
             };
         }
