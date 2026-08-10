@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from "react";
@@ -30,7 +31,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string, force?: boolean) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string, force?: boolean, includeTrend?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
 }
@@ -58,24 +59,23 @@ export function UserDashboard({
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    // COST SAVING: Separate the trend fetch from the base fetch
+    useEffect(() => {
+        if (onFetchUserData && userId && selectedMonth) {
+            // Summary needs Trend (3 months), others only need Strict (1 month)
+            onFetchUserData(userId, selectedMonth, false, activeTab === 'summary');
+        }
+    }, [selectedMonth, userId, activeTab, onFetchUserData]);
+
     const handleRefresh = async () => {
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth, true);
+            await onFetchUserData(userId, selectedMonth, true, activeTab === 'summary');
         } finally {
             setIsRefreshing(false);
         }
     };
-
-    useEffect(() => {
-        if (onFetchUserData && userId && selectedMonth) {
-            const currentMonth = format(new Date(), 'yyyy-MM');
-            if (selectedMonth === currentMonth) {
-                onFetchUserData(userId, selectedMonth);
-            }
-        }
-    }, [selectedMonth, userId, onFetchUserData]);
 
     const pmrInfo = userMap?.[userId];
     const dashboardPmrName = pmrInfo ? `${pmrInfo.firstName} ${pmrInfo.lastName}` : (userId || "PMR");

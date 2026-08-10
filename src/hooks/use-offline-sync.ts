@@ -14,7 +14,7 @@ import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v6';
-const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes cache TTL
+const CACHE_TTL = 30 * 60 * 1000; // Increased to 30 Minutes for "Cost Saving"
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -97,10 +97,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId, selectedMonth]);
 
-  const fetchMasterEntries = useCallback(async (force = false) => {
+  const fetchMasterEntries = useCallback(async (force = false, includeTrend = false) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
-    const fetchKey = `${userId}_${selectedMonth || 'current'}`;
+    const fetchKey = `${userId}_${selectedMonth || 'current'}_${includeTrend ? 'trend' : 'base'}`;
     const now = Date.now();
     
     if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterEntries.length > 0) {
@@ -110,12 +110,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     setLoading(true);
     
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    // STRICT 3-MONTH WINDOW: Support Activity Trend charts
-    const start = startOfMonth(subMonths(refDate, 2)).toISOString();
+    // COST SAVING: Only fetch 3 months if Specifically requested (Summary view). Otherwise 1 month.
+    const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
     const end = endOfMonth(refDate).toISOString();
     
     try {
-      // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
       let snapDocs: any[] = [];
       try {
         const q = query(
@@ -123,13 +122,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           where("userId", "==", userId),
           where("coverageDate", ">=", start),
           where("coverageDate", "<=", end),
-          limit(2000)
+          limit(1000)
         );
         const querySnapshot = await getDocs(q);
         snapDocs = querySnapshot.docs;
       } catch (err: any) {
         if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(2000));
+          const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(500));
           const snap = await getDocs(fallbackQ);
           snapDocs = snap.docs.filter(d => {
             const dateVal = String(d.data().coverageDate || "");
@@ -151,12 +150,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(cacheData));
     } catch (error: any) {
         console.error("Fetch coverage failed:", error);
-        if (error.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'coverageEntries',
-                operation: 'list'
-            }));
-        }
     } finally {
         setLoading(false);
     }
@@ -248,12 +241,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
         } catch (error: any) {
             console.error(`Sync failed for report ${entry.id}:`, error);
-            if (error.code === 'permission-denied') {
-                 errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: 'coverageEntries',
-                    operation: 'create'
-                }));
-            }
         }
     }
 

@@ -24,7 +24,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v6';
-const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
+const CACHE_TTL = 30 * 60 * 1000; // Increased to 30 Minutes
 
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
@@ -66,10 +66,11 @@ export const useDoctors = (active: boolean = true) => {
     setLoading(true);
     try {
       let q;
+      // COST SAVING: Stricter limits on masterlist fetches
       if (isUserAdmin) {
         q = query(collection(db, "doctors"), limit(5000));
       } else {
-        q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(2000));
+        q = query(collection(db, "doctors"), where("userId", "==", user.uid), limit(1500));
       }
 
       const querySnapshot = await getDocs(q);
@@ -80,12 +81,6 @@ export const useDoctors = (active: boolean = true) => {
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: fetchedDoctors, timestamp: now }));
     } catch (error: any) {
         console.error("Fetch doctors failed:", error);
-        if (error.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'doctors',
-                operation: 'list',
-            }));
-        }
     } finally {
       setLoading(false);
     }

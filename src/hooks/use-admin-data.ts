@@ -15,6 +15,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 
 // ADMIN SESSION CACHE: Prevents costly re-fetching when switching between admin tabs or PMR profiles
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
+const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes for "Cost Saving"
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -80,14 +81,14 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, includeTrend = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const cacheKey = `user_${uid}_${selectedMonth}`;
+    const cacheKey = `user_${uid}_${selectedMonth}_${includeTrend ? 'trend' : 'base'}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
-    // Cache TTL check for speed
-    if (!force && cached && (Date.now() - cached.timestamp < 600000)) { 
+    // Cache TTL check for speed and cost saving
+    if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL)) { 
         setIndividualEntries(cached.entries);
         setIndividualPlans(cached.plans);
         setIndividualTimeLogs(cached.logs);
@@ -100,11 +101,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     setLoadingIndividual(true);
     try {
         const refDate = parseISO(selectedMonth + "-01");
-        // STRICT 3-MONTH SCAN: Current + 2 Previous to support Activity Trend perfectly
-        const start = startOfMonth(subMonths(refDate, 2)).toISOString();
+        // COST SAVING: Only fetch 3 months if we specifically need the "Trend" data.
+        const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
         const end = endOfMonth(refDate).toISOString();
 
-        // RESILIENT FETCH: Handles missing indexes by falling back to client-side filtering
+        // RESILIENT FETCH: Handles missing indexes with a strict LIMIT to prevent runaway costs
         const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
             try {
                 const q = query(
@@ -116,9 +117,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                 );
                 return await getDocs(q);
             } catch (err: any) {
-                // Check for index requirement error
+                // If index missing, fetch only the most recent 500 docs (Cost Saving limit)
                 if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-                    const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(maxLimit));
+                    const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(500));
                     const snap = await getDocs(fallbackQ);
                     return {
                         docs: snap.docs.filter(doc => {
@@ -132,11 +133,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         };
 
         const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            resilientGetDocs("coverageEntries", "coverageDate", start, end, 2000),
-            resilientGetDocs("plans", "plannedDate", start, end, 1000),
-            resilientGetDocs("timeLogs", "timeIn", start, end, 500),
-            resilientGetDocs("nonCallDays", "date", start, end, 200),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(2000))),
+            resilientGetDocs("coverageEntries", "coverageDate", start, end, includeTrend ? 1500 : 800),
+            resilientGetDocs("plans", "plannedDate", start, end, 800),
+            resilientGetDocs("timeLogs", "timeIn", start, end, 300),
+            resilientGetDocs("nonCallDays", "date", start, end, 100),
+            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500))),
             getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
         ]);
 
@@ -162,7 +163,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         
         ADMIN_SESSION_CACHE[cacheKey] = data;
     } catch (e) {
-        console.error("Strict Scan failed:", e);
+        console.error("Fetch failed:", e);
     } finally { 
         setLoadingIndividual(false); 
     }
