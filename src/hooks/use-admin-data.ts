@@ -1,21 +1,22 @@
 
 "use client"
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { collection, getDocs, query, where, updateDoc, doc as firestoreDoc, limit, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import { CoverageEntry, Doctor, Plan, NonCallDay, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { useToast } from "./use-toast";
-import { getMonthRangeISO, parseAnyDate } from "@/lib/utils";
-import { isValid, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from "date-fns";
+import { parseAnyDate } from "@/lib/utils";
+import { isValid, parseISO, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
-// ADMIN SESSION CACHE: Prevents costly re-fetching when switching between admin tabs or PMR profiles
+// COST SAVING: Shared session cache
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
-const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes for "Cost Saving"
+const DOCTOR_MASTER_CACHE: Record<string, { data: Doctor[], timestamp: number }> = {};
+const CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -33,6 +34,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
+  
+  const activeFetchIdRef = useRef<string | null>(null);
 
   const isAuthorized = useMemo(() => {
     if (!user) return false;
@@ -84,88 +87,113 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, includeTrend = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const cacheKey = `user_${uid}_${selectedMonth}_${includeTrend ? 'trend' : 'base'}`;
-    const cached = ADMIN_SESSION_CACHE[cacheKey];
+    const fetchId = `${uid}_${selectedMonth}_${Date.now()}`;
+    activeFetchIdRef.current = fetchId;
 
-    // Cache TTL check for speed and cost saving
-    if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL)) { 
-        setIndividualEntries(cached.entries);
-        setIndividualPlans(cached.plans);
-        setIndividualTimeLogs(cached.logs);
-        setIndividualNonCallDays(cached.ncds);
-        setIndividualDoctors(cached.doctors);
-        setIndividualPlanningRequests(cached.requests);
+    // SPEED OPTIMIZATION: Check for unified cache (Trend data satisfies Base data)
+    const trendKey = `user_${uid}_${selectedMonth}_trend`;
+    const baseKey = `user_${uid}_${selectedMonth}_base`;
+    
+    const cachedTrend = ADMIN_SESSION_CACHE[trendKey];
+    const cachedBase = ADMIN_SESSION_CACHE[baseKey];
+    const activeCache = includeTrend ? cachedTrend : (cachedTrend || cachedBase);
+
+    if (!force && activeCache && (Date.now() - activeCache.timestamp < CACHE_TTL)) { 
+        setIndividualEntries(activeCache.entries);
+        setIndividualPlans(activeCache.plans);
+        setIndividualTimeLogs(activeCache.logs);
+        setIndividualNonCallDays(activeCache.ncds);
+        setIndividualPlanningRequests(activeCache.requests);
+        
+        // Identity data might be in a separate cache
+        const cachedDocs = DOCTOR_MASTER_CACHE[uid];
+        if (cachedDocs) setIndividualDoctors(cachedDocs.data);
         return;
     }
 
     setLoadingIndividual(true);
-    try {
-        const refDate = parseISO(selectedMonth + "-01");
-        // COST SAVING: Only fetch 3 months if we specifically need the "Trend" data.
-        const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
-        const end = endOfMonth(refDate).toISOString();
+    const refDate = parseISO(selectedMonth + "-01");
+    const start = startOfMonth(includeTrend ? subMonths(refDate, 2) : refDate).toISOString();
+    const end = endOfMonth(refDate).toISOString();
 
-        // RESILIENT FETCH: Handles missing indexes with a strict LIMIT to prevent runaway costs
-        const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
-            try {
-                const q = query(
-                    collection(db!, collName), 
-                    where("userId", "==", uid), 
-                    where(dateField, ">=", filterStart),
-                    where(dateField, "<=", filterEnd),
-                    limit(maxLimit)
-                );
-                return await getDocs(q);
-            } catch (err: any) {
-                // If index missing, fetch only the most recent 500 docs (Cost Saving limit)
-                if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
-                    const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(500));
-                    const snap = await getDocs(fallbackQ);
-                    return {
-                        docs: snap.docs.filter(doc => {
-                            const val = String(doc.data()[dateField] || "");
-                            return val >= filterStart && val <= filterEnd;
-                        })
-                    };
-                }
-                throw err;
+    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, maxLimit: number) => {
+        try {
+            const q = query(
+                collection(db!, collName), 
+                where("userId", "==", uid), 
+                where(dateField, ">=", filterStart),
+                where(dateField, "<=", filterEnd),
+                limit(maxLimit)
+            );
+            return await getDocs(q);
+        } catch (err: any) {
+            // COST SAVING FALLBACK: If index missing, fetch last 1000 and filter in JS
+            if (err.code === 'failed-precondition' || err.message?.toLowerCase().includes('index')) {
+                const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(1000));
+                const snap = await getDocs(fallbackQ);
+                return {
+                    docs: snap.docs.filter(doc => {
+                        const val = String(doc.data()[dateField] || "");
+                        return val >= filterStart && val <= filterEnd;
+                    })
+                };
             }
+            throw err;
+        }
+    };
+
+    try {
+        // INCREMENTAL LOADING: Fetch identity and activity in parallel but update UI as they arrive
+        const fetchCollection = async (name: string, field: string, limitVal: number, setter: (val: any[]) => void) => {
+            const snap = await resilientGetDocs(name, field, start, end, limitVal);
+            if (activeFetchIdRef.current === fetchId) {
+                const data = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() }));
+                if (name === 'coverageEntries') {
+                    data.sort((a: any, b: any) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+                }
+                setter(data);
+                return data;
+            }
+            return [];
         };
 
-        const [entriesSnap, plansSnap, logsSnap, ncdsSnap, doctorsSnap, requestsSnap] = await Promise.all([
-            resilientGetDocs("coverageEntries", "coverageDate", start, end, includeTrend ? 1500 : 800),
-            resilientGetDocs("plans", "plannedDate", start, end, 800),
-            resilientGetDocs("timeLogs", "timeIn", start, end, 300),
-            resilientGetDocs("nonCallDays", "date", start, end, 100),
-            getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500))),
-            getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)))
-        ]);
-
-        const entries = (entriesSnap.docs || []).map((d: any) => ({ id: d.id, ...d.data() } as CoverageEntry))
-            .sort((a,b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
-
-        const data = {
-            entries,
-            plans: (plansSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as Plan)),
-            logs: (logsSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as any)),
-            ncds: (ncdsSnap.docs || []).map((d: any) => ({id: d.id, ...d.data()} as NonCallDay)),
-            doctors: doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor)),
-            requests: requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest)),
-            timestamp: Date.now()
-        };
-
-        setIndividualEntries(data.entries);
-        setIndividualPlans(data.plans);
-        setIndividualTimeLogs(data.logs);
-        setIndividualNonCallDays(data.ncds);
-        setIndividualDoctors(data.doctors);
-        setIndividualPlanningRequests(data.requests);
+        // Parallel trigger but independent awaits
+        const pEntries = fetchCollection("coverageEntries", "coverageDate", includeTrend ? 1500 : 800, setIndividualEntries);
+        const pPlans = fetchCollection("plans", "plannedDate", 800, setIndividualPlans);
+        const pLogs = fetchCollection("timeLogs", "timeIn", 300, setIndividualTimeLogs);
+        const pNcds = fetchCollection("nonCallDays", "date", 100, setIndividualNonCallDays);
         
-        ADMIN_SESSION_CACHE[cacheKey] = data;
+        // Masterlist Identity (Independent Cache)
+        let doctorsData: Doctor[] = [];
+        if (!force && DOCTOR_MASTER_CACHE[uid] && (Date.now() - DOCTOR_MASTER_CACHE[uid].timestamp < CACHE_TTL)) {
+            doctorsData = DOCTOR_MASTER_CACHE[uid].data;
+            setIndividualDoctors(doctorsData);
+        } else {
+            const doctorsSnap = await getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500)));
+            doctorsData = doctorsSnap.docs.map(d => ({id: d.id, ...d.data()} as Doctor));
+            if (activeFetchIdRef.current === fetchId) {
+                setIndividualDoctors(doctorsData);
+                DOCTOR_MASTER_CACHE[uid] = { data: doctorsData, timestamp: Date.now() };
+            }
+        }
+
+        const requestsSnap = await getDocs(query(collection(db!, "planningRequests"), where("userId", "==", uid), limit(100)));
+        const requestsData = requestsSnap.docs.map(d => ({id: d.id, ...d.data()} as PlanningPermissionRequest));
+        if (activeFetchIdRef.current === fetchId) setIndividualPlanningRequests(requestsData);
+
+        // Finalize Cache once critical activity data is back
+        const [entries, plans, logs, ncds] = await Promise.all([pEntries, pPlans, pLogs, pNcds]);
+        
+        if (activeFetchIdRef.current === fetchId) {
+            ADMIN_SESSION_CACHE[includeTrend ? trendKey : baseKey] = {
+                entries, plans, logs, ncds, requests: requestsData, timestamp: Date.now()
+            };
+        }
+
     } catch (e) {
-        console.error("Fetch failed:", e);
+        console.error("Fetch cycle failed:", e);
     } finally { 
-        setLoadingIndividual(false); 
+        if (activeFetchIdRef.current === fetchId) setLoadingIndividual(false); 
     }
   }, [active, isAuthorized]);
 

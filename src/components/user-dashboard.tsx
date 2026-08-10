@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
@@ -9,7 +9,7 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Q4AllocationView } from "./q4-allocation-view";
@@ -58,12 +58,17 @@ export function UserDashboard({
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const lastFetchedRef = useRef<string>("");
 
-    // COST SAVING: Separate the trend fetch from the base fetch
+    // SPEED OPTIMIZATION: Trigger fetch logic based on tab priority
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            // Summary needs Trend (3 months), others only need Strict (1 month)
-            onFetchUserData(userId, selectedMonth, false, activeTab === 'summary');
+            const fetchKey = `${userId}_${selectedMonth}_${activeTab === 'summary' ? 'trend' : 'base'}`;
+            // Prevent duplicate triggers if we already hit this month/tab combo
+            if (lastFetchedRef.current !== fetchKey) {
+                lastFetchedRef.current = fetchKey;
+                onFetchUserData(userId, selectedMonth, false, activeTab === 'summary');
+            }
         }
     }, [selectedMonth, userId, activeTab, onFetchUserData]);
 
@@ -125,7 +130,7 @@ export function UserDashboard({
                             disabled={isRefreshing}
                             className="h-9 font-headline text-white hover:bg-white/5 gap-2 px-4 bg-[#111827] border border-white/5 rounded-lg shrink-0"
                         >
-                            <RefreshCw className={cn(isRefreshing && "animate-spin")} size={14} />
+                            {isRefreshing ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
                             Refresh Data
                         </Button>
                     )}
