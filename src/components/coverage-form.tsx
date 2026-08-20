@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -576,7 +577,9 @@ export function CoverageForm({
       const sanitizedPayload = cleanPayload(basePayload);
 
       if (isEditMode) {
+          // HEALING: Merge existing fields (like submittedAt and userId) with new values
           onUpdate({
+              ...entryToEdit,
               ...sanitizedPayload,
               id: entryToEdit!.id,
           } as any);

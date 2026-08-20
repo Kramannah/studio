@@ -227,7 +227,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
             
-            await addDoc(collection(db!, "coverageEntries"), sanitized);
+            // HEALING: Ensure submittedAt exists before reaching Firestore
+            const finalData = {
+                ...sanitized,
+                submittedAt: sanitized.submittedAt || entry.submittedAt || new Date().toISOString()
+            };
+            
+            await addDoc(collection(db!, "coverageEntries"), finalData);
             
             successCount++;
             setOfflineEntries(prev => {
@@ -277,6 +283,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
       });
   };
 
+  const deleteOfflineEntry = (id: string) => {
+    const updated = offlineEntries.filter(e => e.id !== id);
+    setOfflineEntries(updated);
+    safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
+    toast({ title: "Offline report removed" });
+  };
+
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
     const sanitized = sanitizePayload(e);
@@ -303,6 +316,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     masterEntries, 
     saveEntry, 
     deleteMasterEntry, 
+    deleteOfflineEntry,
     isSyncing, 
     syncAllOfflineEntries, 
     isOnline, 
@@ -310,7 +324,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     loading,
     fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
-        const updated = offlineEntries.map(item => item.id === e.id ? e : item);
+        const updated = offlineEntries.map(item => item.id === e.id ? { ...item, ...e } : item);
         setOfflineEntries(updated);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
     }

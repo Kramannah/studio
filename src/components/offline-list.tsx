@@ -7,10 +7,21 @@ import { format, parseISO, isValid } from "date-fns";
 import Image from "next/image";
 import React, { useState } from "react";
 import { Button } from "./ui/button";
-import { RefreshCw, Hourglass, Edit, Maximize2 } from "lucide-react";
+import { RefreshCw, Hourglass, Edit, Maximize2, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Badge } from "./ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, parseAnyDate } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type OfflineListProps = {
   entries: CoverageEntry[];
@@ -18,9 +29,10 @@ type OfflineListProps = {
   isOnline: boolean;
   syncAll: () => void;
   onEdit: (entry: CoverageEntry) => void;
+  onDelete?: (id: string) => void;
 };
 
-export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: OfflineListProps) {
+export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit, onDelete }: OfflineListProps) {
   const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
 
   if (entries.length === 0) {
@@ -50,8 +62,8 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: O
         </CardHeader>
       </Card>
       {entries.map(entry => {
-        const coverageDate = entry.coverageDate ? parseISO(entry.coverageDate) : null;
-        const submittedAt = entry.submittedAt ? parseISO(entry.submittedAt) : null;
+        const coverageDate = parseAnyDate(entry.coverageDate);
+        const submittedAt = parseAnyDate(entry.submittedAt);
 
         return (
           <Card key={entry.id}>
@@ -70,9 +82,9 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: O
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p><strong>Coverage Date:</strong> {coverageDate && isValid(coverageDate) ? format(coverageDate, "PPP") : 'Invalid Date'}</p>
+                    <p><strong>Coverage Date:</strong> {coverageDate && isValid(coverageDate) ? format(coverageDate, "PPP") : <span className="text-destructive font-bold">Invalid Date</span>}</p>
                     <p><strong>Coverage Type:</strong> <span className="capitalize">{entry.coverageType}</span></p>
-                    <p><strong>Submitted:</strong> {submittedAt && isValid(submittedAt) ? format(submittedAt, "PPpp") : 'Invalid Date'}</p>
+                    <p><strong>Captured:</strong> {submittedAt && isValid(submittedAt) ? format(submittedAt, "PPpp") : <span className="text-destructive font-bold">Invalid Date</span>}</p>
                   </div>
                   <div className="flex flex-wrap gap-4">
                       {entry.photos && entry.photos.length > 0 && (
@@ -106,11 +118,35 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit }: O
                   </div>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button variant="outline" className="w-full" onClick={() => onEdit(entry)}>
-                  <Edit className="mr-2" />
+            <CardFooter className="gap-3">
+              <Button variant="outline" className="flex-1 font-headline" onClick={() => onEdit(entry)}>
+                  <Edit className="mr-2 h-4 w-4" />
                   Edit Entry
               </Button>
+              {onDelete && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground font-headline h-10 px-4">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Discard Offline Report?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently remove this report from your phone's memory. It will not be synced to the database. Use this to clear stuck or duplicate reports.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => onDelete(entry.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Delete Permanently
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+              )}
             </CardFooter>
           </Card>
         )
