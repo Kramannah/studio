@@ -227,10 +227,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
             
-            // HEALING: Ensure submittedAt exists before reaching Firestore
+            // HEALING: Ensure submittedAt is valid before sending to server
+            let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
+            if (!parseAnyDate(finalSubmittedAt)) {
+                finalSubmittedAt = new Date().toISOString();
+            }
+            
             const finalData = {
                 ...sanitized,
-                submittedAt: sanitized.submittedAt || entry.submittedAt || new Date().toISOString()
+                submittedAt: finalSubmittedAt
             };
             
             await addDoc(collection(db!, "coverageEntries"), finalData);
@@ -296,6 +301,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
+    // HEALING: Ensure date is valid on update
+    if (data.submittedAt && !parseAnyDate(data.submittedAt)) {
+        data.submittedAt = new Date().toISOString();
+    }
+    
     updateDoc(docRef, data)
       .then(() => {
         setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data} : item));
@@ -324,7 +334,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     loading,
     fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
-        const updated = offlineEntries.map(item => item.id === e.id ? { ...item, ...e } : item);
+        // HEALING: When editing an offline entry, replace invalid date with "now"
+        const finalUpdate = { ...e };
+        if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {
+            finalUpdate.submittedAt = new Date().toISOString();
+        }
+        
+        const updated = offlineEntries.map(item => item.id === e.id ? { ...item, ...finalUpdate } : item);
         setOfflineEntries(updated);
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
     }

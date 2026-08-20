@@ -9,7 +9,7 @@ import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Lo
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
-import { cn } from "@/lib/utils"
+import { cn, parseAnyDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -435,10 +435,10 @@ export function CoverageForm({
 
   useEffect(() => {
     if (entryToEdit) {
-        const coverageDate = typeof entryToEdit.coverageDate === 'string' ? parseISO(entryToEdit.coverageDate) : entryToEdit.coverageDate;
+        const coverageDate = parseAnyDate(entryToEdit.coverageDate);
         form.reset({
             ...entryToEdit,
-            coverageDate: isValid(coverageDate) ? (coverageDate as Date) : new Date(),
+            coverageDate: (coverageDate && isValid(coverageDate)) ? coverageDate : new Date(),
         });
         setAutocompleteValue(`${entryToEdit.firstName} ${entryToEdit.lastName}`);
         if (entryToEdit.photos && entryToEdit.photos.length > 0) {
@@ -540,7 +540,7 @@ export function CoverageForm({
         for (const entry of allEntries) {
             if (String(entry.firstName ?? "").toLowerCase().trim() === docFirstNameLower && String(entry.lastName ?? "").toLowerCase().trim() === docLastNameLower) {
                 const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
-                const entryDate = dateStr ? parseISO(dateStr) : null;
+                const entryDate = parseAnyDate(dateStr);
                 if (entryDate && isValid(entryDate)) {
                     if (isSameMonth(entryDate, newCoverageDate)) {
                         coveragesInMonth++;
@@ -577,12 +577,17 @@ export function CoverageForm({
       const sanitizedPayload = cleanPayload(basePayload);
 
       if (isEditMode) {
-          // HEALING: Merge existing fields (like submittedAt and userId) with new values
+          // HEALING: If original timestamp is invalid, set a new one now
+          const originalSubmittedAt = entryToEdit!.submittedAt;
+          const isSubmittedAtValid = !!parseAnyDate(originalSubmittedAt);
+          
           onUpdate({
               ...entryToEdit,
               ...sanitizedPayload,
               id: entryToEdit!.id,
+              submittedAt: isSubmittedAtValid ? originalSubmittedAt : new Date().toISOString()
           } as any);
+          
           toast({ title: "Report Updated" });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
