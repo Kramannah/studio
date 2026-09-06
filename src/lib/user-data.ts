@@ -24,7 +24,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         email: "jmgponce@hovidinc.com"
     },
     "cm4yqA8NfBadUBtffEzcEJRV9873": {
-        code: "GMAS-04",
+        code: "PMR",
         firstName: "Mikka Amielle",
         lastName: "Clement",
         email: "maclement@hovidinc.com"
@@ -240,7 +240,7 @@ export const USER_DATA_MAP: Record<string, { code: string; firstName: string; la
         email: "kcanlas@hovidinc.com"
     },
     "vvLt9N5IzlYs6SHEWaR1Gfw611V2": {
-        code: "GMAS-01",
+        code: "PMR",
         firstName: "Iries",
         lastName: "Rombaiz",
         email: "irombaiz@hovidinc.com"
