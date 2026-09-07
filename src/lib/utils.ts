@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, isBefore, parseISO, isValid, format, startOfMonth, endOfMonth } from "date-fns"
+import { startOfWeek, isSameWeek, isBefore, parseISO, isValid, format, startOfMonth, endOfMonth, isSameMonth, isAfter } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -41,7 +41,52 @@ export function parseAnyDate(date: any): Date | null {
   return null;
 }
 
-export const PH_HOLIDAYS_2026: Record<string, string> = {
+export const PH_HOLIDAYS: Record<string, string> = {
+  // 2024 Holidays
+  "2024-01-01": "New Year's Day",
+  "2024-02-09": "Chinese New Year",
+  "2024-02-10": "Chinese New Year",
+  "2024-02-25": "People Power Anniversary",
+  "2024-03-28": "Maundy Thursday",
+  "2024-03-29": "Good Friday",
+  "2024-03-30": "Black Saturday",
+  "2024-04-09": "Araw ng Kagitingan",
+  "2024-04-10": "Eid'l Fitr",
+  "2024-05-01": "Labor Day",
+  "2024-06-12": "Independence Day",
+  "2024-06-17": "Eid'l Adha",
+  "2024-08-21": "Ninoy Aquino Day",
+  "2024-08-26": "National Heroes Day",
+  "2024-11-01": "All Saints' Day",
+  "2024-11-02": "All Souls' Day",
+  "2024-11-30": "Bonifacio Day",
+  "2024-12-08": "Feast of the Immaculate Conception",
+  "2024-12-25": "Christmas Day",
+  "2024-12-30": "Rizal Day",
+  "2024-12-31": "Last Day of the Year",
+  
+  // 2025 Holidays
+  "2025-01-01": "New Year's Day",
+  "2025-01-29": "Chinese New Year",
+  "2025-02-25": "People Power Anniversary",
+  "2025-03-31": "Eid'l Fitr",
+  "2025-04-17": "Maundy Thursday",
+  "2025-04-18": "Good Friday",
+  "2025-04-19": "Black Saturday",
+  "2025-04-09": "Araw ng Kagitingan",
+  "2025-05-01": "Labor Day",
+  "2025-06-07": "Eid'l Adha",
+  "2025-06-12": "Independence Day",
+  "2025-08-21": "Ninoy Aquino Day",
+  "2025-08-25": "National Heroes Day",
+  "2025-11-01": "All Saints' Day",
+  "2025-11-30": "Bonifacio Day",
+  "2025-12-08": "Feast of the Immaculate Conception",
+  "2025-12-25": "Christmas Day",
+  "2025-12-30": "Rizal Day",
+  "2025-12-31": "Last Day of the Year",
+
+  // 2026 Holidays
   "2026-01-01": "New Year's Day",
   "2026-01-29": "Lunar New Year's Day",
   "2026-02-25": "People Power Anniversary",
@@ -64,7 +109,7 @@ export const PH_HOLIDAYS_2026: Record<string, string> = {
 
 export function getHolidayName(date: Date): string | null {
   const dateString = format(date, 'yyyy-MM-dd');
-  return PH_HOLIDAYS_2026[dateString] || null;
+  return PH_HOLIDAYS[dateString] || null;
 }
 
 export function getMonthRangeISO(monthStr?: string) {
@@ -77,7 +122,6 @@ export function getMonthRangeISO(monthStr?: string) {
 
 /**
  * Safely sets an item in localStorage, handling QuotaExceeded errors gracefully.
- * Strips heavy caches if needed and fails silently to prevent app crashes.
  */
 export function safeStorageSet(key: string, value: string) {
   try {
@@ -87,20 +131,15 @@ export function safeStorageSet(key: string, value: string) {
       (e.code === 22 || e.code === 1014 || e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED');
 
     if (isQuotaError) {
-      // Purge all non-essential display caches to make room
       Object.keys(localStorage).forEach(k => {
-        // Protect critical locally-saved offline entries (not yet synced to DB)
         if (k.startsWith('sfe-') && !k.includes('offline-coverage-entries')) {
           localStorage.removeItem(k);
         }
       });
-
       try {
         localStorage.setItem(key, value);
       } catch (retryError) {
-        // If it still fails, the item itself is simply too large. 
-        // We log it to the console but DON'T re-throw, allowing the app to continue using live data.
-        console.warn('LocalStorage quota limit reached even after purge. This item will not be cached.');
+        console.warn('LocalStorage quota limit reached even after purge.');
       }
     }
   }
