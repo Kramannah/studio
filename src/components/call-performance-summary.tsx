@@ -21,7 +21,8 @@ import {
     Users,
     Target,
     Activity,
-    Search
+    Search,
+    RefreshCw
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -57,7 +58,7 @@ export function CallPerformanceSummary({
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
     const [loading, setLoading] = useState(false);
-    const [performanceData, setPerformancePerformanceData] = useState<PMRPerformance[]>([]);
+    const [performanceData, setPerformanceData] = useState<PMRPerformance[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const { toast } = useToast();
 
@@ -176,7 +177,7 @@ export function CallPerformanceSummary({
                 };
             });
 
-            setPerformancePerformanceData(calculated.sort((a, b) => b.callRate - a.callRate));
+            setPerformanceData(calculated.sort((a, b) => b.callRate - a.callRate));
 
         } catch (error) {
             console.error("Performance compilation failed:", error);
