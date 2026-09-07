@@ -17,7 +17,8 @@ import {
     Trophy,
     CheckCircle2,
     Info,
-    Users
+    Users,
+    RefreshCw
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -29,6 +30,7 @@ import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
 import { managers } from "@/lib/managers";
+import { USER_DATA_MAP } from "@/lib/user-data";
 
 export function CallPerformanceSummary({ 
     userProfiles, 
@@ -80,7 +82,7 @@ export function CallPerformanceSummary({
             const allNCDs = ncdSnap.docs.map(d => ({ id: d.id, ...d.data() } as NonCallDay));
             const allDoctors = doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
 
-            // 2. Map Data by User
+            // 2. Map Data by User for fast lookup
             const entriesByUser = new Map<string, CoverageEntry[]>();
             const ncdsByUser = new Map<string, NonCallDay[]>();
             const doctorsByUser = new Map<string, Doctor[]>();
@@ -103,32 +105,47 @@ export function CallPerformanceSummary({
                 doctorsByUser.get(d.userId)?.push(d);
             });
 
-            // 3. Identify "Assigned PMRs"
-            const assignedUserIds = new Set<string>();
-            Object.values(MANAGER_TEAMS).forEach(team => team.forEach(uid => assignedUserIds.add(uid)));
-            Object.values(userProfiles).forEach(p => {
-                if (p.managerId && p.managerId !== 'none') assignedUserIds.add(p.userId);
-            });
+            // 3. Identify PMRs for the Report (Resilient discovery)
+            let pmrList: any[] = [];
+            
+            const resolvePmrMeta = (uid: string) => {
+                const profile = userProfiles[uid];
+                const meta = USER_DATA_MAP[uid];
+                return {
+                    userId: uid,
+                    firstName: profile?.firstName || meta?.firstName || "Unknown",
+                    lastName: profile?.lastName || meta?.lastName || "User",
+                    code: profile?.code || meta?.code || "PMR",
+                    managerId: profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid)),
+                    role: profile?.role || 'PMR'
+                };
+            };
 
-            let pmrList = Array.from(assignedUserIds)
-                .map(uid => userProfiles[uid] || { userId: uid, firstName: "Unknown", lastName: "User", role: 'PMR' })
-                .filter(p => p.role === 'PMR' || !p.role);
-
-            // Filter by DSM if selected
-            if (selectedManagerId !== "all") {
-                pmrList = pmrList.filter(pmr => {
-                    const managerUid = pmr.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(pmr.userId));
-                    return managerUid === selectedManagerId;
+            if (selectedManagerId === "all") {
+                const allPmrIds = new Set<string>();
+                Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allPmrIds.add(id)));
+                Object.values(userProfiles).forEach(p => {
+                    if (p.managerId && p.managerId !== 'none') allPmrIds.add(p.userId);
                 });
+                pmrList = Array.from(allPmrIds).map(resolvePmrMeta);
+            } else {
+                const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
+                const dynamicIds = Object.values(userProfiles)
+                    .filter(p => p.managerId === selectedManagerId)
+                    .map(p => p.userId);
+                pmrList = Array.from(new Set([...teamIds, ...dynamicIds])).map(resolvePmrMeta);
             }
 
-            // 4. Calculate Individual Performance
+            // Exclude HQ roles from field audit
+            pmrList = pmrList.filter(p => p.role === 'PMR' || !p.role);
+
+            // 4. Calculate Performance Matrix
             const excelRows = pmrList.map(pmr => {
                 const uEntries = entriesByUser.get(pmr.userId) || [];
                 const uNCDs = ncdsByUser.get(pmr.userId) || [];
                 const uDoctors = doctorsByUser.get(pmr.userId) || [];
 
-                // ACTIVE DAYS LOGIC
+                // WORKING DAYS LOGIC
                 let leaveDeduction = 0;
                 uNCDs.forEach(n => {
                     if (n.dayType === 'wholeday') leaveDeduction += 1;
@@ -137,14 +154,15 @@ export function CallPerformanceSummary({
                 const activeDays = Math.max(0, businessDays - leaveDeduction);
                 const targetCalls = Math.round(activeDays * 12);
                 
-                // CALL RATE
+                // KPI 1: CALL RATE
                 const totalCalls = uEntries.length;
                 const callRate = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
 
-                // REACH & CONCENTRATION
+                // KPI 2 & 3: REACH & CONCENTRATION
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
-                    const key = `${e.firstName}|${e.lastName}`.toLowerCase().trim();
+                    // Identity normalization to ensure sync artifacts don't create "ghost" doctors
+                    const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
                     visitMap.set(key, (visitMap.get(key) || 0) + 1);
                 });
 
@@ -152,15 +170,19 @@ export function CallPerformanceSummary({
                 const reach = uDoctors.length > 0 ? Math.round((uniqueVisited / uDoctors.length) * 100) : 0;
 
                 const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
-                const highFreqTarget = uDoctors.filter(d => parseInt(String(d.frequency || '1x').replace('x', ''), 10) >= 3).length;
+                const highFreqTarget = uDoctors.filter(d => {
+                    const f = parseInt(String(d.frequency || '1x').replace('x', ''), 10);
+                    return f >= 3;
+                }).length;
                 const concentration = highFreqTarget > 0 ? Math.round((highFreqAchieved / highFreqTarget) * 100) : 0;
 
                 // MANAGER RESOLUTION
                 let managerName = "Unassigned";
-                const managerUid = pmr.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(pmr.userId));
-                if (managerUid && userProfiles[managerUid]) {
-                    const m = userProfiles[managerUid];
-                    managerName = `${m.lastName}, ${m.firstName}`;
+                const mUid = pmr.managerId;
+                if (mUid) {
+                    const mProfile = userProfiles[mUid];
+                    const mMeta = USER_DATA_MAP[mUid];
+                    managerName = mProfile ? `${mProfile.lastName}, ${mProfile.firstName}` : mMeta ? `${mMeta.lastName}, ${mMeta.firstName}` : "District Manager";
                 }
 
                 return {
@@ -174,9 +196,9 @@ export function CallPerformanceSummary({
                 };
             }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
 
-            // 5. Generate Excel
+            // 5. Trigger Generation
             if (excelRows.length === 0) {
-                toast({ variant: "destructive", title: "No Records Found", description: "No PMRs found for the selected manager or filters." });
+                toast({ variant: "destructive", title: "No Records Found", description: "No PMRs identified in the selected territory." });
                 return;
             }
 
@@ -184,14 +206,14 @@ export function CallPerformanceSummary({
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            const fileName = `PMR_Performance_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            const fileName = `PMR_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
-            toast({ title: "Export Successful", description: `Compiled records for ${excelRows.length} representatives.` });
+            toast({ title: "Audit Exported", description: `Calculated metrics for ${excelRows.length} representatives.` });
 
         } catch (error: any) {
-            console.error("Report generation failed:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: error.message || "An unexpected error occurred." });
+            console.error("Audit Engine Error:", error);
+            toast({ variant: "destructive", title: "Export Failed", description: "A technical error occurred during calculation." });
         } finally {
             setLoading(false);
         }
@@ -275,7 +297,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Inclusion Logic</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                This tool extracts PMRs mapped to a District Manager. HQ, HR, or Marketing roles are excluded from this specific KPI audit.
+                                Extracts PMRs mapped to a District Manager. Fallback data is used for representatives without active system profiles.
                             </p>
                         </div>
                     </CardContent>
