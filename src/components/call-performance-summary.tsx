@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
     format, 
@@ -12,7 +12,8 @@ import {
     isWeekend,
     isSameMonth,
     isBefore,
-    startOfToday
+    startOfToday,
+    min
 } from "date-fns";
 import { 
     Loader2, 
@@ -23,10 +24,11 @@ import {
     Users,
     RefreshCw
 } from "lucide-react";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, query, where, getDocs, limit, documentId } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PH_HOLIDAYS, parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types";
 import * as XLSX from 'xlsx';
@@ -62,6 +64,15 @@ export function CallPerformanceSummary({
         return list;
     }, []);
 
+    // Helper to chunk arrays for Firestore "in" queries (max 30 elements)
+    const chunkArray = <T>(array: T[], size: number): T[][] => {
+        const result = [];
+        for (let i = 0; i < array.length; i += size) {
+            result.push(array.slice(i, i + size));
+        }
+        return result;
+    };
+
     const handleGenerateReport = async () => {
         if (!db) return;
         setLoading(true);
@@ -72,12 +83,11 @@ export function CallPerformanceSummary({
             
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
-            const targetEndDate = isTargetMonthCurrent ? startOfToday() : monthEnd;
+            // If current month, we only audit up to today
+            const targetEndDate = isTargetMonthCurrent ? min([startOfToday(), monthEnd]) : monthEnd;
 
-            const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+            // Calculate standard business days for the audited range
             const businessDaysInterval = eachDayOfInterval({ start: monthStart, end: targetEndDate });
-            
-            // Correct working days calculation
             const businessDaysTotal = businessDaysInterval.filter(day => {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 return !isWeekend(day) && !PH_HOLIDAYS[dateKey];
@@ -86,18 +96,49 @@ export function CallPerformanceSummary({
             const startStr = monthStart.toISOString();
             const endStr = monthEnd.toISOString();
 
-            // 1. Fetch ALL relevant data (Wide Scan for Audit)
-            const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
-                getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(10000))),
-                getDocs(query(collection(db, "nonCallDays"), where("date", ">=", startStr), where("date", "<=", endStr), where("status", "==", "approved"))),
-                getDocs(query(collection(db, "doctors"), limit(10000)))
-            ]);
+            // 1. Identify PMRs to include
+            const allAssignedIds = new Set<string>();
+            if (selectedManagerId === "all") {
+                Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
+                Object.values(userProfiles).forEach(p => {
+                    if (p.managerId && p.managerId !== 'none') allAssignedIds.add(p.userId);
+                });
+            } else {
+                const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
+                const dynamicIds = Object.values(userProfiles)
+                    .filter(p => p.managerId === selectedManagerId)
+                    .map(p => p.userId);
+                teamIds.forEach(id => allAssignedIds.add(id));
+                dynamicIds.forEach(id => allAssignedIds.add(id));
+            }
 
-            const allEntries = entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
-            const allNCDs = ncdSnap.docs.map(d => ({ id: d.id, ...d.data() } as NonCallDay));
-            const allDoctors = doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
+            const targetUserIds = Array.from(allAssignedIds);
+            if (targetUserIds.length === 0) {
+                toast({ variant: "destructive", title: "No PMRs Found", description: "No representatives assigned to the selected territory." });
+                setLoading(false);
+                return;
+            }
 
-            // 2. Map Data by User
+            // 2. Fetch Data in Chunks to avoid Timeout
+            const userChunks = chunkArray(targetUserIds, 30);
+            const allEntries: CoverageEntry[] = [];
+            const allNCDs: NonCallDay[] = [];
+            const allDoctors: Doctor[] = [];
+
+            // Parallel fetch per chunk for speed
+            await Promise.all(userChunks.map(async (chunk) => {
+                const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", chunk), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(5000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", chunk), where("date", ">=", startStr), where("date", "<=", endStr), where("status", "==", "approved"))),
+                    getDocs(query(collection(db!, "doctors"), where("userId", "in", chunk), limit(5000)))
+                ]);
+
+                entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
+                ncdSnap.docs.forEach(d => allNCDs.push({ id: d.id, ...d.data() } as NonCallDay));
+                doctorsSnap.docs.forEach(d => allDoctors.push({ id: d.id, ...d.data() } as Doctor));
+            }));
+
+            // 3. Map Data by User for Performance Calculation
             const entriesByUser = new Map<string, CoverageEntry[]>();
             const ncdsByUser = new Map<string, NonCallDay[]>();
             const doctorsByUser = new Map<string, Doctor[]>();
@@ -120,42 +161,13 @@ export function CallPerformanceSummary({
                 doctorsByUser.get(d.userId)?.push(d);
             });
 
-            // 3. Identify PMRs to include
-            let pmrList: any[] = [];
-            
-            const resolvePmrMeta = (uid: string) => {
+            // 4. Calculate Performance Metrics
+            const excelRows = targetUserIds.map(uid => {
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
-                return {
-                    userId: uid,
-                    firstName: profile?.firstName || meta?.firstName || "Unknown",
-                    lastName: profile?.lastName || meta?.lastName || "User",
-                    code: profile?.code || meta?.code || "PMR",
-                    managerId: profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid)),
-                    role: profile?.role || 'PMR'
-                };
-            };
-
-            if (selectedManagerId === "all") {
-                const allPmrIds = new Set<string>();
-                Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allPmrIds.add(id)));
-                Object.values(userProfiles).forEach(p => {
-                    if (p.managerId && p.managerId !== 'none') allPmrIds.add(p.userId);
-                });
-                pmrList = Array.from(allPmrIds).map(resolvePmrMeta);
-            } else {
-                const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
-                const dynamicIds = Object.values(userProfiles)
-                    .filter(p => p.managerId === selectedManagerId)
-                    .map(p => p.userId);
-                pmrList = Array.from(new Set([...teamIds, ...dynamicIds])).map(resolvePmrMeta);
-            }
-
-            // 4. Calculate Performance Matrix
-            const excelRows = pmrList.map(pmr => {
-                const uEntries = entriesByUser.get(pmr.userId) || [];
-                const uNCDs = ncdsByUser.get(pmr.userId) || [];
-                const uDoctors = doctorsByUser.get(pmr.userId) || [];
+                const uEntries = entriesByUser.get(uid) || [];
+                const uNCDs = ncdsByUser.get(uid) || [];
+                const uDoctors = doctorsByUser.get(uid) || [];
 
                 // WORKING DAYS LOGIC (Deduct leaves only if they were on business days)
                 let leaveDeduction = 0;
@@ -192,8 +204,8 @@ export function CallPerformanceSummary({
                 const concentration = highFreqTarget > 0 ? Math.round((highFreqAchieved / highFreqTarget) * 100) : 0;
 
                 // MANAGER RESOLUTION
+                const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
                 let managerName = "Unassigned";
-                const mUid = pmr.managerId;
                 if (mUid) {
                     const mProfile = userProfiles[mUid];
                     const mMeta = USER_DATA_MAP[mUid];
@@ -202,8 +214,8 @@ export function CallPerformanceSummary({
 
                 return {
                     "District Manager": managerName,
-                    "Employee Code": pmr.code || "PMR",
-                    "Representative": `${pmr.lastName}, ${pmr.firstName}`,
+                    "Employee Code": profile?.code || meta?.code || "PMR",
+                    "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
                     "Call Rate (%)": Math.round(callRate),
                     "Call Concentration (%)": Math.round(concentration),
                     "Call Reach (%)": Math.round(reach),
@@ -211,23 +223,19 @@ export function CallPerformanceSummary({
                 };
             }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
 
-            if (excelRows.length === 0) {
-                toast({ variant: "destructive", title: "No Records Found", description: "No PMRs identified in the selected territory." });
-                return;
-            }
-
+            // 5. Generate Excel
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            const fileName = `PMR_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            const fileName = `Performance_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
             toast({ title: "Audit Exported", description: `Calculated metrics for ${excelRows.length} representatives.` });
 
         } catch (error: any) {
             console.error("Audit Engine Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "A technical error occurred during calculation." });
+            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data is unavailable. Please try again." });
         } finally {
             setLoading(false);
         }
@@ -244,7 +252,7 @@ export function CallPerformanceSummary({
                         Performance Audit Engine
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                        Configure audit parameters to extract KPI records for field personnel.
+                        Extract KPI records for field personnel based on monthly activity.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-8">
@@ -298,7 +306,7 @@ export function CallPerformanceSummary({
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Aggregating metrics across selected territory..." : "Calculates rate, concentration, and reach for assigned staff"}
+                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates whole number KPIs for assigned staff"}
                         </p>
                     </div>
                 </CardContent>
@@ -309,9 +317,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Inclusion Logic</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Integrity</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Extracts PMRs mapped to a District Manager. Metrics are calculated based on ISO timestamps recorded in Firestore.
+                                Uses targeted indexing to prevent timeouts. Deducts leaves from business days only.
                             </p>
                         </div>
                     </CardContent>
@@ -320,9 +328,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Standards</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Weights</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Normalized against 12 daily calls minus approved leave deductions. Current month targets are weighted by elapsed business days.
+                                Current month targets are weighted by elapsed business days for fair real-time scoring.
                             </p>
                         </div>
                     </CardContent>
