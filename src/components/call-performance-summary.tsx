@@ -22,7 +22,8 @@ import {
     Target,
     Activity,
     Search,
-    RefreshCw
+    RefreshCw,
+    AlertCircle
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -60,7 +61,7 @@ export function CallPerformanceSummary({
     isSuperAdmin: boolean 
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-    const [selectedDSMId, setSelectedDSMId] = useState<string>("all");
+    const [selectedDSMId, setSelectedDSMId] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const [performanceData, setPerformanceData] = useState<PMRPerformance[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -81,6 +82,13 @@ export function CallPerformanceSummary({
 
     const fetchPerformance = async () => {
         if (!db) return;
+        
+        // If super admin and no DSM selected, don't fetch anything
+        if (isSuperAdmin && !selectedDSMId) {
+            setPerformanceData([]);
+            return;
+        }
+
         setLoading(true);
         
         try {
@@ -106,7 +114,10 @@ export function CallPerformanceSummary({
             const pmrProfiles = Object.values(userProfiles).filter(p => {
                 const isPmr = p.role === 'PMR' || !p.role;
                 if (!isPmr) return false;
-                if (isSuperAdmin) return true;
+                if (isSuperAdmin) {
+                    // Only show PMRs belonging to the selected DSM
+                    return p.managerId === selectedDSMId;
+                }
                 // If DSM, only show their team
                 return p.managerId === currentUserId;
             });
@@ -194,32 +205,23 @@ export function CallPerformanceSummary({
 
     useEffect(() => {
         fetchPerformance();
-    }, [selectedMonth]);
+    }, [selectedMonth, selectedDSMId]);
 
     const filteredData = useMemo(() => {
-        let data = performanceData;
-
-        // Apply DSM filter if Super Admin has selected one
-        if (isSuperAdmin && selectedDSMId !== "all") {
-            data = data.filter(d => d.managerId === selectedDSMId);
-        }
-
         const q = searchQuery.toLowerCase().trim();
-        if (!q) return data;
-        return data.filter(d => 
+        if (!q) return performanceData;
+        return performanceData.filter(d => 
             d.name.toLowerCase().includes(q) || 
             d.code.toLowerCase().includes(q) || 
             d.district.toLowerCase().includes(q)
         );
-    }, [performanceData, searchQuery, selectedDSMId, isSuperAdmin]);
+    }, [performanceData, searchQuery]);
 
     const handleExport = () => {
         const rows = filteredData.map(d => ({
             "District": d.district,
             "Employee Code": d.code,
             "Representative": d.name,
-            "Total Calls": d.totalCalls,
-            "Target Calls": d.targetCalls,
             "Call Rate (%)": d.callRate,
             "Call Concentration (%)": d.concentration,
             "Call Reach (%)": d.reach,
@@ -248,10 +250,9 @@ export function CallPerformanceSummary({
                         <div className="w-[220px]">
                             <Select value={selectedDSMId} onValueChange={setSelectedDSMId}>
                                 <SelectTrigger className="h-11 font-headline border-2 rounded-xl">
-                                    <SelectValue placeholder="All Districts" />
+                                    <SelectValue placeholder="Select District..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Districts</SelectItem>
                                     {managers.map(m => (
                                         <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
                                     ))}
@@ -289,80 +290,85 @@ export function CallPerformanceSummary({
                 </div>
             </div>
 
-            <Card className="border-2 shadow-sm">
-                <CardHeader className="bg-muted/30 border-b pb-6">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                            placeholder="Filter by name or district..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 h-11 border-2 rounded-xl"
-                        />
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader className="bg-muted/20">
-                                <TableRow className="h-12 hover:bg-transparent">
-                                    <TableHead className="font-bold text-foreground pl-6">Rep Name</TableHead>
-                                    <TableHead className="font-bold text-foreground">District</TableHead>
-                                    <TableHead className="text-center font-bold text-foreground">Call Rate</TableHead>
-                                    <TableHead className="text-center font-bold text-foreground">3X Conc.</TableHead>
-                                    <TableHead className="text-center font-bold text-foreground">Reach</TableHead>
-                                    <TableHead className="text-right pr-6 font-bold text-foreground">Volume</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                                ) : filteredData.length > 0 ? (
-                                    filteredData.map((d) => (
-                                        <TableRow key={d.userId} className="h-16 hover:bg-muted/30 border-b">
-                                            <TableCell className="pl-6">
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-sm">{d.name}</span>
-                                                    <span className="text-[10px] font-black text-primary/70 uppercase">{d.code}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="font-medium text-xs text-muted-foreground">{d.district}</TableCell>
-                                            <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className={cn("font-black font-headline text-lg", d.callRate >= 100 ? "text-[#10b981]" : "text-foreground")}>
-                                                        {d.callRate}%
-                                                    </span>
-                                                    <div className="w-16 h-1 bg-muted rounded-full mt-1 overflow-hidden">
-                                                        <div className={cn("h-full", d.callRate >= 100 ? "bg-[#10b981]" : "bg-primary")} style={{ width: `${Math.min(100, d.callRate)}%` }} />
+            {isSuperAdmin && !selectedDSMId ? (
+                <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed rounded-2xl bg-muted/5">
+                    <AlertCircle className="w-10 h-10 text-muted-foreground mb-4" />
+                    <p className="font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Territory Selection Required</p>
+                    <p className="text-xs text-muted-foreground mt-2">Please select a District Manager from the dropdown to load the performance rankings.</p>
+                </div>
+            ) : (
+                <Card className="border-2 shadow-sm">
+                    <CardHeader className="bg-muted/30 border-b pb-6">
+                        <div className="relative max-w-md">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                placeholder="Filter by name or code..." 
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10 h-11 border-2 rounded-xl"
+                            />
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader className="bg-muted/20">
+                                    <TableRow className="h-12 hover:bg-transparent">
+                                        <TableHead className="font-bold text-foreground pl-6">Rep Name</TableHead>
+                                        <TableHead className="font-bold text-foreground">District</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground">Call Rate</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground">3X Conc.</TableHead>
+                                        <TableHead className="text-center font-bold text-foreground">Reach</TableHead>
+                                        <TableHead className="text-right pr-6 font-bold text-foreground">Active Days</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {loading ? (
+                                        <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                    ) : filteredData.length > 0 ? (
+                                        filteredData.map((d) => (
+                                            <TableRow key={d.userId} className="h-16 hover:bg-muted/30 border-b">
+                                                <TableCell className="pl-6">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-sm">{d.name}</span>
+                                                        <span className="text-[10px] font-black text-primary/70 uppercase">{d.code}</span>
                                                     </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#06b6d4]/10 text-[#06b6d4]">
-                                                    {d.concentration}%
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#8b5cf6]/10 text-[#8b5cf6]">
-                                                    {d.reach}%
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right pr-6">
-                                                <div className="flex flex-col items-end">
-                                                    <span className="font-bold text-sm">{d.totalCalls}</span>
-                                                    <span className="text-[10px] text-muted-foreground uppercase font-black">of {d.targetCalls}</span>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                ) : (
-                                    <TableRow><TableCell colSpan={6} className="h-64 text-center text-muted-foreground italic">No performance data found for this selection.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
+                                                </TableCell>
+                                                <TableCell className="font-medium text-xs text-muted-foreground">{d.district}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className={cn("font-black font-headline text-lg", d.callRate >= 100 ? "text-[#10b981]" : "text-foreground")}>
+                                                            {d.callRate}%
+                                                        </span>
+                                                        <div className="w-16 h-1 bg-muted rounded-full mt-1 overflow-hidden">
+                                                            <div className={cn("h-full", d.callRate >= 100 ? "bg-[#10b981]" : "bg-primary")} style={{ width: `${Math.min(100, d.callRate)}%` }} />
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#06b6d4]/10 text-[#06b6d4]">
+                                                        {d.concentration}%
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#8b5cf6]/10 text-[#8b5cf6]">
+                                                        {d.reach}%
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right pr-6">
+                                                    <span className="font-mono font-bold text-sm">{d.activeDays}</span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow><TableCell colSpan={6} className="h-64 text-center text-muted-foreground italic">No performance data found for this selection.</TableCell></TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <MetricHelpCard title="Call Rate" icon={Activity} color="text-primary" desc="Measured against 12 calls per active business day." />
