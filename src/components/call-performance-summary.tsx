@@ -11,7 +11,6 @@ import {
     isValid,
     isWeekend,
     isSameMonth,
-    isBefore,
     startOfToday,
     min
 } from "date-fns";
@@ -24,7 +23,7 @@ import {
     Users,
     RefreshCw
 } from "lucide-react";
-import { collection, query, where, getDocs, limit, documentId } from "firebase/firestore";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PH_HOLIDAYS, parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,7 +38,6 @@ import { USER_DATA_MAP } from "@/lib/user-data";
 
 export function CallPerformanceSummary({ 
     userProfiles, 
-    currentUserId, 
     isSuperAdmin 
 }: { 
     userProfiles: Record<string, UserProfile>, 
@@ -64,15 +62,6 @@ export function CallPerformanceSummary({
         return list;
     }, []);
 
-    // Helper to chunk arrays for Firestore "in" queries (max 30 elements)
-    const chunkArray = <T>(array: T[], size: number): T[][] => {
-        const result = [];
-        for (let i = 0; i < array.length; i += size) {
-            result.push(array.slice(i, i + size));
-        }
-        return result;
-    };
-
     const handleGenerateReport = async () => {
         if (!db) return;
         setLoading(true);
@@ -83,10 +72,8 @@ export function CallPerformanceSummary({
             
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
-            // If current month, we only audit up to today
             const targetEndDate = isTargetMonthCurrent ? min([startOfToday(), monthEnd]) : monthEnd;
 
-            // Calculate standard business days for the audited range
             const businessDaysInterval = eachDayOfInterval({ start: monthStart, end: targetEndDate });
             const businessDaysTotal = businessDaysInterval.filter(day => {
                 const dateKey = format(day, 'yyyy-MM-dd');
@@ -96,7 +83,6 @@ export function CallPerformanceSummary({
             const startStr = monthStart.toISOString();
             const endStr = monthEnd.toISOString();
 
-            // 1. Identify PMRs to include
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
@@ -119,26 +105,31 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            // 2. Fetch Data in Chunks to avoid Timeout
-            const userChunks = chunkArray(targetUserIds, 30);
             const allEntries: CoverageEntry[] = [];
             const allNCDs: NonCallDay[] = [];
             const allDoctors: Doctor[] = [];
 
-            // Parallel fetch per chunk for speed
-            await Promise.all(userChunks.map(async (chunk) => {
-                const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "in", chunk), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(5000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "in", chunk), where("date", ">=", startStr), where("date", "<=", endStr), where("status", "==", "approved"))),
-                    getDocs(query(collection(db!, "doctors"), where("userId", "in", chunk), limit(5000)))
-                ]);
+            const CONCURRENCY_LIMIT = 5;
+            for (let i = 0; i < targetUserIds.length; i += CONCURRENCY_LIMIT) {
+                const batch = targetUserIds.slice(i, i + CONCURRENCY_LIMIT);
+                await Promise.all(batch.map(async (uid) => {
+                    const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
+                        getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(1000))),
+                        getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", startStr), where("date", "<=", endStr), limit(200))),
+                        getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500)))
+                    ]);
 
-                entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
-                ncdSnap.docs.forEach(d => allNCDs.push({ id: d.id, ...d.data() } as NonCallDay));
-                doctorsSnap.docs.forEach(d => allDoctors.push({ id: d.id, ...d.data() } as Doctor));
-            }));
+                    entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
+                    ncdSnap.docs.forEach(d => {
+                        const data = d.data() as NonCallDay;
+                        if (data.status === 'approved') {
+                            allNCDs.push({ id: d.id, ...data });
+                        }
+                    });
+                    doctorsSnap.docs.forEach(d => allDoctors.push({ id: d.id, ...d.data() } as Doctor));
+                }));
+            }
 
-            // 3. Map Data by User for Performance Calculation
             const entriesByUser = new Map<string, CoverageEntry[]>();
             const ncdsByUser = new Map<string, NonCallDay[]>();
             const doctorsByUser = new Map<string, Doctor[]>();
@@ -161,7 +152,6 @@ export function CallPerformanceSummary({
                 doctorsByUser.get(d.userId)?.push(d);
             });
 
-            // 4. Calculate Performance Metrics
             const excelRows = targetUserIds.map(uid => {
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
@@ -169,7 +159,6 @@ export function CallPerformanceSummary({
                 const uNCDs = ncdsByUser.get(uid) || [];
                 const uDoctors = doctorsByUser.get(uid) || [];
 
-                // WORKING DAYS LOGIC (Deduct leaves only if they were on business days)
                 let leaveDeduction = 0;
                 uNCDs.forEach(n => {
                     const nDate = parseAnyDate(n.date);
@@ -182,11 +171,9 @@ export function CallPerformanceSummary({
                 const activeDays = Math.max(0, businessDaysTotal - leaveDeduction);
                 const targetCalls = Math.round(activeDays * 12);
                 
-                // KPI 1: CALL RATE
                 const totalCalls = uEntries.length;
                 const callRate = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
 
-                // KPI 2 & 3: REACH & CONCENTRATION
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
                     const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
@@ -203,7 +190,6 @@ export function CallPerformanceSummary({
                 }).length;
                 const concentration = highFreqTarget > 0 ? Math.round((highFreqAchieved / highFreqTarget) * 100) : 0;
 
-                // MANAGER RESOLUTION
                 const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
                 let managerName = "Unassigned";
                 if (mUid) {
@@ -223,7 +209,6 @@ export function CallPerformanceSummary({
                 };
             }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
 
-            // 5. Generate Excel
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
