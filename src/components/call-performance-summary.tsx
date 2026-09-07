@@ -87,9 +87,9 @@ export function CallPerformanceSummary({
             const allDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
             const businessDays = allDays.filter(day => !isWeekend(day) && !PH_HOLIDAYS_2026[format(day, 'yyyy-MM-dd')]).length;
 
-            // 1. Fetch relevant data collections
+            // 1. Fetch relevant data collections (Reduced limit to max allowed 10,000)
             const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
-                getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(15000))),
+                getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(10000))),
                 getDocs(query(collection(db, "nonCallDays"), where("date", ">=", start), where("date", "<=", end), where("status", "==", "approved"))),
                 getDocs(query(collection(db, "doctors"), limit(10000)))
             ]);
@@ -118,13 +118,13 @@ export function CallPerformanceSummary({
             });
 
             allNCDs.forEach(n => {
-                if (!ncdsByUser.has(n.userId)) ncdsByUser.set(n.userId, []);
-                ncdsByUser.get(n.userId)!.push(n);
+                if (!n.userId || !ncdsByUser.has(n.userId)) ncdsByUser.set(n.userId, []);
+                ncdsByUser.get(n.userId)?.push(n);
             });
 
             allDoctors.forEach(d => {
-                if (!doctorsByUser.has(d.userId)) doctorsByUser.set(d.userId, []);
-                doctorsByUser.get(d.userId)!.push(d);
+                if (!d.userId || !doctorsByUser.has(d.userId)) doctorsByUser.set(d.userId, []);
+                doctorsByUser.get(d.userId)?.push(d);
             });
 
             // 4. Calculate Individual Performance
