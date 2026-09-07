@@ -20,7 +20,7 @@ import {
 import { Input } from "./ui/input";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
-import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS_2026, getHolidayName, parseAnyDate } from "@/lib/utils";
+import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
 
 type PlanningCalendarProps = {
@@ -145,7 +145,7 @@ export function PlanningCalendar({
     }, [planningRequests]);
 
     const holidayDates = useMemo(() => {
-        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
+        return Object.keys(PH_HOLIDAYS || {}).map(d => parseISO(d));
     }, []);
 
     const isLocked = useMemo(() => {

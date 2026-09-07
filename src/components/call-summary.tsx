@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
 import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon, Download } from "lucide-react";
-import { cn, parseAnyDate, PH_HOLIDAYS_2026 } from "@/lib/utils";
+import { cn, parseAnyDate, PH_HOLIDAYS } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -99,7 +99,7 @@ export function CallSummary({
             if (isWeekend) return false;
             
             const dateStr = format(day, 'yyyy-MM-dd');
-            return !PH_HOLIDAYS_2026[dateStr];
+            return !PH_HOLIDAYS[dateStr];
         }).length;
 
         // ID-LEVEL DEDUPLICATION: Ensures data doesn't shift due to sync artifacts

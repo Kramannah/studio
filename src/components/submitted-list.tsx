@@ -16,7 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { cn, PH_HOLIDAYS_2026, getHolidayName, parseAnyDate } from "@/lib/utils";
+import { cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
 
 const ITEMS_PER_PAGE = 10;
@@ -202,7 +202,7 @@ export function SubmittedList({
     }, []);
 
     const holidayDates = useMemo(() => {
-        return Object.keys(PH_HOLIDAYS_2026).map(d => parseISO(d));
+        return Object.keys(PH_HOLIDAYS || {}).map(d => parseISO(d));
     }, []);
 
     const nonCallDates = useMemo(() => {
