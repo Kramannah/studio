@@ -155,7 +155,6 @@ export function CallPerformanceSummary({
                 const meta = USER_DATA_MAP[uid];
                 const uEntries = entriesByUser.get(uid) || [];
                 const uNCDs = ncdsByUser.get(uid) || [];
-                const uDoctors = doctorsByUser.get(uid) || [];
 
                 let leaveDeduction = 0;
                 uNCDs.forEach(n => {
@@ -309,7 +308,7 @@ export function CallPerformanceSummary({
                             </p>
                         </div>
                     </CardContent>
-                </div>
+                </Card>
             </div>
         </div>
     );
