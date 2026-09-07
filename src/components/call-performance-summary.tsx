@@ -16,7 +16,8 @@ import {
     FileSpreadsheet,
     Trophy,
     CheckCircle2,
-    Info
+    Info,
+    Users
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -27,6 +28,7 @@ import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
+import { managers } from "@/lib/managers";
 
 export function CallPerformanceSummary({ 
     userProfiles, 
@@ -38,6 +40,7 @@ export function CallPerformanceSummary({
     isSuperAdmin: boolean 
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+    const [selectedManagerId, setSelectedManagerId] = useState<string>("all");
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
@@ -101,16 +104,23 @@ export function CallPerformanceSummary({
             });
 
             // 3. Identify "Assigned PMRs"
-            // Includes PMRs in hardcoded list + anyone with a managerId in Firestore
             const assignedUserIds = new Set<string>();
             Object.values(MANAGER_TEAMS).forEach(team => team.forEach(uid => assignedUserIds.add(uid)));
             Object.values(userProfiles).forEach(p => {
                 if (p.managerId && p.managerId !== 'none') assignedUserIds.add(p.userId);
             });
 
-            const pmrList = Array.from(assignedUserIds)
+            let pmrList = Array.from(assignedUserIds)
                 .map(uid => userProfiles[uid] || { userId: uid, firstName: "Unknown", lastName: "User", role: 'PMR' })
                 .filter(p => p.role === 'PMR' || !p.role);
+
+            // Filter by DSM if selected
+            if (selectedManagerId !== "all") {
+                pmrList = pmrList.filter(pmr => {
+                    const managerUid = pmr.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(pmr.userId));
+                    return managerUid === selectedManagerId;
+                });
+            }
 
             // 4. Calculate Individual Performance
             const excelRows = pmrList.map(pmr => {
@@ -165,6 +175,11 @@ export function CallPerformanceSummary({
             }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
 
             // 5. Generate Excel
+            if (excelRows.length === 0) {
+                toast({ variant: "destructive", title: "No Records Found", description: "No PMRs found for the selected manager or filters." });
+                return;
+            }
+
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
@@ -172,7 +187,7 @@ export function CallPerformanceSummary({
             const fileName = `PMR_Performance_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
-            toast({ title: "Export Successful", description: `Compiled records for ${excelRows.length} assigned representatives.` });
+            toast({ title: "Export Successful", description: `Compiled records for ${excelRows.length} representatives.` });
 
         } catch (error: any) {
             console.error("Report generation failed:", error);
@@ -193,20 +208,38 @@ export function CallPerformanceSummary({
                         Performance Audit Engine
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                        Download consolidated performance rankings for all territory-assigned representatives.
+                        Configure audit parameters to extract KPI records for field personnel.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-8">
-                    <div className="flex flex-col items-center gap-6">
-                        <p className="text-sm font-black uppercase tracking-widest text-muted-foreground">Select Audit Period</p>
-                        <div className="w-full max-w-[300px]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                <Users className="w-3 h-3" /> Select Territory
+                            </p>
+                            <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                                <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
+                                    <SelectValue placeholder="All Districts" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Districts (Global)</SelectItem>
+                                    {managers.map(m => (
+                                        <SelectItem key={m.uid} value={m.uid}>
+                                            {m.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Select Audit Period</p>
                             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                                <SelectTrigger className="h-14 font-headline border-2 rounded-2xl bg-muted/30">
+                                <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
                                     <SelectValue placeholder="Select Period" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {months.map(m => (
-                                        <SelectItem key={m.value} value={m.value} className="h-10">
+                                        <SelectItem key={m.value} value={m.value}>
                                             {m.label}
                                         </SelectItem>
                                     ))}
@@ -229,7 +262,7 @@ export function CallPerformanceSummary({
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Aggregating metrics across all assigned territories..." : "Calculates rate, concentration, and reach for active staff"}
+                            {loading ? "Aggregating metrics across selected territory..." : "Calculates rate, concentration, and reach for assigned staff"}
                         </p>
                     </div>
                 </CardContent>
@@ -242,7 +275,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Inclusion Logic</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                This tool only extracts PMRs currently mapped to a District Manager. HQ, HR, or Marketing roles are excluded from this audit.
+                                This tool extracts PMRs mapped to a District Manager. HQ, HR, or Marketing roles are excluded from this specific KPI audit.
                             </p>
                         </div>
                     </CardContent>
@@ -251,9 +284,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Formatting</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Standards</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Metrics are rounded to the nearest whole number. Call Rate is normalized against 12 daily calls minus approved leaves.
+                                Metrics are rounded to whole numbers. Call Rate is normalized against 12 daily calls minus approved leave deductions.
                             </p>
                         </div>
                     </CardContent>
