@@ -102,6 +102,10 @@ export function CallPerformanceSummary({
                 return;
             }
 
+            // Resolve selected manager name once for consistent DSM column assignment
+            const selectedManager = managers.find(m => m.uid === selectedManagerId);
+            const forcedManagerName = selectedManager ? selectedManager.name : null;
+
             const excelRows: any[] = [];
 
             // Process each user individually for stability and index efficiency
@@ -112,7 +116,7 @@ export function CallPerformanceSummary({
                 ]);
 
                 // Filter specifically for the target month in-memory to handle timezone buffer
-                const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry).filter(e => {
+                const uEntries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
                 });
@@ -164,13 +168,19 @@ export function CallPerformanceSummary({
                 // 3. Metadata resolution
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
-                const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
                 
                 let managerName = "Unassigned";
-                if (mUid) {
-                    const mProfile = userProfiles[mUid];
-                    const mMeta = USER_DATA_MAP[mUid];
-                    managerName = mProfile ? `${mProfile.lastName}, ${mProfile.firstName}` : mMeta ? `${mMeta.lastName}, ${mMeta.firstName}` : "District Manager";
+                if (selectedManagerId !== "all" && forcedManagerName) {
+                    // Use the specifically selected manager name from the dropdown
+                    managerName = forcedManagerName;
+                } else {
+                    // Fallback for "All Districts" mode or unselected state
+                    const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
+                    if (mUid) {
+                        const mProfile = userProfiles[mUid];
+                        const mMeta = USER_DATA_MAP[mUid];
+                        managerName = mProfile ? `${mProfile.lastName}, ${mProfile.firstName}` : mMeta ? `${mMeta.lastName}, ${mMeta.firstName}` : "District Manager";
+                    }
                 }
 
                 excelRows.push({
