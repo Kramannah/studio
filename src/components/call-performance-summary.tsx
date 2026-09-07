@@ -7,16 +7,12 @@ import {
     format, 
     startOfMonth, 
     endOfMonth, 
-    eachDayOfInterval, 
     parseISO, 
     isValid,
-    isWeekend,
     isSameMonth,
-    startOfToday,
-    min,
-    startOfDay,
     subDays,
-    addDays
+    addDays,
+    startOfDay
 } from "date-fns";
 import { 
     Loader2, 
@@ -28,7 +24,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PH_HOLIDAYS, parseAnyDate, cn } from "@/lib/utils";
+import { parseAnyDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CoverageEntry, NonCallDay, UserProfile } from "@/lib/types";
@@ -72,33 +68,20 @@ export function CallPerformanceSummary({
         
         try {
             const refDate = parseISO(selectedMonth + "-01");
-            const isTargetMonthCurrent = isSameMonth(refDate, new Date());
-            
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
-            // Cap business day count at today for current month reports to ensure "Active days" are accurate
-            const targetEndDate = isTargetMonthCurrent ? min([startOfToday(), monthEnd]) : monthEnd;
-
-            // Calculate theoretical business days in range (Mon-Fri minus Holidays)
-            const daysInRange = eachDayOfInterval({ start: monthStart, end: targetEndDate });
-            const businessDaysAvailable = daysInRange.filter(day => {
-                const d = startOfDay(day);
-                const dateKey = format(d, 'yyyy-MM-dd');
-                return !isWeekend(d) && !PH_HOLIDAYS[dateKey];
-            }).length;
 
             // TIMEZONE BUFFER: Expand query by 24h to capture Manila (UTC+8) records safely
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // Identify Target PMRs from both hardcoded teams and dynamic profiles
+            // Identify Target PMRs
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
                 Object.values(userProfiles).forEach(p => {
                     if (p.managerId && p.managerId !== 'none' && (p.role === 'PMR' || !p.role)) allAssignedIds.add(p.userId);
                 });
-                // Fallback: Check USER_DATA_MAP for any user assigned to any DSM
                 Object.keys(USER_DATA_MAP).forEach(uid => {
                     const isAssigned = Object.values(MANAGER_TEAMS).some(team => team.includes(uid));
                     if (isAssigned) allAssignedIds.add(uid);
@@ -121,13 +104,14 @@ export function CallPerformanceSummary({
 
             const excelRows: any[] = [];
 
-            // Process each user individually for precise index-free retrieval
+            // Process each user individually for stability and index efficiency
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap] = await Promise.all([
                     getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(1000))),
                     getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200)))
                 ]);
 
+                // Filter specifically for the target month in-memory to handle timezone buffer
                 const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
@@ -137,32 +121,33 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // 1. Calculate Active Days (Business Days minus approved leaves)
-                const leaveDaysMap = new Map<string, number>();
+                // 1. Calculate Active Days (Sum of weighted days where calls happened)
+                // This logic strictly matches CallSummary.tsx for reporting consistency
+                const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
-                    if (n.status !== 'approved') return;
-                    const nDate = parseAnyDate(n.date);
-                    if (!nDate) return;
-                    
-                    const dayStart = startOfDay(nDate);
-                    const dateKey = format(dayStart, 'yyyy-MM-dd');
-                    
-                    // Only deduct if it's within reporting range [monthStart, targetEndDate]
-                    if (dayStart >= startOfDay(monthStart) && dayStart <= startOfDay(targetEndDate)) {
-                        // Only deduct if it's a weekday and not a public holiday
-                        if (!isWeekend(dayStart) && !PH_HOLIDAYS[dateKey]) {
-                            const current = leaveDaysMap.get(dateKey) || 0;
-                            let val = 0;
-                            if (n.dayType === 'wholeday') val = 1;
-                            else if (n.dayType?.includes('halfday')) val = 0.5;
-                            leaveDaysMap.set(dateKey, Math.min(1, current + val));
-                        }
+                    if (n.status === 'approved' && n.date) {
+                        const d = parseAnyDate(n.date);
+                        if (d) uNcdMap.set(format(d, 'yyyy-MM-dd'), n.dayType);
                     }
                 });
 
-                let totalLeaveDeduction = 0;
-                leaveDaysMap.forEach(v => totalLeaveDeduction += v);
-                const activeDaysCount = Math.max(0, businessDaysAvailable - totalLeaveDeduction);
+                const daysWithCalls = new Set<string>();
+                uEntries.forEach(e => {
+                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    if (d) daysWithCalls.add(format(d, 'yyyy-MM-dd'));
+                });
+
+                let activeDaysCount = 0;
+                daysWithCalls.forEach(dateStr => {
+                    const leaveType = uNcdMap.get(dateStr);
+                    if (leaveType === 'wholeday') {
+                        activeDaysCount += 0;
+                    } else if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') {
+                        activeDaysCount += 0.5;
+                    } else {
+                        activeDaysCount += 1.0;
+                    }
+                });
 
                 // 2. Metrics (Numerators Only)
                 const totalCallsCount = uEntries.length;
@@ -283,7 +268,7 @@ export function CallPerformanceSummary({
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates raw counts and active days for assigned staff"}
+                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates raw counts and active reporting days for assigned staff"}
                         </p>
                     </div>
                 </CardContent>
@@ -294,9 +279,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Integrity</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Uses timezone-buffered queries to prevent record clipping. Deducts leaves from business days only.
+                                Active Days match the PMR Dashboard logic: sum of weighted days where reports were logged (adjusting for partial leaves).
                             </p>
                         </div>
                     </CardContent>
@@ -305,9 +290,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Columns</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Raw Numerators</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Export contains raw numerators for Call Rate, Concentration, and Reach.
+                                KPI columns export raw counts (Total Calls, High Freq Providers, and Unique Reach) for manual target assessment.
                             </p>
                         </div>
                     </CardContent>
