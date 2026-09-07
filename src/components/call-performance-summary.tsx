@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { PH_HOLIDAYS, parseAnyDate } from "@/lib/utils";
+import { PH_HOLIDAYS, parseAnyDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,7 +45,7 @@ export function CallPerformanceSummary({
     isSuperAdmin: boolean 
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-    const [selectedManagerId, setSelectedManagerId] = useState<string>("all");
+    const [selectedManagerId, setSelectedManagerId] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
 
@@ -63,7 +63,10 @@ export function CallPerformanceSummary({
     }, []);
 
     const handleGenerateReport = async () => {
-        if (!db) return;
+        if (!db || !selectedManagerId) {
+            toast({ variant: "destructive", title: "Selection Required", description: "Please select a territory first." });
+            return;
+        }
         setLoading(true);
         
         try {
@@ -72,10 +75,12 @@ export function CallPerformanceSummary({
             
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
+            // Cap business day count at today for current month reports
             const targetEndDate = isTargetMonthCurrent ? min([startOfToday(), monthEnd]) : monthEnd;
 
-            const businessDaysInterval = eachDayOfInterval({ start: monthStart, end: targetEndDate });
-            const businessDaysTotal = businessDaysInterval.filter(day => {
+            // Calculate theoretical business days in range (Mon-Fri minus Holidays)
+            const daysInRange = eachDayOfInterval({ start: monthStart, end: targetEndDate });
+            const businessDaysAvailable = daysInRange.filter(day => {
                 const dateKey = format(day, 'yyyy-MM-dd');
                 return !isWeekend(day) && !PH_HOLIDAYS[dateKey];
             }).length;
@@ -83,11 +88,12 @@ export function CallPerformanceSummary({
             const startStr = monthStart.toISOString();
             const endStr = monthEnd.toISOString();
 
+            // Identify Target PMRs
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
                 Object.values(userProfiles).forEach(p => {
-                    if (p.managerId && p.managerId !== 'none') allAssignedIds.add(p.userId);
+                    if (p.managerId && p.managerId !== 'none' && (p.role === 'PMR' || !p.role)) allAssignedIds.add(p.userId);
                 });
             } else {
                 const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
@@ -105,69 +111,41 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            const allEntries: CoverageEntry[] = [];
-            const allNCDs: NonCallDay[] = [];
-            const allDoctors: Doctor[] = [];
+            const excelRows: any[] = [];
 
-            const CONCURRENCY_LIMIT = 5;
-            for (let i = 0; i < targetUserIds.length; i += CONCURRENCY_LIMIT) {
-                const batch = targetUserIds.slice(i, i + CONCURRENCY_LIMIT);
-                await Promise.all(batch.map(async (uid) => {
-                    const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
-                        getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(1000))),
-                        getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", startStr), where("date", "<=", endStr), limit(200))),
-                        getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500)))
-                    ]);
+            // Process each user individually to avoid complex composite index requirements and timeouts
+            for (const uid of targetUserIds) {
+                const [entriesSnap, ncdSnap] = await Promise.all([
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(1000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", startStr), where("date", "<=", endStr), limit(200)))
+                ]);
 
-                    entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
-                    ncdSnap.docs.forEach(d => {
-                        const data = d.data() as NonCallDay;
-                        allNCDs.push({ id: d.id, ...data });
-                    });
-                    doctorsSnap.docs.forEach(d => allDoctors.push({ id: d.id, ...d.data() } as Doctor));
-                }));
-            }
+                const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
+                const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay);
 
-            const entriesByUser = new Map<string, CoverageEntry[]>();
-            const ncdsByUser = new Map<string, NonCallDay[]>();
-            const doctorsByUser = new Map<string, Doctor[]>();
-
-            allEntries.forEach(e => {
-                if (!e.userId) return;
-                if (!entriesByUser.has(e.userId)) entriesByUser.set(e.userId, []);
-                entriesByUser.get(e.userId)!.push(e);
-            });
-
-            allNCDs.forEach(n => {
-                if (!n.userId) return;
-                if (!ncdsByUser.has(n.userId)) ncdsByUser.set(n.userId, []);
-                ncdsByUser.get(n.userId)?.push(n);
-            });
-
-            allDoctors.forEach(d => {
-                if (!d.userId) return;
-                if (!doctorsByUser.has(d.userId)) doctorsByUser.set(d.userId, []);
-                doctorsByUser.get(d.userId)?.push(d);
-            });
-
-            const excelRows = targetUserIds.map(uid => {
-                const profile = userProfiles[uid];
-                const meta = USER_DATA_MAP[uid];
-                const uEntries = entriesByUser.get(uid) || [];
-                const uNCDs = ncdsByUser.get(uid) || [];
-
-                let leaveDeduction = 0;
+                // 1. Calculate Active Days (Field Days available to date)
+                const leaveDaysMap = new Map<string, number>();
                 uNCDs.forEach(n => {
                     if (n.status !== 'approved') return;
                     const nDate = parseAnyDate(n.date);
-                    if (nDate && !isWeekend(nDate)) {
-                        if (n.dayType === 'wholeday') leaveDeduction += 1;
-                        else if (n.dayType.includes('halfday')) leaveDeduction += 0.5;
+                    if (!nDate) return;
+                    
+                    const dateKey = format(nDate, 'yyyy-MM-dd');
+                    // Only deduct if it's a weekday, not a holiday, and within reportable range
+                    if (nDate >= monthStart && nDate <= targetEndDate && !isWeekend(nDate) && !PH_HOLIDAYS[dateKey]) {
+                        const current = leaveDaysMap.get(dateKey) || 0;
+                        let val = 0;
+                        if (n.dayType === 'wholeday') val = 1;
+                        else if (n.dayType.includes('halfday')) val = 0.5;
+                        leaveDaysMap.set(dateKey, Math.min(1, current + val));
                     }
                 });
 
-                const activeDays = Math.max(0, businessDaysTotal - leaveDeduction);
-                
+                let totalLeaveDeduction = 0;
+                leaveDaysMap.forEach(v => totalLeaveDeduction += v);
+                const activeDays = Math.max(0, businessDaysAvailable - totalLeaveDeduction);
+
+                // 2. Metrics (Numerators)
                 const totalCalls = uEntries.length;
 
                 const visitMap = new Map<string, number>();
@@ -179,6 +157,9 @@ export function CallPerformanceSummary({
                 const uniqueVisited = visitMap.size;
                 const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
 
+                // 3. Metadata
+                const profile = userProfiles[uid];
+                const meta = USER_DATA_MAP[uid];
                 const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
                 let managerName = "Unassigned";
                 if (mUid) {
@@ -187,7 +168,7 @@ export function CallPerformanceSummary({
                     managerName = mProfile ? `${mProfile.lastName}, ${mProfile.firstName}` : mMeta ? `${mMeta.lastName}, ${mMeta.firstName}` : "District Manager";
                 }
 
-                return {
+                excelRows.push({
                     "District Manager": managerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
@@ -195,8 +176,10 @@ export function CallPerformanceSummary({
                     "Call Concentration": highFreqAchieved,
                     "Call Reach": uniqueVisited,
                     "Active days": activeDays
-                };
-            }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]));
+                });
+            }
+
+            excelRows.sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]));
 
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
@@ -237,7 +220,7 @@ export function CallPerformanceSummary({
                             </p>
                             <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
                                 <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
-                                    <SelectValue placeholder="All Districts" />
+                                    <SelectValue placeholder="Select Territory" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Districts (Global)</SelectItem>
@@ -269,7 +252,7 @@ export function CallPerformanceSummary({
                     <div className="space-y-4 pt-4">
                         <Button 
                             onClick={handleGenerateReport} 
-                            disabled={loading} 
+                            disabled={loading || !selectedManagerId} 
                             size="lg"
                             className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
                         >
