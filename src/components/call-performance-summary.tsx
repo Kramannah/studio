@@ -30,6 +30,7 @@ import { cn, PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
@@ -87,7 +88,7 @@ export function CallPerformanceSummary({
             const allDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
             const businessDays = allDays.filter(day => !isWeekend(day) && !PH_HOLIDAYS_2026[format(day, 'yyyy-MM-dd')]).length;
 
-            // 1. Fetch relevant data collections (Reduced limit to max allowed 10,000)
+            // 1. Fetch relevant data collections (Strict limit of 10,000 for Firestore compliance)
             const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
                 getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(10000))),
                 getDocs(query(collection(db, "nonCallDays"), where("date", ">=", start), where("date", "<=", end), where("status", "==", "approved"))),
