@@ -34,12 +34,14 @@ import { Badge } from "@/components/ui/badge";
 import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
+import { managers } from "@/lib/managers";
 
 interface PMRPerformance {
     userId: string;
     code: string;
     name: string;
     district: string;
+    managerId?: string;
     callRate: number;
     totalCalls: number;
     targetCalls: number;
@@ -58,6 +60,7 @@ export function CallPerformanceSummary({
     isSuperAdmin: boolean 
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+    const [selectedDSMId, setSelectedDSMId] = useState<string>("all");
     const [loading, setLoading] = useState(false);
     const [performanceData, setPerformanceData] = useState<PMRPerformance[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -169,6 +172,7 @@ export function CallPerformanceSummary({
                     code: pmr.code || "PMR",
                     name: `${pmr.lastName}, ${pmr.firstName}`,
                     district: districtName,
+                    managerId: pmr.managerId,
                     callRate,
                     totalCalls,
                     targetCalls,
@@ -193,14 +197,21 @@ export function CallPerformanceSummary({
     }, [selectedMonth]);
 
     const filteredData = useMemo(() => {
+        let data = performanceData;
+
+        // Apply DSM filter if Super Admin has selected one
+        if (isSuperAdmin && selectedDSMId !== "all") {
+            data = data.filter(d => d.managerId === selectedDSMId);
+        }
+
         const q = searchQuery.toLowerCase().trim();
-        if (!q) return performanceData;
-        return performanceData.filter(d => 
+        if (!q) return data;
+        return data.filter(d => 
             d.name.toLowerCase().includes(q) || 
             d.code.toLowerCase().includes(q) || 
             d.district.toLowerCase().includes(q)
         );
-    }, [performanceData, searchQuery]);
+    }, [performanceData, searchQuery, selectedDSMId, isSuperAdmin]);
 
     const handleExport = () => {
         const rows = filteredData.map(d => ({
@@ -233,6 +244,21 @@ export function CallPerformanceSummary({
                     <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Consolidated performance metrics for the selected period.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
+                    {isSuperAdmin && (
+                        <div className="w-[220px]">
+                            <Select value={selectedDSMId} onValueChange={setSelectedDSMId}>
+                                <SelectTrigger className="h-11 font-headline border-2 rounded-xl">
+                                    <SelectValue placeholder="All Districts" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Districts</SelectItem>
+                                    {managers.map(m => (
+                                        <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     <div className="w-[200px]">
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                             <SelectTrigger className="h-11 font-headline border-2 rounded-xl">
