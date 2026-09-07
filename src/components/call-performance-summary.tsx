@@ -168,11 +168,8 @@ export function CallPerformanceSummary({
                 });
 
                 const activeDays = Math.max(0, businessDaysTotal - leaveDeduction);
-                const rawTargetCalls = activeDays * 12;
-                const roundedTargetCalls = Math.round(rawTargetCalls);
                 
                 const totalCalls = uEntries.length;
-                const callRate = roundedTargetCalls > 0 ? (totalCalls / roundedTargetCalls) * 100 : 0;
 
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
@@ -181,14 +178,7 @@ export function CallPerformanceSummary({
                 });
 
                 const uniqueVisited = visitMap.size;
-                const reach = uDoctors.length > 0 ? (uniqueVisited / uDoctors.length) * 100 : 0;
-
                 const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
-                const highFreqTarget = uDoctors.filter(d => {
-                    const f = parseInt(String(d.frequency || '1x').replace('x', ''), 10);
-                    return f >= 3;
-                }).length;
-                const concentration = highFreqTarget > 0 ? (highFreqAchieved / highFreqTarget) * 100 : 0;
 
                 const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
                 let managerName = "Unassigned";
@@ -202,10 +192,10 @@ export function CallPerformanceSummary({
                     "District Manager": managerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
-                    "Call Rate": `${totalCalls} / ${roundedTargetCalls} (${Math.round(callRate)}%)`,
-                    "Call Concentration": `${highFreqAchieved} / ${highFreqTarget} (${Math.round(concentration)}%)`,
-                    "Call Reach": `${uniqueVisited} / ${uDoctors.length} (${Math.round(reach)}%)`,
-                    "Actual Working Days": activeDays
+                    "Call Rate": totalCalls,
+                    "Call Concentration": highFreqAchieved,
+                    "Call Reach": uniqueVisited,
+                    "Active days": activeDays
                 };
             }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]));
 
@@ -291,7 +281,7 @@ export function CallPerformanceSummary({
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates ratios and KPI percentages for assigned staff"}
+                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates raw counts and active days for assigned staff"}
                         </p>
                     </div>
                 </CardContent>
@@ -313,13 +303,13 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Weights</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">KPI Columns</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Current month targets are weighted by elapsed business days for fair real-time scoring.
+                                Export contains raw numerators for Call Rate, Concentration, and Reach.
                             </p>
                         </div>
                     </CardContent>
-                </Card>
+                </div>
             </div>
         </div>
     );
