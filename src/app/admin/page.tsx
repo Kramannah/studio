@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase, CheckCircle2, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -28,10 +27,10 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link';
 import { format } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
+import { CallPerformanceSummary } from '@/components/call-performance-summary';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -64,7 +63,6 @@ export default function AdminPage() {
         setMounted(true);
     }, []);
 
-    // Super Admin check
     const isSuperAdmin = useMemo(() => {
         if (!user) return false;
         const email = (user.email ?? "").toLowerCase();
@@ -94,7 +92,6 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-    // DSM Lock Logic
     useEffect(() => {
         if (mounted && isTerritoryManager && user?.uid) {
             setSelectedManagerId(user.uid);
@@ -113,13 +110,11 @@ export default function AdminPage() {
         allPlanningRequests,
         updateNonCallDayStatus,
         updatePlanningRequestStatus,
-        loadingIndividual,
         loadingApprovals,
         fetchUserData,
         fetchTeamApprovals
     } = useAdminData(selectedManagerId, profiles, mounted);
 
-    // PMR Managed List Logic
     const managedUserIds = useMemo(() => {
         if (!selectedManagerId) return [];
         const hardcoded = MANAGER_TEAMS[selectedManagerId] || [];
@@ -138,8 +133,6 @@ export default function AdminPage() {
         if (isSuperAdmin || isMarketingOrHR) return allPlanningRequests;
         return allPlanningRequests.filter(req => managedUserIds.includes(req.userId));
     }, [allPlanningRequests, managedUserIds, isSuperAdmin, isMarketingOrHR]);
-
-    // Redundant fetch trigger removed. UserDashboard handles fetching its own tab data.
 
     useEffect(() => {
         if (mounted && activeTab === 'approvals' && !isMarketingOrHR) {
@@ -323,6 +316,7 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
+                            <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Performance</TabsTrigger>
                             {isSuperAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
                     </div>
@@ -407,6 +401,14 @@ export default function AdminPage() {
                             )}
                         </TabsContent>
                     )}
+
+                    <TabsContent value="performance">
+                        <CallPerformanceSummary 
+                            userProfiles={profiles}
+                            currentUserId={user?.uid}
+                            isSuperAdmin={isSuperAdmin || isMarketingOrHR}
+                        />
+                    </TabsContent>
 
                     {isSuperAdmin && (
                         <TabsContent value="accounts">
