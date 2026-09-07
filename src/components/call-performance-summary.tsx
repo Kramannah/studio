@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -20,16 +21,14 @@ import {
     Trophy,
     CheckCircle2,
     Info,
-    Users,
-    RefreshCw
+    Users
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PH_HOLIDAYS, parseAnyDate, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types";
+import type { CoverageEntry, NonCallDay, UserProfile } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -37,8 +36,7 @@ import { managers } from "@/lib/managers";
 import { USER_DATA_MAP } from "@/lib/user-data";
 
 export function CallPerformanceSummary({ 
-    userProfiles, 
-    isSuperAdmin 
+    userProfiles 
 }: { 
     userProfiles: Record<string, UserProfile>, 
     currentUserId?: string,
@@ -75,7 +73,7 @@ export function CallPerformanceSummary({
             
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
-            // Cap business day count at today for current month reports
+            // Cap business day count at today for current month reports to ensure "Active days" are accurate
             const targetEndDate = isTargetMonthCurrent ? min([startOfToday(), monthEnd]) : monthEnd;
 
             // Calculate theoretical business days in range (Mon-Fri minus Holidays)
@@ -88,7 +86,7 @@ export function CallPerformanceSummary({
             const startStr = monthStart.toISOString();
             const endStr = monthEnd.toISOString();
 
-            // Identify Target PMRs
+            // Identify Target PMRs from both hardcoded teams and dynamic profiles
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
@@ -113,7 +111,7 @@ export function CallPerformanceSummary({
 
             const excelRows: any[] = [];
 
-            // Process each user individually to avoid complex composite index requirements and timeouts
+            // Process each user individually for precise index-free retrieval
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap] = await Promise.all([
                     getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(1000))),
@@ -123,7 +121,7 @@ export function CallPerformanceSummary({
                 const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
                 const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay);
 
-                // 1. Calculate Active Days (Field Days available to date)
+                // 1. Calculate Active Days (Field Days available to date minus approved leaves)
                 const leaveDaysMap = new Map<string, number>();
                 uNCDs.forEach(n => {
                     if (n.status !== 'approved') return;
@@ -136,7 +134,7 @@ export function CallPerformanceSummary({
                         const current = leaveDaysMap.get(dateKey) || 0;
                         let val = 0;
                         if (n.dayType === 'wholeday') val = 1;
-                        else if (n.dayType.includes('halfday')) val = 0.5;
+                        else if (n.dayType?.includes('halfday')) val = 0.5;
                         leaveDaysMap.set(dateKey, Math.min(1, current + val));
                     }
                 });
@@ -145,7 +143,7 @@ export function CallPerformanceSummary({
                 leaveDaysMap.forEach(v => totalLeaveDeduction += v);
                 const activeDays = Math.max(0, businessDaysAvailable - totalLeaveDeduction);
 
-                // 2. Metrics (Numerators)
+                // 2. Metrics (Numerators Only as requested)
                 const totalCalls = uEntries.length;
 
                 const visitMap = new Map<string, number>();
@@ -157,10 +155,11 @@ export function CallPerformanceSummary({
                 const uniqueVisited = visitMap.size;
                 const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
 
-                // 3. Metadata
+                // 3. Metadata resolution
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
                 const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
+                
                 let managerName = "Unassigned";
                 if (mUid) {
                     const mProfile = userProfiles[mUid];
@@ -179,7 +178,7 @@ export function CallPerformanceSummary({
                 });
             }
 
-            excelRows.sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]));
+            excelRows.sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || a["Representative"].localeCompare(b["Representative"]));
 
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
