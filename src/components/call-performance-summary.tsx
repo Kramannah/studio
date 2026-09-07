@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
     format, 
     startOfMonth, 
@@ -15,41 +14,19 @@ import {
 import { 
     Loader2, 
     FileSpreadsheet,
-    Download,
     Trophy,
-    TrendingUp,
-    Users,
-    Target,
-    Activity,
-    Search,
-    RefreshCw,
-    AlertCircle
+    CheckCircle2,
+    Info
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { cn, PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
+import { PH_HOLIDAYS_2026, parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import type { CoverageEntry, NonCallDay, UserProfile, Doctor } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
-import { managers } from "@/lib/managers";
-
-interface PMRPerformance {
-    userId: string;
-    code: string;
-    name: string;
-    district: string;
-    managerId?: string;
-    callRate: number;
-    totalCalls: number;
-    targetCalls: number;
-    concentration: number; // 3X visits
-    reach: number; // Reach against masterlist
-    activeDays: number;
-}
+import { MANAGER_TEAMS } from "@/lib/admins";
 
 export function CallPerformanceSummary({ 
     userProfiles, 
@@ -61,10 +38,7 @@ export function CallPerformanceSummary({
     isSuperAdmin: boolean 
 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-    const [selectedDSMId, setSelectedDSMId] = useState<string>("");
     const [loading, setLoading] = useState(false);
-    const [performanceData, setPerformanceData] = useState<PMRPerformance[]>([]);
-    const [searchQuery, setSearchQuery] = useState("");
     const { toast } = useToast();
 
     const months = useMemo(() => {
@@ -80,15 +54,8 @@ export function CallPerformanceSummary({
         return list;
     }, []);
 
-    const fetchPerformance = async () => {
+    const handleGenerateReport = async () => {
         if (!db) return;
-        
-        // If super admin and no DSM selected, don't fetch anything
-        if (isSuperAdmin && !selectedDSMId) {
-            setPerformanceData([]);
-            return;
-        }
-
         setLoading(true);
         
         try {
@@ -99,7 +66,7 @@ export function CallPerformanceSummary({
             const allDays = eachDayOfInterval({ start: startOfMonth(refDate), end: endOfMonth(refDate) });
             const businessDays = allDays.filter(day => !isWeekend(day) && !PH_HOLIDAYS_2026[format(day, 'yyyy-MM-dd')]).length;
 
-            // 1. Fetch relevant data collections (Strict limit of 10,000 for Firestore compliance)
+            // 1. Fetch ALL relevant data (Wide Scan for Audit)
             const [entriesSnap, ncdSnap, doctorsSnap] = await Promise.all([
                 getDocs(query(collection(db, "coverageEntries"), where("coverageDate", ">=", start), where("coverageDate", "<=", end), limit(10000))),
                 getDocs(query(collection(db, "nonCallDays"), where("date", ">=", start), where("date", "<=", end), where("status", "==", "approved"))),
@@ -110,40 +77,43 @@ export function CallPerformanceSummary({
             const allNCDs = ncdSnap.docs.map(d => ({ id: d.id, ...d.data() } as NonCallDay));
             const allDoctors = doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
 
-            // 2. Filter PMRs based on authorization
-            const pmrProfiles = Object.values(userProfiles).filter(p => {
-                const isPmr = p.role === 'PMR' || !p.role;
-                if (!isPmr) return false;
-                if (isSuperAdmin) {
-                    // Only show PMRs belonging to the selected DSM
-                    return p.managerId === selectedDSMId;
-                }
-                // If DSM, only show their team
-                return p.managerId === currentUserId;
-            });
-
-            // 3. Map Data by User for calculation
+            // 2. Map Data by User
             const entriesByUser = new Map<string, CoverageEntry[]>();
             const ncdsByUser = new Map<string, NonCallDay[]>();
             const doctorsByUser = new Map<string, Doctor[]>();
 
             allEntries.forEach(e => {
+                if (!e.userId) return;
                 if (!entriesByUser.has(e.userId)) entriesByUser.set(e.userId, []);
                 entriesByUser.get(e.userId)!.push(e);
             });
 
             allNCDs.forEach(n => {
-                if (!n.userId || !ncdsByUser.has(n.userId)) ncdsByUser.set(n.userId, []);
+                if (!n.userId) return;
+                if (!ncdsByUser.has(n.userId)) ncdsByUser.set(n.userId, []);
                 ncdsByUser.get(n.userId)?.push(n);
             });
 
             allDoctors.forEach(d => {
-                if (!d.userId || !doctorsByUser.has(d.userId)) doctorsByUser.set(d.userId, []);
+                if (!d.userId) return;
+                if (!doctorsByUser.has(d.userId)) doctorsByUser.set(d.userId, []);
                 doctorsByUser.get(d.userId)?.push(d);
             });
 
+            // 3. Identify "Assigned PMRs"
+            // Includes PMRs in hardcoded list + anyone with a managerId in Firestore
+            const assignedUserIds = new Set<string>();
+            Object.values(MANAGER_TEAMS).forEach(team => team.forEach(uid => assignedUserIds.add(uid)));
+            Object.values(userProfiles).forEach(p => {
+                if (p.managerId && p.managerId !== 'none') assignedUserIds.add(p.userId);
+            });
+
+            const pmrList = Array.from(assignedUserIds)
+                .map(uid => userProfiles[uid] || { userId: uid, firstName: "Unknown", lastName: "User", role: 'PMR' })
+                .filter(p => p.role === 'PMR' || !p.role);
+
             // 4. Calculate Individual Performance
-            const calculated: PMRPerformance[] = pmrProfiles.map(pmr => {
+            const excelRows = pmrList.map(pmr => {
                 const uEntries = entriesByUser.get(pmr.userId) || [];
                 const uNCDs = ncdsByUser.get(pmr.userId) || [];
                 const uDoctors = doctorsByUser.get(pmr.userId) || [];
@@ -157,7 +127,7 @@ export function CallPerformanceSummary({
                 const activeDays = Math.max(0, businessDays - leaveDeduction);
                 const targetCalls = Math.round(activeDays * 12);
                 
-                // PERFORMANCE LOGIC
+                // CALL RATE
                 const totalCalls = uEntries.length;
                 const callRate = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
 
@@ -175,222 +145,120 @@ export function CallPerformanceSummary({
                 const highFreqTarget = uDoctors.filter(d => parseInt(String(d.frequency || '1x').replace('x', ''), 10) >= 3).length;
                 const concentration = highFreqTarget > 0 ? Math.round((highFreqAchieved / highFreqTarget) * 100) : 0;
 
-                const manager = pmr.managerId ? userProfiles[pmr.managerId] : null;
-                const districtName = manager ? manager.lastName : "N/A";
+                // MANAGER RESOLUTION
+                let managerName = "Unassigned";
+                const managerUid = pmr.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(pmr.userId));
+                if (managerUid && userProfiles[managerUid]) {
+                    const m = userProfiles[managerUid];
+                    managerName = `${m.lastName}, ${m.firstName}`;
+                }
 
                 return {
-                    userId: pmr.userId,
-                    code: pmr.code || "PMR",
-                    name: `${pmr.lastName}, ${pmr.firstName}`,
-                    district: districtName,
-                    managerId: pmr.managerId,
-                    callRate,
-                    totalCalls,
-                    targetCalls,
-                    concentration,
-                    reach,
-                    activeDays
+                    "District Manager": managerName,
+                    "Employee Code": pmr.code || "PMR",
+                    "Representative": `${pmr.lastName}, ${pmr.firstName}`,
+                    "Call Rate (%)": Math.round(callRate),
+                    "Call Concentration (%)": Math.round(concentration),
+                    "Call Reach (%)": Math.round(reach),
+                    "Actual Working Days": activeDays
                 };
-            });
+            }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
 
-            setPerformanceData(calculated.sort((a, b) => b.callRate - a.callRate));
+            // 5. Generate Excel
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
+            
+            const fileName = `PMR_Performance_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            XLSX.writeFile(wb, fileName);
 
-        } catch (error) {
-            console.error("Performance compilation failed:", error);
-            toast({ variant: "destructive", title: "Refresh Failed", description: "Database fetch limit reached or network error." });
+            toast({ title: "Export Successful", description: `Compiled records for ${excelRows.length} assigned representatives.` });
+
+        } catch (error: any) {
+            console.error("Report generation failed:", error);
+            toast({ variant: "destructive", title: "Export Failed", description: error.message || "An unexpected error occurred." });
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchPerformance();
-    }, [selectedMonth, selectedDSMId]);
-
-    const filteredData = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        if (!q) return performanceData;
-        return performanceData.filter(d => 
-            d.name.toLowerCase().includes(q) || 
-            d.code.toLowerCase().includes(q) || 
-            d.district.toLowerCase().includes(q)
-        );
-    }, [performanceData, searchQuery]);
-
-    const handleExport = () => {
-        const rows = filteredData.map(d => ({
-            "District": d.district,
-            "Employee Code": d.code,
-            "Representative": d.name,
-            "Call Rate (%)": d.callRate,
-            "Call Concentration (%)": d.concentration,
-            "Call Reach (%)": d.reach,
-            "Active Reporting Days": d.activeDays
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Performance Summary");
-        
-        const fileName = `PMR_Performance_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-    };
-
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                    <h3 className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                        <Trophy className="text-yellow-500" /> Organization Rankings
-                    </h3>
-                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Consolidated performance metrics for the selected period.</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    {isSuperAdmin && (
-                        <div className="w-[220px]">
-                            <Select value={selectedDSMId} onValueChange={setSelectedDSMId}>
-                                <SelectTrigger className="h-11 font-headline border-2 rounded-xl">
-                                    <SelectValue placeholder="Select District..." />
+        <div className="flex flex-col items-center justify-center min-h-[400px] w-full animate-in fade-in duration-500 space-y-8">
+            <Card className="max-w-2xl w-full border-2 shadow-lg rounded-2xl overflow-hidden">
+                <CardHeader className="bg-primary/5 border-b-2 text-center py-10">
+                    <div className="mx-auto bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                        <Trophy className="w-8 h-8 text-primary" />
+                    </div>
+                    <CardTitle className="text-3xl font-black font-headline text-primary tracking-tight">
+                        Performance Audit Engine
+                    </CardTitle>
+                    <CardDescription className="text-base mt-2">
+                        Download consolidated performance rankings for all territory-assigned representatives.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="p-10 space-y-8">
+                    <div className="flex flex-col items-center gap-6">
+                        <p className="text-sm font-black uppercase tracking-widest text-muted-foreground">Select Audit Period</p>
+                        <div className="w-full max-w-[300px]">
+                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                                <SelectTrigger className="h-14 font-headline border-2 rounded-2xl bg-muted/30">
+                                    <SelectValue placeholder="Select Period" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {managers.map(m => (
-                                        <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>
+                                    {months.map(m => (
+                                        <SelectItem key={m.value} value={m.value} className="h-10">
+                                            {m.label}
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
-                    )}
-                    <div className="w-[200px]">
-                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger className="h-11 font-headline border-2 rounded-xl">
-                                <SelectValue placeholder="Period" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
                     </div>
-                    <Button 
-                        variant="outline" 
-                        onClick={handleExport} 
-                        disabled={loading || filteredData.length === 0}
-                        className="h-11 font-headline border-2 rounded-xl gap-2"
-                    >
-                        <Download size={16} /> Export Summary
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={fetchPerformance} 
-                        disabled={loading}
-                        className="h-11 w-11 rounded-xl border-2"
-                    >
-                        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                    </Button>
-                </div>
-            </div>
 
-            {isSuperAdmin && !selectedDSMId ? (
-                <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed rounded-2xl bg-muted/5">
-                    <AlertCircle className="w-10 h-10 text-muted-foreground mb-4" />
-                    <p className="font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Territory Selection Required</p>
-                    <p className="text-xs text-muted-foreground mt-2">Please select a District Manager from the dropdown to load the performance rankings.</p>
-                </div>
-            ) : (
-                <Card className="border-2 shadow-sm">
-                    <CardHeader className="bg-muted/30 border-b pb-6">
-                        <div className="relative max-w-md">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input 
-                                placeholder="Filter by name or code..." 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 h-11 border-2 rounded-xl"
-                            />
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader className="bg-muted/20">
-                                    <TableRow className="h-12 hover:bg-transparent">
-                                        <TableHead className="font-bold text-foreground pl-6">Rep Name</TableHead>
-                                        <TableHead className="font-bold text-foreground">District</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Call Rate</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">3X Conc.</TableHead>
-                                        <TableHead className="text-center font-bold text-foreground">Reach</TableHead>
-                                        <TableHead className="text-right pr-6 font-bold text-foreground">Active Days</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                                    ) : filteredData.length > 0 ? (
-                                        filteredData.map((d) => (
-                                            <TableRow key={d.userId} className="h-16 hover:bg-muted/30 border-b">
-                                                <TableCell className="pl-6">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm">{d.name}</span>
-                                                        <span className="text-[10px] font-black text-primary/70 uppercase">{d.code}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-medium text-xs text-muted-foreground">{d.district}</TableCell>
-                                                <TableCell className="text-center">
-                                                    <div className="flex flex-col items-center">
-                                                        <span className={cn("font-black font-headline text-lg", d.callRate >= 100 ? "text-[#10b981]" : "text-foreground")}>
-                                                            {d.callRate}%
-                                                        </span>
-                                                        <div className="w-16 h-1 bg-muted rounded-full mt-1 overflow-hidden">
-                                                            <div className={cn("h-full", d.callRate >= 100 ? "bg-[#10b981]" : "bg-primary")} style={{ width: `${Math.min(100, d.callRate)}%` }} />
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#06b6d4]/10 text-[#06b6d4]">
-                                                        {d.concentration}%
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="secondary" className="font-mono font-bold h-7 px-3 bg-[#8b5cf6]/10 text-[#8b5cf6]">
-                                                        {d.reach}%
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6">
-                                                    <span className="font-mono font-bold text-sm">{d.activeDays}</span>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
-                                        <TableRow><TableCell colSpan={6} className="h-64 text-center text-muted-foreground italic">No performance data found for this selection.</TableCell></TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
+                    <div className="space-y-4 pt-4">
+                        <Button 
+                            onClick={handleGenerateReport} 
+                            disabled={loading} 
+                            size="lg"
+                            className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
+                        >
+                            {loading ? (
+                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Compiling Records...</>
+                            ) : (
+                                <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Audit Report (.xlsx)</>
+                            )}
+                        </Button>
+                        <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
+                            {loading ? "Aggregating metrics across all assigned territories..." : "Calculates rate, concentration, and reach for active staff"}
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
+                <Card className="border-2 shadow-sm bg-muted/20">
+                    <CardContent className="p-4 flex items-start gap-3">
+                        <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Inclusion Logic</p>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                This tool only extracts PMRs currently mapped to a District Manager. HQ, HR, or Marketing roles are excluded from this audit.
+                            </p>
                         </div>
                     </CardContent>
                 </Card>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <MetricHelpCard title="Call Rate" icon={Activity} color="text-primary" desc="Measured against 12 calls per active business day." />
-                <MetricHelpCard title="Concentration" icon={Target} color="text-[#06b6d4]" desc="Percentage of high-frequency (3x/4x) doctors visited 3+ times." />
-                <MetricHelpCard title="Call Reach" icon={Users} color="text-[#8b5cf6]" desc="Unique doctors visited vs. total doctors in masterlist." />
+                <Card className="border-2 shadow-sm bg-muted/20">
+                    <CardContent className="p-4 flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Formatting</p>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                Metrics are rounded to the nearest whole number. Call Rate is normalized against 12 daily calls minus approved leaves.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         </div>
-    );
-}
-
-function MetricHelpCard({ title, icon: Icon, color, desc }: { title: string, icon: any, color: string, desc: string }) {
-    return (
-        <Card className="border-2 bg-muted/10">
-            <CardContent className="p-4 flex gap-4 items-start">
-                <div className={cn("p-2 rounded-lg bg-background border-2", color)}>
-                    <Icon size={18} />
-                </div>
-                <div className="space-y-0.5">
-                    <p className="font-bold text-sm">{title}</p>
-                    <p className="text-[11px] text-muted-foreground leading-snug">{desc}</p>
-                </div>
-            </CardContent>
-        </Card>
     );
 }
