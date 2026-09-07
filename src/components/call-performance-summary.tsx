@@ -122,9 +122,7 @@ export function CallPerformanceSummary({
                     entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
                     ncdSnap.docs.forEach(d => {
                         const data = d.data() as NonCallDay;
-                        if (data.status === 'approved') {
-                            allNCDs.push({ id: d.id, ...data });
-                        }
+                        allNCDs.push({ id: d.id, ...data });
                     });
                     doctorsSnap.docs.forEach(d => allDoctors.push({ id: d.id, ...d.data() } as Doctor));
                 }));
@@ -161,6 +159,7 @@ export function CallPerformanceSummary({
 
                 let leaveDeduction = 0;
                 uNCDs.forEach(n => {
+                    if (n.status !== 'approved') return;
                     const nDate = parseAnyDate(n.date);
                     if (nDate && !isWeekend(nDate)) {
                         if (n.dayType === 'wholeday') leaveDeduction += 1;
@@ -169,10 +168,11 @@ export function CallPerformanceSummary({
                 });
 
                 const activeDays = Math.max(0, businessDaysTotal - leaveDeduction);
-                const targetCalls = Math.round(activeDays * 12);
+                const rawTargetCalls = activeDays * 12;
+                const roundedTargetCalls = Math.round(rawTargetCalls);
                 
                 const totalCalls = uEntries.length;
-                const callRate = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
+                const callRate = roundedTargetCalls > 0 ? (totalCalls / roundedTargetCalls) * 100 : 0;
 
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
@@ -181,16 +181,16 @@ export function CallPerformanceSummary({
                 });
 
                 const uniqueVisited = visitMap.size;
-                const reach = uDoctors.length > 0 ? Math.round((uniqueVisited / uDoctors.length) * 100) : 0;
+                const reach = uDoctors.length > 0 ? (uniqueVisited / uDoctors.length) * 100 : 0;
 
                 const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
                 const highFreqTarget = uDoctors.filter(d => {
                     const f = parseInt(String(d.frequency || '1x').replace('x', ''), 10);
                     return f >= 3;
                 }).length;
-                const concentration = highFreqTarget > 0 ? Math.round((highFreqAchieved / highFreqTarget) * 100) : 0;
+                const concentration = highFreqTarget > 0 ? (highFreqAchieved / highFreqTarget) * 100 : 0;
 
-                const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => MANAGER_TEAMS[mId].includes(uid));
+                const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
                 let managerName = "Unassigned";
                 if (mUid) {
                     const mProfile = userProfiles[mUid];
@@ -202,12 +202,12 @@ export function CallPerformanceSummary({
                     "District Manager": managerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
-                    "Call Rate (%)": Math.round(callRate),
-                    "Call Concentration (%)": Math.round(concentration),
-                    "Call Reach (%)": Math.round(reach),
+                    "Call Rate": `${totalCalls} / ${roundedTargetCalls} (${Math.round(callRate)}%)`,
+                    "Call Concentration": `${highFreqAchieved} / ${highFreqTarget} (${Math.round(concentration)}%)`,
+                    "Call Reach": `${uniqueVisited} / ${uDoctors.length} (${Math.round(reach)}%)`,
                     "Actual Working Days": activeDays
                 };
-            }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || b["Call Rate (%)"] - a["Call Rate (%)"]);
+            }).sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]));
 
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
@@ -291,7 +291,7 @@ export function CallPerformanceSummary({
                             )}
                         </Button>
                         <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates whole number KPIs for assigned staff"}
+                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates ratios and KPI percentages for assigned staff"}
                         </p>
                     </div>
                 </CardContent>
