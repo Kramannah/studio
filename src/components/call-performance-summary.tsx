@@ -13,7 +13,10 @@ import {
     isWeekend,
     isSameMonth,
     startOfToday,
-    min
+    min,
+    startOfDay,
+    subDays,
+    addDays
 } from "date-fns";
 import { 
     Loader2, 
@@ -79,12 +82,14 @@ export function CallPerformanceSummary({
             // Calculate theoretical business days in range (Mon-Fri minus Holidays)
             const daysInRange = eachDayOfInterval({ start: monthStart, end: targetEndDate });
             const businessDaysAvailable = daysInRange.filter(day => {
-                const dateKey = format(day, 'yyyy-MM-dd');
-                return !isWeekend(day) && !PH_HOLIDAYS[dateKey];
+                const d = startOfDay(day);
+                const dateKey = format(d, 'yyyy-MM-dd');
+                return !isWeekend(d) && !PH_HOLIDAYS[dateKey];
             }).length;
 
-            const startStr = monthStart.toISOString();
-            const endStr = monthEnd.toISOString();
+            // TIMEZONE BUFFER: Expand query by 24h to capture Manila (UTC+8) records safely
+            const queryStart = subDays(monthStart, 1).toISOString();
+            const queryEnd = addDays(monthEnd, 1).toISOString();
 
             // Identify Target PMRs from both hardcoded teams and dynamic profiles
             const allAssignedIds = new Set<string>();
@@ -92,6 +97,11 @@ export function CallPerformanceSummary({
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
                 Object.values(userProfiles).forEach(p => {
                     if (p.managerId && p.managerId !== 'none' && (p.role === 'PMR' || !p.role)) allAssignedIds.add(p.userId);
+                });
+                // Fallback: Check USER_DATA_MAP for any user assigned to any DSM
+                Object.keys(USER_DATA_MAP).forEach(uid => {
+                    const isAssigned = Object.values(MANAGER_TEAMS).some(team => team.includes(uid));
+                    if (isAssigned) allAssignedIds.add(uid);
                 });
             } else {
                 const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
@@ -114,37 +124,48 @@ export function CallPerformanceSummary({
             // Process each user individually for precise index-free retrieval
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", startStr), where("coverageDate", "<=", endStr), limit(1000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", startStr), where("date", "<=", endStr), limit(200)))
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(1000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200)))
                 ]);
 
-                const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
-                const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay);
+                const uEntries = entriesSnap.docs.map(d => d.data() as CoverageEntry).filter(e => {
+                    const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                    return d && d >= monthStart && d <= monthEnd;
+                });
+                const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay).filter(n => {
+                    const d = parseAnyDate(n.date);
+                    return d && d >= monthStart && d <= monthEnd;
+                });
 
-                // 1. Calculate Active Days (Field Days available to date minus approved leaves)
+                // 1. Calculate Active Days (Business Days minus approved leaves)
                 const leaveDaysMap = new Map<string, number>();
                 uNCDs.forEach(n => {
                     if (n.status !== 'approved') return;
                     const nDate = parseAnyDate(n.date);
                     if (!nDate) return;
                     
-                    const dateKey = format(nDate, 'yyyy-MM-dd');
-                    // Only deduct if it's a weekday, not a holiday, and within reportable range
-                    if (nDate >= monthStart && nDate <= targetEndDate && !isWeekend(nDate) && !PH_HOLIDAYS[dateKey]) {
-                        const current = leaveDaysMap.get(dateKey) || 0;
-                        let val = 0;
-                        if (n.dayType === 'wholeday') val = 1;
-                        else if (n.dayType?.includes('halfday')) val = 0.5;
-                        leaveDaysMap.set(dateKey, Math.min(1, current + val));
+                    const dayStart = startOfDay(nDate);
+                    const dateKey = format(dayStart, 'yyyy-MM-dd');
+                    
+                    // Only deduct if it's within reporting range [monthStart, targetEndDate]
+                    if (dayStart >= startOfDay(monthStart) && dayStart <= startOfDay(targetEndDate)) {
+                        // Only deduct if it's a weekday and not a public holiday
+                        if (!isWeekend(dayStart) && !PH_HOLIDAYS[dateKey]) {
+                            const current = leaveDaysMap.get(dateKey) || 0;
+                            let val = 0;
+                            if (n.dayType === 'wholeday') val = 1;
+                            else if (n.dayType?.includes('halfday')) val = 0.5;
+                            leaveDaysMap.set(dateKey, Math.min(1, current + val));
+                        }
                     }
                 });
 
                 let totalLeaveDeduction = 0;
                 leaveDaysMap.forEach(v => totalLeaveDeduction += v);
-                const activeDays = Math.max(0, businessDaysAvailable - totalLeaveDeduction);
+                const activeDaysCount = Math.max(0, businessDaysAvailable - totalLeaveDeduction);
 
-                // 2. Metrics (Numerators Only as requested)
-                const totalCalls = uEntries.length;
+                // 2. Metrics (Numerators Only)
+                const totalCallsCount = uEntries.length;
 
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
@@ -152,8 +173,8 @@ export function CallPerformanceSummary({
                     visitMap.set(key, (visitMap.get(key) || 0) + 1);
                 });
 
-                const uniqueVisited = visitMap.size;
-                const highFreqAchieved = Array.from(visitMap.values()).filter(count => count >= 3).length;
+                const uniqueVisitedCount = visitMap.size;
+                const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 3).length;
 
                 // 3. Metadata resolution
                 const profile = userProfiles[uid];
@@ -171,10 +192,10 @@ export function CallPerformanceSummary({
                     "District Manager": managerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
-                    "Call Rate": totalCalls,
-                    "Call Concentration": highFreqAchieved,
-                    "Call Reach": uniqueVisited,
-                    "Active days": activeDays
+                    "Call Rate": totalCallsCount,
+                    "Call Concentration": highFreqAchievedCount,
+                    "Call Reach": uniqueVisitedCount,
+                    "Active days": activeDaysCount
                 });
             }
 
@@ -275,7 +296,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Integrity</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Uses targeted indexing to prevent timeouts. Deducts leaves from business days only.
+                                Uses timezone-buffered queries to prevent record clipping. Deducts leaves from business days only.
                             </p>
                         </div>
                     </CardContent>
