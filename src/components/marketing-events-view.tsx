@@ -11,13 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { 
     Plus, 
     Calendar, 
-    MapPin, 
     Pencil, 
     Trash2, 
     Presentation, 
     Loader2, 
     Users, 
-    TrendingUp,
     MoreHorizontal,
     ChevronLeft
 } from "lucide-react";
@@ -57,14 +55,6 @@ export function MarketingEventsView() {
     const handleEdit = (event: MarketingEvent) => {
         setEditingEvent(event);
         setView('form');
-    };
-
-    const getStatusBadge = (status: MarketingEvent['status']) => {
-        switch (status) {
-            case 'completed': return <Badge className="bg-[#10b981] text-white">Completed</Badge>;
-            case 'cancelled': return <Badge variant="destructive">Cancelled</Badge>;
-            default: return <Badge variant="secondary">Planned</Badge>;
-        }
     };
 
     if (view === 'form') {
@@ -128,10 +118,11 @@ export function MarketingEventsView() {
                             <CardHeader className="bg-muted/30 border-b pb-4 relative">
                                 <div className="flex justify-between items-start">
                                     <div className="space-y-1">
-                                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tighter border-primary/30 text-primary">
-                                            {event.eventType}
-                                        </Badge>
                                         <CardTitle className="text-lg font-black font-headline line-clamp-1">{event.eventName}</CardTitle>
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold uppercase tracking-widest">
+                                            <Calendar className="w-3.5 h-3.5" />
+                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-1">
                                          <DropdownMenu modal={false}>
@@ -176,35 +167,6 @@ export function MarketingEventsView() {
                                         <span className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">{event.isListed ? 'Masterlist Provider' : 'Guest Provider'}</span>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4 border-t border-b py-4 border-dashed">
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-1.5">
-                                            <Calendar className="w-3 h-3" /> Date
-                                        </p>
-                                        <p className="text-sm font-bold">{format(parseISO(event.eventDate), 'MMM d, yyyy')}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest flex items-center gap-1.5">
-                                            <MapPin className="w-3 h-3" /> Venue
-                                        </p>
-                                        <p className="text-sm font-bold truncate">{event.venue || 'N/A'}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <TrendingUp className="w-4 h-4 text-primary opacity-50" />
-                                        <span className="font-mono font-bold text-lg">₱{Number(event.estimatedCost || 0).toLocaleString()}</span>
-                                    </div>
-                                    {getStatusBadge(event.status)}
-                                </div>
-
-                                {event.remarks && (
-                                    <div className="pt-2">
-                                        <p className="text-[10px] text-muted-foreground italic line-clamp-2">"{event.remarks}"</p>
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
                     ))}

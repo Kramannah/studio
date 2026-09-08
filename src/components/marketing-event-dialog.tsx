@@ -15,7 +15,6 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Autocomplete } from "./autocomplete"
@@ -26,7 +25,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Loader2, Save, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
-import { ScrollArea } from "./ui/scroll-area"
 
 const MARKETING_PROGRAMS = [
   "DapaTalk (1 on 1)",
@@ -49,12 +47,7 @@ const eventSchema = z.object({
   doctorFirstName: z.string().min(1, "First Name is required"),
   doctorLastName: z.string().min(1, "Last Name is required"),
   eventName: z.string().min(1, "Program is required"),
-  eventType: z.enum(['RTD', 'Convention', 'Booth Activity', 'Product Launch', 'Medical Society Meeting']),
   eventDate: z.date(),
-  venue: z.string().optional(),
-  estimatedCost: z.coerce.number().optional(),
-  status: z.enum(['planned', 'completed', 'cancelled']),
-  remarks: z.string().optional(),
 });
 
 type MarketingEventFormProps = {
@@ -76,12 +69,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
       doctorFirstName: "",
       doctorLastName: "",
       eventName: "",
-      eventType: "RTD",
       eventDate: new Date(),
-      venue: "",
-      estimatedCost: 0,
-      status: "planned",
-      remarks: "",
     },
   });
 
@@ -90,7 +78,11 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
   useEffect(() => {
     if (event) {
       form.reset({
-        ...event,
+        isListed: event.isListed,
+        doctorId: event.doctorId || "",
+        doctorFirstName: event.doctorFirstName,
+        doctorLastName: event.doctorLastName,
+        eventName: event.eventName,
         eventDate: event.eventDate ? parseISO(event.eventDate) : new Date(),
       });
       setAutocompleteValue(event.isListed ? `${event.doctorFirstName} ${event.doctorLastName}` : "");
@@ -101,12 +93,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
         doctorFirstName: "",
         doctorLastName: "",
         eventName: "",
-        eventType: "RTD",
         eventDate: new Date(),
-        venue: "",
-        estimatedCost: 0,
-        status: "planned",
-        remarks: "",
       });
       setAutocompleteValue("");
     }
@@ -124,8 +111,10 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
     try {
       await onSave({
         ...values,
+        eventType: 'RTD', // Default for legacy compatibility
+        status: 'completed', // Default since user is logging it
         eventDate: values.eventDate.toISOString(),
-      });
+      } as any);
     } finally {
       setIsSubmitting(false);
     }
@@ -243,117 +232,34 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         )}
                     />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField
-                            control={form.control}
-                            name="eventType"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel className="font-headline">Classification</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
+                    <FormField
+                        control={form.control}
+                        name="eventDate"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                            <FormLabel className="font-headline mb-2">Program Date</FormLabel>
+                            <Popover>
+                                <PopoverTrigger asChild>
                                 <FormControl>
-                                    <SelectTrigger className="h-11 border-2 rounded-xl"><SelectValue placeholder="Select type" /></SelectTrigger>
+                                    <Button
+                                    variant={"outline"}
+                                    className={cn("w-full h-11 pl-3 text-left font-normal border-2 rounded-xl", !field.value && "text-muted-foreground")}
+                                    >
+                                    {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
                                 </FormControl>
-                                <SelectContent>
-                                    <SelectItem value="RTD">RTD</SelectItem>
-                                    <SelectItem value="Convention">Convention</SelectItem>
-                                    <SelectItem value="Booth Activity">Booth Activity</SelectItem>
-                                    <SelectItem value="Product Launch">Product Launch</SelectItem>
-                                    <SelectItem value="Medical Society Meeting">Medical Society Meeting</SelectItem>
-                                </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="eventDate"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                <FormLabel className="font-headline mb-2">Event Date</FormLabel>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                    <FormControl>
-                                        <Button
-                                        variant={"outline"}
-                                        className={cn("w-full h-11 pl-3 text-left font-normal border-2 rounded-xl", !field.value && "text-muted-foreground")}
-                                        >
-                                        {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                        </Button>
-                                    </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={field.value}
-                                        onSelect={field.onChange}
-                                        initialFocus
-                                    />
-                                    </PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <FormField
-                            control={form.control}
-                            name="venue"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Venue / Location</FormLabel>
-                                    <FormControl><Input {...field} placeholder="e.g. Grand Hotel" className="h-11 border-2 rounded-xl" /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                         <FormField
-                            control={form.control}
-                            name="estimatedCost"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="font-headline">Estimated Cost (₱)</FormLabel>
-                                    <FormControl><Input type="number" {...field} className="h-11 border-2 rounded-xl font-mono" /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-
-                    <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="font-headline">Tracking Status</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                                <SelectTrigger className="h-11 border-2 rounded-xl"><SelectValue placeholder="Select status" /></SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                <SelectItem value="planned">Planned</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                            </Select>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    initialFocus
+                                />
+                                </PopoverContent>
+                            </Popover>
                             <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-
-                    <FormField
-                        control={form.control}
-                        name="remarks"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel className="font-headline">Notes & Remarks</FormLabel>
-                                <FormControl><Textarea {...field} rows={4} className="border-2 rounded-xl resize-none" placeholder="Any additional context or outcomes..." /></FormControl>
-                                <FormMessage />
                             </FormItem>
                         )}
                     />
