@@ -125,7 +125,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
 
     const handleOpenComplete = (group: MarketingEvent[]) => {
         const initialStatuses: Record<string, 'attended' | 'not-attended'> = {};
-        group.forEach(e => {
+        group.forEach(event => {
             initialStatuses[event.id] = 'attended';
         });
         setIndividualAttendance(initialStatuses);
@@ -197,7 +197,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                 "Quarter": event.quarter || "N/A",
                 "Marketing Program": event.eventName,
                 "Event Date": dateStr,
-                "Doctor Name": `Dr. {event.doctorFirstName} {event.doctorLastName}`,
+                "Doctor Name": `Dr. ${event.doctorFirstName} ${event.doctorLastName}`,
                 "Enrollment": event.isListed ? "Masterlist" : "Guest",
                 "Workflow Status": event.status.toUpperCase(),
                 "Attendance Status": event.attendanceStatus || (event.status === 'planned' ? 'PENDING' : 'N/A')
@@ -225,7 +225,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Events Audit");
         
-        const fileName = `Marketing_Events_Report_{format(new Date(), 'yyyyMMdd')}.xlsx`;
+        const fileName = `Marketing_Events_Report_${format(new Date(), 'yyyyMMdd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
 
         toast({ title: "Report Generated", description: "Excel file downloaded successfully." });
@@ -288,12 +288,12 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                             </SelectContent>
                         </Select>
                     </div>
-                    {readOnly && (
-                        <Button variant="outline" onClick={handleExportExcel} className="h-12 border-2 rounded-xl font-headline gap-2">
-                            <FileSpreadsheet className="w-5 h-5 text-primary" />
-                            Export Excel
-                        </Button>
-                    )}
+                    
+                    <Button variant="outline" onClick={handleExportExcel} className="h-12 border-2 rounded-xl font-headline gap-2">
+                        <FileSpreadsheet className="w-5 h-5 text-primary" />
+                        Export Excel
+                    </Button>
+                    
                     {!readOnly && (
                         <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
                             <Plus className="w-5 h-5" />
