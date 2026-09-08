@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
-import { MarketingEventDialog } from "./marketing-event-dialog";
+import { MarketingEventForm } from "./marketing-event-dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,8 @@ import {
     Loader2, 
     Users, 
     TrendingUp,
-    MoreHorizontal
+    MoreHorizontal,
+    ChevronLeft
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -45,17 +46,17 @@ export function MarketingEventsView() {
     const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents();
     const { doctors } = useDoctors();
     
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [view, setView] = useState<'list' | 'form'>('list');
     const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
 
     const handleAdd = () => {
         setEditingEvent(undefined);
-        setIsDialogOpen(true);
+        setView('form');
     };
 
     const handleEdit = (event: MarketingEvent) => {
         setEditingEvent(event);
-        setIsDialogOpen(true);
+        setView('form');
     };
 
     const getStatusBadge = (status: MarketingEvent['status']) => {
@@ -65,6 +66,30 @@ export function MarketingEventsView() {
             default: return <Badge variant="secondary">Planned</Badge>;
         }
     };
+
+    if (view === 'form') {
+        return (
+            <div className="w-full max-w-4xl mx-auto space-y-6">
+                <Button variant="ghost" onClick={() => setView('list')} className="gap-2 mb-2 font-headline">
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to Activities
+                </Button>
+                <MarketingEventForm 
+                    doctors={doctors}
+                    event={editingEvent}
+                    onCancel={() => setView('list')}
+                    onSave={async (data) => {
+                        if (editingEvent) {
+                            await updateEvent({ ...editingEvent, ...data });
+                        } else {
+                            await addEvent(data);
+                        }
+                        setView('list');
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-[1400px] mx-auto">
@@ -188,20 +213,6 @@ export function MarketingEventsView() {
                     ))}
                 </div>
             )}
-
-            <MarketingEventDialog 
-                isOpen={isDialogOpen} 
-                onOpenChange={setIsDialogOpen} 
-                onSave={async (data) => {
-                    if (editingEvent) {
-                        await updateEvent({ ...editingEvent, ...data });
-                    } else {
-                        await addEvent(data);
-                    }
-                }}
-                doctors={doctors}
-                event={editingEvent}
-            />
         </div>
     );
 }
