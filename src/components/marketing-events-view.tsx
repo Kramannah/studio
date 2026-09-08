@@ -72,7 +72,7 @@ export function MarketingEventsView() {
             <div className="w-full max-w-4xl mx-auto space-y-6">
                 <Button variant="ghost" onClick={() => setView('list')} className="gap-2 mb-2 font-headline">
                     <ChevronLeft className="w-4 h-4" />
-                    Back to Activities
+                    Back to Programs
                 </Button>
                 <MarketingEventForm 
                     doctors={doctors}
@@ -95,19 +95,19 @@ export function MarketingEventsView() {
         <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-[1400px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Activities</h2>
-                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Clinical Meetings & Professional Events</p>
+                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Programs</h2>
+                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Clinical Updates & Professional Events</p>
                 </div>
                 <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
                     <Plus className="w-5 h-5" />
-                    Log New Activity
+                    Log New Program
                 </Button>
             </div>
 
             {loading && events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 border-4 border-dashed rounded-[2rem] bg-muted/5">
                     <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-                    <p className="font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Accessing events database...</p>
+                    <p className="font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Accessing programs database...</p>
                 </div>
             ) : events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-20 border-4 border-dashed rounded-[2rem] bg-muted/5 text-center space-y-6">
@@ -115,13 +115,10 @@ export function MarketingEventsView() {
                         <Presentation className="w-10 h-10 text-muted-foreground" />
                     </div>
                     <div className="space-y-2">
-                        <h3 className="text-2xl font-black font-headline text-foreground">No Activities Recorded</h3>
-                        <p className="text-muted-foreground max-w-sm mx-auto">
-                            Start tracking your clinical updates, RTDs, and conventions to improve territory oversight.
-                        </p>
+                        <h3 className="text-2xl font-black font-headline text-foreground">No Programs Recorded</h3>
                     </div>
                     <Button onClick={handleAdd} variant="outline" className="border-2 rounded-xl h-11 px-8 font-headline">
-                        Create Your First Event
+                        Record Your First Program
                     </Button>
                 </div>
             ) : (
@@ -155,8 +152,8 @@ export function MarketingEventsView() {
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete this activity?</AlertDialogTitle>
-                                                            <AlertDialogDescription>This action will permanently remove the event record.</AlertDialogDescription>
+                                                            <AlertDialogTitle>Delete this program record?</AlertDialogTitle>
+                                                            <AlertDialogDescription>This action will permanently remove the record.</AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>

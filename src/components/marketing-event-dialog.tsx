@@ -28,12 +28,27 @@ import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
 import { ScrollArea } from "./ui/scroll-area"
 
+const MARKETING_PROGRAMS = [
+  "DapaTalk (1 on 1)",
+  "DapaTalk (group)",
+  "RoxaTalk (1 on 1)",
+  "MycoToc (1-on-1)",
+  "MycoToc (group)",
+  "DermOb In-Clinic Snack",
+  "Think-Tank-Toc",
+  "DapaRox PP",
+  "DermToc",
+  "TGP",
+  "Gastro RTD",
+  "General Lines PP"
+];
+
 const eventSchema = z.object({
   isListed: z.boolean(),
   doctorId: z.string().optional(),
   doctorFirstName: z.string().min(1, "First Name is required"),
   doctorLastName: z.string().min(1, "Last Name is required"),
-  eventName: z.string().min(1, "Activity Name is required"),
+  eventName: z.string().min(1, "Program is required"),
   eventType: z.enum(['RTD', 'Convention', 'Booth Activity', 'Product Launch', 'Medical Society Meeting']),
   eventDate: z.date(),
   venue: z.string().optional(),
@@ -120,8 +135,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
     <Card className="border-2 shadow-xl animate-in slide-in-from-right-4 duration-300">
       <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20">
         <div>
-          <CardTitle className="font-headline text-xl text-primary">{event ? 'Modify Activity' : 'Log New Activity'}</CardTitle>
-          <CardDescription>Enter details for clinical updates, meetings, or conventions.</CardDescription>
+          <CardTitle className="font-headline text-xl text-primary">{event ? 'Modify Program' : 'Log Marketing Program'}</CardTitle>
         </div>
         <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full">
             <X className="w-5 h-5" />
@@ -211,8 +225,19 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         name="eventName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="font-headline">Activity Name / Event Theme</FormLabel>
-                                <FormControl><Input {...field} placeholder="e.g. 1st Quarter RTD Update" className="h-11 border-2 rounded-xl" /></FormControl>
+                                <FormLabel className="font-headline">Marketing Program</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="h-11 border-2 rounded-xl">
+                                            <SelectValue placeholder="Select Program..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {MARKETING_PROGRAMS.map(program => (
+                                            <SelectItem key={program} value={program}>{program}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -342,7 +367,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                     className="flex-1 h-14 font-headline text-lg rounded-2xl shadow-xl transition-all active:scale-[0.98] font-black"
                 >
                     {isSubmitting ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Save className="mr-2 h-6 w-6" />}
-                    {event ? 'Confirm Changes' : 'Save Activity'}
+                    {event ? 'Confirm Changes' : 'Save Program'}
                 </Button>
                 <Button 
                     type="button" 
