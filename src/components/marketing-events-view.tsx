@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
 import { MarketingEventForm } from "./marketing-event-dialog";
