@@ -45,6 +45,10 @@ export interface CoverageEntry {
 export interface MarketingEvent {
   id: string;
   userId: string;
+  isListed: boolean;
+  doctorId?: string;
+  doctorFirstName: string;
+  doctorLastName: string;
   eventName: string;
   eventType: 'RTD' | 'Convention' | 'Booth Activity' | 'Product Launch' | 'Medical Society Meeting';
   eventDate: string; // ISO string

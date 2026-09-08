@@ -110,6 +110,10 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
+        "isListed": { "type": "boolean" },
+        "doctorId": { "type": "string" },
+        "doctorFirstName": { "type": "string" },
+        "doctorLastName": { "type": "string" },
         "eventName": { "type": "string" },
         "eventType": { "enum": ["RTD", "Convention", "Booth Activity", "Product Launch", "Medical Society Meeting"] },
         "eventDate": { "type": "string", "format": "date-time" },
@@ -118,7 +122,7 @@
         "status": { "enum": ["planned", "completed", "cancelled"] },
         "remarks": { "type": "string" }
       },
-      "required": ["userId", "eventName", "eventType", "eventDate"]
+      "required": ["userId", "eventName", "eventType", "eventDate", "doctorFirstName", "doctorLastName"]
     },
     "PlanningPermissionRequest": {
       "title": "PlanningPermissionRequest",
