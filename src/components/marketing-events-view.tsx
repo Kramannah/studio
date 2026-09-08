@@ -395,8 +395,8 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
 
             {/* Completion Dialog */}
             <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, group: null })}>
-                <DialogContent className="sm:max-w-xl border-2 p-0 overflow-hidden flex flex-col max-h-[90vh]">
-                    <DialogHeader className="p-6 shrink-0 border-b bg-background">
+                <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto border-2 border-primary/20 shadow-2xl p-6">
+                    <DialogHeader className="mb-6">
                         <DialogTitle className="font-headline text-xl flex items-center gap-2">
                             <CheckCircle2 className="text-green-500" /> Confirm Program Attendance
                         </DialogTitle>
@@ -405,77 +405,89 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                         </DialogDescription>
                     </DialogHeader>
                     
-                    <ScrollArea className="flex-1">
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-4">
-                                <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Provider Attendance List</Label>
-                                <div className="grid grid-cols-1 gap-2">
-                                    {completionDialog.group?.map(event => {
-                                        const status = individualAttendance[event.id];
-                                        return (
-                                            <div 
-                                                key={event.id} 
-                                                className={cn(
-                                                    "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer",
-                                                    status === 'attended' ? "border-primary bg-primary/5" : "border-muted bg-muted/20 opacity-60"
-                                                )}
-                                                onClick={() => toggleIndividualAttendance(event.id)}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "h-5 w-5 rounded-full flex items-center justify-center border",
-                                                        status === 'attended' ? "bg-primary border-primary text-white" : "border-muted-foreground text-transparent"
-                                                    )}>
-                                                        <Check className="h-3 w-3" strokeWidth={3} />
-                                                    </div>
-                                                    <span className="font-bold text-sm">Dr. {event.doctorFirstName} {event.doctorLastName}</span>
+                    <div className="space-y-8">
+                        <div className="space-y-4">
+                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Provider Attendance List</Label>
+                            <div className="grid grid-cols-1 gap-2">
+                                {completionDialog.group?.map(event => {
+                                    const status = individualAttendance[event.id];
+                                    return (
+                                        <div 
+                                            key={event.id} 
+                                            className={cn(
+                                                "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer",
+                                                status === 'attended' ? "border-primary bg-primary/5" : "border-muted bg-muted/20 opacity-60"
+                                            )}
+                                            onClick={() => toggleIndividualAttendance(event.id)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn(
+                                                    "h-5 w-5 rounded-full flex items-center justify-center border",
+                                                    status === 'attended' ? "bg-primary border-primary text-white" : "border-muted-foreground text-transparent"
+                                                )}>
+                                                    <Check className="h-3 w-3" strokeWidth={3} />
                                                 </div>
-                                                <Badge variant={status === 'attended' ? "default" : "outline"} className="text-[10px]">
-                                                    {status === 'attended' ? "Present" : "No-Show"}
-                                                </Badge>
+                                                <span className="font-bold text-sm">Dr. {event.doctorFirstName} {event.doctorLastName}</span>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <Badge variant={status === 'attended' ? "default" : "outline"} className="text-[10px]">
+                                                {status === 'attended' ? "Present" : "No-Show"}
+                                            </Badge>
+                                        </div>
+                                    );
+                                })}
                             </div>
+                        </div>
 
-                            {anyAttended && (
-                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                                    <Label className="font-headline text-xs uppercase text-primary">Required Proof Photo (for Present Doctors)</Label>
-                                    <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
-                                    
-                                    {proofPhoto ? (
-                                        <div className="relative aspect-video w-full rounded-2xl border-2 overflow-hidden bg-muted">
-                                            <Image src={proofPhoto} alt="Proof Preview" fill className="object-contain" />
-                                            <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full" onClick={() => setProofPhoto(null)} disabled={isProcessing}>
-                                                <Trash2 className="w-4 h-4" />
+                        {anyAttended && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                <Label className="font-headline text-xs uppercase text-primary font-black">Required Proof Photo (for Present Doctors)</Label>
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                                
+                                {proofPhoto ? (
+                                    <div className="relative aspect-video w-full rounded-2xl border-2 overflow-hidden bg-muted group">
+                                        <Image src={proofPhoto} alt="Proof Preview" fill className="object-contain" />
+                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <Button variant="destructive" size="icon" className="h-12 w-12 rounded-full shadow-lg" onClick={() => setProofPhoto(null)} disabled={isProcessing}>
+                                                <Trash2 className="w-6 h-6" />
                                             </Button>
                                         </div>
-                                    ) : (
-                                        <Button variant="outline" className="w-full h-32 border-dashed border-2 flex-col gap-2 rounded-2xl" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
-                                            <Camera className="w-8 h-8 text-muted-foreground" />
-                                            <span className="text-sm font-medium">Capture or Upload Proof Photo</span>
-                                        </Button>
-                                    )}
-                                </div>
-                            )}
+                                    </div>
+                                ) : (
+                                    <Button 
+                                        variant="outline" 
+                                        className="w-full h-40 border-dashed border-2 flex-col gap-3 rounded-2xl hover:bg-primary/5 hover:border-primary transition-all group" 
+                                        onClick={() => fileInputRef.current?.click()} 
+                                        disabled={isProcessing}
+                                    >
+                                        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <Camera className="w-7 h-7 text-muted-foreground group-hover:text-primary" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-bold">Capture or Upload Proof Photo</p>
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Tap to access camera or gallery</p>
+                                        </div>
+                                    </Button>
+                                )}
+                            </div>
+                        )}
 
-                            {!anyAttended && (
-                                <div className="bg-muted/50 p-4 rounded-xl border-2 border-dashed text-center">
-                                    <p className="text-sm text-muted-foreground italic">No doctors marked as present. No proof photo is required for this batch.</p>
-                                </div>
-                            )}
-                        </div>
-                    </ScrollArea>
+                        {!anyAttended && (
+                            <div className="bg-muted/50 p-6 rounded-xl border-2 border-dashed text-center">
+                                <p className="text-sm text-muted-foreground italic font-medium">No doctors marked as present. No proof photo is required for this batch.</p>
+                            </div>
+                        )}
+                    </div>
 
-                    <DialogFooter className="p-6 shrink-0 border-t bg-muted/20 gap-2 flex flex-row items-center justify-end">
-                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, group: null })} disabled={isProcessing}>Close</Button>
+                    <DialogFooter className="mt-8 pt-6 border-t gap-3 flex flex-row items-center justify-end">
+                        <Button variant="ghost" className="font-headline h-12 px-6" onClick={() => setCompletionDialog({ isOpen: false, group: null })} disabled={isProcessing}>
+                            Close
+                        </Button>
                         <Button 
-                            className="font-headline px-8" 
+                            className="font-headline h-12 px-10 shadow-xl" 
                             onClick={handleSaveCompletion}
                             disabled={(anyAttended && !proofPhoto) || isProcessing}
                         >
-                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Program"}
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing...</> : "Finalize Program"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
