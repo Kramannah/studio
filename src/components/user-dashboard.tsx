@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
-import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest } from "@/lib/types";
+import type { CoverageEntry, Doctor, Plan, NonCallDay, TimeLog, PlanningPermissionRequest, MarketingEvent } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SubmittedList } from "@/components/submitted-list";
 import { MasterList } from "@/components/master-list";
@@ -13,6 +13,7 @@ import { RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Q4AllocationView } from "./q4-allocation-view";
+import { MarketingEventsView } from "./marketing-events-view";
 
 interface UserDashboardProps {
     userId: string;
@@ -60,7 +61,6 @@ export function UserDashboard({
     const [isRefreshing, setIsRefreshing] = useState(false);
     const lastFetchedRef = useRef<string>("");
 
-    // Undone "Cost Saving": Remove lazy loading by tab. Always fetch broad data for accuracy.
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
             const fetchKey = `${userId}_${selectedMonth}`;
@@ -107,6 +107,12 @@ export function UserDashboard({
                             className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
                         >
                             Planning
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="events" 
+                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                        >
+                            Marketing Events
                         </TabsTrigger>
                         <TabsTrigger 
                             value="master" 
@@ -179,6 +185,10 @@ export function UserDashboard({
                             selectedMonth={selectedMonth}
                             onMonthChange={onMonthChange}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="events" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+                        <MarketingEventsView userId={userId} readOnly={true} />
                     </TabsContent>
                     
                     <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">

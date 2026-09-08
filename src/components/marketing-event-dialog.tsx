@@ -135,7 +135,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
     <Card className="border-2 shadow-xl animate-in slide-in-from-right-4 duration-300">
       <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20">
         <div>
-          <CardTitle className="font-headline text-xl text-primary">{event ? 'Modify Program' : 'Log Marketing Program'}</CardTitle>
+          <CardTitle className="font-headline text-xl text-primary">{event ? 'Modify Event' : 'Log Marketing Event'}</CardTitle>
         </div>
         <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full">
             <X className="w-5 h-5" />
@@ -249,11 +249,11 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         name="eventName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="font-headline text-primary">Marketing Program</FormLabel>
+                                <FormLabel className="font-headline text-primary">Marketing Event</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger className="h-11 border-2 rounded-xl">
-                                            <SelectValue placeholder="Select Program..." />
+                                            <SelectValue placeholder="Select Event..." />
                                         </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
@@ -272,7 +272,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         name="eventDate"
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
-                            <FormLabel className="font-headline mb-2 text-primary">Program Date</FormLabel>
+                            <FormLabel className="font-headline mb-2 text-primary">Event Date</FormLabel>
                             <Popover>
                                 <PopoverTrigger asChild>
                                 <FormControl>
@@ -308,7 +308,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                     className="flex-1 h-14 font-headline text-lg rounded-2xl shadow-xl transition-all active:scale-[0.98] font-black"
                 >
                     {isSubmitting ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Save className="mr-2 h-6 w-6" />}
-                    {event ? 'Confirm Changes' : 'Save Program'}
+                    {event ? 'Confirm Changes' : 'Save Event'}
                 </Button>
                 <Button 
                     type="button" 

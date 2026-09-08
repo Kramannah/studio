@@ -24,7 +24,8 @@ import {
     ChevronLeft,
     Camera,
     Image as ImageIcon,
-    Filter
+    Filter,
+    Maximize2
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -47,8 +48,13 @@ import Image from "next/image";
 import { compressImage } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 
-export function MarketingEventsView() {
-    const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents();
+interface MarketingEventsViewProps {
+    userId?: string;
+    readOnly?: boolean;
+}
+
+export function MarketingEventsView({ userId, readOnly = false }: MarketingEventsViewProps) {
+    const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents(true, undefined, userId);
     const { doctors } = useDoctors();
     const { toast } = useToast();
     
@@ -66,6 +72,9 @@ export function MarketingEventsView() {
     const [proofPhoto, setProofPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Image Preview State
+    const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
     const filteredEvents = useMemo(() => {
         if (selectedQuarter === 'all') return events;
@@ -93,7 +102,6 @@ export function MarketingEventsView() {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 const base64 = event.target?.result as string;
-                // Immediate compression to save browser memory
                 const compressed = await compressImage(base64, 800, 0.5);
                 setProofPhoto(compressed);
             };
@@ -133,7 +141,7 @@ export function MarketingEventsView() {
             <div className="w-full max-w-4xl mx-auto space-y-6">
                 <Button variant="ghost" onClick={() => setView('list')} className="gap-2 mb-2 font-headline">
                     <ChevronLeft className="w-4 h-4" />
-                    Back to Programs
+                    Back to Events
                 </Button>
                 <MarketingEventForm 
                     doctors={doctors}
@@ -157,8 +165,7 @@ export function MarketingEventsView() {
         <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-[1400px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Programs</h2>
-                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Master Workflow</p>
+                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Events</h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border-2">
@@ -176,10 +183,12 @@ export function MarketingEventsView() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
-                        <Plus className="w-5 h-5" />
-                        Log New Program
-                    </Button>
+                    {!readOnly && (
+                        <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
+                            <Plus className="w-5 h-5" />
+                            Log New Event
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -197,7 +206,7 @@ export function MarketingEventsView() {
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
                                     <TableHead className="font-bold">Quarter</TableHead>
-                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold">Marketing Event</TableHead>
                                     <TableHead className="font-bold text-center">Scheduled Date</TableHead>
                                     <TableHead className="text-right pr-6">Actions</TableHead>
                                 </TableRow>
@@ -216,32 +225,34 @@ export function MarketingEventsView() {
                                             {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-right pr-6">
-                                            <div className="flex justify-end gap-2">
-                                                <Button size="sm" onClick={() => handleOpenComplete(event)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
-                                                    Complete
-                                                </Button>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white font-headline h-9">
-                                                            Cancel
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Cancel this program?</AlertDialogTitle>
-                                                            <AlertDialogDescription>This will move the program to the Canceled section.</AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Go Back</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleCancelEvent(event)} className="bg-destructive text-white">Confirm Cancellation</AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </div>
+                                            {!readOnly && (
+                                                <div className="flex justify-end gap-2">
+                                                    <Button size="sm" onClick={() => handleOpenComplete(event)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
+                                                        Complete
+                                                    </Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white font-headline h-9">
+                                                                Cancel
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Cancel this event?</AlertDialogTitle>
+                                                                <AlertDialogDescription>This will move the event to the Canceled section.</AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Go Back</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleCancelEvent(event)} className="bg-destructive text-white">Confirm Cancellation</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No pending programs for the selected quarter.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No pending events for the selected quarter.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -255,7 +266,7 @@ export function MarketingEventsView() {
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
                                     <TableHead className="font-bold">Quarter</TableHead>
-                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold">Marketing Event</TableHead>
                                     <TableHead className="font-bold text-center">Status</TableHead>
                                     <TableHead className="font-bold text-center">Proof</TableHead>
                                     <TableHead className="text-right pr-6">Date Finished</TableHead>
@@ -277,8 +288,14 @@ export function MarketingEventsView() {
                                         <TableCell className="text-center">
                                             {event.proofPhoto ? (
                                                 <div className="flex justify-center">
-                                                    <div className="w-10 h-10 rounded border-2 border-primary/20 overflow-hidden relative group cursor-pointer">
+                                                    <div 
+                                                        className="w-10 h-10 rounded border-2 border-primary/20 overflow-hidden relative group cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                                        onClick={() => setPreviewImage({ src: event.proofPhoto!, title: `Proof: ${event.doctorFirstName} ${event.doctorLastName}` })}
+                                                    >
                                                         <Image src={event.proofPhoto} alt="Proof" fill className="object-cover" />
+                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <Maximize2 className="w-3 h-3 text-white" />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ) : <span className="text-xs text-muted-foreground">—</span>}
@@ -288,7 +305,7 @@ export function MarketingEventsView() {
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={6} className="h-40 text-center text-muted-foreground italic">No completed programs yet.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="h-40 text-center text-muted-foreground italic">No completed events yet.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -302,7 +319,7 @@ export function MarketingEventsView() {
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
                                     <TableHead className="font-bold">Quarter</TableHead>
-                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold">Marketing Event</TableHead>
                                     <TableHead className="font-bold text-center">Type</TableHead>
                                     <TableHead className="text-right pr-6">Original Date</TableHead>
                                 </TableRow>
@@ -323,7 +340,7 @@ export function MarketingEventsView() {
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No canceled programs.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No canceled events.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -387,9 +404,34 @@ export function MarketingEventsView() {
                             onClick={handleSaveCompletion}
                             disabled={(attendance === 'attended' && !proofPhoto) || isProcessing}
                         >
-                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Program"}
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Event"}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Proof Preview Dialog */}
+            <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+                <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/95 z-[1000]">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>{previewImage?.title || "Proof Preview"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="relative w-full h-[85vh] flex items-center justify-center p-4">
+                        {previewImage?.src && (
+                            <Image 
+                                src={previewImage.src} 
+                                alt="Full Proof" 
+                                width={1600} 
+                                height={1200} 
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" 
+                            />
+                        )}
+                    </div>
+                    <div className="absolute top-4 left-4">
+                        <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg border-2 border-primary/20">
+                            {previewImage?.title}
+                        </Badge>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

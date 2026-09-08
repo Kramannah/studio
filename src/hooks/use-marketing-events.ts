@@ -22,15 +22,17 @@ const sanitizeData = (data: any) => {
   );
 };
 
-export const useMarketingEvents = (active: boolean = true, selectedMonth?: string) => {
+export const useMarketingEvents = (active: boolean = true, selectedMonth?: string, userId?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const effectiveUserId = userId || user?.uid;
+  
   const [events, setEvents] = useState<MarketingEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const lastFetchRef = useRef<number>(0);
 
   const fetchEvents = useCallback(async (force = false) => {
-    if (!user || !db || (!active && !force) || !navigator.onLine) return;
+    if (!effectiveUserId || !db || (!active && !force) || !navigator.onLine) return;
 
     const now = Date.now();
     if (!force && (now - lastFetchRef.current < EVENTS_CACHE_TTL) && events.length > 0) return;
@@ -38,13 +40,12 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     setLoading(true);
     try {
       const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-      // Look back 1 month for historical context in the dashboard
       const start = startOfMonth(subMonths(refDate, 1)).toISOString();
       const end = endOfMonth(refDate).toISOString();
 
       const q = query(
         collection(db, "marketingEvents"),
-        where("userId", "==", user.uid),
+        where("userId", "==", effectiveUserId),
         where("eventDate", ">=", start),
         where("eventDate", "<=", end),
         orderBy("eventDate", "desc"),
@@ -60,15 +61,15 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     } finally {
       setLoading(false);
     }
-  }, [user?.uid, active, selectedMonth]);
+  }, [effectiveUserId, active, selectedMonth, events.length]);
 
   useEffect(() => {
-    if (active && user) fetchEvents();
-  }, [fetchEvents, active, user]);
+    if (active && effectiveUserId) fetchEvents();
+  }, [fetchEvents, active, effectiveUserId]);
 
   const addEvent = async (eventData: Omit<MarketingEvent, 'id' | 'userId'>) => {
-    if (!user || !db) return;
-    const payload = { ...eventData, userId: user.uid };
+    if (!effectiveUserId || !db) return;
+    const payload = { ...eventData, userId: effectiveUserId };
     const sanitized = sanitizeData(payload);
 
     return addDoc(collection(db, "marketingEvents"), sanitized)
