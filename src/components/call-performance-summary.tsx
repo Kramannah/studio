@@ -67,11 +67,10 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
-            // TIMEZONE BUFFER: Expand query by 24h to capture Manila (UTC+8) records safely
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // Identify Target PMRs - Mirror logic from District Reports
+            // PMR DISCOVERY: Exact mirror of District Reports logic
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
@@ -112,26 +111,21 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // 1. Resolve DSM Name dynamically for each PMR to ensure accuracy
+                // DSM MAPPING: If a manager is selected, use that. If 'All', resolve based on PMR assignment.
                 let pmrManagerName = "Unassigned";
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
 
                 if (selectedManagerId === "all") {
                     const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
-                    const managerData = mId ? userProfiles[mId] : null;
-                    if (managerData) {
-                        pmrManagerName = `${managerData.firstName} ${managerData.lastName}`;
-                    } else if (mId) {
-                        const hManager = managers.find(m => m.uid === mId);
-                        pmrManagerName = hManager?.name || mId;
-                    }
+                    const hManager = managers.find(m => m.uid === mId);
+                    pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
                 } else {
                     const selectedManager = managers.find(m => m.uid === selectedManagerId);
                     pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
                 }
 
-                // 2. Calculate Active Days (Reporting-based weighted sum logic)
+                // ACTIVE DAYS: Weighted sum of reporting days logic (Matches PMR Dashboard)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
@@ -154,7 +148,7 @@ export function CallPerformanceSummary({
                     else activeDaysCount += 1.0;
                 });
 
-                // 3. Metrics (Raw Numerators)
+                // METRICS: Raw counts (numerators only)
                 const totalCallsCount = uEntries.length;
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
@@ -185,7 +179,7 @@ export function CallPerformanceSummary({
             const fileName = `Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
-            toast({ title: "Audit Exported", description: `Calculated metrics for ${excelRows.length} representatives.` });
+            toast({ title: "Audit Exported", description: `Compiled records for ${excelRows.length} representatives.` });
 
         } catch (error: any) {
             console.error("Audit Engine Error:", error);

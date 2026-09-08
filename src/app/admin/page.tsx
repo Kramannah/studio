@@ -91,7 +91,7 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-    // Performance section restricted to Super Admin or HQ Staff
+    // PERFORMANCE RESTRICTION: Hidden from DSMs, strictly for National/HQ
     const canSeePerformance = isSuperAdmin || isMarketingOrHR;
 
     useEffect(() => {
