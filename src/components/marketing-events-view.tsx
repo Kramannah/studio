@@ -42,10 +42,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Image from "next/image";
+import { compressImage } from "@/lib/storage-utils";
+import { useToast } from "@/hooks/use-toast";
 
 export function MarketingEventsView() {
     const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents();
     const { doctors } = useDoctors();
+    const { toast } = useToast();
     
     const [view, setView] = useState<'list' | 'form'>('list');
     const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
@@ -58,6 +61,7 @@ export function MarketingEventsView() {
     });
     const [attendance, setAttendance] = useState<'attended' | 'not-attended'>('attended');
     const [proofPhoto, setProofPhoto] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const pendingEvents = useMemo(() => events.filter(e => e.status === 'planned'), [events]);
@@ -79,26 +83,41 @@ export function MarketingEventsView() {
         const file = e.target.files?.[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = (event) => setProofPhoto(event.target?.result as string);
+            reader.onload = async (event) => {
+                const base64 = event.target?.result as string;
+                // Immediate compression to save browser memory
+                const compressed = await compressImage(base64, 800, 0.5);
+                setProofPhoto(compressed);
+            };
             reader.readAsDataURL(file);
         }
     };
 
     const handleSaveCompletion = async () => {
-        if (!completionDialog.event) return;
+        if (!completionDialog.event || isProcessing) return;
         
-        await updateEvent({
-            ...completionDialog.event,
-            status: 'completed',
-            attendanceStatus: attendance,
-            proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
-        });
-        
-        setCompletionDialog({ isOpen: false, event: null });
+        setIsProcessing(true);
+        try {
+            await updateEvent({
+                ...completionDialog.event,
+                status: 'completed',
+                attendanceStatus: attendance,
+                proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
+            });
+            
+            setCompletionDialog({ isOpen: false, event: null });
+            setActiveTab('completed');
+        } catch (error) {
+            console.error("Failed to complete program:", error);
+            toast({ variant: 'destructive', title: "Process Failed", description: "Could not finalize the program record." });
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleCancelEvent = async (event: MarketingEvent) => {
         await updateEvent({ ...event, status: 'cancelled' });
+        setActiveTab('canceled');
     };
 
     if (view === 'form') {
@@ -119,6 +138,7 @@ export function MarketingEventsView() {
                             await addEvent({ ...data, status: 'planned' } as any);
                         }
                         setView('list');
+                        setActiveTab('pending');
                     }}
                 />
             </div>
@@ -139,7 +159,7 @@ export function MarketingEventsView() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6">
+                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6 w-full sm:w-auto overflow-x-auto justify-start">
                     <TabsTrigger value="pending" className="px-8 rounded-lg font-headline">Pending ({pendingEvents.length})</TabsTrigger>
                     <TabsTrigger value="completed" className="px-8 rounded-lg font-headline">Completed ({completedEvents.length})</TabsTrigger>
                     <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline">Canceled ({canceledEvents.length})</TabsTrigger>
@@ -164,7 +184,7 @@ export function MarketingEventsView() {
                                             <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{event.eventName}</Badge>
                                         </TableCell>
                                         <TableCell className="text-center text-sm font-medium text-muted-foreground">
-                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-right pr-6">
                                             <div className="flex justify-end gap-2">
@@ -231,7 +251,7 @@ export function MarketingEventsView() {
                                             ) : <span className="text-xs text-muted-foreground">—</span>}
                                         </TableCell>
                                         <TableCell className="text-right pr-6 text-sm text-muted-foreground">
-                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
                                         </TableCell>
                                     </TableRow>
                                 )) : (
@@ -262,7 +282,7 @@ export function MarketingEventsView() {
                                             <Badge variant="outline" className="border-destructive/30 text-destructive/50">Canceled</Badge>
                                         </TableCell>
                                         <TableCell className="text-right pr-6 text-sm text-muted-foreground">
-                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
                                         </TableCell>
                                     </TableRow>
                                 )) : (
@@ -275,7 +295,7 @@ export function MarketingEventsView() {
             </Tabs>
 
             {/* Completion Dialog */}
-            <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && setCompletionDialog({ isOpen: false, event: null })}>
+            <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, event: null })}>
                 <DialogContent className="sm:max-w-md border-2">
                     <DialogHeader>
                         <DialogTitle className="font-headline text-xl flex items-center gap-2">
@@ -309,12 +329,12 @@ export function MarketingEventsView() {
                                 {proofPhoto ? (
                                     <div className="relative aspect-video w-full rounded-2xl border-2 overflow-hidden bg-muted">
                                         <Image src={proofPhoto} alt="Proof Preview" fill className="object-contain" />
-                                        <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full" onClick={() => setProofPhoto(null)}>
+                                        <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full" onClick={() => setProofPhoto(null)} disabled={isProcessing}>
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
                                     </div>
                                 ) : (
-                                    <Button variant="outline" className="w-full h-32 border-dashed border-2 flex-col gap-2 rounded-2xl" onClick={() => fileInputRef.current?.click()}>
+                                    <Button variant="outline" className="w-full h-32 border-dashed border-2 flex-col gap-2 rounded-2xl" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
                                         <Camera className="w-8 h-8 text-muted-foreground" />
                                         <span className="text-sm font-medium">Capture or Upload Photo</span>
                                     </Button>
@@ -324,13 +344,13 @@ export function MarketingEventsView() {
                     </div>
 
                     <DialogFooter className="gap-2">
-                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, event: null })}>Close</Button>
+                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, event: null })} disabled={isProcessing}>Close</Button>
                         <Button 
                             className="font-headline px-8" 
                             onClick={handleSaveCompletion}
-                            disabled={attendance === 'attended' && !proofPhoto}
+                            disabled={(attendance === 'attended' && !proofPhoto) || isProcessing}
                         >
-                            Finalize Program
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Program"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

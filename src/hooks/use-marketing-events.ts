@@ -13,6 +13,15 @@ import { parseISO, format, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
 const EVENTS_CACHE_TTL = 10 * 60 * 1000; // 10 Minutes
 
+/**
+ * Sanitizes an object by removing undefined values.
+ */
+const sanitizeData = (data: any) => {
+  return Object.fromEntries(
+    Object.entries(data).filter(([_, v]) => v !== undefined)
+  );
+};
+
 export const useMarketingEvents = (active: boolean = true, selectedMonth?: string) => {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -29,6 +38,7 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     setLoading(true);
     try {
       const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+      // Look back 1 month for historical context in the dashboard
       const start = startOfMonth(subMonths(refDate, 1)).toISOString();
       const end = endOfMonth(refDate).toISOString();
 
@@ -50,7 +60,7 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     } finally {
       setLoading(false);
     }
-  }, [user, active, selectedMonth, events.length]);
+  }, [user?.uid, active, selectedMonth]);
 
   useEffect(() => {
     if (active && user) fetchEvents();
@@ -59,16 +69,18 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
   const addEvent = async (eventData: Omit<MarketingEvent, 'id' | 'userId'>) => {
     if (!user || !db) return;
     const payload = { ...eventData, userId: user.uid };
-    addDoc(collection(db, "marketingEvents"), payload)
+    const sanitized = sanitizeData(payload);
+
+    return addDoc(collection(db, "marketingEvents"), sanitized)
       .then((docRef) => {
-        setEvents(prev => [{ id: docRef.id, ...payload } as MarketingEvent, ...prev]);
+        setEvents(prev => [{ id: docRef.id, ...sanitized } as MarketingEvent, ...prev]);
         toast({ title: "Event Logged" });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: 'marketingEvents',
           operation: 'create',
-          requestResourceData: payload,
+          requestResourceData: sanitized,
         }));
       });
   };
@@ -77,16 +89,18 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     if (!db) return;
     const { id, ...data } = event;
     const docRef = doc(db, "marketingEvents", id);
-    updateDoc(docRef, data)
+    const sanitized = sanitizeData(data);
+
+    return updateDoc(docRef, sanitized)
       .then(() => {
-        setEvents(prev => prev.map(e => e.id === id ? event : e));
+        setEvents(prev => prev.map(e => e.id === id ? { ...e, ...sanitized } : e));
         toast({ title: "Event Updated" });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: docRef.path,
           operation: 'update',
-          requestResourceData: data,
+          requestResourceData: sanitized,
         }));
       });
   };
@@ -94,7 +108,7 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
   const deleteEvent = async (id: string) => {
     if (!db) return;
     const docRef = doc(db, "marketingEvents", id);
-    deleteDoc(docRef)
+    return deleteDoc(docRef)
       .then(() => {
         setEvents(prev => prev.filter(e => e.id !== id));
         toast({ title: "Event Removed" });
