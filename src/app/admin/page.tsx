@@ -491,7 +491,15 @@ export default function AdminPage() {
                                                                 <Button 
                                                                     variant="ghost" 
                                                                     size="icon" 
-                                                                    onClick={() => setEditingAccount({ uid: acc.uid, firstName: acc.firstName, lastName: acc.lastName, managerId: acc.managerId, email: acc.email, code: acc.code, role: acc.role as any })}
+                                                                    onClick={() => setEditingAccount({ 
+                                                                        uid: acc.uid, 
+                                                                        firstName: acc.firstName, 
+                                                                        lastName: acc.lastName, 
+                                                                        managerId: acc.managerId || '', 
+                                                                        email: acc.email, 
+                                                                        code: acc.code, 
+                                                                        role: acc.role as any 
+                                                                    })}
                                                                 >
                                                                     <Pencil className="h-4 w-4" />
                                                                 </Button>
@@ -617,13 +625,42 @@ export default function AdminPage() {
                     </DialogHeader>
                     {editingAccount && (
                         <div className="grid gap-4 py-4">
-                             <div className="grid gap-2">
-                                <Label htmlFor="edit-email">Technical Identifier (Email)</Label>
-                                <Input 
-                                    id="edit-email" 
-                                    value={editingAccount.email} 
-                                    onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })}
-                                />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label>First Name</Label>
+                                    <Input value={editingAccount.firstName} onChange={(e) => setEditingAccount({...editingAccount, firstName: e.target.value})} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Last Name</Label>
+                                    <Input value={editingAccount.lastName} onChange={(e) => setEditingAccount({...editingAccount, lastName: e.target.value})} />
+                                </div>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>technical Email (Identifier)</Label>
+                                <Input value={editingAccount.email} onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Assigned District Manager</Label>
+                                <Select value={editingAccount.managerId || 'none'} onValueChange={(v) => setEditingAccount({...editingAccount, managerId: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Assign DSM..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">No Manager / HQ</SelectItem>
+                                        {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>System Role</Label>
+                                <Select value={editingAccount.role} onValueChange={(v: any) => setEditingAccount({...editingAccount, role: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Select Role..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="PMR">Representative (PMR)</SelectItem>
+                                        <SelectItem value="Manager">District Manager (DSM)</SelectItem>
+                                        <SelectItem value="Admin">Administrator (Admin)</SelectItem>
+                                        <SelectItem value="Marketing">Marketing</SelectItem>
+                                        <SelectItem value="HR">HR</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     )}

@@ -8,7 +8,8 @@ import {
     endOfMonth, 
     parseISO, 
     subDays,
-    addDays
+    addDays,
+    isValid
 } from "date-fns";
 import { 
     Loader2, 
@@ -71,23 +72,23 @@ export function CallPerformanceSummary({
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // PMR DISCOVERY: Exact mirror of District Reports logic to handle current assignments
-            const allAssignedIds = new Set<string>();
+            // PMR DISCOVERY: Mirroring Live District Reports
+            const allPmrIds = new Set<string>();
             if (selectedManagerId === "all") {
-                Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
+                Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allPmrIds.add(id)));
                 Object.values(userProfiles).forEach(p => {
-                    if (p.managerId && p.managerId !== 'none') allAssignedIds.add(p.userId);
+                    if (p.managerId && p.managerId !== 'none') allPmrIds.add(p.userId);
                 });
             } else {
                 const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
                 const dynamicIds = Object.values(userProfiles)
                     .filter(p => p.managerId === selectedManagerId)
                     .map(p => p.userId);
-                teamIds.forEach(id => allAssignedIds.add(id));
-                dynamicIds.forEach(id => allAssignedIds.add(id));
+                teamIds.forEach(id => allPmrIds.add(id));
+                dynamicIds.forEach(id => allPmrIds.add(id));
             }
 
-            const targetUserIds = Array.from(allAssignedIds);
+            const targetUserIds = Array.from(allPmrIds);
             if (targetUserIds.length === 0) {
                 toast({ variant: "destructive", title: "No PMRs Found", description: "No representatives assigned to the selected territory." });
                 setLoading(false);
@@ -112,31 +113,31 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // DSM RESOLUTION: Mirroring live District Reports tab
+                // DSM RESOLUTION: Precise Selection Logic
                 let pmrManagerName = "Unassigned";
-                if (selectedManagerId === "all") {
+                if (selectedManagerId !== "all") {
+                    const selectedManager = managers.find(m => m.uid === selectedManagerId);
+                    pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
+                } else {
                     const profile = userProfiles[uid];
                     const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
                     const hManager = managers.find(m => m.uid === mId);
                     pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
-                } else {
-                    const selectedManager = managers.find(m => m.uid === selectedManagerId);
-                    pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
                 }
 
-                // ACTIVE DAYS: Weighted sum of reporting days (Consistency with Dashboard)
+                // ACTIVE DAYS: Precise Weighted Reporting Days (Align with Dashboard)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
                         const d = parseAnyDate(n.date);
-                        if (d) uNcdMap.set(format(d, 'yyyy-MM-dd'), n.dayType);
+                        if (d && isValid(d)) uNcdMap.set(format(d, 'yyyy-MM-dd'), n.dayType);
                     }
                 });
 
                 const daysWithCalls = new Set<string>();
                 uEntries.forEach(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    if (d) daysWithCalls.add(format(d, 'yyyy-MM-dd'));
+                    if (d && isValid(d)) daysWithCalls.add(format(d, 'yyyy-MM-dd'));
                 });
 
                 let activeDaysCount = 0;
@@ -177,7 +178,7 @@ export function CallPerformanceSummary({
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            // DYNAMIC FILENAME: Territory + Month
+            // DYNAMIC FILENAME: Selection + Month
             const territoryName = selectedManagerId === "all" ? "Global" : (managers.find(m => m.uid === selectedManagerId)?.name || "Territory");
             const fileName = `Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
