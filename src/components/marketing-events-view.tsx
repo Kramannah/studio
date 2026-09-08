@@ -159,10 +159,10 @@ export function MarketingEventsView() {
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6 w-full sm:w-auto overflow-x-auto justify-start">
-                    <TabsTrigger value="pending" className="px-8 rounded-lg font-headline">Pending ({pendingEvents.length})</TabsTrigger>
-                    <TabsTrigger value="completed" className="px-8 rounded-lg font-headline">Completed ({completedEvents.length})</TabsTrigger>
-                    <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline">Canceled ({canceledEvents.length})</TabsTrigger>
+                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6 w-full sm:w-fit overflow-x-auto justify-start scrollbar-hide flex-nowrap">
+                    <TabsTrigger value="pending" className="px-8 rounded-lg font-headline whitespace-nowrap">Pending ({pendingEvents.length})</TabsTrigger>
+                    <TabsTrigger value="completed" className="px-8 rounded-lg font-headline whitespace-nowrap">Completed ({completedEvents.length})</TabsTrigger>
+                    <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline whitespace-nowrap">Canceled ({canceledEvents.length})</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="pending">
