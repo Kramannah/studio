@@ -147,11 +147,15 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                     doctors={doctors}
                     event={editingEvent}
                     onCancel={() => setView('list')}
-                    onSave={async (data) => {
+                    onSave={async (dataArray) => {
                         if (editingEvent) {
-                            await updateEvent({ ...editingEvent, ...data });
+                            // Edit mode only allows one doctor
+                            await updateEvent({ ...editingEvent, ...dataArray[0] });
                         } else {
-                            await addEvent({ ...data, status: 'planned' } as any);
+                            // Bulk create mode
+                            for (const data of dataArray) {
+                                await addEvent({ ...data, status: 'planned' } as any);
+                            }
                         }
                         setView('list');
                         setActiveTab('pending');

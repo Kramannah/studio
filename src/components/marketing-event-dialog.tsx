@@ -22,9 +22,10 @@ import { format, parseISO, isValid } from "date-fns"
 import type { MarketingEvent, Doctor } from "@/lib/types"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Loader2, Save, X } from "lucide-react"
+import { CalendarIcon, Loader2, Save, X, UserPlus, Trash2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
+import { Badge } from "./ui/badge"
 
 const MARKETING_PROGRAMS = [
   "DapaTalk (1 on 1)",
@@ -42,17 +43,20 @@ const MARKETING_PROGRAMS = [
 ];
 
 const eventSchema = z.object({
-  isListed: z.boolean(),
-  doctorId: z.string().optional(),
-  doctorFirstName: z.string().min(1, "First Name is required"),
-  doctorLastName: z.string().min(1, "Last Name is required"),
   eventName: z.string().min(1, "Program is required"),
   eventDate: z.date(),
   quarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
 });
 
+type ProviderEntry = {
+    id?: string;
+    firstName: string;
+    lastName: string;
+    isListed: boolean;
+};
+
 type MarketingEventFormProps = {
-  onSave: (data: Omit<MarketingEvent, 'id' | 'userId'>) => Promise<void>;
+  onSave: (data: Omit<MarketingEvent, 'id' | 'userId'>[]) => Promise<void>;
   onCancel: () => void;
   doctors: Doctor[];
   event?: MarketingEvent;
@@ -61,36 +65,36 @@ type MarketingEventFormProps = {
 export function MarketingEventForm({ onSave, onCancel, doctors, event }: MarketingEventFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [autocompleteValue, setAutocompleteValue] = useState("");
+  const [isListedMode, setIsListedMode] = useState(true);
+  const [selectedProviders, setSelectedProviders] = useState<ProviderEntry[]>([]);
+  
+  // Guest inputs
+  const [guestFirst, setGuestFirst] = useState("");
+  const [guestLast, setGuestLast] = useState("");
 
   const form = useForm<z.infer<typeof eventSchema>>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
-      isListed: true,
-      doctorId: "",
-      doctorFirstName: "",
-      doctorLastName: "",
       eventName: "",
       eventDate: new Date(),
       quarter: "Q1",
     },
   });
 
-  const isListed = form.watch("isListed");
-
   useEffect(() => {
     if (event) {
       form.reset({
-        isListed: event.isListed,
-        doctorId: event.doctorId || "",
-        doctorFirstName: event.doctorFirstName,
-        doctorLastName: event.doctorLastName,
         eventName: event.eventName,
         eventDate: event.eventDate ? parseISO(event.eventDate) : new Date(),
         quarter: event.quarter || "Q1",
       });
-      setAutocompleteValue(event.isListed ? `${event.doctorFirstName} ${event.doctorLastName}` : "");
+      setSelectedProviders([{
+          id: event.doctorId,
+          firstName: event.doctorFirstName,
+          lastName: event.doctorLastName,
+          isListed: event.isListed
+      }]);
     } else {
-      // Auto-detect current quarter
       const month = new Date().getMonth();
       let currentQ: "Q1" | "Q2" | "Q3" | "Q4" = "Q1";
       if (month >= 3 && month <= 5) currentQ = "Q2";
@@ -98,44 +102,72 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
       else if (month >= 9 && month <= 11) currentQ = "Q4";
 
       form.reset({
-        isListed: true,
-        doctorId: "",
-        doctorFirstName: "",
-        doctorLastName: "",
         eventName: "",
         eventDate: new Date(),
         quarter: currentQ,
       });
-      setAutocompleteValue("");
+      setSelectedProviders([]);
     }
   }, [event, form]);
 
-  const handleSelectDoctor = useCallback((doctor: Doctor) => {
-    form.setValue("doctorId", doctor.id, { shouldValidate: true, shouldDirty: true });
-    form.setValue("doctorFirstName", doctor.firstName, { shouldValidate: true, shouldDirty: true });
-    form.setValue("doctorLastName", doctor.lastName, { shouldValidate: true, shouldDirty: true });
-    setAutocompleteValue(`${doctor.firstName} ${doctor.lastName}`);
-  }, [form]);
+  const handleAddDoctorFromMaster = useCallback((doctor: Doctor) => {
+    if (!selectedProviders.find(p => p.id === doctor.id)) {
+        setSelectedProviders(prev => [...prev, {
+            id: doctor.id,
+            firstName: doctor.firstName,
+            lastName: doctor.lastName,
+            isListed: true
+        }]);
+    }
+    setAutocompleteValue("");
+  }, [selectedProviders]);
+
+  const handleAddGuest = () => {
+      if (guestFirst.trim() && guestLast.trim()) {
+          setSelectedProviders(prev => [...prev, {
+              firstName: guestFirst.trim(),
+              lastName: guestLast.trim(),
+              isListed: false
+          }]);
+          setGuestFirst("");
+          setGuestLast("");
+      }
+  };
+
+  const handleRemoveProvider = (index: number) => {
+      setSelectedProviders(prev => prev.filter((_, i) => i !== index));
+  };
 
   const onSubmit = async (values: z.infer<typeof eventSchema>) => {
+    if (selectedProviders.length === 0) return;
     setIsSubmitting(true);
     try {
-      await onSave({
-        ...values,
-        eventType: 'RTD', // Default for legacy compatibility
-        status: 'completed', // Default since user is logging it
-        eventDate: values.eventDate.toISOString(),
-      } as any);
+      const payloads = selectedProviders.map(p => ({
+          isListed: p.isListed,
+          doctorId: p.id,
+          doctorFirstName: p.firstName,
+          doctorLastName: p.lastName,
+          eventName: values.eventName,
+          eventDate: values.eventDate.toISOString(),
+          quarter: values.quarter,
+          eventType: 'RTD' as any,
+          status: 'planned' as any,
+      }));
+
+      await onSave(payloads);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const isEditMode = !!event;
+
   return (
     <Card className="border-2 shadow-xl animate-in slide-in-from-right-4 duration-300">
       <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/20">
         <div>
-          <CardTitle className="font-headline text-xl text-primary">{event ? 'Modify Event' : 'Log Marketing Event'}</CardTitle>
+          <CardTitle className="font-headline text-xl text-primary">{isEditMode ? 'Modify Event' : 'Log Marketing Event'}</CardTitle>
+          {!isEditMode && <CardDescription>You can add multiple doctors to this program.</CardDescription>}
         </div>
         <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-full">
             <X className="w-5 h-5" />
@@ -145,80 +177,96 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <div className="space-y-6">
+                
+                {/* PROVIDER SELECTION SECTION */}
                 <div className="space-y-4 bg-muted/30 p-5 rounded-2xl border-2 border-dashed">
-                    <FormField
-                        control={form.control}
-                        name="isListed"
-                        render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Provider Selection</FormLabel>
-                            <FormControl>
+                    {!isEditMode && (
+                        <div className="space-y-3 mb-6">
+                            <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Provider Selection Type</FormLabel>
                             <RadioGroup
-                                onValueChange={(v) => {
-                                    const listed = v === "true";
-                                    field.onChange(listed);
-                                    form.setValue("doctorId", "");
-                                    form.setValue("doctorFirstName", "");
-                                    form.setValue("doctorLastName", "");
-                                    setAutocompleteValue("");
-                                }}
-                                value={field.value ? "true" : "false"}
+                                value={isListedMode ? "true" : "false"}
+                                onValueChange={(v) => setIsListedMode(v === "true")}
                                 className="flex gap-4"
                             >
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="true" /></FormControl>
-                                    <FormLabel className="font-bold cursor-pointer">In Masterlist</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl><RadioGroupItem value="false" /></FormControl>
-                                    <FormLabel className="font-bold cursor-pointer">Guest / Not Listed</FormLabel>
-                                </FormItem>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="true" id="mode-listed" />
+                                    <FormLabel htmlFor="mode-listed" className="font-bold cursor-pointer">In Masterlist</FormLabel>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="false" id="mode-guest" />
+                                    <FormLabel htmlFor="mode-guest" className="font-bold cursor-pointer">Guest / Not Listed</FormLabel>
+                                </div>
                             </RadioGroup>
-                            </FormControl>
-                        </FormItem>
-                        )}
-                    />
-
-                    {isListed ? (
-                        <div className="space-y-2">
-                            <FormLabel className="font-headline text-xs uppercase text-primary">Registered Medical Provider</FormLabel>
-                            <Autocomplete 
-                                doctors={doctors} 
-                                value={autocompleteValue} 
-                                onChange={setAutocompleteValue} 
-                                onSelect={handleSelectDoctor}
-                                placeholder="Search by name or clinic..."
-                            />
-                            <FormMessage />
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
-                            <FormField
-                                control={form.control}
-                                name="doctorFirstName"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="font-headline text-xs text-primary">First Name</FormLabel>
-                                        <FormControl><Input {...field} placeholder="e.g. Maria" className="h-11 border-2 rounded-xl" /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="doctorLastName"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="font-headline text-xs text-primary">Last Name</FormLabel>
-                                        <FormControl><Input {...field} placeholder="e.g. Cruz" className="h-11 border-2 rounded-xl" /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
                         </div>
                     )}
+
+                    {!isEditMode && (
+                        <div className="space-y-4">
+                            {isListedMode ? (
+                                <div className="space-y-2">
+                                    <FormLabel className="font-headline text-xs uppercase text-primary">Search & Add Doctor</FormLabel>
+                                    <Autocomplete 
+                                        doctors={doctors} 
+                                        value={autocompleteValue} 
+                                        onChange={setAutocompleteValue} 
+                                        onSelect={handleAddDoctorFromMaster}
+                                        placeholder="Type name to find and add..."
+                                    />
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                    <div className="space-y-2">
+                                        <FormLabel className="font-headline text-xs text-primary">First Name</FormLabel>
+                                        <Input value={guestFirst} onChange={(e) => setGuestFirst(e.target.value)} placeholder="e.g. Maria" className="h-11 border-2 rounded-xl" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <FormLabel className="font-headline text-xs text-primary">Last Name</FormLabel>
+                                        <Input value={guestLast} onChange={(e) => setGuestLast(e.target.value)} placeholder="e.g. Cruz" className="h-11 border-2 rounded-xl" />
+                                    </div>
+                                    <Button type="button" onClick={handleAddGuest} disabled={!guestFirst || !guestLast} variant="secondary" className="h-11 rounded-xl font-headline font-bold">
+                                        <UserPlus className="mr-2 h-4 w-4" /> Add Guest
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* SELECTED PROVIDERS QUEUE */}
+                    <div className="mt-6 pt-6 border-t">
+                        <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-headline text-xs uppercase tracking-widest text-primary flex items-center gap-2">
+                                <Users className="h-3 w-3" />
+                                Selected Providers ({selectedProviders.length})
+                            </h4>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 scrollbar-hide">
+                            {selectedProviders.length > 0 ? (
+                                selectedProviders.map((p, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-3 bg-background rounded-xl border shadow-sm animate-in fade-in slide-in-from-left-2">
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant={p.isListed ? "secondary" : "outline"} className="text-[10px]">
+                                                {p.isListed ? "Listed" : "Guest"}
+                                            </Badge>
+                                            <span className="font-bold text-sm">Dr. {p.firstName} {p.lastName}</span>
+                                        </div>
+                                        {!isEditMode && (
+                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveProvider(idx)} className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-full">
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-8 text-center text-muted-foreground italic text-sm border-2 border-dashed rounded-xl">
+                                    No providers added to this event yet.
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
+                {/* EVENT DETAILS SECTION */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <FormField
                         control={form.control}
@@ -249,7 +297,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         name="eventName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="font-headline text-primary">Marketing Event</FormLabel>
+                                <FormLabel className="font-headline text-primary">Marketing Program</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger className="h-11 border-2 rounded-xl">
@@ -304,11 +352,11 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
             <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t">
                 <Button 
                     type="submit" 
-                    disabled={isSubmitting} 
+                    disabled={isSubmitting || selectedProviders.length === 0} 
                     className="flex-1 h-14 font-headline text-lg rounded-2xl shadow-xl transition-all active:scale-[0.98] font-black"
                 >
                     {isSubmitting ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Save className="mr-2 h-6 w-6" />}
-                    {event ? 'Confirm Changes' : 'Save Event'}
+                    {isEditMode ? 'Confirm Changes' : `Save Event for ${selectedProviders.length} Providers`}
                 </Button>
                 <Button 
                     type="button" 
