@@ -50,6 +50,7 @@ export interface MarketingEvent {
   doctorFirstName: string;
   doctorLastName: string;
   eventName: string;
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
   eventType: 'RTD' | 'Convention' | 'Booth Activity' | 'Product Launch' | 'Medical Society Meeting';
   eventDate: string; // ISO string
   venue?: string;

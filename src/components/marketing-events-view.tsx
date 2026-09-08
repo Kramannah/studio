@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
     Plus, 
     Calendar, 
@@ -22,7 +23,8 @@ import {
     XCircle,
     ChevronLeft,
     Camera,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Filter
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -53,6 +55,7 @@ export function MarketingEventsView() {
     const [view, setView] = useState<'list' | 'form'>('list');
     const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
     const [activeTab, setActiveTab] = useState('pending');
+    const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
     
     // Completion Dialog State
     const [completionDialog, setCompletionDialog] = useState<{ isOpen: boolean; event: MarketingEvent | null }>({
@@ -64,9 +67,14 @@ export function MarketingEventsView() {
     const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const pendingEvents = useMemo(() => events.filter(e => e.status === 'planned'), [events]);
-    const completedEvents = useMemo(() => events.filter(e => e.status === 'completed'), [events]);
-    const canceledEvents = useMemo(() => events.filter(e => e.status === 'cancelled'), [events]);
+    const filteredEvents = useMemo(() => {
+        if (selectedQuarter === 'all') return events;
+        return events.filter(e => e.quarter === selectedQuarter);
+    }, [events, selectedQuarter]);
+
+    const pendingEvents = useMemo(() => filteredEvents.filter(e => e.status === 'planned'), [filteredEvents]);
+    const completedEvents = useMemo(() => filteredEvents.filter(e => e.status === 'completed'), [filteredEvents]);
+    const canceledEvents = useMemo(() => filteredEvents.filter(e => e.status === 'cancelled'), [filteredEvents]);
 
     const handleAdd = () => {
         setEditingEvent(undefined);
@@ -152,10 +160,27 @@ export function MarketingEventsView() {
                     <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Programs</h2>
                     <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Master Workflow</p>
                 </div>
-                <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
-                    <Plus className="w-5 h-5" />
-                    Log New Program
-                </Button>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border-2">
+                        <Filter className="w-4 h-4 text-primary ml-2" />
+                        <Select value={selectedQuarter} onValueChange={(v: any) => setSelectedQuarter(v)}>
+                            <SelectTrigger className="h-9 w-[140px] bg-transparent border-none shadow-none font-headline focus:ring-0">
+                                <SelectValue placeholder="Quarter" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Quarters</SelectItem>
+                                <SelectItem value="Q1">Quarter 1</SelectItem>
+                                <SelectItem value="Q2">Quarter 2</SelectItem>
+                                <SelectItem value="Q3">Quarter 3</SelectItem>
+                                <SelectItem value="Q4">Quarter 4</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
+                        <Plus className="w-5 h-5" />
+                        Log New Program
+                    </Button>
+                </div>
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -171,6 +196,7 @@ export function MarketingEventsView() {
                             <TableHeader className="bg-muted/30">
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Quarter</TableHead>
                                     <TableHead className="font-bold">Marketing Program</TableHead>
                                     <TableHead className="font-bold text-center">Scheduled Date</TableHead>
                                     <TableHead className="text-right pr-6">Actions</TableHead>
@@ -180,6 +206,9 @@ export function MarketingEventsView() {
                                 {pendingEvents.length > 0 ? pendingEvents.map((event) => (
                                     <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
                                         <TableCell className="pl-6 font-bold text-base">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
+                                        </TableCell>
                                         <TableCell>
                                             <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{event.eventName}</Badge>
                                         </TableCell>
@@ -212,7 +241,7 @@ export function MarketingEventsView() {
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No pending programs.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No pending programs for the selected quarter.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -225,6 +254,7 @@ export function MarketingEventsView() {
                             <TableHeader className="bg-muted/30">
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Quarter</TableHead>
                                     <TableHead className="font-bold">Marketing Program</TableHead>
                                     <TableHead className="font-bold text-center">Status</TableHead>
                                     <TableHead className="font-bold text-center">Proof</TableHead>
@@ -235,6 +265,9 @@ export function MarketingEventsView() {
                                 {completedEvents.length > 0 ? completedEvents.map((event) => (
                                     <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
                                         <TableCell className="pl-6 font-bold">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
+                                        </TableCell>
                                         <TableCell>{event.eventName}</TableCell>
                                         <TableCell className="text-center">
                                             <Badge variant={event.attendanceStatus === 'attended' ? 'default' : 'secondary'} className={cn(event.attendanceStatus === 'attended' ? "bg-green-600" : "opacity-50")}>
@@ -255,7 +288,7 @@ export function MarketingEventsView() {
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No completed programs yet.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={6} className="h-40 text-center text-muted-foreground italic">No completed programs yet.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -268,6 +301,7 @@ export function MarketingEventsView() {
                             <TableHeader className="bg-muted/30">
                                 <TableRow className="h-14">
                                     <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Quarter</TableHead>
                                     <TableHead className="font-bold">Marketing Program</TableHead>
                                     <TableHead className="font-bold text-center">Type</TableHead>
                                     <TableHead className="text-right pr-6">Original Date</TableHead>
@@ -277,6 +311,9 @@ export function MarketingEventsView() {
                                 {canceledEvents.length > 0 ? canceledEvents.map((event) => (
                                     <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
                                         <TableCell className="pl-6 font-bold text-destructive">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
+                                        </TableCell>
                                         <TableCell className="line-through opacity-50">{event.eventName}</TableCell>
                                         <TableCell className="text-center">
                                             <Badge variant="outline" className="border-destructive/30 text-destructive/50">Canceled</Badge>
@@ -286,7 +323,7 @@ export function MarketingEventsView() {
                                         </TableCell>
                                     </TableRow>
                                 )) : (
-                                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No canceled programs.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No canceled programs.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>

@@ -48,6 +48,7 @@ const eventSchema = z.object({
   doctorLastName: z.string().min(1, "Last Name is required"),
   eventName: z.string().min(1, "Program is required"),
   eventDate: z.date(),
+  quarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
 });
 
 type MarketingEventFormProps = {
@@ -70,6 +71,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
       doctorLastName: "",
       eventName: "",
       eventDate: new Date(),
+      quarter: "Q1",
     },
   });
 
@@ -84,9 +86,17 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
         doctorLastName: event.doctorLastName,
         eventName: event.eventName,
         eventDate: event.eventDate ? parseISO(event.eventDate) : new Date(),
+        quarter: event.quarter || "Q1",
       });
       setAutocompleteValue(event.isListed ? `${event.doctorFirstName} ${event.doctorLastName}` : "");
     } else {
+      // Auto-detect current quarter
+      const month = new Date().getMonth();
+      let currentQ: "Q1" | "Q2" | "Q3" | "Q4" = "Q1";
+      if (month >= 3 && month <= 5) currentQ = "Q2";
+      else if (month >= 6 && month <= 8) currentQ = "Q3";
+      else if (month >= 9 && month <= 11) currentQ = "Q4";
+
       form.reset({
         isListed: true,
         doctorId: "",
@@ -94,6 +104,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
         doctorLastName: "",
         eventName: "",
         eventDate: new Date(),
+        quarter: currentQ,
       });
       setAutocompleteValue("");
     }
@@ -208,13 +219,37 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <FormField
+                        control={form.control}
+                        name="quarter"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="font-headline text-primary">Select Quarter</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="h-11 border-2 rounded-xl">
+                                            <SelectValue placeholder="Select Quarter..." />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Q1">Quarter 1</SelectItem>
+                                        <SelectItem value="Q2">Quarter 2</SelectItem>
+                                        <SelectItem value="Q3">Quarter 3</SelectItem>
+                                        <SelectItem value="Q4">Quarter 4</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
                     <FormField
                         control={form.control}
                         name="eventName"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel className="font-headline">Marketing Program</FormLabel>
+                                <FormLabel className="font-headline text-primary">Marketing Program</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger className="h-11 border-2 rounded-xl">
@@ -237,7 +272,7 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
                         name="eventDate"
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
-                            <FormLabel className="font-headline mb-2">Program Date</FormLabel>
+                            <FormLabel className="font-headline mb-2 text-primary">Program Date</FormLabel>
                             <Popover>
                                 <PopoverTrigger asChild>
                                 <FormControl>
