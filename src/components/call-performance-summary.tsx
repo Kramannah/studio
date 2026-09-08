@@ -8,8 +8,7 @@ import {
     endOfMonth, 
     parseISO, 
     subDays,
-    addDays,
-    isValid
+    addDays
 } from "date-fns";
 import { 
     Loader2, 
@@ -72,7 +71,7 @@ export function CallPerformanceSummary({
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // Identify Target PMRs (Dynamic Discovery logic mirrors District Reports)
+            // Identify Target PMRs - Mirror logic from District Reports
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
@@ -95,9 +94,6 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            const selectedManager = managers.find(m => m.uid === selectedManagerId);
-            const forcedManagerName = selectedManager ? selectedManager.name : "District Manager";
-
             const excelRows: any[] = [];
 
             for (const uid of targetUserIds) {
@@ -116,7 +112,26 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // 1. Calculate Active Days (Sum of weighted days where reports happened)
+                // 1. Resolve DSM Name dynamically for each PMR to ensure accuracy
+                let pmrManagerName = "Unassigned";
+                const profile = userProfiles[uid];
+                const meta = USER_DATA_MAP[uid];
+
+                if (selectedManagerId === "all") {
+                    const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
+                    const managerData = mId ? userProfiles[mId] : null;
+                    if (managerData) {
+                        pmrManagerName = `${managerData.firstName} ${managerData.lastName}`;
+                    } else if (mId) {
+                        const hManager = managers.find(m => m.uid === mId);
+                        pmrManagerName = hManager?.name || mId;
+                    }
+                } else {
+                    const selectedManager = managers.find(m => m.uid === selectedManagerId);
+                    pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
+                }
+
+                // 2. Calculate Active Days (Reporting-based weighted sum logic)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
@@ -139,7 +154,7 @@ export function CallPerformanceSummary({
                     else activeDaysCount += 1.0;
                 });
 
-                // 2. Metrics (Raw Whole-Number Counts)
+                // 3. Metrics (Raw Numerators)
                 const totalCallsCount = uEntries.length;
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
@@ -150,12 +165,8 @@ export function CallPerformanceSummary({
                 const uniqueVisitedCount = visitMap.size;
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 3).length;
 
-                // 3. Metadata resolution
-                const profile = userProfiles[uid];
-                const meta = USER_DATA_MAP[uid];
-                
                 excelRows.push({
-                    "District Manager": forcedManagerName,
+                    "District Manager": pmrManagerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
                     "Call Rate": totalCallsCount,
@@ -268,9 +279,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Raw Numerators</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Dynamic Territory Discovery</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                KPI columns export raw whole-number counts (Total Calls, High Freq Providers, and Unique Reach).
+                                Personnel assignments are resolved in real-time to match the current District Reports structure.
                             </p>
                         </div>
                     </CardContent>

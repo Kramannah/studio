@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, Trash2, MapPin, KeyRound, Loader2, PackageCheck, Briefcase, CheckCircle2, BarChart3 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -42,7 +42,7 @@ export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    const { profiles, updateProfile, addProfile, deleteProfile } = useUserProfiles();
+    const { profiles, updateProfile, addProfile } = useUserProfiles();
     
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -90,6 +90,9 @@ export default function AdminPage() {
     }, [profile]);
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
+
+    // Restricted Access Control: hide performance section from DSMs
+    const canSeePerformance = isSuperAdmin || isMarketingOrHR;
 
     useEffect(() => {
         if (mounted && isTerritoryManager && user?.uid) {
@@ -311,7 +314,7 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
-                            {(isSuperAdmin || isMarketingOrHR) && (
+                            {canSeePerformance && (
                                 <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                     <BarChart3 className="h-4 w-4" /> Performance
                                 </TabsTrigger>
@@ -401,7 +404,7 @@ export default function AdminPage() {
                         </TabsContent>
                     )}
 
-                    {(isSuperAdmin || isMarketingOrHR) && (
+                    {canSeePerformance && (
                         <TabsContent value="performance">
                             <CallPerformanceSummary 
                                 userProfiles={profiles}
@@ -506,7 +509,6 @@ export default function AdminPage() {
                 </Tabs>
             </main>
 
-            {/* Create Account Dialog */}
             <Dialog open={isCreateAccountOpen} onOpenChange={(open) => !isProcessing && setIsCreateAccountOpen(open)}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
@@ -571,7 +573,6 @@ export default function AdminPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Add Record Dialog */}
             <Dialog open={isAddRecordOpen} onOpenChange={(open) => !isProcessing && setIsAddRecordOpen(open)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -608,7 +609,6 @@ export default function AdminPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Edit Profile Dialog */}
             <Dialog open={!!editingAccount} onOpenChange={(open) => !open && setEditingAccount(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
