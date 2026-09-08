@@ -42,6 +42,18 @@ export interface CoverageEntry {
   migrationStatus?: 'optimized';
 }
 
+export interface MarketingEvent {
+  id: string;
+  userId: string;
+  eventName: string;
+  eventType: 'RTD' | 'Convention' | 'Booth Activity' | 'Product Launch' | 'Medical Society Meeting';
+  eventDate: string; // ISO string
+  venue?: string;
+  estimatedCost?: number;
+  status: 'planned' | 'completed' | 'cancelled';
+  remarks?: string;
+}
+
 export interface Doctor {
   id: string;
   userId: string;

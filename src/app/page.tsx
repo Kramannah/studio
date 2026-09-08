@@ -14,7 +14,8 @@ import {
   LogIn, 
   LogOut, 
   Notebook, 
-  LayoutDashboard
+  LayoutDashboard,
+  Presentation
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -37,8 +38,9 @@ import { CallSummary } from '@/components/call-summary';
 import { SubmittedList } from '@/components/submitted-list';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { TimeLogDialog } from '@/components/time-log-dialog';
+import { MarketingEventsView } from '@/components/marketing-events-view';
 
-type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation';
+type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation' | 'marketing-events';
 
 const DynamicSkeleton = () => (
   <div className="space-y-4 w-full">
@@ -179,6 +181,7 @@ export default function Home() {
         return <CallSummary pmrName={currentPmrName} entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': return <Q4AllocationView readOnly={true} />;
+      case 'marketing-events': return <MarketingEventsView />;
       default: return null;
     }
   };
@@ -232,6 +235,11 @@ export default function Home() {
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton onClick={() => setActiveView('submitted')} isActive={activeView === 'submitted'}>
                           Submitted Coverage
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton onClick={() => setActiveView('marketing-events')} isActive={activeView === 'marketing-events'}>
+                          Marketing Events
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>

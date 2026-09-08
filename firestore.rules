@@ -67,6 +67,12 @@ service cloud.firestore {
       allow update, delete: if isManagerial() || isOwner(resource.data.userId);
     }
 
+    match /marketingEvents/{id} {
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+    }
+
     match /nonCallDays/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;

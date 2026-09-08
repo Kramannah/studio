@@ -104,6 +104,22 @@
       },
       "required": ["userId", "doctorId", "plannedDate"]
     },
+    "MarketingEvent": {
+      "title": "MarketingEvent",
+      "description": "A record of a marketing event or clinical meeting organized by the rep.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "eventName": { "type": "string" },
+        "eventType": { "enum": ["RTD", "Convention", "Booth Activity", "Product Launch", "Medical Society Meeting"] },
+        "eventDate": { "type": "string", "format": "date-time" },
+        "venue": { "type": "string" },
+        "estimatedCost": { "type": "number" },
+        "status": { "enum": ["planned", "completed", "cancelled"] },
+        "remarks": { "type": "string" }
+      },
+      "required": ["userId", "eventName", "eventType", "eventDate"]
+    },
     "PlanningPermissionRequest": {
       "title": "PlanningPermissionRequest",
       "description": "A request to unlock planning for a specific week.",
@@ -177,6 +193,7 @@
     "/coverageEntries/{id}": { "schema": { "$ref": "#/backend/entities/CoverageEntry" }, "description": "Submitted call reports." },
     "/nonCallDays/{id}": { "schema": { "$ref": "#/backend/entities/NonCallDay" }, "description": "Leave and non-activity requests." },
     "/plans/{id}": { "schema": { "$ref": "#/backend/entities/Plan" }, "description": "Scheduled visit plans." },
+    "/marketingEvents/{id}": { "schema": { "$ref": "#/backend/entities/MarketingEvent" }, "description": "Records of marketing events organized by representatives." },
     "/planningRequests/{id}": { "schema": { "$ref": "#/backend/entities/PlanningPermissionRequest" }, "description": "Requests to unlock past planning weeks." },
     "/timeLogs/{id}": { "schema": { "$ref": "#/backend/entities/TimeLog" }, "description": "User attendance logs." },
     "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Legacy inventory allocations." },
