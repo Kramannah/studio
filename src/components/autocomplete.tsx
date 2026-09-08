@@ -63,7 +63,7 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
   }, [doctors, value]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
           <div className="relative w-full">
             <Input
@@ -80,7 +80,7 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
           </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-[--radix-popover-trigger-width] p-0 shadow-2xl border-2 rounded-xl" 
+        className="w-[--radix-popover-trigger-width] p-0 shadow-2xl border-2 rounded-xl z-[110]" 
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
