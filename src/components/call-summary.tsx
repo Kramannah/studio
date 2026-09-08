@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -102,7 +103,6 @@ export function CallSummary({
             return !PH_HOLIDAYS[dateStr];
         }).length;
 
-        // ID-LEVEL DEDUPLICATION: Ensures data doesn't shift due to sync artifacts
         const safeEntriesMap = new Map<string, CoverageEntry>();
         (entries || []).forEach(e => { if (e.id) safeEntriesMap.set(e.id, e); });
         const safeEntries = Array.from(safeEntriesMap.values());
@@ -110,7 +110,6 @@ export function CallSummary({
         const safeDoctors = Array.isArray(doctors) ? doctors : [];
         const safeNCDs = Array.isArray(nonCallDays) ? nonCallDays : [];
 
-        // TREND DATA (3 MONTHS)
         const m0 = referenceDate;
         const m1 = subMonths(referenceDate, 1);
         const m2 = subMonths(referenceDate, 2);
@@ -127,7 +126,6 @@ export function CallSummary({
             };
         });
 
-        // MONTHLY FILTERED DATA
         const filteredEntries = safeEntries.filter(e => {
             const d = parseAnyDate(e.coverageDate) || parseAnyDate(e.submittedAt);
             return d && isValid(d) && isWithinInterval(d, { start, end });
@@ -160,15 +158,12 @@ export function CallSummary({
         const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
         const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
 
-        // IDENTITY NORMALIZATION HELPER
         const normalizeStr = (s?: string) => (s ?? "").toLowerCase().trim().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
 
-        // STABLE PROVIDER GROUPING
         const providerVisits = filteredEntries.reduce((acc, entry) => {
             const providerName = `${entry.firstName || ""} ${entry.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
             const specialty = normalizeStr(entry.specialty);
             const clinic = normalizeStr(entry.clinic);
-            // Composite key ensures stability even if masterlist changes
             const compositeKey = `${providerName}|${specialty}|${clinic}`;
             
             if (!acc[compositeKey]) {
@@ -198,11 +193,10 @@ export function CallSummary({
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
 
         const totalCalls = filteredEntries.length;
-        const targetCalls = activeDays * 12;
+        const targetCalls = activeDays * 15; // UPDATED TARGET: 15 Doctors Per Day
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
-        // AGGREGATE STAT BREAKDOWNS
         const productUsage = filteredEntries.reduce((acc, entry) => {
             const process = (name?: string, qty?: number) => {
                 const key = (name ?? "").trim();
@@ -226,7 +220,6 @@ export function CallSummary({
         const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
         const sortedSpecialties = Object.entries(specialtyCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
-        // TRACKING TABLE LOGIC
         const visitedDoctorListMap = new Map<string, any>();
         safeDoctors.forEach(doctor => {
             const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -294,14 +287,12 @@ export function CallSummary({
         const safePmrName = pmrName || "N/A";
         const displayMonth = selectedMonth ? format(parseISO(selectedMonth + "-01"), "MMMM yyyy") : "N/A";
 
-        // Sheet 1: Calls 3 months
         const trendSheetData = insights.trendData.map(t => ({
             "PMR Name": safePmrName,
             "Period": t.fullDate,
             "Total Sales Calls": t.calls
         }));
 
-        // Sheet 2: Visits per specialty
         const specialtySheetData = insights.specialtyDistribution.map(s => ({
             "PMR Name": safePmrName,
             "Period": displayMonth,
@@ -353,7 +344,7 @@ export function CallSummary({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
-                    title="CALL RATE" 
+                    title="CALL RATE (15/DAY)" 
                     value={
                         <div className="flex items-baseline gap-1">
                             <span>{insights.totalCalls}/{Math.round(insights.targetCalls)}</span>

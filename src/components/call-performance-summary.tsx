@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -68,11 +69,9 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
-            // Wide query window to handle Manila timezone buffer
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // PMR DISCOVERY: Mirroring Live District Reports
             const allPmrIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allPmrIds.add(id)));
@@ -113,7 +112,6 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // DSM RESOLUTION: Precise Selection Logic
                 let pmrManagerName = "Unassigned";
                 if (selectedManagerId !== "all") {
                     const selectedManager = managers.find(m => m.uid === selectedManagerId);
@@ -125,7 +123,6 @@ export function CallPerformanceSummary({
                     pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
                 }
 
-                // ACTIVE DAYS: Precise Weighted Reporting Days (Align with Dashboard)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
@@ -148,7 +145,6 @@ export function CallPerformanceSummary({
                     else activeDaysCount += 1.0;
                 });
 
-                // KPI METRICS: Raw counts (numerators only)
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
                     const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
@@ -178,9 +174,8 @@ export function CallPerformanceSummary({
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            // DYNAMIC FILENAME: Selection + Month
             const territoryName = selectedManagerId === "all" ? "Global" : (managers.find(m => m.uid === selectedManagerId)?.name || "Territory");
-            const fileName = `Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            const fileName = `Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
             toast({ title: "Audit Exported", description: `Compiled records for ${excelRows.length} representatives.` });
