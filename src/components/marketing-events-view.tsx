@@ -23,13 +23,14 @@ import {
     XCircle,
     ChevronLeft,
     Camera,
-    Image as ImageIcon,
+    ImageIcon,
     Filter,
     Maximize2,
     ChevronDown,
     ChevronUp,
     Check,
-    X
+    X,
+    FileSpreadsheet
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -51,6 +52,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Image from "next/image";
 import { compressImage } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
 
 interface MarketingEventsViewProps {
     userId?: string;
@@ -124,7 +126,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
     const handleOpenComplete = (group: MarketingEvent[]) => {
         const initialStatuses: Record<string, 'attended' | 'not-attended'> = {};
         group.forEach(e => {
-            initialStatuses[e.id] = 'attended';
+            initialStatuses[event.id] = 'attended';
         });
         setIndividualAttendance(initialStatuses);
         setProofPhoto(null);
@@ -180,6 +182,53 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
     const handleCancelGroup = async (group: MarketingEvent[]) => {
         await Promise.all(group.map(event => updateEvent({ ...event, status: 'cancelled' })));
         setActiveTab('canceled');
+    };
+
+    const handleExportExcel = () => {
+        if (events.length === 0) {
+            toast({ variant: "destructive", title: "No Data", description: "There are no marketing events to export for this period." });
+            return;
+        }
+
+        const dataToExport = events.map(event => {
+            const dateStr = event.eventDate ? format(parseISO(event.eventDate), 'yyyy-MM-dd') : 'N/A';
+            return {
+                "Session ID (Batch)": event.groupId || event.id,
+                "Quarter": event.quarter || "N/A",
+                "Marketing Program": event.eventName,
+                "Event Date": dateStr,
+                "Doctor Name": `Dr. {event.doctorFirstName} {event.doctorLastName}`,
+                "Enrollment": event.isListed ? "Masterlist" : "Guest",
+                "Workflow Status": event.status.toUpperCase(),
+                "Attendance Status": event.attendanceStatus || (event.status === 'planned' ? 'PENDING' : 'N/A')
+            };
+        });
+
+        // Sort by Batch ID and Date so group members are adjacent
+        dataToExport.sort((a, b) => a["Session ID (Batch)"].localeCompare(b["Session ID (Batch)"]) || a["Event Date"].localeCompare(b["Event Date"]));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        
+        // Auto-size columns for readability
+        const wscols = [
+            { wch: 25 }, // Session ID
+            { wch: 10 }, // Quarter
+            { wch: 30 }, // Program
+            { wch: 15 }, // Date
+            { wch: 25 }, // Doctor
+            { wch: 15 }, // Enrollment
+            { wch: 15 }, // Status
+            { wch: 15 }  // Attendance
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Events Audit");
+        
+        const fileName = `Marketing_Events_Report_{format(new Date(), 'yyyyMMdd')}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        toast({ title: "Report Generated", description: "Excel file downloaded successfully." });
     };
 
     const anyAttended = useMemo(() => {
@@ -239,6 +288,12 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                             </SelectContent>
                         </Select>
                     </div>
+                    {readOnly && (
+                        <Button variant="outline" onClick={handleExportExcel} className="h-12 border-2 rounded-xl font-headline gap-2">
+                            <FileSpreadsheet className="w-5 h-5 text-primary" />
+                            Export Excel
+                        </Button>
+                    )}
                     {!readOnly && (
                         <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
                             <Plus className="w-5 h-5" />
