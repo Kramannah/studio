@@ -1,10 +1,9 @@
-
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -106,12 +105,12 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
     }
   }, [event, isOpen, form]);
 
-  const handleSelectDoctor = (doctor: Doctor) => {
-    form.setValue("doctorId", doctor.id);
-    form.setValue("doctorFirstName", doctor.firstName);
-    form.setValue("doctorLastName", doctor.lastName);
+  const handleSelectDoctor = useCallback((doctor: Doctor) => {
+    form.setValue("doctorId", doctor.id, { shouldValidate: true, shouldDirty: true });
+    form.setValue("doctorFirstName", doctor.firstName, { shouldValidate: true, shouldDirty: true });
+    form.setValue("doctorLastName", doctor.lastName, { shouldValidate: true, shouldDirty: true });
     setAutocompleteValue(`${doctor.firstName} ${doctor.lastName}`);
-  };
+  }, [form]);
 
   const onSubmit = async (values: z.infer<typeof eventSchema>) => {
     setIsSubmitting(true);
@@ -146,13 +145,14 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
                         <FormControl>
                         <RadioGroup
                             onValueChange={(v) => {
-                                field.onChange(v === "true");
+                                const listed = v === "true";
+                                field.onChange(listed);
                                 form.setValue("doctorId", "");
                                 form.setValue("doctorFirstName", "");
                                 form.setValue("doctorLastName", "");
                                 setAutocompleteValue("");
                             }}
-                            defaultValue={field.value ? "true" : "false"}
+                            value={field.value ? "true" : "false"}
                             className="flex gap-4"
                         >
                             <FormItem className="flex items-center space-x-2 space-y-0">
@@ -179,6 +179,7 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
                             onSelect={handleSelectDoctor}
                             placeholder="Search by name, specialty, or clinic..."
                         />
+                        <FormMessage />
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 gap-4 animate-in fade-in duration-300">
@@ -228,7 +229,7 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel className="font-headline">Activity Type</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                             </FormControl>
@@ -258,7 +259,7 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
                                     variant={"outline"}
                                     className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
                                     >
-                                    {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                    {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                                     <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                     </Button>
                                 </FormControl>
@@ -309,7 +310,7 @@ export function MarketingEventDialog({ isOpen, onOpenChange, onSave, doctors, ev
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel className="font-headline">Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                             <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                         </FormControl>

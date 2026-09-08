@@ -95,6 +95,11 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
                       key={doctor.id}
                       value={doctor.id}
                       onSelect={() => handleSelect(doctor)}
+                      onPointerDown={(e) => {
+                        // Crucial for nested Dialog/Popover selection stability
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
                     >
                     <Check
                       className={cn(
