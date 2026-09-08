@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -188,7 +187,7 @@ export function UserDashboard({
                     </TabsContent>
 
                     <TabsContent value="events" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        <MarketingEventsView userId={userId} readOnly={true} />
+                        <MarketingEventsView userId={userId} readOnly={true} pmrName={dashboardPmrName} />
                     </TabsContent>
                     
                     <TabsContent value="master" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">

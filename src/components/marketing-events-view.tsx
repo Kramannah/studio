@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
+import { useAuth } from "@/hooks/use-auth";
 import { MarketingEventForm } from "./marketing-event-dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,9 +58,11 @@ import * as XLSX from 'xlsx';
 interface MarketingEventsViewProps {
     userId?: string;
     readOnly?: boolean;
+    pmrName?: string;
 }
 
-export function MarketingEventsView({ userId, readOnly = false }: MarketingEventsViewProps) {
+export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmrName }: MarketingEventsViewProps) {
+    const { user, profile } = useAuth();
     const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents(true, undefined, userId);
     const { doctors } = useDoctors();
     const { toast } = useToast();
@@ -82,6 +85,14 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
 
     // Image Preview State
     const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
+
+    const resolvedPmrName = useMemo(() => {
+        if (propPmrName) return propPmrName;
+        if (!userId || userId === user?.uid) {
+            return profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
+        }
+        return userId;
+    }, [propPmrName, userId, user, profile]);
 
     const filteredEvents = useMemo(() => {
         if (selectedQuarter === 'all') return events;
@@ -193,6 +204,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         const dataToExport = events.map(event => {
             const dateStr = event.eventDate ? format(parseISO(event.eventDate), 'yyyy-MM-dd') : 'N/A';
             return {
+                "Representative": resolvedPmrName,
                 "Session ID (Batch)": event.groupId || event.id,
                 "Quarter": event.quarter || "N/A",
                 "Marketing Program": event.eventName,
@@ -211,6 +223,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         
         // Auto-size columns for readability
         const wscols = [
+            { wch: 25 }, // Representative
             { wch: 25 }, // Session ID
             { wch: 10 }, // Quarter
             { wch: 30 }, // Program
@@ -225,7 +238,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Events Audit");
         
-        const fileName = `Marketing_Events_Report_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+        const fileName = `${resolvedPmrName.replace(/\s+/g, '_')}_Marketing_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
 
         toast({ title: "Report Generated", description: "Excel file downloaded successfully." });
