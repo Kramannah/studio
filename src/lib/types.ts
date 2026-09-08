@@ -55,6 +55,8 @@ export interface MarketingEvent {
   venue?: string;
   estimatedCost?: number;
   status: 'planned' | 'completed' | 'cancelled';
+  attendanceStatus?: 'attended' | 'not-attended';
+  proofPhoto?: string;
   remarks?: string;
 }
 

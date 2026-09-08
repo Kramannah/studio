@@ -1,13 +1,15 @@
 
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
 import { MarketingEventForm } from "./marketing-event-dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
     Plus, 
     Calendar, 
@@ -16,8 +18,11 @@ import {
     Presentation, 
     Loader2, 
     Users, 
-    MoreHorizontal,
-    ChevronLeft
+    CheckCircle2, 
+    XCircle,
+    ChevronLeft,
+    Camera,
+    Image as ImageIcon
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -33,12 +38,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import Image from "next/image";
 
 export function MarketingEventsView() {
     const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents();
@@ -46,15 +49,56 @@ export function MarketingEventsView() {
     
     const [view, setView] = useState<'list' | 'form'>('list');
     const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
+    const [activeTab, setActiveTab] = useState('pending');
+    
+    // Completion Dialog State
+    const [completionDialog, setCompletionDialog] = useState<{ isOpen: boolean; event: MarketingEvent | null }>({
+        isOpen: false,
+        event: null
+    });
+    const [attendance, setAttendance] = useState<'attended' | 'not-attended'>('attended');
+    const [proofPhoto, setProofPhoto] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const pendingEvents = useMemo(() => events.filter(e => e.status === 'planned'), [events]);
+    const completedEvents = useMemo(() => events.filter(e => e.status === 'completed'), [events]);
+    const canceledEvents = useMemo(() => events.filter(e => e.status === 'cancelled'), [events]);
 
     const handleAdd = () => {
         setEditingEvent(undefined);
         setView('form');
     };
 
-    const handleEdit = (event: MarketingEvent) => {
-        setEditingEvent(event);
-        setView('form');
+    const handleOpenComplete = (event: MarketingEvent) => {
+        setAttendance('attended');
+        setProofPhoto(null);
+        setCompletionDialog({ isOpen: true, event });
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => setProofPhoto(event.target?.result as string);
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSaveCompletion = async () => {
+        if (!completionDialog.event) return;
+        
+        await updateEvent({
+            ...completionDialog.event,
+            status: 'completed',
+            attendanceStatus: attendance,
+            proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
+        });
+        
+        setCompletionDialog({ isOpen: false, event: null });
+    };
+
+    const handleCancelEvent = async (event: MarketingEvent) => {
+        await updateEvent({ ...event, status: 'cancelled' });
     };
 
     if (view === 'form') {
@@ -72,7 +116,7 @@ export function MarketingEventsView() {
                         if (editingEvent) {
                             await updateEvent({ ...editingEvent, ...data });
                         } else {
-                            await addEvent(data);
+                            await addEvent({ ...data, status: 'planned' } as any);
                         }
                         setView('list');
                     }}
@@ -86,7 +130,7 @@ export function MarketingEventsView() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Programs</h2>
-                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Clinical Updates & Professional Events</p>
+                    <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest">Master Workflow</p>
                 </div>
                 <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
                     <Plus className="w-5 h-5" />
@@ -94,84 +138,203 @@ export function MarketingEventsView() {
                 </Button>
             </div>
 
-            {loading && events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-20 border-4 border-dashed rounded-[2rem] bg-muted/5">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-                    <p className="font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">Accessing programs database...</p>
-                </div>
-            ) : events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-20 border-4 border-dashed rounded-[2rem] bg-muted/5 text-center space-y-6">
-                    <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center">
-                        <Presentation className="w-10 h-10 text-muted-foreground" />
-                    </div>
-                    <div className="space-y-2">
-                        <h3 className="text-2xl font-black font-headline text-foreground">No Programs Recorded</h3>
-                    </div>
-                    <Button onClick={handleAdd} variant="outline" className="border-2 rounded-xl h-11 px-8 font-headline">
-                        Record Your First Program
-                    </Button>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {events.map((event) => (
-                        <Card key={event.id} className="group border-2 shadow-lg overflow-hidden hover:border-primary/50 transition-all duration-300">
-                            <CardHeader className="bg-muted/30 border-b pb-4 relative">
-                                <div className="flex justify-between items-start">
-                                    <div className="space-y-1">
-                                        <CardTitle className="text-lg font-black font-headline line-clamp-1">{event.eventName}</CardTitle>
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-bold uppercase tracking-widest">
-                                            <Calendar className="w-3.5 h-3.5" />
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6">
+                    <TabsTrigger value="pending" className="px-8 rounded-lg font-headline">Pending ({pendingEvents.length})</TabsTrigger>
+                    <TabsTrigger value="completed" className="px-8 rounded-lg font-headline">Completed ({completedEvents.length})</TabsTrigger>
+                    <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline">Canceled ({canceledEvents.length})</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="pending">
+                    <Card className="border-2 shadow-lg overflow-hidden">
+                        <Table>
+                            <TableHeader className="bg-muted/30">
+                                <TableRow className="h-14">
+                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold text-center">Scheduled Date</TableHead>
+                                    <TableHead className="text-right pr-6">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {pendingEvents.length > 0 ? pendingEvents.map((event) => (
+                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
+                                        <TableCell className="pl-6 font-bold text-base">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{event.eventName}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-center text-sm font-medium text-muted-foreground">
                                             {format(parseISO(event.eventDate), 'MMM d, yyyy')}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                         <DropdownMenu modal={false}>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <MoreHorizontal className="h-4 w-4" />
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <div className="flex justify-end gap-2">
+                                                <Button size="sm" onClick={() => handleOpenComplete(event)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
+                                                    Complete
                                                 </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleEdit(event)} className="gap-2">
-                                                    <Pencil className="h-4 w-4" /> Edit
-                                                </DropdownMenuItem>
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
-                                                        <DropdownMenuItem className="text-destructive focus:text-destructive gap-2">
-                                                            <Trash2 className="h-4 w-4" /> Delete
-                                                        </DropdownMenuItem>
+                                                        <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white font-headline h-9">
+                                                            Cancel
+                                                        </Button>
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle>Delete this program record?</AlertDialogTitle>
-                                                            <AlertDialogDescription>This action will permanently remove the record.</AlertDialogDescription>
+                                                            <AlertDialogTitle>Cancel this program?</AlertDialogTitle>
+                                                            <AlertDialogDescription>This will move the program to the Canceled section.</AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => deleteEvent(event.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                                                            <AlertDialogCancel>Go Back</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleCancelEvent(event)} className="bg-destructive text-white">Confirm Cancellation</AlertDialogAction>
                                                         </AlertDialogFooter>
                                                     </AlertDialogContent>
                                                 </AlertDialog>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )) : (
+                                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No pending programs.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="completed">
+                    <Card className="border-2 shadow-lg overflow-hidden">
+                        <Table>
+                            <TableHeader className="bg-muted/30">
+                                <TableRow className="h-14">
+                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold text-center">Status</TableHead>
+                                    <TableHead className="font-bold text-center">Proof</TableHead>
+                                    <TableHead className="text-right pr-6">Date Finished</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {completedEvents.length > 0 ? completedEvents.map((event) => (
+                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
+                                        <TableCell className="pl-6 font-bold">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell>{event.eventName}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Badge variant={event.attendanceStatus === 'attended' ? 'default' : 'secondary'} className={cn(event.attendanceStatus === 'attended' ? "bg-green-600" : "opacity-50")}>
+                                                {event.attendanceStatus === 'attended' ? 'Attended' : 'Not Attended'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {event.proofPhoto ? (
+                                                <div className="flex justify-center">
+                                                    <div className="w-10 h-10 rounded border-2 border-primary/20 overflow-hidden relative group cursor-pointer">
+                                                        <Image src={event.proofPhoto} alt="Proof" fill className="object-cover" />
+                                                    </div>
+                                                </div>
+                                            ) : <span className="text-xs text-muted-foreground">—</span>}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6 text-sm text-muted-foreground">
+                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                        </TableCell>
+                                    </TableRow>
+                                )) : (
+                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No completed programs yet.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="canceled">
+                    <Card className="border-2 shadow-lg overflow-hidden opacity-80">
+                        <Table>
+                            <TableHeader className="bg-muted/30">
+                                <TableRow className="h-14">
+                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    <TableHead className="font-bold">Marketing Program</TableHead>
+                                    <TableHead className="font-bold text-center">Type</TableHead>
+                                    <TableHead className="text-right pr-6">Original Date</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {canceledEvents.length > 0 ? canceledEvents.map((event) => (
+                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
+                                        <TableCell className="pl-6 font-bold text-destructive">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
+                                        <TableCell className="line-through opacity-50">{event.eventName}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Badge variant="outline" className="border-destructive/30 text-destructive/50">Canceled</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right pr-6 text-sm text-muted-foreground">
+                                            {format(parseISO(event.eventDate), 'MMM d, yyyy')}
+                                        </TableCell>
+                                    </TableRow>
+                                )) : (
+                                    <TableRow><TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">No canceled programs.</TableCell></TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </Card>
+                </TabsContent>
+            </Tabs>
+
+            {/* Completion Dialog */}
+            <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && setCompletionDialog({ isOpen: false, event: null })}>
+                <DialogContent className="sm:max-w-md border-2">
+                    <DialogHeader>
+                        <DialogTitle className="font-headline text-xl flex items-center gap-2">
+                            <CheckCircle2 className="text-green-500" /> Confirm Completion
+                        </DialogTitle>
+                        <DialogDescription>
+                            Provide attendance details for Dr. {completionDialog.event?.doctorFirstName} {completionDialog.event?.doctorLastName}.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="py-6 space-y-6">
+                        <div className="space-y-3">
+                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Attendance Result</Label>
+                            <RadioGroup value={attendance} onValueChange={(v: any) => setAttendance(v)} className="grid grid-cols-2 gap-4">
+                                <div className={cn("flex items-center space-x-2 border-2 p-3 rounded-xl cursor-pointer transition-all", attendance === 'attended' ? "border-primary bg-primary/5" : "border-muted")}>
+                                    <RadioGroupItem value="attended" id="att-yes" />
+                                    <Label htmlFor="att-yes" className="font-bold cursor-pointer">Attended</Label>
                                 </div>
-                            </CardHeader>
-                            <CardContent className="p-5 space-y-4">
-                                <div className="flex items-center gap-3 text-sm font-medium">
-                                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                                        <Users className="w-5 h-5 text-primary" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-foreground font-bold">Dr. {event.doctorFirstName} {event.doctorLastName}</span>
-                                        <span className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">{event.isListed ? 'Masterlist Provider' : 'Guest Provider'}</span>
-                                    </div>
+                                <div className={cn("flex items-center space-x-2 border-2 p-3 rounded-xl cursor-pointer transition-all", attendance === 'not-attended' ? "border-primary bg-primary/5" : "border-muted")}>
+                                    <RadioGroupItem value="not-attended" id="att-no" />
+                                    <Label htmlFor="att-no" className="font-bold cursor-pointer">Not Attended</Label>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            )}
+                            </RadioGroup>
+                        </div>
+
+                        {attendance === 'attended' && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                <Label className="font-headline text-xs uppercase text-primary">Required Proof Photo</Label>
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                                
+                                {proofPhoto ? (
+                                    <div className="relative aspect-video w-full rounded-2xl border-2 overflow-hidden bg-muted">
+                                        <Image src={proofPhoto} alt="Proof Preview" fill className="object-contain" />
+                                        <Button variant="destructive" size="icon" className="absolute top-2 right-2 h-8 w-8 rounded-full" onClick={() => setProofPhoto(null)}>
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button variant="outline" className="w-full h-32 border-dashed border-2 flex-col gap-2 rounded-2xl" onClick={() => fileInputRef.current?.click()}>
+                                        <Camera className="w-8 h-8 text-muted-foreground" />
+                                        <span className="text-sm font-medium">Capture or Upload Photo</span>
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="gap-2">
+                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, event: null })}>Close</Button>
+                        <Button 
+                            className="font-headline px-8" 
+                            onClick={handleSaveCompletion}
+                            disabled={attendance === 'attended' && !proofPhoto}
+                        >
+                            Finalize Program
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
