@@ -1,18 +1,15 @@
-
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
     format, 
     startOfMonth, 
     endOfMonth, 
     parseISO, 
-    isValid,
-    isSameMonth,
     subDays,
     addDays,
-    startOfDay
+    isValid
 } from "date-fns";
 import { 
     Loader2, 
@@ -24,7 +21,7 @@ import {
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { parseAnyDate, cn } from "@/lib/utils";
+import { parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CoverageEntry, NonCallDay, UserProfile } from "@/lib/types";
@@ -75,16 +72,12 @@ export function CallPerformanceSummary({
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // Identify Target PMRs
+            // Identify Target PMRs (Dynamic Discovery logic mirrors District Reports)
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
                 Object.values(userProfiles).forEach(p => {
-                    if (p.managerId && p.managerId !== 'none' && (p.role === 'PMR' || !p.role)) allAssignedIds.add(p.userId);
-                });
-                Object.keys(USER_DATA_MAP).forEach(uid => {
-                    const isAssigned = Object.values(MANAGER_TEAMS).some(team => team.includes(uid));
-                    if (isAssigned) allAssignedIds.add(uid);
+                    if (p.managerId && p.managerId !== 'none') allAssignedIds.add(p.userId);
                 });
             } else {
                 const teamIds = MANAGER_TEAMS[selectedManagerId] || [];
@@ -102,31 +95,28 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            // Resolve selected manager name once for consistent DSM column assignment
             const selectedManager = managers.find(m => m.uid === selectedManagerId);
-            const forcedManagerName = selectedManager ? selectedManager.name : null;
+            const forcedManagerName = selectedManager ? selectedManager.name : "District Manager";
 
             const excelRows: any[] = [];
 
-            // Process each user individually for stability and index efficiency
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(1000))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(1500))),
                     getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200)))
                 ]);
 
-                // Filter specifically for the target month in-memory to handle timezone buffer
                 const uEntries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
                 });
+                
                 const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay).filter(n => {
                     const d = parseAnyDate(n.date);
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // 1. Calculate Active Days (Sum of weighted days where calls happened)
-                // This logic strictly matches CallSummary.tsx for reporting consistency
+                // 1. Calculate Active Days (Sum of weighted days where reports happened)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
@@ -144,18 +134,13 @@ export function CallPerformanceSummary({
                 let activeDaysCount = 0;
                 daysWithCalls.forEach(dateStr => {
                     const leaveType = uNcdMap.get(dateStr);
-                    if (leaveType === 'wholeday') {
-                        activeDaysCount += 0;
-                    } else if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') {
-                        activeDaysCount += 0.5;
-                    } else {
-                        activeDaysCount += 1.0;
-                    }
+                    if (leaveType === 'wholeday') activeDaysCount += 0;
+                    else if (leaveType === 'halfday-am' || leaveType === 'halfday-pm') activeDaysCount += 0.5;
+                    else activeDaysCount += 1.0;
                 });
 
-                // 2. Metrics (Numerators Only)
+                // 2. Metrics (Raw Whole-Number Counts)
                 const totalCallsCount = uEntries.length;
-
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
                     const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
@@ -169,22 +154,8 @@ export function CallPerformanceSummary({
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
                 
-                let managerName = "Unassigned";
-                if (selectedManagerId !== "all" && forcedManagerName) {
-                    // Use the specifically selected manager name from the dropdown
-                    managerName = forcedManagerName;
-                } else {
-                    // Fallback for "All Districts" mode or unselected state
-                    const mUid = profile?.managerId || Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(uid));
-                    if (mUid) {
-                        const mProfile = userProfiles[mUid];
-                        const mMeta = USER_DATA_MAP[mUid];
-                        managerName = mProfile ? `${mProfile.lastName}, ${mProfile.firstName}` : mMeta ? `${mMeta.lastName}, ${mMeta.firstName}` : "District Manager";
-                    }
-                }
-
                 excelRows.push({
-                    "District Manager": managerName,
+                    "District Manager": forcedManagerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
                     "Call Rate": totalCallsCount,
@@ -194,20 +165,20 @@ export function CallPerformanceSummary({
                 });
             }
 
-            excelRows.sort((a, b) => a["District Manager"].localeCompare(b["District Manager"]) || a["Representative"].localeCompare(b["Representative"]));
+            excelRows.sort((a, b) => a["Representative"].localeCompare(b["Representative"]));
 
             const ws = XLSX.utils.json_to_sheet(excelRows);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            const fileName = `Performance_Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            const fileName = `Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
             toast({ title: "Audit Exported", description: `Calculated metrics for ${excelRows.length} representatives.` });
 
         } catch (error: any) {
             console.error("Audit Engine Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data is unavailable. Please try again." });
+            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data is unavailable." });
         } finally {
             setLoading(false);
         }
@@ -277,9 +248,6 @@ export function CallPerformanceSummary({
                                 <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Audit Report (.xlsx)</>
                             )}
                         </Button>
-                        <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Optimizing queries and calculating metrics..." : "Calculates raw counts and active reporting days for assigned staff"}
-                        </p>
                     </div>
                 </CardContent>
             </Card>
@@ -291,7 +259,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Active Days match the PMR Dashboard logic: sum of weighted days where reports were logged (adjusting for partial leaves).
+                                Active Days match the PMR Dashboard logic: weighted sum of reporting days adjusting for partial leaves.
                             </p>
                         </div>
                     </CardContent>
@@ -302,7 +270,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Raw Numerators</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                KPI columns export raw counts (Total Calls, High Freq Providers, and Unique Reach) for manual target assessment.
+                                KPI columns export raw whole-number counts (Total Calls, High Freq Providers, and Unique Reach).
                             </p>
                         </div>
                     </CardContent>

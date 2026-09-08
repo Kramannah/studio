@@ -22,7 +22,6 @@ import { PlanningRequestApprovals } from '@/components/planning-request-approval
 import { useUserProfiles } from '@/hooks/use-user-profiles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { firebaseConfig } from '@/firebase/config';
@@ -276,10 +275,6 @@ export default function AdminPage() {
         }
     };
 
-    const handleDeleteAccount = async (uid: string) => {
-        await deleteProfile(uid);
-    };
-
     if (!mounted || authLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
@@ -316,7 +311,11 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
-                            <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Performance</TabsTrigger>
+                            {(isSuperAdmin || isMarketingOrHR) && (
+                                <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                    <BarChart3 className="h-4 w-4" /> Performance
+                                </TabsTrigger>
+                            )}
                             {isSuperAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
                     </div>
@@ -402,13 +401,15 @@ export default function AdminPage() {
                         </TabsContent>
                     )}
 
-                    <TabsContent value="performance">
-                        <CallPerformanceSummary 
-                            userProfiles={profiles}
-                            currentUserId={user?.uid}
-                            isSuperAdmin={isSuperAdmin || isMarketingOrHR}
-                        />
-                    </TabsContent>
+                    {(isSuperAdmin || isMarketingOrHR) && (
+                        <TabsContent value="performance">
+                            <CallPerformanceSummary 
+                                userProfiles={profiles}
+                                currentUserId={user?.uid}
+                                isSuperAdmin={true}
+                            />
+                        </TabsContent>
+                    )}
 
                     {isSuperAdmin && (
                         <TabsContent value="accounts">
