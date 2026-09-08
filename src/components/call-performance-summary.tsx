@@ -67,10 +67,11 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
+            // Wide query window to handle Manila timezone buffer
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
-            // PMR DISCOVERY: Exact mirror of District Reports logic
+            // PMR DISCOVERY: Exact mirror of District Reports logic to handle current assignments
             const allAssignedIds = new Set<string>();
             if (selectedManagerId === "all") {
                 Object.values(MANAGER_TEAMS).forEach(team => team.forEach(id => allAssignedIds.add(id)));
@@ -97,7 +98,7 @@ export function CallPerformanceSummary({
 
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(1500))),
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(2000))),
                     getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200)))
                 ]);
 
@@ -111,12 +112,10 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // DSM MAPPING: If a manager is selected, use that. If 'All', resolve based on PMR assignment.
+                // DSM RESOLUTION: Mirroring live District Reports tab
                 let pmrManagerName = "Unassigned";
-                const profile = userProfiles[uid];
-                const meta = USER_DATA_MAP[uid];
-
                 if (selectedManagerId === "all") {
+                    const profile = userProfiles[uid];
                     const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
                     const hManager = managers.find(m => m.uid === mId);
                     pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
@@ -125,7 +124,7 @@ export function CallPerformanceSummary({
                     pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
                 }
 
-                // ACTIVE DAYS: Weighted sum of reporting days logic (Matches PMR Dashboard)
+                // ACTIVE DAYS: Weighted sum of reporting days (Consistency with Dashboard)
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
                     if (n.status === 'approved' && n.date) {
@@ -148,8 +147,7 @@ export function CallPerformanceSummary({
                     else activeDaysCount += 1.0;
                 });
 
-                // METRICS: Raw counts (numerators only)
-                const totalCallsCount = uEntries.length;
+                // KPI METRICS: Raw counts (numerators only)
                 const visitMap = new Map<string, number>();
                 uEntries.forEach(e => {
                     const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
@@ -159,11 +157,14 @@ export function CallPerformanceSummary({
                 const uniqueVisitedCount = visitMap.size;
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 3).length;
 
+                const profile = userProfiles[uid];
+                const meta = USER_DATA_MAP[uid];
+
                 excelRows.push({
                     "District Manager": pmrManagerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
-                    "Call Rate": totalCallsCount,
+                    "Call Rate": uEntries.length,
                     "Call Concentration": highFreqAchievedCount,
                     "Call Reach": uniqueVisitedCount,
                     "Active days": activeDaysCount
@@ -176,7 +177,9 @@ export function CallPerformanceSummary({
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
             
-            const fileName = `Audit_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            // DYNAMIC FILENAME: Territory + Month
+            const territoryName = selectedManagerId === "all" ? "Global" : (managers.find(m => m.uid === selectedManagerId)?.name || "Territory");
+            const fileName = `Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
             toast({ title: "Audit Exported", description: `Compiled records for ${excelRows.length} representatives.` });

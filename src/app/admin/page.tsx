@@ -91,7 +91,7 @@ export default function AdminPage() {
 
     const hasAdminAccess = isUserAdmin || isUserManager || isMarketingOrHR;
 
-    // PERFORMANCE RESTRICTION: Hidden from DSMs, strictly for National/HQ
+    // PERFORMANCE RESTRICTION: Strictly hidden from DSMs/Managers. Only for SuperAdmin/HQ.
     const canSeePerformance = isSuperAdmin || isMarketingOrHR;
 
     useEffect(() => {
@@ -618,9 +618,9 @@ export default function AdminPage() {
                     {editingAccount && (
                         <div className="grid gap-4 py-4">
                              <div className="grid gap-2">
-                                <Label htmlFor="email">Technical Identifier (Email)</Label>
+                                <Label htmlFor="edit-email">Technical Identifier (Email)</Label>
                                 <Input 
-                                    id="email" 
+                                    id="edit-email" 
                                     value={editingAccount.email} 
                                     onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })}
                                 />
