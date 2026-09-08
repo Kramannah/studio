@@ -26,7 +26,9 @@ import {
     Filter,
     Maximize2,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Check,
+    X
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -70,7 +72,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         isOpen: false,
         group: null
     });
-    const [attendance, setAttendance] = useState<'attended' | 'not-attended'>('attended');
+    const [individualAttendance, setIndividualAttendance] = useState<Record<string, 'attended' | 'not-attended'>>({});
     const [proofPhoto, setProofPhoto] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +90,7 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         const groups: Record<string, MarketingEvent[]> = {};
         
         filteredEvents.forEach(e => {
-            const gid = e.groupId || e.id; // Use groupId if available, else doc id for single entries
+            const gid = e.groupId || e.id; 
             if (!groups[gid]) groups[gid] = [];
             groups[gid].push(e);
         });
@@ -119,9 +121,20 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
     };
 
     const handleOpenComplete = (group: MarketingEvent[]) => {
-        setAttendance('attended');
+        const initialStatuses: Record<string, 'attended' | 'not-attended'> = {};
+        group.forEach(e => {
+            initialStatuses[e.id] = 'attended';
+        });
+        setIndividualAttendance(initialStatuses);
         setProofPhoto(null);
         setCompletionDialog({ isOpen: true, group });
+    };
+
+    const toggleIndividualAttendance = (eventId: string) => {
+        setIndividualAttendance(prev => ({
+            ...prev,
+            [eventId]: prev[eventId] === 'attended' ? 'not-attended' : 'attended'
+        }));
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,15 +155,16 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         
         setIsProcessing(true);
         try {
-            // Update all records in the group
-            await Promise.all(completionDialog.group.map(event => 
-                updateEvent({
+            await Promise.all(completionDialog.group.map(event => {
+                const status = individualAttendance[event.id];
+                return updateEvent({
                     ...event,
                     status: 'completed',
-                    attendanceStatus: attendance,
-                    proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
-                })
-            ));
+                    attendanceStatus: status,
+                    // Only attach proof photo to records that were actually attended
+                    proofPhoto: status === 'attended' ? proofPhoto || undefined : undefined
+                });
+            }));
             
             setCompletionDialog({ isOpen: false, group: null });
             setActiveTab('completed');
@@ -167,6 +181,10 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         setActiveTab('canceled');
     };
 
+    const anyAttended = useMemo(() => {
+        return Object.values(individualAttendance).some(v => v === 'attended');
+    }, [individualAttendance]);
+
     if (view === 'form') {
         return (
             <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -182,7 +200,6 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                         if (editingEvent) {
                             await updateEvent({ ...editingEvent, ...dataArray[0] });
                         } else {
-                            // Bulk create mode: Hook handles individual addDoc calls
                             for (const data of dataArray) {
                                 await addEvent(data as any);
                             }
@@ -262,19 +279,15 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                                             <TableRow className={cn("h-20 hover:bg-muted/20 border-b", isExpanded && "bg-muted/10")}>
                                                 <TableCell className="pl-6 font-bold text-base">
                                                     <div className="flex items-center gap-2">
-                                                        {isGroup ? (
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="sm" 
-                                                                onClick={() => toggleGroup(gid)}
-                                                                className="p-0 h-auto hover:bg-transparent text-primary flex items-center gap-2"
-                                                            >
-                                                                {group.length} Doctors Invited
-                                                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                                            </Button>
-                                                        ) : (
-                                                            `Dr. ${firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`
-                                                        )}
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            onClick={() => toggleGroup(gid)}
+                                                            className="p-0 h-auto hover:bg-transparent text-primary flex items-center gap-2"
+                                                        >
+                                                            {isGroup ? `${group.length} Doctors Invited` : `Dr. ${firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`}
+                                                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                        </Button>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -341,7 +354,6 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                                                 </TableCell>
                                             </TableRow>
 
-                                            {/* EXPANDED NAMES SECTION */}
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/5">
                                                     <TableCell colSpan={activeTab === 'completed' ? 6 : 5} className="p-0">
@@ -349,10 +361,19 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                                                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Providers in this report:</p>
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                                                 {group.map((e, idx) => (
-                                                                    <div key={e.id} className="flex items-center gap-2 p-2 rounded-lg bg-background border shadow-sm">
-                                                                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                                                                        <span className="text-sm font-bold truncate">Dr. {e.doctorFirstName} {e.doctorLastName}</span>
-                                                                        {e.isListed && <Badge variant="outline" className="text-[8px] h-4 ml-auto opacity-50">Masterlist</Badge>}
+                                                                    <div key={e.id} className="flex items-center justify-between p-3 rounded-lg bg-background border shadow-sm">
+                                                                        <div className="flex items-center gap-2 truncate">
+                                                                            <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                                                                            <span className="text-sm font-bold truncate">Dr. {e.doctorFirstName} {e.doctorLastName}</span>
+                                                                        </div>
+                                                                        {activeTab === 'completed' && (
+                                                                            <Badge variant="outline" className={cn("text-[8px] h-4 shrink-0 ml-2", e.attendanceStatus === 'attended' ? "border-green-500 text-green-600" : "opacity-50")}>
+                                                                                {e.attendanceStatus === 'attended' ? "Attended" : "No-Show"}
+                                                                            </Badge>
+                                                                        )}
+                                                                        {activeTab === 'pending' && e.isListed && (
+                                                                            <Badge variant="outline" className="text-[8px] h-4 shrink-0 opacity-50 ml-2">Masterlist</Badge>
+                                                                        )}
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -373,34 +394,52 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
 
             {/* Completion Dialog */}
             <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, group: null })}>
-                <DialogContent className="sm:max-w-md border-2">
+                <DialogContent className="sm:max-w-xl border-2">
                     <DialogHeader>
                         <DialogTitle className="font-headline text-xl flex items-center gap-2">
-                            <CheckCircle2 className="text-green-500" /> Confirm Batch Completion
+                            <CheckCircle2 className="text-green-500" /> Confirm Program Attendance
                         </DialogTitle>
                         <DialogDescription>
-                            Provide attendance details for this group of {completionDialog.group?.length || 0} doctors.
+                            Review the guest list and indicate which providers successfully attended the session.
                         </DialogDescription>
                     </DialogHeader>
                     
                     <div className="py-6 space-y-6">
-                        <div className="space-y-3">
-                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Attendance Result (Applies to all)</Label>
-                            <RadioGroup value={attendance} onValueChange={(v: any) => setAttendance(v)} className="grid grid-cols-2 gap-4">
-                                <div className={cn("flex items-center space-x-2 border-2 p-3 rounded-xl cursor-pointer transition-all", attendance === 'attended' ? "border-primary bg-primary/5" : "border-muted")}>
-                                    <RadioGroupItem value="attended" id="att-yes" />
-                                    <Label htmlFor="att-yes" className="font-bold cursor-pointer">Attended</Label>
-                                </div>
-                                <div className={cn("flex items-center space-x-2 border-2 p-3 rounded-xl cursor-pointer transition-all", attendance === 'not-attended' ? "border-primary bg-primary/5" : "border-muted")}>
-                                    <RadioGroupItem value="not-attended" id="att-no" />
-                                    <Label htmlFor="att-no" className="font-bold cursor-pointer">Not Attended</Label>
-                                </div>
-                            </RadioGroup>
+                        <div className="space-y-4">
+                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Provider Attendance List</Label>
+                            <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+                                {completionDialog.group?.map(event => {
+                                    const status = individualAttendance[event.id];
+                                    return (
+                                        <div 
+                                            key={event.id} 
+                                            className={cn(
+                                                "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer",
+                                                status === 'attended' ? "border-primary bg-primary/5" : "border-muted bg-muted/20 opacity-60"
+                                            )}
+                                            onClick={() => toggleIndividualAttendance(event.id)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn(
+                                                    "h-5 w-5 rounded-full flex items-center justify-center border",
+                                                    status === 'attended' ? "bg-primary border-primary text-white" : "border-muted-foreground text-transparent"
+                                                )}>
+                                                    <Check className="h-3 w-3" strokeWidth={3} />
+                                                </div>
+                                                <span className="font-bold text-sm">Dr. {event.doctorFirstName} {event.doctorLastName}</span>
+                                            </div>
+                                            <Badge variant={status === 'attended' ? "default" : "outline"} className="text-[10px]">
+                                                {status === 'attended' ? "Present" : "No-Show"}
+                                            </Badge>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
 
-                        {attendance === 'attended' && (
+                        {anyAttended && (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                                <Label className="font-headline text-xs uppercase text-primary">Required Proof Photo</Label>
+                                <Label className="font-headline text-xs uppercase text-primary">Required Proof Photo (for Present Doctors)</Label>
                                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
                                 
                                 {proofPhoto ? (
@@ -413,9 +452,15 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                                 ) : (
                                     <Button variant="outline" className="w-full h-32 border-dashed border-2 flex-col gap-2 rounded-2xl" onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>
                                         <Camera className="w-8 h-8 text-muted-foreground" />
-                                        <span className="text-sm font-medium">Capture or Upload Photo</span>
+                                        <span className="text-sm font-medium">Capture or Upload Proof Photo</span>
                                     </Button>
                                 )}
+                            </div>
+                        )}
+
+                        {!anyAttended && (
+                            <div className="bg-muted/50 p-4 rounded-xl border-2 border-dashed text-center">
+                                <p className="text-sm text-muted-foreground italic">No doctors marked as present. No proof photo is required for this batch.</p>
                             </div>
                         )}
                     </div>
@@ -425,9 +470,9 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                         <Button 
                             className="font-headline px-8" 
                             onClick={handleSaveCompletion}
-                            disabled={(attendance === 'attended' && !proofPhoto) || isProcessing}
+                            disabled={(anyAttended && !proofPhoto) || isProcessing}
                         >
-                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Report"}
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Program"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
