@@ -142,7 +142,11 @@ export function MarketingEventForm({ onSave, onCancel, doctors, event }: Marketi
     if (selectedProviders.length === 0) return;
     setIsSubmitting(true);
     try {
+      // Generate a shared groupId for this batch
+      const groupId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
       const payloads = selectedProviders.map(p => ({
+          groupId,
           isListed: p.isListed,
           doctorId: p.id,
           doctorFirstName: p.firstName,

@@ -45,6 +45,7 @@ export interface CoverageEntry {
 export interface MarketingEvent {
   id: string;
   userId: string;
+  groupId?: string; // Used to group multiple doctors in one session
   isListed: boolean;
   doctorId?: string;
   doctorFirstName: string;

@@ -25,7 +25,9 @@ import {
     Camera,
     Image as ImageIcon,
     Filter,
-    Maximize2
+    Maximize2,
+    ChevronDown,
+    ChevronUp
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -62,11 +64,12 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
     const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
     const [activeTab, setActiveTab] = useState('pending');
     const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     
     // Completion Dialog State
-    const [completionDialog, setCompletionDialog] = useState<{ isOpen: boolean; event: MarketingEvent | null }>({
+    const [completionDialog, setCompletionDialog] = useState<{ isOpen: boolean; group: MarketingEvent[] | null }>({
         isOpen: false,
-        event: null
+        group: null
     });
     const [attendance, setAttendance] = useState<'attended' | 'not-attended'>('attended');
     const [proofPhoto, setProofPhoto] = useState<string | null>(null);
@@ -81,19 +84,45 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
         return events.filter(e => e.quarter === selectedQuarter);
     }, [events, selectedQuarter]);
 
-    const pendingEvents = useMemo(() => filteredEvents.filter(e => e.status === 'planned'), [filteredEvents]);
-    const completedEvents = useMemo(() => filteredEvents.filter(e => e.status === 'completed'), [filteredEvents]);
-    const canceledEvents = useMemo(() => filteredEvents.filter(e => e.status === 'cancelled'), [filteredEvents]);
+    // Grouping Logic: Treat multiple docs as 1 report based on groupId
+    const groupedEvents = useMemo(() => {
+        const groups: Record<string, MarketingEvent[]> = {};
+        
+        filteredEvents.forEach(e => {
+            const gid = e.groupId || e.id; // Use groupId if available, else doc id for single entries
+            if (!groups[gid]) groups[gid] = [];
+            groups[gid].push(e);
+        });
+
+        const sortedGroups = Object.values(groups).sort((a, b) => 
+            new Date(b[0].eventDate).getTime() - new Date(a[0].eventDate).getTime()
+        );
+
+        return {
+            pending: sortedGroups.filter(g => g[0].status === 'planned'),
+            completed: sortedGroups.filter(g => g[0].status === 'completed'),
+            canceled: sortedGroups.filter(g => g[0].status === 'cancelled')
+        };
+    }, [filteredEvents]);
 
     const handleAdd = () => {
         setEditingEvent(undefined);
         setView('form');
     };
 
-    const handleOpenComplete = (event: MarketingEvent) => {
+    const toggleGroup = (groupId: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    const handleOpenComplete = (group: MarketingEvent[]) => {
         setAttendance('attended');
         setProofPhoto(null);
-        setCompletionDialog({ isOpen: true, event });
+        setCompletionDialog({ isOpen: true, group });
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,29 +139,32 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
     };
 
     const handleSaveCompletion = async () => {
-        if (!completionDialog.event || isProcessing) return;
+        if (!completionDialog.group || isProcessing) return;
         
         setIsProcessing(true);
         try {
-            await updateEvent({
-                ...completionDialog.event,
-                status: 'completed',
-                attendanceStatus: attendance,
-                proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
-            });
+            // Update all records in the group
+            await Promise.all(completionDialog.group.map(event => 
+                updateEvent({
+                    ...event,
+                    status: 'completed',
+                    attendanceStatus: attendance,
+                    proofPhoto: attendance === 'attended' ? proofPhoto || undefined : undefined
+                })
+            ));
             
-            setCompletionDialog({ isOpen: false, event: null });
+            setCompletionDialog({ isOpen: false, group: null });
             setActiveTab('completed');
         } catch (error) {
-            console.error("Failed to complete program:", error);
-            toast({ variant: 'destructive', title: "Process Failed", description: "Could not finalize the program record." });
+            console.error("Failed to complete programs:", error);
+            toast({ variant: 'destructive', title: "Process Failed", description: "Could not finalize the program records." });
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const handleCancelEvent = async (event: MarketingEvent) => {
-        await updateEvent({ ...event, status: 'cancelled' });
+    const handleCancelGroup = async (group: MarketingEvent[]) => {
+        await Promise.all(group.map(event => updateEvent({ ...event, status: 'cancelled' })));
         setActiveTab('canceled');
     };
 
@@ -149,12 +181,11 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                     onCancel={() => setView('list')}
                     onSave={async (dataArray) => {
                         if (editingEvent) {
-                            // Edit mode only allows one doctor
                             await updateEvent({ ...editingEvent, ...dataArray[0] });
                         } else {
-                            // Bulk create mode
+                            // Bulk create mode: Hook handles individual addDoc calls
                             for (const data of dataArray) {
-                                await addEvent({ ...data, status: 'planned' } as any);
+                                await addEvent(data as any);
                             }
                         }
                         setView('list');
@@ -164,6 +195,10 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
             </div>
         );
     }
+
+    const currentGroups = activeTab === 'pending' ? groupedEvents.pending : 
+                        activeTab === 'completed' ? groupedEvents.completed : 
+                        groupedEvents.canceled;
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-[1400px] mx-auto">
@@ -198,12 +233,12 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-muted/50 p-1 rounded-xl border-2 mb-6 w-full sm:w-fit overflow-x-auto justify-start scrollbar-hide flex-nowrap">
-                    <TabsTrigger value="pending" className="px-8 rounded-lg font-headline whitespace-nowrap">Pending ({pendingEvents.length})</TabsTrigger>
-                    <TabsTrigger value="completed" className="px-8 rounded-lg font-headline whitespace-nowrap">Completed ({completedEvents.length})</TabsTrigger>
-                    <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline whitespace-nowrap">Canceled ({canceledEvents.length})</TabsTrigger>
+                    <TabsTrigger value="pending" className="px-8 rounded-lg font-headline whitespace-nowrap">Pending ({groupedEvents.pending.length})</TabsTrigger>
+                    <TabsTrigger value="completed" className="px-8 rounded-lg font-headline whitespace-nowrap">Completed ({groupedEvents.completed.length})</TabsTrigger>
+                    <TabsTrigger value="canceled" className="px-8 rounded-lg font-headline whitespace-nowrap">Canceled ({groupedEvents.canceled.length})</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="pending">
+                <TabsContent value={activeTab}>
                     <Card className="border-2 shadow-lg overflow-hidden">
                         <Table>
                             <TableHeader className="bg-muted/30">
@@ -212,139 +247,124 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                                     <TableHead className="font-bold">Quarter</TableHead>
                                     <TableHead className="font-bold">Marketing Event</TableHead>
                                     <TableHead className="font-bold text-center">Scheduled Date</TableHead>
+                                    {activeTab === 'completed' && <TableHead className="font-bold text-center">Proof</TableHead>}
                                     <TableHead className="text-right pr-6">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {pendingEvents.length > 0 ? pendingEvents.map((event) => (
-                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
-                                        <TableCell className="pl-6 font-bold text-base">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{event.eventName}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-center text-sm font-medium text-muted-foreground">
-                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-right pr-6">
-                                            {!readOnly && (
-                                                <div className="flex justify-end gap-2">
-                                                    <Button size="sm" onClick={() => handleOpenComplete(event)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
-                                                        Complete
-                                                    </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white font-headline h-9">
-                                                                Cancel
+                                {currentGroups.length > 0 ? currentGroups.map((group) => {
+                                    const firstEvent = group[0];
+                                    const gid = firstEvent.groupId || firstEvent.id;
+                                    const isExpanded = expandedGroups.has(gid);
+                                    const isGroup = group.length > 1;
+
+                                    return (
+                                        <React.Fragment key={gid}>
+                                            <TableRow className={cn("h-20 hover:bg-muted/20 border-b", isExpanded && "bg-muted/10")}>
+                                                <TableCell className="pl-6 font-bold text-base">
+                                                    <div className="flex items-center gap-2">
+                                                        {isGroup ? (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="sm" 
+                                                                onClick={() => toggleGroup(gid)}
+                                                                className="p-0 h-auto hover:bg-transparent text-primary flex items-center gap-2"
+                                                            >
+                                                                {group.length} Doctors Invited
+                                                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                             </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Cancel this event?</AlertDialogTitle>
-                                                                <AlertDialogDescription>This will move the event to the Canceled section.</AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Go Back</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleCancelEvent(event)} className="bg-destructive text-white">Confirm Cancellation</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No pending events for the selected quarter.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </Card>
-                </TabsContent>
-
-                <TabsContent value="completed">
-                    <Card className="border-2 shadow-lg overflow-hidden">
-                        <Table>
-                            <TableHeader className="bg-muted/30">
-                                <TableRow className="h-14">
-                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
-                                    <TableHead className="font-bold">Quarter</TableHead>
-                                    <TableHead className="font-bold">Marketing Event</TableHead>
-                                    <TableHead className="font-bold text-center">Status</TableHead>
-                                    <TableHead className="font-bold text-center">Proof</TableHead>
-                                    <TableHead className="text-right pr-6">Date Finished</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {completedEvents.length > 0 ? completedEvents.map((event) => (
-                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
-                                        <TableCell className="pl-6 font-bold">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
-                                        </TableCell>
-                                        <TableCell>{event.eventName}</TableCell>
-                                        <TableCell className="text-center">
-                                            <Badge variant={event.attendanceStatus === 'attended' ? 'default' : 'secondary'} className={cn(event.attendanceStatus === 'attended' ? "bg-green-600" : "opacity-50")}>
-                                                {event.attendanceStatus === 'attended' ? 'Attended' : 'Not Attended'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {event.proofPhoto ? (
-                                                <div className="flex justify-center">
-                                                    <div 
-                                                        className="w-10 h-10 rounded border-2 border-primary/20 overflow-hidden relative group cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                                                        onClick={() => setPreviewImage({ src: event.proofPhoto!, title: `Proof: ${event.doctorFirstName} ${event.doctorLastName}` })}
-                                                    >
-                                                        <Image src={event.proofPhoto} alt="Proof" fill className="object-cover" />
-                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <Maximize2 className="w-3 h-3 text-white" />
-                                                        </div>
+                                                        ) : (
+                                                            `Dr. ${firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`
+                                                        )}
                                                     </div>
-                                                </div>
-                                            ) : <span className="text-xs text-muted-foreground">—</span>}
-                                        </TableCell>
-                                        <TableCell className="text-right pr-6 text-sm text-muted-foreground">
-                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                    <TableRow><TableCell colSpan={6} className="h-40 text-center text-muted-foreground italic">No completed events yet.</TableCell></TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </Card>
-                </TabsContent>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline" className="font-mono">{firstEvent.quarter || 'Q1'}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">{firstEvent.eventName}</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center text-sm font-medium text-muted-foreground">
+                                                    {firstEvent.eventDate ? format(parseISO(firstEvent.eventDate), 'MMM d, yyyy') : 'N/A'}
+                                                </TableCell>
+                                                
+                                                {activeTab === 'completed' && (
+                                                    <TableCell className="text-center">
+                                                        {firstEvent.proofPhoto ? (
+                                                            <div className="flex justify-center">
+                                                                <div 
+                                                                    className="w-10 h-10 rounded border-2 border-primary/20 overflow-hidden relative group cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                                                    onClick={() => setPreviewImage({ src: firstEvent.proofPhoto!, title: `Group Proof: ${firstEvent.eventName}` })}
+                                                                >
+                                                                    <Image src={firstEvent.proofPhoto} alt="Proof" fill className="object-cover" />
+                                                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <Maximize2 className="w-3 h-3 text-white" />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                                                    </TableCell>
+                                                )}
 
-                <TabsContent value="canceled">
-                    <Card className="border-2 shadow-lg overflow-hidden opacity-80">
-                        <Table>
-                            <TableHeader className="bg-muted/30">
-                                <TableRow className="h-14">
-                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
-                                    <TableHead className="font-bold">Quarter</TableHead>
-                                    <TableHead className="font-bold">Marketing Event</TableHead>
-                                    <TableHead className="font-bold text-center">Type</TableHead>
-                                    <TableHead className="text-right pr-6">Original Date</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {canceledEvents.length > 0 ? canceledEvents.map((event) => (
-                                    <TableRow key={event.id} className="h-20 hover:bg-muted/20 border-b">
-                                        <TableCell className="pl-6 font-bold text-destructive">Dr. {event.doctorFirstName} {event.doctorLastName}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="font-mono">{event.quarter || 'Q1'}</Badge>
-                                        </TableCell>
-                                        <TableCell className="line-through opacity-50">{event.eventName}</TableCell>
-                                        <TableCell className="text-center">
-                                            <Badge variant="outline" className="border-destructive/30 text-destructive/50">Canceled</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right pr-6 text-sm text-muted-foreground">
-                                            {event.eventDate ? format(parseISO(event.eventDate), 'MMM d, yyyy') : 'N/A'}
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                    <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground italic">No canceled events.</TableCell></TableRow>
+                                                <TableCell className="text-right pr-6">
+                                                    {!readOnly && activeTab === 'pending' && (
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button size="sm" onClick={() => handleOpenComplete(group)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
+                                                                Complete
+                                                            </Button>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button size="sm" variant="outline" className="border-destructive text-destructive hover:bg-destructive hover:text-white font-headline h-9">
+                                                                        Cancel
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Cancel this event?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>This will move all {group.length} records in this batch to the Canceled section.</AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Go Back</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleCancelGroup(group)} className="bg-destructive text-white">Confirm Cancellation</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </div>
+                                                    )}
+                                                    {activeTab === 'completed' && (
+                                                        <Badge variant={firstEvent.attendanceStatus === 'attended' ? 'default' : 'secondary'} className={cn(firstEvent.attendanceStatus === 'attended' ? "bg-green-600" : "opacity-50")}>
+                                                            {firstEvent.attendanceStatus === 'attended' ? 'Attended' : 'Not Attended'}
+                                                        </Badge>
+                                                    )}
+                                                    {activeTab === 'canceled' && (
+                                                         <Badge variant="outline" className="border-destructive/30 text-destructive/50">Canceled</Badge>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+
+                                            {/* EXPANDED NAMES SECTION */}
+                                            {isExpanded && (
+                                                <TableRow className="bg-muted/5">
+                                                    <TableCell colSpan={activeTab === 'completed' ? 6 : 5} className="p-0">
+                                                        <div className="px-12 py-4 space-y-2 border-l-4 border-primary/20 animate-in slide-in-from-top-2 duration-300">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Providers in this report:</p>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                                {group.map((e, idx) => (
+                                                                    <div key={e.id} className="flex items-center gap-2 p-2 rounded-lg bg-background border shadow-sm">
+                                                                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                                                        <span className="text-sm font-bold truncate">Dr. {e.doctorFirstName} {e.doctorLastName}</span>
+                                                                        {e.isListed && <Badge variant="outline" className="text-[8px] h-4 ml-auto opacity-50">Masterlist</Badge>}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                }) : (
+                                    <TableRow><TableCell colSpan={activeTab === 'completed' ? 6 : 5} className="h-40 text-center text-muted-foreground italic">No entries found.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>
@@ -353,20 +373,20 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
             </Tabs>
 
             {/* Completion Dialog */}
-            <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, event: null })}>
+            <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, group: null })}>
                 <DialogContent className="sm:max-w-md border-2">
                     <DialogHeader>
                         <DialogTitle className="font-headline text-xl flex items-center gap-2">
-                            <CheckCircle2 className="text-green-500" /> Confirm Completion
+                            <CheckCircle2 className="text-green-500" /> Confirm Batch Completion
                         </DialogTitle>
                         <DialogDescription>
-                            Provide attendance details for Dr. {completionDialog.event?.doctorFirstName} {completionDialog.event?.doctorLastName}.
+                            Provide attendance details for this group of {completionDialog.group?.length || 0} doctors.
                         </DialogDescription>
                     </DialogHeader>
                     
                     <div className="py-6 space-y-6">
                         <div className="space-y-3">
-                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Attendance Result</Label>
+                            <Label className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Attendance Result (Applies to all)</Label>
                             <RadioGroup value={attendance} onValueChange={(v: any) => setAttendance(v)} className="grid grid-cols-2 gap-4">
                                 <div className={cn("flex items-center space-x-2 border-2 p-3 rounded-xl cursor-pointer transition-all", attendance === 'attended' ? "border-primary bg-primary/5" : "border-muted")}>
                                     <RadioGroupItem value="attended" id="att-yes" />
@@ -402,13 +422,13 @@ export function MarketingEventsView({ userId, readOnly = false }: MarketingEvent
                     </div>
 
                     <DialogFooter className="gap-2">
-                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, event: null })} disabled={isProcessing}>Close</Button>
+                        <Button variant="ghost" onClick={() => setCompletionDialog({ isOpen: false, group: null })} disabled={isProcessing}>Close</Button>
                         <Button 
                             className="font-headline px-8" 
                             onClick={handleSaveCompletion}
                             disabled={(attendance === 'attended' && !proofPhoto) || isProcessing}
                         >
-                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Event"}
+                            {isProcessing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</> : "Finalize Report"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
