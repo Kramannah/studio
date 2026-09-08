@@ -71,7 +71,7 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
               disabled={disabled}
-              className="w-full pr-10"
+              className="w-full pr-10 border-2 h-11 rounded-xl focus-visible:ring-primary"
               onFocus={() => !disabled && setOpen(true)}
             />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50">
@@ -80,14 +80,14 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
           </div>
       </PopoverTrigger>
       <PopoverContent 
-        className="w-[--radix-popover-trigger-width] p-0" 
+        className="w-[--radix-popover-trigger-width] p-0 shadow-2xl border-2 rounded-xl" 
         align="start"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Command shouldFilter={false}>
-          <CommandList>
+          <CommandList className="max-h-[300px] overflow-y-auto">
             {filteredDoctors.length === 0 ? (
-                <CommandEmpty>No doctor found in masterlist.</CommandEmpty>
+                <CommandEmpty className="p-4 text-sm text-center text-muted-foreground">No doctor found in masterlist.</CommandEmpty>
             ) : (
                 <CommandGroup>
                 {filteredDoctors.map((doctor) => (
@@ -100,16 +100,17 @@ export const Autocomplete = React.memo(({ doctors, value, onChange, onSelect, pl
                         e.preventDefault();
                         e.stopPropagation();
                       }}
+                      className="p-3 cursor-pointer hover:bg-primary/10"
                     >
                     <Check
                       className={cn(
-                        "mr-2 h-4 w-4",
+                        "mr-2 h-4 w-4 text-primary shrink-0",
                         `${doctor.firstName} ${doctor.lastName}` === value ? "opacity-100" : "opacity-0"
                       )}
                     />
-                    <div className="flex flex-col">
-                      <span className="font-bold">{doctor.firstName} {doctor.lastName}</span>
-                      <span className="text-[10px] text-muted-foreground truncate">{doctor.specialty} • {doctor.clinic}</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-sm truncate">{doctor.firstName} {doctor.lastName}</span>
+                      <span className="text-[10px] text-muted-foreground truncate uppercase font-black tracking-tight">{doctor.specialty} • {doctor.clinic}</span>
                     </div>
                     </CommandItem>
                 ))}
