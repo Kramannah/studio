@@ -24,7 +24,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v6';
-const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
+const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
 
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
@@ -142,12 +142,13 @@ export const useDoctors = (active: boolean = true) => {
     const docRef = doc(db, "doctors", id);
     const finalData = { ...dataToUpdate, userId: user.uid };
     
-    // Resolve old version to check for name changes before updating for cascading sync
     const oldVersion = doctors.find(d => d.id === id);
-    const nameChanged = oldVersion && (oldVersion.firstName !== doctorData.firstName || oldVersion.lastName !== doctorData.lastName);
+    if (!oldVersion) return;
+
+    const nameChanged = oldVersion.firstName !== doctorData.firstName || oldVersion.lastName !== doctorData.lastName;
 
     updateDoc(docRef, finalData)
-      .then(() => {
+      .then(async () => {
         setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
@@ -155,21 +156,41 @@ export const useDoctors = (active: boolean = true) => {
         });
         toast({ title: "Doctor Updated" });
 
-        // CASCADING UPDATE: If names were modified, sync all associated plans in the background
+        // CASCADING SYNC: Update all plans and coverage entries if name changed
         if (nameChanged) {
-            getDocs(query(collection(db!, "plans"), where("doctorId", "==", id)))
-                .then(snap => {
-                    if (snap.empty) return;
-                    const batch = writeBatch(db!);
-                    snap.forEach(pDoc => {
-                        batch.update(doc(db!, "plans", pDoc.id), {
-                            doctorFirstName: doctorData.firstName,
-                            doctorLastName: doctorData.lastName
-                        });
+            try {
+                const [plansSnap, entriesSnap] = await Promise.all([
+                    getDocs(query(collection(db!, "plans"), where("doctorId", "==", id))),
+                    getDocs(query(
+                        collection(db!, "coverageEntries"), 
+                        where("userId", "==", user.uid),
+                        where("firstName", "==", oldVersion.firstName),
+                        where("lastName", "==", oldVersion.lastName)
+                    ))
+                ]);
+
+                if (plansSnap.empty && entriesSnap.empty) return;
+
+                const batch = writeBatch(db!);
+                
+                plansSnap.forEach(pDoc => {
+                    batch.update(doc(db!, "plans", pDoc.id), {
+                        doctorFirstName: doctorData.firstName,
+                        doctorLastName: doctorData.lastName
                     });
-                    batch.commit(); // Non-blocking commit
-                })
-                .catch(err => console.warn("Plan name cascade failed:", err));
+                });
+
+                entriesSnap.forEach(eDoc => {
+                    batch.update(doc(db!, "coverageEntries", eDoc.id), {
+                        firstName: doctorData.firstName,
+                        lastName: doctorData.lastName
+                    });
+                });
+
+                await batch.commit();
+            } catch (err) {
+                console.warn("Name cascade sync failed:", err);
+            }
         }
       })
       .catch(async (error) => {

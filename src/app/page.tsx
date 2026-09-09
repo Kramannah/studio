@@ -145,9 +145,12 @@ export default function Home() {
 
   const handleUpdateDoctor = useCallback((doctor: Doctor) => {
     updateDoctor(doctor);
-    // Force a refresh of plans data to reflect any cascading name changes
-    setTimeout(() => refreshPlans(true), 1500);
-  }, [updateDoctor, refreshPlans]);
+    // Force a deep refresh of plans and entries to reflect cascading data changes
+    setTimeout(() => {
+        refreshPlans(true);
+        refreshEntries(true);
+    }, 2000);
+  }, [updateDoctor, refreshPlans, refreshEntries]);
 
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...globalUsedQuantities };
