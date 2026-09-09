@@ -145,61 +145,61 @@ export const useDoctors = (active: boolean = true) => {
     const oldVersion = doctors.find(d => d.id === id);
     if (!oldVersion) return;
 
-    const nameChanged = oldVersion.firstName !== doctorData.firstName || oldVersion.lastName !== doctorData.lastName;
+    // Detect if identifying names have changed
+    const nameChanged = 
+        oldVersion.firstName.trim() !== doctorData.firstName.trim() || 
+        oldVersion.lastName.trim() !== doctorData.lastName.trim();
 
-    updateDoc(docRef, finalData)
-      .then(async () => {
+    try {
+        await updateDoc(docRef, finalData);
+        
         setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
+        
         toast({ title: "Doctor Updated" });
 
-        // CASCADING SYNC: Update all plans and coverage entries if name changed
+        // CASCADING SYNC: Correct all historical and planned records to match new name
         if (nameChanged) {
-            try {
-                const [plansSnap, entriesSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "plans"), where("doctorId", "==", id))),
-                    getDocs(query(
-                        collection(db!, "coverageEntries"), 
-                        where("userId", "==", user.uid),
-                        where("firstName", "==", oldVersion.firstName),
-                        where("lastName", "==", oldVersion.lastName)
-                    ))
-                ]);
-
-                if (plansSnap.empty && entriesSnap.empty) return;
-
-                const batch = writeBatch(db!);
-                
-                plansSnap.forEach(pDoc => {
-                    batch.update(doc(db!, "plans", pDoc.id), {
-                        doctorFirstName: doctorData.firstName,
-                        doctorLastName: doctorData.lastName
-                    });
+            const batch = writeBatch(db!);
+            
+            // 1. Correct Plans (Search by Doctor ID is reliable)
+            const plansSnap = await getDocs(query(collection(db!, "plans"), where("doctorId", "==", id)));
+            plansSnap.forEach(pDoc => {
+                batch.update(doc(db!, "plans", pDoc.id), {
+                    doctorFirstName: doctorData.firstName,
+                    doctorLastName: doctorData.lastName
                 });
+            });
 
-                entriesSnap.forEach(eDoc => {
-                    batch.update(doc(db!, "coverageEntries", eDoc.id), {
-                        firstName: doctorData.firstName,
-                        lastName: doctorData.lastName
-                    });
+            // 2. Correct Coverage Entries (Must match by old name + user ID)
+            const entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid)));
+            const matchingEntries = entriesSnap.docs.filter(d => {
+                const data = d.data();
+                return String(data.firstName || "").toLowerCase().trim() === String(oldVersion.firstName).toLowerCase().trim() &&
+                       String(data.lastName || "").toLowerCase().trim() === String(oldVersion.lastName).toLowerCase().trim();
+            });
+
+            matchingEntries.forEach(eDoc => {
+                batch.update(doc(db!, "coverageEntries", eDoc.id), {
+                    firstName: doctorData.firstName,
+                    lastName: doctorData.lastName
                 });
+            });
 
+            if (!plansSnap.empty || matchingEntries.length > 0) {
                 await batch.commit();
-            } catch (err) {
-                console.warn("Name cascade sync failed:", err);
             }
         }
-      })
-      .catch(async (error) => {
+    } catch (error: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: docRef.path,
             operation: 'update',
             requestResourceData: finalData,
         }));
-      });
+    }
   };
 
   const deleteDoctor = async (id: string) => {

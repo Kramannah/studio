@@ -143,13 +143,15 @@ export default function Home() {
     }
   }, [refetchAllocations]);
 
-  const handleUpdateDoctor = useCallback((doctor: Doctor) => {
-    updateDoctor(doctor);
-    // Force a deep refresh of plans and entries to reflect cascading data changes
-    setTimeout(() => {
-        refreshPlans(true);
-        refreshEntries(true);
-    }, 2000);
+  const handleUpdateDoctor = useCallback(async (doctor: Doctor) => {
+    // Correctly await the doctor update including cascading syncs
+    await updateDoctor(doctor);
+    
+    // Coordinated refresh of dependent datasets
+    await Promise.all([
+        refreshPlans(true),
+        refreshEntries(true)
+    ]);
   }, [updateDoctor, refreshPlans, refreshEntries]);
 
   const mergedUsedQuantities = useMemo(() => {
