@@ -455,27 +455,22 @@ export function CoverageForm({
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
-        // Try to find the doctor in the masterlist first
-        let doctor = (doctors || []).find(d => d.id === plannedDoctorId);
+        // PRIORITY: Find doctor in Masterlist to get Specialty/Clinic
+        const masterDoctor = (doctors || []).find(d => d.id === plannedDoctorId);
         
-        // HEALING: If doctor not in masterlist (loading or mismatch), autofill from the plan data
-        if (!doctor) {
-            const plan = (todaysPlans || []).find(p => p.doctorId === plannedDoctorId);
-            if (plan) {
-                doctor = {
-                    firstName: plan.doctorFirstName,
-                    lastName: plan.doctorLastName,
-                    id: plan.doctorId
-                } as any;
-            }
-        }
+        // FALLBACK: Use name data from Plan if Masterlist record is not yet in cache
+        const plannedRecord = (todaysPlans || []).find(p => p.doctorId === plannedDoctorId);
 
-        if (doctor) {
-            form.setValue("firstName", doctor.firstName || "");
-            form.setValue("lastName", doctor.lastName || "");
-            if (doctor.specialty) form.setValue("specialty", doctor.specialty);
-            if (doctor.clinic) form.setValue("clinic", doctor.clinic);
-            if (doctor.hacme) form.setValue("hacme", doctor.hacme);
+        if (masterDoctor) {
+            form.setValue("firstName", masterDoctor.firstName || "");
+            form.setValue("lastName", masterDoctor.lastName || "");
+            form.setValue("specialty", masterDoctor.specialty || "");
+            form.setValue("clinic", masterDoctor.clinic || "");
+            form.setValue("hacme", masterDoctor.hacme || "NO");
+        } else if (plannedRecord) {
+            form.setValue("firstName", plannedRecord.doctorFirstName || "");
+            form.setValue("lastName", plannedRecord.doctorLastName || "");
+            // Note: Specialty and Clinic are not in Plan, will remain empty until Masterlist loads
         }
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
@@ -485,9 +480,9 @@ export function CoverageForm({
   const handleAutocompleteSelect = (doctor: Doctor) => {
     form.setValue("firstName", doctor.firstName);
     form.setValue("lastName", doctor.lastName);
-    form.setValue("specialty", doctor.specialty);
-    form.setValue("clinic", doctor.clinic);
-    form.setValue("hacme", doctor.hacme);
+    form.setValue("specialty", doctor.specialty || "");
+    form.setValue("clinic", doctor.clinic || "");
+    form.setValue("hacme", doctor.hacme || "NO");
     setAutocompleteValue(`${doctor.firstName} ${doctor.lastName}`);
   };
   

@@ -56,12 +56,13 @@ export const useDoctors = (active: boolean = true) => {
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
-    // Explicitly wait for profile if it's supposed to be there to avoid broad query denial
-    // But don't block if we have a clear DSM UID match
     const normalizedEmail = (user.email ?? "").toLowerCase();
-    const isManagerUID = ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com';
     
+    // Check SuperAdmin status immediately
+    const isManagerUID = ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com';
     if (isManagerUID) return true;
+    
+    // For other roles, wait for profile to confirm
     if (authLoading && !profile) return false; 
     
     return ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) || profile?.role === 'Admin';
@@ -71,8 +72,8 @@ export const useDoctors = (active: boolean = true) => {
     if (!user?.uid || !db || !active || !navigator.onLine) return;
 
     const now = Date.now();
-    // HEALING: If list is empty but we have a user, ignore TTL and fetch at least once
-    const needsInitialFetch = doctors.length === 0 && lastUidRef.current !== user.uid;
+    // HEALING: If list is empty or user switched, fetch immediately
+    const needsInitialFetch = doctors.length === 0 || lastUidRef.current !== user.uid;
     
     if (!force && !needsInitialFetch && (now - lastFetchTimeRef.current < CACHE_TTL)) {
         return;
@@ -81,7 +82,7 @@ export const useDoctors = (active: boolean = true) => {
     setLoading(true);
     try {
       let q;
-      // CRITICAL: Scope query strictly to avoid permission errors if profile isn't ready
+      // SECURE QUERY: Always include filter for PMRs to avoid security denial
       if (isUserAdmin) {
         q = query(collection(db, "doctors"), limit(5000));
       } else {
@@ -109,7 +110,7 @@ export const useDoctors = (active: boolean = true) => {
   }, [user?.uid, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
-    // If active view requires doctors, fetch them
+    // Coordinate fetch based on auth readiness
     if (active && user?.uid && !authLoading) {
         fetchDoctors();
     }
