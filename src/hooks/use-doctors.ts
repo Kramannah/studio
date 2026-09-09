@@ -140,33 +140,34 @@ export const useDoctors = (active: boolean = true) => {
     if (!user || !db) return;
     const { id, userId, ...dataToUpdate } = doctorData;
     const docRef = doc(db, "doctors", id);
-    const finalData = { ...dataToUpdate, userId: user.uid };
+    const finalData = { ...dataToUpdate, userId: doctorData.userId || user.uid };
     
     const oldVersion = doctors.find(d => d.id === id);
     if (!oldVersion) return;
 
     // Detect if identifying names have changed
     const nameChanged = 
-        oldVersion.firstName.trim() !== doctorData.firstName.trim() || 
-        oldVersion.lastName.trim() !== doctorData.lastName.trim();
+        oldVersion.firstName.trim().toLowerCase() !== doctorData.firstName.trim().toLowerCase() || 
+        oldVersion.lastName.trim().toLowerCase() !== doctorData.lastName.trim().toLowerCase();
 
     try {
+        // 1. Update the primary doctor record
         await updateDoc(docRef, finalData);
         
-        setDoctors((prev) => {
-            const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: user.uid } : d));
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
-            return next;
-        });
-        
-        toast({ title: "Doctor Updated" });
-
-        // CASCADING SYNC: Correct all historical and planned records to match new name
+        // 2. CASCADING SYNC: Correct all historical and planned records if name changed
         if (nameChanged) {
             const batch = writeBatch(db!);
             
-            // 1. Correct Plans (Search by Doctor ID is reliable)
-            const plansSnap = await getDocs(query(collection(db!, "plans"), where("doctorId", "==", id)));
+            // CRITICAL FIX: Only query and update records BELONGING to the current user
+            // This prevents permission errors triggered by trying to update other PMRs' records
+            const targetUserId = doctorData.userId || user.uid;
+
+            // Fetch dependent datasets for this specific user/doctor
+            const [plansSnap, entriesSnap] = await Promise.all([
+                getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
+                getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))
+            ]);
+
             plansSnap.forEach(pDoc => {
                 batch.update(doc(db!, "plans", pDoc.id), {
                     doctorFirstName: doctorData.firstName,
@@ -174,8 +175,7 @@ export const useDoctors = (active: boolean = true) => {
                 });
             });
 
-            // 2. Correct Coverage Entries (Must match by old name + user ID)
-            const entriesSnap = await getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", user.uid)));
+            // For coverage entries, match by previous name
             const matchingEntries = entriesSnap.docs.filter(d => {
                 const data = d.data();
                 return String(data.firstName || "").toLowerCase().trim() === String(oldVersion.firstName).toLowerCase().trim() &&
@@ -193,12 +193,32 @@ export const useDoctors = (active: boolean = true) => {
                 await batch.commit();
             }
         }
+
+        // 3. Update local cache and state
+        setDoctors((prev) => {
+            const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: finalData.userId } : d));
+            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
+            return next;
+        });
+        
+        toast({ title: "Doctor Updated" });
     } catch (error: any) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: docRef.path,
-            operation: 'update',
-            requestResourceData: finalData,
-        }));
+        console.error("Update doctor failed:", error);
+        
+        // Distinguish between actual Permission Denied and technical failures
+        if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'update',
+                requestResourceData: finalData,
+            }));
+        } else {
+            toast({ 
+                variant: 'destructive', 
+                title: "Sync Error", 
+                description: "Record saved, but cascading update to plans failed. Please try syncing manually." 
+            });
+        }
     }
   };
 

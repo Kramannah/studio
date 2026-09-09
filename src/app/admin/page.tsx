@@ -31,6 +31,7 @@ import { format } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
 import { CallPerformanceSummary } from '@/components/call-performance-summary';
+import { useDoctors } from '@/hooks/use-doctors';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -45,6 +46,9 @@ export default function AdminPage() {
     const { toast } = useToast();
     const { profiles, updateProfile, addProfile } = useUserProfiles();
     
+    // Hooks for data manipulation in admin view
+    const { updateDoctor, addDoctor, deleteDoctor } = useDoctors(false);
+
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
@@ -364,9 +368,9 @@ export default function AdminPage() {
                                 usedQuantities={individualUsedQuantities}
                                 userMap={mergedUserMap}
                                 isAdminView={true}
-                                onAddDoctor={() => {}}
-                                onUpdateDoctor={() => {}}
-                                onDeleteDoctor={() => {}}
+                                onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
+                                onUpdateDoctor={(d) => updateDoctor({ ...d, userId: selectedUserId })}
+                                onDeleteDoctor={deleteDoctor}
                                 onFetchUserData={fetchUserData}
                                 selectedMonth={selectedMonth}
                                 onMonthChange={setSelectedMonth}
