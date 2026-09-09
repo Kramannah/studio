@@ -69,14 +69,17 @@ const productPrescriberOptions = [
 ];
 
 const ProductSelect = ({ field }: { field: any }) => (
-    <Select onValueChange={field.onChange} value={field.value || ""}>
+    <Select 
+        onValueChange={(val) => field.onChange(val === "unassigned" ? "" : val)} 
+        value={field.value || "unassigned"}
+    >
         <FormControl>
             <SelectTrigger>
-                <SelectValue placeholder="Select..." />
+                <SelectValue placeholder="Select status..." />
             </SelectTrigger>
         </FormControl>
         <SelectContent>
-            <SelectItem value="">Select Status...</SelectItem>
+            <SelectItem value="unassigned">No Status Assigned</SelectItem>
             {productPrescriberOptions.map(option => (
                 <SelectItem key={option} value={option}>{option}</SelectItem>
             ))}
