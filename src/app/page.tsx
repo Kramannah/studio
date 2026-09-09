@@ -95,7 +95,9 @@ export default function Home() {
     fetchMasterEntries: refreshEntries 
   } = useOfflineSync(user?.uid, activeView !== 'master' && activeView !== 'allocation', selectedMonth, refetchAllocations);
   
-  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(activeView === 'planning' || activeView === 'coverage' || activeView === 'master' || activeView === 'submitted');
+  // CACHE STABILITY: Keep doctors active as long as user is logged in to ensure selection components always have data
+  const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
+  
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
   const { nonCallDays, addNonCallDay, loading: nonCallDaysLoading, fetchNonCallDays } = useNonCallDays(activeView === 'planning' || activeView === 'summary', selectedMonth);
   const { timeLogs, addTimeIn, addTimeOut, todaysTimeIn, loading: timeLogsLoading, fetchTimeLogs } = useTimeLogs(activeView === 'summary' || activeView === 'planning', selectedMonth);
@@ -144,10 +146,7 @@ export default function Home() {
   }, [refetchAllocations]);
 
   const handleUpdateDoctor = useCallback(async (doctor: Doctor) => {
-    // Correctly await the doctor update including cascading syncs
     await updateDoctor(doctor);
-    
-    // Coordinated refresh of dependent datasets
     await Promise.all([
         refreshPlans(true),
         refreshEntries(true)

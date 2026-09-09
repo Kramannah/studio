@@ -16,7 +16,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 // SHARED CACHE: Persists data for the duration of the session to prevent re-downloads
 const ADMIN_SESSION_CACHE: Record<string, any> = {};
 const DOCTOR_MASTER_CACHE: Record<string, { data: Doctor[], timestamp: number }> = {};
-const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
+const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
 
 export function useAdminData(managerId?: string, userProfiles: Record<string, UserProfile> = {}, active: boolean = true) {
   const { user, profile } = useAuth();
@@ -107,7 +107,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     const refDate = parseISO(selectedMonth + "-01");
-    // WIDE SCAN: Restore 4-month rolling window for accuracy
+    // ROLLING WINDOW: Fetches last 4 months for trend accuracy and history discovery
     const start = startOfMonth(subMonths(refDate, 3)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
@@ -122,7 +122,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             );
             return await getDocs(q);
         } catch (err: any) {
-            // Revert to full per-user scan on index error (Deep discovery)
+            // Index Error Fallback: Scan last 2000 records for the user regardless of date field order
             const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(2000));
             try {
                 const snap = await getDocs(fallbackQ);

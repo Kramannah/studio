@@ -28,11 +28,13 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
 
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(false);
   const lastFetchTimeRef = useRef<number>(0);
+  const lastUidRef = useRef<string | null>(null);
 
+  // Load from local storage immediately on mount/user change
   useEffect(() => {
     if (user?.uid) {
         try {
@@ -48,18 +50,23 @@ export const useDoctors = (active: boolean = true) => {
 
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
+    // Explicitly wait for profile if it's supposed to be there to avoid broad query denial
+    if (authLoading && !profile) return false; 
+    
     const normalizedEmail = (user.email ?? "").toLowerCase();
     return ADMIN_UIDS.includes(user.uid) || 
            normalizedEmail === 'mbustamante@hovidinc.com' ||
            ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) ||
            profile?.role === 'Admin';
-  }, [user, profile]);
+  }, [user, profile, authLoading]);
 
   const fetchDoctors = useCallback(async (force = false) => {
-    if (!user || !db || !active || !navigator.onLine) return;
+    if (!user?.uid || !db || !active || !navigator.onLine) return;
 
     const now = Date.now();
-    if (!force && (now - lastFetchTimeRef.current < CACHE_TTL) && doctors.length > 0) {
+    // Only skip if not forced AND TTL is valid AND we have some data
+    // If doctors array is empty, we ALWAYS try to fetch at least once
+    if (!force && (now - lastFetchTimeRef.current < CACHE_TTL) && (doctors.length > 0 || lastUidRef.current === user.uid)) {
         return;
     }
 
@@ -77,17 +84,28 @@ export const useDoctors = (active: boolean = true) => {
 
       setDoctors(fetchedDoctors);
       lastFetchTimeRef.current = now;
+      lastUidRef.current = user.uid;
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: fetchedDoctors, timestamp: now }));
     } catch (error: any) {
         console.error("Fetch doctors failed:", error);
+        // Only emit if it's actually a permission issue, otherwise show a standard warning
+        if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: 'doctors',
+                operation: 'list',
+            }));
+        }
     } finally {
       setLoading(false);
     }
-  }, [user, isUserAdmin, active, doctors.length]);
+  }, [user?.uid, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
-    if (active && user) fetchDoctors();
-  }, [fetchDoctors, active, user]);
+    // If active view requires doctors, fetch them
+    if (active && user?.uid && !authLoading) {
+        fetchDoctors();
+    }
+  }, [fetchDoctors, active, user?.uid, authLoading]);
 
   const addDoctor = async (doctorData: Omit<Doctor, "id">) => {
     if (!user || !db) return;
@@ -145,24 +163,17 @@ export const useDoctors = (active: boolean = true) => {
     const oldVersion = doctors.find(d => d.id === id);
     if (!oldVersion) return;
 
-    // Detect if identifying names have changed
     const nameChanged = 
         oldVersion.firstName.trim().toLowerCase() !== doctorData.firstName.trim().toLowerCase() || 
         oldVersion.lastName.trim().toLowerCase() !== doctorData.lastName.trim().toLowerCase();
 
     try {
-        // 1. Update the primary doctor record
         await updateDoc(docRef, finalData);
         
-        // 2. CASCADING SYNC: Correct all historical and planned records if name changed
         if (nameChanged) {
             const batch = writeBatch(db!);
-            
-            // CRITICAL FIX: Only query and update records BELONGING to the current user
-            // This prevents permission errors triggered by trying to update other PMRs' records
             const targetUserId = doctorData.userId || user.uid;
 
-            // Fetch dependent datasets for this specific user/doctor
             const [plansSnap, entriesSnap] = await Promise.all([
                 getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
                 getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))
@@ -175,7 +186,6 @@ export const useDoctors = (active: boolean = true) => {
                 });
             });
 
-            // For coverage entries, match by previous name
             const matchingEntries = entriesSnap.docs.filter(d => {
                 const data = d.data();
                 return String(data.firstName || "").toLowerCase().trim() === String(oldVersion.firstName).toLowerCase().trim() &&
@@ -194,7 +204,6 @@ export const useDoctors = (active: boolean = true) => {
             }
         }
 
-        // 3. Update local cache and state
         setDoctors((prev) => {
             const next = prev.map((d) => (d.id === doctorData.id ? { ...doctorData, userId: finalData.userId } : d));
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
@@ -204,8 +213,6 @@ export const useDoctors = (active: boolean = true) => {
         toast({ title: "Doctor Updated" });
     } catch (error: any) {
         console.error("Update doctor failed:", error);
-        
-        // Distinguish between actual Permission Denied and technical failures
         if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: docRef.path,
@@ -216,7 +223,7 @@ export const useDoctors = (active: boolean = true) => {
             toast({ 
                 variant: 'destructive', 
                 title: "Sync Error", 
-                description: "Record saved, but cascading update to plans failed. Please try syncing manually." 
+                description: "Record saved, but cascading update failed. Try a manual sync." 
             });
         }
     }
