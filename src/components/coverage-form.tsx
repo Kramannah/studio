@@ -455,18 +455,32 @@ export function CoverageForm({
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
-        const doctor = (doctors || []).find(d => d.id === plannedDoctorId);
+        // Try to find the doctor in the masterlist first
+        let doctor = (doctors || []).find(d => d.id === plannedDoctorId);
+        
+        // HEALING: If doctor not in masterlist (loading or mismatch), autofill from the plan data
+        if (!doctor) {
+            const plan = (todaysPlans || []).find(p => p.doctorId === plannedDoctorId);
+            if (plan) {
+                doctor = {
+                    firstName: plan.doctorFirstName,
+                    lastName: plan.doctorLastName,
+                    id: plan.doctorId
+                } as any;
+            }
+        }
+
         if (doctor) {
-            form.setValue("firstName", doctor.firstName);
-            form.setValue("lastName", doctor.lastName);
-            form.setValue("specialty", doctor.specialty);
-            form.setValue("clinic", doctor.clinic);
-            form.setValue("hacme", doctor.hacme);
+            form.setValue("firstName", doctor.firstName || "");
+            form.setValue("lastName", doctor.lastName || "");
+            if (doctor.specialty) form.setValue("specialty", doctor.specialty);
+            if (doctor.clinic) form.setValue("clinic", doctor.clinic);
+            if (doctor.hacme) form.setValue("hacme", doctor.hacme);
         }
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);
     }
-  }, [callType, plannedDoctorId, doctors, form, entryToEdit]);
+  }, [callType, plannedDoctorId, doctors, todaysPlans, form, entryToEdit]);
 
   const handleAutocompleteSelect = (doctor: Doctor) => {
     form.setValue("firstName", doctor.firstName);

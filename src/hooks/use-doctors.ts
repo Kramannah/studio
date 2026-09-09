@@ -37,6 +37,12 @@ export const useDoctors = (active: boolean = true) => {
   // Load from local storage immediately on mount/user change
   useEffect(() => {
     if (user?.uid) {
+        if (lastUidRef.current && lastUidRef.current !== user.uid) {
+            // New user session, clear immediate state to prevent ghosting
+            setDoctors([]);
+            lastFetchTimeRef.current = 0;
+        }
+        
         try {
             const cached = localStorage.getItem(`${DOCTORS_STORAGE_KEY}_${user.uid}`);
             if (cached) {
@@ -51,28 +57,31 @@ export const useDoctors = (active: boolean = true) => {
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     // Explicitly wait for profile if it's supposed to be there to avoid broad query denial
+    // But don't block if we have a clear DSM UID match
+    const normalizedEmail = (user.email ?? "").toLowerCase();
+    const isManagerUID = ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com';
+    
+    if (isManagerUID) return true;
     if (authLoading && !profile) return false; 
     
-    const normalizedEmail = (user.email ?? "").toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || 
-           normalizedEmail === 'mbustamante@hovidinc.com' ||
-           ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) ||
-           profile?.role === 'Admin';
+    return ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) || profile?.role === 'Admin';
   }, [user, profile, authLoading]);
 
   const fetchDoctors = useCallback(async (force = false) => {
     if (!user?.uid || !db || !active || !navigator.onLine) return;
 
     const now = Date.now();
-    // Only skip if not forced AND TTL is valid AND we have some data
-    // If doctors array is empty, we ALWAYS try to fetch at least once
-    if (!force && (now - lastFetchTimeRef.current < CACHE_TTL) && (doctors.length > 0 || lastUidRef.current === user.uid)) {
+    // HEALING: If list is empty but we have a user, ignore TTL and fetch at least once
+    const needsInitialFetch = doctors.length === 0 && lastUidRef.current !== user.uid;
+    
+    if (!force && !needsInitialFetch && (now - lastFetchTimeRef.current < CACHE_TTL)) {
         return;
     }
 
     setLoading(true);
     try {
       let q;
+      // CRITICAL: Scope query strictly to avoid permission errors if profile isn't ready
       if (isUserAdmin) {
         q = query(collection(db, "doctors"), limit(5000));
       } else {
@@ -88,8 +97,7 @@ export const useDoctors = (active: boolean = true) => {
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: fetchedDoctors, timestamp: now }));
     } catch (error: any) {
         console.error("Fetch doctors failed:", error);
-        // Only emit if it's actually a permission issue, otherwise show a standard warning
-        if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+        if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'doctors',
                 operation: 'list',
@@ -174,6 +182,7 @@ export const useDoctors = (active: boolean = true) => {
             const batch = writeBatch(db!);
             const targetUserId = doctorData.userId || user.uid;
 
+            // Only attempt sync for current user to avoid permission errors
             const [plansSnap, entriesSnap] = await Promise.all([
                 getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
                 getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))
@@ -188,8 +197,11 @@ export const useDoctors = (active: boolean = true) => {
 
             const matchingEntries = entriesSnap.docs.filter(d => {
                 const data = d.data();
-                return String(data.firstName || "").toLowerCase().trim() === String(oldVersion.firstName).toLowerCase().trim() &&
-                       String(data.lastName || "").toLowerCase().trim() === String(oldVersion.lastName).toLowerCase().trim();
+                const eFirst = String(data.firstName || "").toLowerCase().trim();
+                const eLast = String(data.lastName || "").toLowerCase().trim();
+                const oFirst = String(oldVersion.firstName).toLowerCase().trim();
+                const oLast = String(oldVersion.lastName).toLowerCase().trim();
+                return eFirst === oFirst && eLast === oLast;
             });
 
             matchingEntries.forEach(eDoc => {
@@ -213,18 +225,14 @@ export const useDoctors = (active: boolean = true) => {
         toast({ title: "Doctor Updated" });
     } catch (error: any) {
         console.error("Update doctor failed:", error);
-        if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+        if (error.code === 'permission-denied') {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'update',
                 requestResourceData: finalData,
             }));
         } else {
-            toast({ 
-                variant: 'destructive', 
-                title: "Sync Error", 
-                description: "Record saved, but cascading update failed. Try a manual sync." 
-            });
+            toast({ variant: 'destructive', title: "Update Error", description: "Failed to sync changes." });
         }
     }
   };
