@@ -48,6 +48,9 @@ const EntryRow = ({
     const doctor = useMemo(() => {
         const eFirst = (entry.firstName || "").toLowerCase().trim();
         const eLast = (entry.lastName || "").toLowerCase().trim();
+        
+        // Priority 1: Direct lookup (can be unreliable if list was replaced)
+        // Priority 2: Name-based fuzzy lookup (the resilient way)
         return (doctors || []).find(d => 
             (d.firstName || "").toLowerCase().trim() === eFirst && 
             (d.lastName || "").toLowerCase().trim() === eLast
