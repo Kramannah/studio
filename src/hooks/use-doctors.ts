@@ -62,17 +62,18 @@ export const useDoctors = (active: boolean = true) => {
     const isManagerUID = ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com';
     if (isManagerUID) return true;
     
+    if (ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail)) return true;
+
     // For other roles, wait for profile to confirm
-    if (authLoading && !profile) return false; 
+    if (!profile) return false; 
     
-    return ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail) || profile?.role === 'Admin';
-  }, [user, profile, authLoading]);
+    return profile.role === 'Admin';
+  }, [user, profile]);
 
   const fetchDoctors = useCallback(async (force = false) => {
     if (!user?.uid || !db || !active || !navigator.onLine) return;
 
     const now = Date.now();
-    // HEALING: If list is empty or user switched, fetch immediately
     const needsInitialFetch = doctors.length === 0 || lastUidRef.current !== user.uid;
     
     if (!force && !needsInitialFetch && (now - lastFetchTimeRef.current < CACHE_TTL)) {
@@ -82,7 +83,7 @@ export const useDoctors = (active: boolean = true) => {
     setLoading(true);
     try {
       let q;
-      // SECURE QUERY: Always include filter for PMRs to avoid security denial
+      // SECURE QUERY: PMRs must ALWAYS include filter for PMRs to avoid security denial
       if (isUserAdmin) {
         q = query(collection(db, "doctors"), limit(5000));
       } else {
@@ -110,7 +111,6 @@ export const useDoctors = (active: boolean = true) => {
   }, [user?.uid, isUserAdmin, active, doctors.length]);
 
   useEffect(() => {
-    // Coordinate fetch based on auth readiness
     if (active && user?.uid && !authLoading) {
         fetchDoctors();
     }
@@ -118,15 +118,21 @@ export const useDoctors = (active: boolean = true) => {
 
   const addDoctor = async (doctorData: Omit<Doctor, "id">) => {
     if (!user || !db) return;
-    const newDoctorData = { ...doctorData, userId: user.uid };
+    // FIX: Respect existing userId if passed (e.g. from Admin Dashboard targeting a PMR)
+    const targetUserId = (doctorData as any).userId || user.uid;
+    const newDoctorData = { ...doctorData, userId: targetUserId };
+    
     addDoc(collection(db, "doctors"), newDoctorData)
       .then((docRef) => {
         const created = { id: docRef.id, ...newDoctorData } as Doctor;
-        setDoctors((prev) => {
-            const next = [...prev, created];
-            safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
-            return next;
-        });
+        // Only update local state if we are the owner or an admin
+        if (targetUserId === user.uid || isUserAdmin) {
+            setDoctors((prev) => {
+                const next = [...prev, created];
+                safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
+                return next;
+            });
+        }
         toast({ title: "Doctor Added" });
       })
       .catch(async (error) => {
@@ -138,11 +144,12 @@ export const useDoctors = (active: boolean = true) => {
       });
   };
 
-  const addDoctorsBulk = async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[]) => {
+  const addDoctorsBulk = async (doctorsToAdd: Omit<Doctor, 'id' | 'userId'>[], targetUserId?: string) => {
     if (!user || !db || doctorsToAdd.length === 0) return;
     setLoading(true);
     const batch = writeBatch(db);
-    const processedDoctors: any[] = doctorsToAdd.map(d => ({ ...d, userId: user.uid }));
+    const finalUserId = targetUserId || user.uid;
+    const processedDoctors: any[] = doctorsToAdd.map(d => ({ ...d, userId: finalUserId }));
     
     processedDoctors.forEach(data => {
         batch.set(doc(collection(db, "doctors")), data);
@@ -183,7 +190,7 @@ export const useDoctors = (active: boolean = true) => {
             const batch = writeBatch(db!);
             const targetUserId = doctorData.userId || user.uid;
 
-            // Only attempt sync for current user to avoid permission errors
+            // Only attempt sync for target user to avoid permission errors
             const [plansSnap, entriesSnap] = await Promise.all([
                 getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
                 getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))

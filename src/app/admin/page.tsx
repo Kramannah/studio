@@ -47,7 +47,7 @@ export default function AdminPage() {
     const { profiles, updateProfile, addProfile } = useUserProfiles();
     
     // Hooks for data manipulation in admin view
-    const { updateDoctor, addDoctor, deleteDoctor } = useDoctors(false);
+    const { updateDoctor, addDoctor, deleteDoctor, addDoctorsBulk, deleteDoctorsBulk } = useDoctors(false);
 
     const [selectedManagerId, setSelectedManagerId] = useState<string | undefined>(undefined);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -369,8 +369,10 @@ export default function AdminPage() {
                                 userMap={mergedUserMap}
                                 isAdminView={true}
                                 onAddDoctor={(d) => addDoctor({ ...d, userId: selectedUserId })}
+                                onAddDoctorsBulk={(docs) => addDoctorsBulk(docs, selectedUserId)}
                                 onUpdateDoctor={(d) => updateDoctor({ ...d, userId: selectedUserId })}
                                 onDeleteDoctor={deleteDoctor}
+                                onDeleteDoctorsBulk={deleteDoctorsBulk}
                                 onFetchUserData={fetchUserData}
                                 selectedMonth={selectedMonth}
                                 onMonthChange={setSelectedMonth}

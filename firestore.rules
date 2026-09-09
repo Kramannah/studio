@@ -10,7 +10,7 @@ service cloud.firestore {
     }
 
     function isOwner(docUserId) {
-      return isSignedIn() && docUserId == request.auth.uid;
+      return isSignedIn() && string(docUserId) == request.auth.uid;
     }
 
     // Robust Administrative Check
