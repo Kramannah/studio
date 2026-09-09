@@ -25,6 +25,8 @@ import { FirestorePermissionError } from '@/firebase/errors';
 const DOCTORS_STORAGE_KEY = 'sfe-doctors-v6';
 const CACHE_TTL = 15 * 60 * 1000; // 15 Minutes
 
+type ProductKey = keyof Pick<Doctor, 'dapavid' | 'hofovir' | 'inox' | 'irinovid' | 'ondavid' | 'ricamTablet' | 'tocovid100mg' | 'tocovid200mg' | 'tocovidVitality' | 'virestCream' | 'virestTab'>;
+
 export const useDoctors = (active: boolean = true) => {
   const { toast } = useToast();
   const { user, profile, loading: authLoading } = useAuth();
@@ -37,7 +39,6 @@ export const useDoctors = (active: boolean = true) => {
   useEffect(() => {
     if (user?.uid) {
         if (lastUidRef.current && lastUidRef.current !== user.uid) {
-            // New user session, clear immediate state to prevent ghosting
             setDoctors([]);
             lastFetchTimeRef.current = 0;
         }
@@ -56,16 +57,10 @@ export const useDoctors = (active: boolean = true) => {
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const normalizedEmail = (user.email ?? "").toLowerCase();
-    
-    // Check SuperAdmin status immediately
     const isManagerUID = ADMIN_UIDS.includes(user.uid) || normalizedEmail === 'mbustamante@hovidinc.com';
     if (isManagerUID) return true;
-    
     if (ADMIN_EMAILS.some(e => e.toLowerCase() === normalizedEmail)) return true;
-
-    // For other roles, wait for profile to confirm
     if (!profile) return false; 
-    
     return profile.role === 'Admin';
   }, [user, profile]);
 
@@ -82,7 +77,6 @@ export const useDoctors = (active: boolean = true) => {
     setLoading(true);
     try {
       let q;
-      // SECURE QUERY: PMRs must ALWAYS include filter for PMRs to avoid security denial
       if (isUserAdmin) {
         q = query(collection(db, "doctors"), limit(5000));
       } else {
@@ -98,12 +92,6 @@ export const useDoctors = (active: boolean = true) => {
       safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: fetchedDoctors, timestamp: now }));
     } catch (error: any) {
         console.error("Fetch doctors failed:", error);
-        if (error.code === 'permission-denied') {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'doctors',
-                operation: 'list',
-            }));
-        }
     } finally {
       setLoading(false);
     }
@@ -187,37 +175,46 @@ export const useDoctors = (active: boolean = true) => {
             const batch = writeBatch(db!);
             const targetUserId = doctorData.userId || user.uid;
 
+            // Fetch ALL plans and entries for the user to perform name-based synchronization
             const [plansSnap, entriesSnap] = await Promise.all([
-                getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
+                getDocs(query(collection(db!, "plans"), where("userId", "==", targetUserId))),
                 getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))
             ]);
 
+            const oFirst = String(oldVersion.firstName).toLowerCase().trim();
+            const oLast = String(oldVersion.lastName).toLowerCase().trim();
+
+            // 1. Sync Call Plans (Schedule)
             plansSnap.forEach(pDoc => {
-                batch.update(doc(db!, "plans", pDoc.id), {
-                    doctorFirstName: doctorData.firstName,
-                    doctorLastName: doctorData.lastName
-                });
+                const pData = pDoc.data();
+                const pFirst = String(pData.doctorFirstName || "").toLowerCase().trim();
+                const pLast = String(pData.doctorLastName || "").toLowerCase().trim();
+                
+                // Match by ID OR by Old Name (handles re-linked records)
+                if (pData.doctorId === id || (pFirst === oFirst && pLast === oLast)) {
+                    batch.update(pDoc.ref, {
+                        doctorFirstName: doctorData.firstName,
+                        doctorLastName: doctorData.lastName,
+                        doctorId: id // Ensure ID is also healed/synced
+                    });
+                }
             });
 
-            const matchingEntries = entriesSnap.docs.filter(d => {
-                const data = d.data();
-                const eFirst = String(data.firstName || "").toLowerCase().trim();
-                const eLast = String(data.lastName || "").toLowerCase().trim();
-                const oFirst = String(oldVersion.firstName).toLowerCase().trim();
-                const oLast = String(oldVersion.lastName).toLowerCase().trim();
-                return eFirst === oFirst && eLast === oLast;
+            // 2. Sync Historical Coverage Entries
+            entriesSnap.forEach(eDoc => {
+                const eData = eDoc.data();
+                const eFirst = String(eData.firstName || "").toLowerCase().trim();
+                const eLast = String(eData.lastName || "").toLowerCase().trim();
+                
+                if (eFirst === oFirst && eLast === oLast) {
+                    batch.update(eDoc.ref, {
+                        firstName: doctorData.firstName,
+                        lastName: doctorData.lastName
+                    });
+                }
             });
 
-            matchingEntries.forEach(eDoc => {
-                batch.update(doc(db!, "coverageEntries", eDoc.id), {
-                    firstName: doctorData.firstName,
-                    lastName: doctorData.lastName
-                });
-            });
-
-            if (!plansSnap.empty || matchingEntries.length > 0) {
-                await batch.commit();
-            }
+            await batch.commit();
         }
 
         setDoctors((prev) => {

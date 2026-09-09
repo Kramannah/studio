@@ -226,7 +226,7 @@ export function PlanningCalendar({
     }, [selectedDate, onAddNonCallDay]);
     
     const handleLogCallClick = (plan: Plan) => {
-        // FUZZY LINKING: Priority 1 is doctorId, Priority 2 is Name-Based Lookup
+        // RESILIENT LINKING: Try ID first, then fallback to Name lookup
         const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
             String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
             String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
@@ -398,7 +398,7 @@ export function PlanningCalendar({
                             <TableBody>
                                 {selectedDayPlans.length > 0 ? (
                                     selectedDayPlans.map((plan) => {
-                                        // FUZZY LINKING: Priority 1 is ID, Priority 2 is Name-Based Lookup
+                                        // FUZZY LINKING: Resolves name-based link if ID is stale
                                         const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
                                             String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
                                             String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
