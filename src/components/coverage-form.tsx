@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -149,7 +148,7 @@ const SearchableSelect = ({
     const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onValueChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
@@ -455,11 +454,15 @@ export function CoverageForm({
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
-        // PRIORITY: Find doctor in Masterlist to get Specialty/Clinic
-        const masterDoctor = (doctors || []).find(d => d.id === plannedDoctorId);
-        
-        // FALLBACK: Use name data from Plan if Masterlist record is not yet in cache
+        // FUZZY RELINKING: Try ID first, then fallback to Name lookup to resolve Masterlist records
         const plannedRecord = (todaysPlans || []).find(p => p.doctorId === plannedDoctorId);
+        const pFirst = String(plannedRecord?.doctorFirstName || "").toLowerCase().trim();
+        const pLast = String(plannedRecord?.doctorLastName || "").toLowerCase().trim();
+
+        const masterDoctor = (doctors || []).find(d => d.id === plannedDoctorId) || (doctors || []).find(d => {
+            return String(d.firstName || "").toLowerCase().trim() === pFirst && 
+                   String(d.lastName || "").toLowerCase().trim() === pLast;
+        });
 
         if (masterDoctor) {
             form.setValue("firstName", masterDoctor.firstName || "");
@@ -470,7 +473,6 @@ export function CoverageForm({
         } else if (plannedRecord) {
             form.setValue("firstName", plannedRecord.doctorFirstName || "");
             form.setValue("lastName", plannedRecord.doctorLastName || "");
-            // Note: Specialty and Clinic are not in Plan, will remain empty until Masterlist loads
         }
     } else if (callType === 'unplanned' && !entryToEdit) {
         form.setValue("plannedDoctorId", undefined);

@@ -226,7 +226,12 @@ export function PlanningCalendar({
     }, [selectedDate, onAddNonCallDay]);
     
     const handleLogCallClick = (plan: Plan) => {
-        const doctor = (doctors || []).find(d => d.id === plan.doctorId);
+        // FUZZY LINKING: Priority 1 is doctorId, Priority 2 is Name-Based Lookup
+        const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
+            String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
+            String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
+        );
+
         if (doctor && plan.plannedDate) {
             onLogCall(doctor, parseAnyDate(plan.plannedDate) || new Date());
         }
@@ -393,7 +398,12 @@ export function PlanningCalendar({
                             <TableBody>
                                 {selectedDayPlans.length > 0 ? (
                                     selectedDayPlans.map((plan) => {
-                                        const doctor = (doctors || []).find(d => d.id === plan.doctorId);
+                                        // FUZZY LINKING: Priority 1 is ID, Priority 2 is Name-Based Lookup
+                                        const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
+                                            String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
+                                            String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
+                                        );
+
                                         const dateStr = format(selectedDate || new Date(), 'yyyy-MM-dd');
                                         const isCovered = (entriesByDate[dateStr] || []).some(e => 
                                             String(e.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() && 

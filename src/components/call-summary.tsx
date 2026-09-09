@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -193,7 +192,7 @@ export function CallSummary({
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
 
         const totalCalls = filteredEntries.length;
-        const targetCalls = activeDays * 15; // UPDATED TARGET: 15 Doctors Per Day
+        const targetCalls = activeDays * 15; 
         const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
@@ -221,13 +220,23 @@ export function CallSummary({
         const sortedSpecialties = Object.entries(specialtyCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
         const visitedDoctorListMap = new Map<string, any>();
+        
+        // FUZZY MATCHING: Ensure masterlist doctors are correctly associated with visits even with minor naming variations
         safeDoctors.forEach(doctor => {
             const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
             const specialty = normalizeStr(doctor.specialty);
             const clinic = normalizeStr(doctor.clinic);
             const compositeKey = `${providerName}|${specialty}|${clinic}`;
             
-            const visitData = providerVisits[compositeKey];
+            // Priority 1: Exact composite match
+            let visitData = providerVisits[compositeKey];
+            
+            // Priority 2: Fuzzy name search if specialty/clinic mismatch slightly
+            if (!visitData) {
+                const fuzzyKey = Object.keys(providerVisits).find(k => k.startsWith(providerName + "|"));
+                if (fuzzyKey) visitData = providerVisits[fuzzyKey];
+            }
+
             const actual = visitData?.count || 0;
             const target = parseInt(String(doctor.frequency || "1x").replace('x', ''), 10) || 1;
             
@@ -244,15 +253,23 @@ export function CallSummary({
 
         Object.entries(providerVisits).forEach(([key, data]) => {
             if (!visitedDoctorListMap.has(key)) {
-                visitedDoctorListMap.set(key, {
-                    name: `${data.firstName} ${data.lastName}`,
-                    specialty: data.specialty,
-                    clinic: data.clinic,
-                    target: 0,
-                    actual: data.count,
-                    isMet: true,
-                    inMasterlist: false
-                });
+                // Double check if this visited doctor exists in masterlist under a slightly different key
+                const providerName = `${data.firstName || ""} ${data.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
+                const alreadyMatched = Array.from(visitedDoctorListMap.values()).some(d => 
+                    d.inMasterlist && d.name.toLowerCase().trim().replace(/\s+/g, ' ') === providerName
+                );
+
+                if (!alreadyMatched) {
+                    visitedDoctorListMap.set(key, {
+                        name: `${data.firstName} ${data.lastName}`,
+                        specialty: data.specialty,
+                        clinic: data.clinic,
+                        target: 0,
+                        actual: data.count,
+                        isMet: true,
+                        inMasterlist: false
+                    });
+                }
             }
         });
 

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -118,14 +117,12 @@ export const useDoctors = (active: boolean = true) => {
 
   const addDoctor = async (doctorData: Omit<Doctor, "id">) => {
     if (!user || !db) return;
-    // FIX: Respect existing userId if passed (e.g. from Admin Dashboard targeting a PMR)
     const targetUserId = (doctorData as any).userId || user.uid;
     const newDoctorData = { ...doctorData, userId: targetUserId };
     
     addDoc(collection(db, "doctors"), newDoctorData)
       .then((docRef) => {
         const created = { id: docRef.id, ...newDoctorData } as Doctor;
-        // Only update local state if we are the owner or an admin
         if (targetUserId === user.uid || isUserAdmin) {
             setDoctors((prev) => {
                 const next = [...prev, created];
@@ -190,7 +187,6 @@ export const useDoctors = (active: boolean = true) => {
             const batch = writeBatch(db!);
             const targetUserId = doctorData.userId || user.uid;
 
-            // Only attempt sync for target user to avoid permission errors
             const [plansSnap, entriesSnap] = await Promise.all([
                 getDocs(query(collection(db!, "plans"), where("doctorId", "==", id), where("userId", "==", targetUserId))),
                 getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", targetUserId)))
