@@ -142,6 +142,10 @@ export const useDoctors = (active: boolean = true) => {
     const docRef = doc(db, "doctors", id);
     const finalData = { ...dataToUpdate, userId: user.uid };
     
+    // Resolve old version to check for name changes before updating for cascading sync
+    const oldVersion = doctors.find(d => d.id === id);
+    const nameChanged = oldVersion && (oldVersion.firstName !== doctorData.firstName || oldVersion.lastName !== doctorData.lastName);
+
     updateDoc(docRef, finalData)
       .then(() => {
         setDoctors((prev) => {
@@ -150,6 +154,23 @@ export const useDoctors = (active: boolean = true) => {
             return next;
         });
         toast({ title: "Doctor Updated" });
+
+        // CASCADING UPDATE: If names were modified, sync all associated plans in the background
+        if (nameChanged) {
+            getDocs(query(collection(db!, "plans"), where("doctorId", "==", id)))
+                .then(snap => {
+                    if (snap.empty) return;
+                    const batch = writeBatch(db!);
+                    snap.forEach(pDoc => {
+                        batch.update(doc(db!, "plans", pDoc.id), {
+                            doctorFirstName: doctorData.firstName,
+                            doctorLastName: doctorData.lastName
+                        });
+                    });
+                    batch.commit(); // Non-blocking commit
+                })
+                .catch(err => console.warn("Plan name cascade failed:", err));
+        }
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({

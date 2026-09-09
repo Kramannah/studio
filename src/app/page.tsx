@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -142,6 +143,12 @@ export default function Home() {
     }
   }, [refetchAllocations]);
 
+  const handleUpdateDoctor = useCallback((doctor: Doctor) => {
+    updateDoctor(doctor);
+    // Force a refresh of plans data to reflect any cascading name changes
+    setTimeout(() => refreshPlans(true), 1500);
+  }, [updateDoctor, refreshPlans]);
+
   const mergedUsedQuantities = useMemo(() => {
     const quantities = { ...globalUsedQuantities };
     offlineEntries.forEach(entry => {
@@ -178,7 +185,7 @@ export default function Home() {
       case 'summary': 
         const currentPmrName = profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
         return <CallSummary pmrName={currentPmrName} entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
-      case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={updateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
+      case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={handleUpdateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': return <Q4AllocationView readOnly={true} />;
       case 'marketing-events': return <MarketingEventsView />;
       default: return null;
