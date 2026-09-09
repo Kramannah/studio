@@ -149,6 +149,7 @@ export const useDoctors = (active: boolean = true) => {
             safeStorageSet(`${DOCTORS_STORAGE_KEY}_${user.uid}`, JSON.stringify({ data: next, timestamp: Date.now() }));
             return next;
         });
+        toast({ title: "Doctor Updated" });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({

@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -32,26 +32,26 @@ import { ScrollArea } from "./ui/scroll-area"
 const doctorFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  specialty: z.string().optional(),
-  clinic: z.string().optional(),
-  hcpCode: z.string().optional(),
-  coverageType: z.enum(['inbase', 'outbase']).optional(),
-  province: z.string().optional(),
-  municipality: z.string().optional(),
-  placeOfPractice: z.string().optional(),
+  specialty: z.string().nullable().optional().transform(v => v || ""),
+  clinic: z.string().nullable().optional().transform(v => v || ""),
+  hcpCode: z.string().nullable().optional().transform(v => v || ""),
+  coverageType: z.enum(['inbase', 'outbase']).nullable().optional().transform(v => v || undefined),
+  province: z.string().nullable().optional().transform(v => v || ""),
+  municipality: z.string().nullable().optional().transform(v => v || ""),
+  placeOfPractice: z.string().nullable().optional().transform(v => v || ""),
   frequency: z.enum(['1x', '2x', '3x', '4x']),
   hacme: z.enum(['YES', 'NO']).optional().default('NO'),
-  dapavid: z.string().optional(),
-  hofovir: z.string().optional(),
-  inox: z.string().optional(),
-  irinovid: z.string().optional(),
-  ondavid: z.string().optional(),
-  ricamTablet: z.string().optional(),
-  tocovid100mg: z.string().optional(),
-  tocovid200mg: z.string().optional(),
-  tocovidVitality: z.string().optional(),
-  virestCream: z.string().optional(),
-  virestTab: z.string().optional(),
+  dapavid: z.string().nullable().optional().transform(v => v || ""),
+  hofovir: z.string().nullable().optional().transform(v => v || ""),
+  inox: z.string().nullable().optional().transform(v => v || ""),
+  irinovid: z.string().nullable().optional().transform(v => v || ""),
+  ondavid: z.string().nullable().optional().transform(v => v || ""),
+  ricamTablet: z.string().nullable().optional().transform(v => v || ""),
+  tocovid100mg: z.string().nullable().optional().transform(v => v || ""),
+  tocovid200mg: z.string().nullable().optional().transform(v => v || ""),
+  tocovidVitality: z.string().nullable().optional().transform(v => v || ""),
+  virestCream: z.string().nullable().optional().transform(v => v || ""),
+  virestTab: z.string().nullable().optional().transform(v => v || ""),
 })
 
 type DoctorFormDialogProps = {
@@ -69,13 +69,14 @@ const productPrescriberOptions = [
 ];
 
 const ProductSelect = ({ field }: { field: any }) => (
-    <Select onValueChange={field.onChange} value={field.value}>
+    <Select onValueChange={field.onChange} value={field.value || ""}>
         <FormControl>
             <SelectTrigger>
                 <SelectValue placeholder="Select..." />
             </SelectTrigger>
         </FormControl>
         <SelectContent>
+            <SelectItem value="">Select Status...</SelectItem>
             {productPrescriberOptions.map(option => (
                 <SelectItem key={option} value={option}>{option}</SelectItem>
             ))}
@@ -125,10 +126,31 @@ export function DoctorFormDialog({ isOpen, onOpenChange, onSave, doctor }: Docto
   useEffect(() => {
     if (isOpen) {
       if (doctor) {
+        // Sanitize data from Firestore to replace nulls with empty strings for RHF
         form.reset({
             ...doctor,
+            firstName: doctor.firstName || "",
+            lastName: doctor.lastName || "",
+            specialty: doctor.specialty || "",
+            clinic: doctor.clinic || "",
+            hcpCode: doctor.hcpCode || "",
             province: doctor.province || "",
-            municipality: doctor.municipality || ""
+            municipality: doctor.municipality || "",
+            placeOfPractice: doctor.placeOfPractice || "",
+            dapavid: doctor.dapavid || "",
+            hofovir: doctor.hofovir || "",
+            inox: doctor.inox || "",
+            irinovid: doctor.irinovid || "",
+            ondavid: doctor.ondavid || "",
+            ricamTablet: doctor.ricamTablet || "",
+            tocovid100mg: doctor.tocovid100mg || "",
+            tocovid200mg: doctor.tocovid200mg || "",
+            tocovidVitality: doctor.tocovidVitality || "",
+            virestCream: doctor.virestCream || "",
+            virestTab: doctor.virestTab || "",
+            frequency: doctor.frequency || "1x",
+            hacme: doctor.hacme || "NO",
+            coverageType: doctor.coverageType || undefined
         });
       } else {
         form.reset({
