@@ -144,11 +144,16 @@ const SearchableSelect = ({
     showBalance?: boolean
 }) => {
     const [open, setOpen] = useState(false);
-    const validOptions = useMemo(() => (options || []).filter(o => o.value && o.value.trim() !== ""), [options]);
+    
+    // Filter out items with empty values or labels
+    const validOptions = useMemo(() => 
+        (options || []).filter(o => o && o.value && o.value.trim() !== ""), 
+    [options]);
+    
     const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
-        <Popover open={open} onValueChange={setOpen} modal={false}>
+        <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
@@ -166,7 +171,6 @@ const SearchableSelect = ({
             <PopoverContent 
               className="w-[--radix-popover-trigger-width] p-0 shadow-2xl border-2 rounded-xl z-[120]" 
               align="start"
-              onOpenAutoFocus={(e) => e.preventDefault()}
             >
                 <Command shouldFilter={true}>
                     <CommandInput placeholder={`Search ${placeholder?.toLowerCase()}...`} />
@@ -178,15 +182,10 @@ const SearchableSelect = ({
                                     key={option.value}
                                     value={option.label}
                                     onSelect={() => {
-                                        onValueChange(option.value === value ? "" : option.value);
+                                        onValueChange(option.value);
                                         setOpen(false);
                                     }}
-                                    onPointerDown={(e) => {
-                                      // Crucial for nested selection stability
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                    }}
-                                    className="p-2 cursor-pointer"
+                                    className="p-2 cursor-pointer pointer-events-auto"
                                 >
                                     <Check
                                         className={cn(
