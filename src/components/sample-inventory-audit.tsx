@@ -8,7 +8,10 @@ import {
     endOfMonth, 
     parseISO, 
     isAfter,
-    isValid
+    isValid,
+    eachMonthOfInterval,
+    isSameMonth,
+    isBefore
 } from "date-fns";
 import { 
     Loader2, 
@@ -17,14 +20,15 @@ import {
     CheckCircle2,
     Info,
     Users,
-    Pill
+    Pill,
+    ArrowRight
 } from "lucide-react";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { parseAnyDate, getStartOfYearISO } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CoverageEntry, UserProfile, Q4Allocation, IndividualAllocation } from "@/lib/types";
+import type { CoverageEntry, UserProfile } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -36,7 +40,8 @@ export function SampleInventoryAudit({
 }: { 
     userProfiles: Record<string, UserProfile>
 }) {
-    const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+    const [startMonth, setStartMonth] = useState(() => format(new Date(), 'yyyy-MM'));
+    const [endMonth, setEndMonth] = useState(() => format(new Date(), 'yyyy-MM'));
     const [selectedManagerId, setSelectedManagerId] = useState<string>("");
     const [loading, setLoading] = useState(false);
     const { toast } = useToast();
@@ -44,7 +49,7 @@ export function SampleInventoryAudit({
     const months = useMemo(() => {
         const list = [];
         const currentYear = new Date().getFullYear();
-        for (let i = -6; i <= 3; i++) {
+        for (let i = -12; i <= 3; i++) {
             const date = new Date(currentYear, new Date().getMonth() + i, 1);
             list.push({
                 value: format(date, 'yyyy-MM'),
@@ -59,14 +64,19 @@ export function SampleInventoryAudit({
             toast({ variant: "destructive", title: "Selection Required", description: "Please select a territory first." });
             return;
         }
+
+        const startDate = parseISO(startMonth + "-01");
+        const endDate = parseISO(endMonth + "-01");
+
+        if (isAfter(startDate, endDate)) {
+            toast({ variant: "destructive", title: "Invalid Range", description: "Start month cannot be after end month." });
+            return;
+        }
+
         setLoading(true);
         
         try {
-            const refDate = parseISO(selectedMonth + "-01");
-            const monthStart = startOfMonth(refDate);
-            const monthEnd = endOfMonth(refDate);
-
-            // Usage range
+            const monthsInRange = eachMonthOfInterval({ start: startDate, end: endDate });
             const yearStartStr = getStartOfYearISO();
             const yearStartDate = parseISO(yearStartStr);
 
@@ -122,33 +132,6 @@ export function SampleInventoryAudit({
                     limit(5000)
                 ));
 
-                const userMonthlyUsage: Record<string, number> = {};
-                const userTotalUsage: Record<string, number> = {};
-
-                entriesSnap.docs.forEach(d => {
-                    const data = d.data() as CoverageEntry;
-                    const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
-                    if (!cDate || !isAfter(cDate, yearStartDate)) return;
-
-                    const isCurrentMonth = cDate >= monthStart && cDate <= monthEnd;
-
-                    const process = (name?: string, qty?: number) => {
-                        const key = String(name ?? "").toLowerCase().trim();
-                        if (!key) return;
-                        const qVal = Math.round(Number(qty || 0));
-                        if (!isNaN(qVal) && qVal !== 0) {
-                            userTotalUsage[key] = (userTotalUsage[key] || 0) + qVal;
-                            if (isCurrentMonth) {
-                                userMonthlyUsage[key] = (userMonthlyUsage[key] || 0) + qVal;
-                            }
-                        }
-                    };
-
-                    process(data.primarySampleName, data.primaryProductQty);
-                    process(data.secondarySampleName, data.secondaryProductQty);
-                    data.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
-                });
-
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
                 const pmrName = profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User";
@@ -159,30 +142,70 @@ export function SampleInventoryAudit({
                 const hManager = managers.find(m => m.uid === mId);
                 pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
 
-                globalSamples.forEach(sample => {
-                    const overrideKey = `${uid}_${sample.id}`;
-                    const allocated = overridesMap.has(overrideKey) ? overridesMap.get(overrideKey)! : sample.qty;
-                    const usedInMonth = userMonthlyUsage[sample.name.toLowerCase()] || 0;
-                    const usedTotal = userTotalUsage[sample.name.toLowerCase()] || 0;
-                    const balance = Math.max(0, allocated - usedTotal);
+                // Pre-process usage by month for this user
+                const entries = entriesSnap.docs.map(d => d.data() as CoverageEntry);
 
-                    if (allocated > 0 || usedInMonth > 0 || usedTotal > 0) {
-                        excelRows.push({
-                            "District Manager": pmrManagerName,
-                            "Employee Code": pmrCode,
-                            "Representative": pmrName,
-                            "Category": sample.group,
-                            "Material": sample.name,
-                            "Allocated Qty": allocated,
-                            "Used This Month": usedInMonth,
-                            "Remaining Balance": balance
-                        });
-                    }
-                });
+                for (const currentMonthDate of monthsInRange) {
+                    const monthStart = startOfMonth(currentMonthDate);
+                    const monthEnd = endOfMonth(currentMonthDate);
+                    const monthLabel = format(currentMonthDate, 'MMMM yyyy');
+
+                    const userMonthlyUsage: Record<string, number> = {};
+                    const userCumulativeUsage: Record<string, number> = {};
+
+                    entries.forEach(data => {
+                        const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
+                        if (!cDate || !isAfter(cDate, yearStartDate)) return;
+
+                        const isThisMonth = isSameMonth(cDate, currentMonthDate);
+                        const isCumulative = cDate <= monthEnd;
+
+                        const process = (name?: string, qty?: number) => {
+                            const key = String(name ?? "").toLowerCase().trim();
+                            if (!key) return;
+                            const qVal = Math.round(Number(qty || 0));
+                            if (!isNaN(qVal) && qVal !== 0) {
+                                if (isCumulative) {
+                                    userCumulativeUsage[key] = (userCumulativeUsage[key] || 0) + qVal;
+                                }
+                                if (isThisMonth) {
+                                    userMonthlyUsage[key] = (userMonthlyUsage[key] || 0) + qVal;
+                                }
+                            }
+                        };
+
+                        process(data.primarySampleName, data.primaryProductQty);
+                        process(data.secondarySampleName, data.secondaryProductQty);
+                        data.reminderProducts?.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
+                    });
+
+                    globalSamples.forEach(sample => {
+                        const overrideKey = `${uid}_${sample.id}`;
+                        const allocated = overridesMap.has(overrideKey) ? overridesMap.get(overrideKey)! : sample.qty;
+                        const usedInMonth = userMonthlyUsage[sample.name.toLowerCase()] || 0;
+                        const usedCumulative = userCumulativeUsage[sample.name.toLowerCase()] || 0;
+                        const balance = Math.max(0, allocated - usedCumulative);
+
+                        // Only include rows if there's any activity or allocation to report
+                        if (allocated > 0 || usedInMonth > 0 || usedCumulative > 0) {
+                            excelRows.push({
+                                "District Manager": pmrManagerName,
+                                "Employee Code": pmrCode,
+                                "Representative": pmrName,
+                                "Category": sample.group,
+                                "Material": sample.name,
+                                "Allocated Qty": allocated,
+                                "Used In Month": usedInMonth,
+                                "Remaining Balance": balance,
+                                "Audit Month": monthLabel
+                            });
+                        }
+                    });
+                }
             }
 
             if (excelRows.length === 0) {
-                toast({ variant: "destructive", title: "No Data Found", description: "No sample usage recorded for the selected period." });
+                toast({ variant: "destructive", title: "No Data Found", description: "No sample usage recorded for the selected range." });
                 setLoading(false);
                 return;
             }
@@ -192,7 +215,8 @@ export function SampleInventoryAudit({
             XLSX.utils.book_append_sheet(wb, ws, "Inventory Audit");
             
             const territoryName = selectedManagerId === "all" ? "Global" : (managers.find(m => m.uid === selectedManagerId)?.name || "Territory");
-            const fileName = `Samples_Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`;
+            const rangeLabel = startMonth === endMonth ? startMonth : `${startMonth}_to_${endMonth}`;
+            const fileName = `Samples_Audit_${territoryName.replace(/\s+/g, '_')}_${rangeLabel}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
             toast({ title: "Audit Exported", description: `Compiled usage records for ${targetUserIds.length} representatives.` });
@@ -207,7 +231,7 @@ export function SampleInventoryAudit({
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[400px] w-full animate-in fade-in duration-500 space-y-8">
-            <Card className="max-w-2xl w-full border-2 shadow-lg rounded-2xl overflow-hidden">
+            <Card className="max-w-3xl w-full border-2 shadow-lg rounded-2xl overflow-hidden">
                 <CardHeader className="bg-primary/5 border-b-2 text-center py-10">
                     <div className="mx-auto bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
                         <Pill className="w-8 h-8 text-primary" />
@@ -216,34 +240,53 @@ export function SampleInventoryAudit({
                         Sample Inventory Audit
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                        Extract sample distribution records and remaining balances for field personnel.
+                        Generate multi-month distribution records and point-in-time balances.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                            <Users className="w-3 h-3" /> Select Territory
+                        </p>
+                        <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                            <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
+                                <SelectValue placeholder="Select Territory" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Districts (Global)</SelectItem>
+                                {managers.map(m => (
+                                    <SelectItem key={m.uid} value={m.uid}>
+                                        {m.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
                         <div className="space-y-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                                <Users className="w-3 h-3" /> Select Territory
-                            </p>
-                            <Select value={selectedManagerId} onValueChange={setSelectedManagerId}>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Start Period</p>
+                            <Select value={startMonth} onValueChange={setStartMonth}>
                                 <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
-                                    <SelectValue placeholder="Select Territory" />
+                                    <SelectValue placeholder="Start Month" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">All Districts (Global)</SelectItem>
-                                    {managers.map(m => (
-                                        <SelectItem key={m.uid} value={m.uid}>
-                                            {m.name}
+                                    {months.map(m => (
+                                        <SelectItem key={m.value} value={m.value}>
+                                            {m.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-4">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Select Audit Period</p>
-                            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                            <div className="flex items-center gap-2 mb-2">
+                                <ArrowRight className="w-3 h-3 text-muted-foreground" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">End Period</p>
+                            </div>
+                            <Select value={endMonth} onValueChange={setEndMonth}>
                                 <SelectTrigger className="h-12 font-headline border-2 rounded-xl bg-muted/30">
-                                    <SelectValue placeholder="Select Period" />
+                                    <SelectValue placeholder="End Month" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {months.map(m => (
@@ -264,23 +307,23 @@ export function SampleInventoryAudit({
                             className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
                         >
                             {loading ? (
-                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Compiling Inventory...</>
+                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Compiling Inventory Range...</>
                             ) : (
-                                <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Samples Report (.xlsx)</>
+                                <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Range Report (.xlsx)</>
                             )}
                         </Button>
                     </div>
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl w-full">
                 <Card className="border-2 shadow-sm bg-muted/20">
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Method</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Range Auditing</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Used This Month counts visits within the selected period. Remaining Balance accounts for total usage since the start of the year.
+                                Selecting a range will generate a line item for every representative, every month, and every sample in the range.
                             </p>
                         </div>
                     </CardContent>
@@ -289,9 +332,9 @@ export function SampleInventoryAudit({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Global Accuracy</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Accurate Snapshots</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                The audit considers both Global Template allocations and individual PMR overrides for pinpoint precision.
+                                The "Remaining Balance" column reflects the stock available at the conclusion of that specific audit month.
                             </p>
                         </div>
                     </CardContent>
