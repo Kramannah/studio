@@ -145,7 +145,6 @@ const SearchableSelect = ({
 }) => {
     const [open, setOpen] = useState(false);
     
-    // Filter out items with empty values or labels
     const validOptions = useMemo(() => 
         (options || []).filter(o => o && o.value && o.value.trim() !== ""), 
     [options]);
@@ -463,7 +462,6 @@ export function CoverageForm({
 
   useEffect(() => {
     if (callType === 'planned' && plannedDoctorId) {
-        // FUZZY RELINKING: Try ID first, then fallback to Name lookup to resolve Masterlist records
         const plannedRecord = (todaysPlans || []).find(p => p.doctorId === plannedDoctorId);
         const pFirst = String(plannedRecord?.doctorFirstName || "").toLowerCase().trim();
         const pLast = String(plannedRecord?.doctorLastName || "").toLowerCase().trim();
@@ -510,11 +508,19 @@ export function CoverageForm({
 
   const cleanPayload = (data: any): any => {
     const cleaned: any = {};
+    const proofFields = ['photos', 'signature', 'jointCallSignature'];
+
     Object.keys(data).forEach(key => {
         const val = data[key];
-        if (val === undefined || val === null || val === "") return;
+        const isProofField = proofFields.includes(key);
+
+        if (val === undefined || val === "") return;
+        
+        // Preserve nulls/empty arrays for proof fields so they can be explicitly cleared in Firestore
+        if (val === null && !isProofField) return;
+        
         if (Array.isArray(val)) {
-            if (val.length === 0) return;
+            if (val.length === 0 && !isProofField) return;
             if (key === 'reminderProducts') {
                 cleaned[key] = val
                     .map(p => cleanPayload(p))
@@ -597,7 +603,6 @@ export function CoverageForm({
       const sanitizedPayload = cleanPayload(basePayload);
 
       if (isEditMode) {
-          // HEALING: If original timestamp is invalid, set a new one now
           const originalSubmittedAt = entryToEdit!.submittedAt;
           const isSubmittedAtValid = !!parseAnyDate(originalSubmittedAt);
           

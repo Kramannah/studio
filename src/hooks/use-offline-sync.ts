@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -24,13 +23,29 @@ const sanitizePayload = (data: any): any => {
   const cleaned: any = {};
   if (!data || typeof data !== 'object') return cleaned;
   
+  const proofFields = ['photos', 'signature', 'jointCallSignature'];
+
   Object.keys(data).forEach(key => {
     const val = data[key];
+    const isProofField = proofFields.includes(key);
+
     if (val === undefined || val === "") return;
-    if (val === null && (key === 'id' || key === 'isOffline')) return;
+    
+    // Explicitly handle null values for proof fields so they can be cleared in Firestore
+    if (val === null) {
+        if (isProofField) {
+            cleaned[key] = null;
+        }
+        return;
+    }
     
     if (Array.isArray(val)) {
-      if (val.length === 0) return;
+      if (val.length === 0) {
+          if (isProofField) {
+              cleaned[key] = [];
+          }
+          return;
+      }
       if (key === 'reminderProducts') {
         cleaned[key] = val.map(p => sanitizePayload(p)).filter(p => Object.keys(p).length > 0);
         if (cleaned[key].length === 0) delete cleaned[key];
@@ -110,7 +125,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     setLoading(true);
     
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    // Restored Broad Scoping: Always pull 4 months for accuracy and trend prep
     const start = startOfMonth(subMonths(refDate, 3)).toISOString();
     const end = endOfMonth(refDate).toISOString();
     
@@ -127,7 +141,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const querySnapshot = await getDocs(q);
         snapDocs = querySnapshot.docs;
       } catch (err: any) {
-        // Broad Fallback logic restored
         const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(1500));
         const snap = await getDocs(fallbackQ);
         snapDocs = snap.docs.filter(d => {
@@ -227,7 +240,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
             
-            // HEALING: Ensure submittedAt is valid before sending to server
             let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
             if (!parseAnyDate(finalSubmittedAt)) {
                 finalSubmittedAt = new Date().toISOString();
@@ -297,11 +309,18 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
-    const sanitized = sanitizePayload(e);
+
+    let processedPhotos = e.photos;
+    if (e.photos && e.photos.length > 0) {
+        try {
+            processedPhotos = await Promise.all(e.photos.map((p: string) => compressImage(p, 800, 0.5)));
+        } catch (err) { console.warn("Update compression failed", err); }
+    }
+
+    const sanitized = sanitizePayload({ ...e, photos: processedPhotos });
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
-    // HEALING: Ensure date is valid on update
     if (data.submittedAt && !parseAnyDate(data.submittedAt)) {
         data.submittedAt = new Date().toISOString();
     }
@@ -334,7 +353,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     loading,
     fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
-        // HEALING: When editing an offline entry, replace invalid date with "now"
         const finalUpdate = { ...e };
         if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {
             finalUpdate.submittedAt = new Date().toISOString();
