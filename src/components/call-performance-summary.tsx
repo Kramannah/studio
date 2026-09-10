@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -152,7 +151,8 @@ export function CallPerformanceSummary({
                 });
 
                 const uniqueVisitedCount = visitMap.size;
-                const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 3).length;
+                // CONCENTRATION (4X) Audit Logic
+                const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
 
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
@@ -162,7 +162,7 @@ export function CallPerformanceSummary({
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
                     "Call Rate": uEntries.length,
-                    "Call Concentration": highFreqAchievedCount,
+                    "Call Concentration (4X)": highFreqAchievedCount,
                     "Call Reach": uniqueVisitedCount,
                     "Active days": activeDaysCount
                 });
@@ -272,13 +272,13 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Dynamic Territory Discovery</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">High Frequency Audit</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Personnel assignments are resolved in real-time to match the current District Reports structure.
+                                Concentration is now calculated based on a 4-visit threshold per provider per month.
                             </p>
                         </div>
                     </CardContent>
-                </Card>
+                </div>
             </div>
         </div>
     );

@@ -178,10 +178,11 @@ export function CallSummary({
             return acc;
         }, {} as Record<string, { count: number, firstName: string, lastName: string, specialty: string, clinic: string }>);
         
-        const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
+        // CONCENTRATION (4X) Threshold Logic
+        const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 4).length;
         const targetHighFreqFromList = safeDoctors.filter(d => {
             const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
-            return freqVal >= 3;
+            return freqVal >= 4;
         }).length;
         
         const totalHighFreqTarget = Math.max(targetHighFreqFromList, actualHighFreqAchieved);
@@ -221,17 +222,14 @@ export function CallSummary({
 
         const visitedDoctorListMap = new Map<string, any>();
         
-        // FUZZY MATCHING: Ensure masterlist doctors are correctly associated with visits even with minor naming variations
         safeDoctors.forEach(doctor => {
             const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
             const specialty = normalizeStr(doctor.specialty);
             const clinic = normalizeStr(doctor.clinic);
             const compositeKey = `${providerName}|${specialty}|${clinic}`;
             
-            // Priority 1: Exact composite match
             let visitData = providerVisits[compositeKey];
             
-            // Priority 2: Fuzzy name search if specialty/clinic mismatch slightly
             if (!visitData) {
                 const fuzzyKey = Object.keys(providerVisits).find(k => k.startsWith(providerName + "|"));
                 if (fuzzyKey) visitData = providerVisits[fuzzyKey];
@@ -253,7 +251,6 @@ export function CallSummary({
 
         Object.entries(providerVisits).forEach(([key, data]) => {
             if (!visitedDoctorListMap.has(key)) {
-                // Double check if this visited doctor exists in masterlist under a slightly different key
                 const providerName = `${data.firstName || ""} ${data.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
                 const alreadyMatched = Array.from(visitedDoctorListMap.values()).some(d => 
                     d.inMasterlist && d.name.toLowerCase().trim().replace(/\s+/g, ' ') === providerName
@@ -374,14 +371,14 @@ export function CallSummary({
                     bgColor="bg-[#241a12]" 
                 />
                 <StatCard 
-                    title="CONCENTRATION (3X)" 
+                    title="CONCENTRATION (4X)" 
                     value={
                         <div className="flex items-baseline gap-1">
                             <span>{insights.completedHighFreq.actual}/{insights.completedHighFreq.total}</span>
                             <span className="text-sm font-bold text-white/50">({insights.completedHighFreq.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
                         </div>
                     }
-                    description="Providers visited 3+ times" 
+                    description="Providers visited 4+ times" 
                     icon={Target} 
                     color="text-[#10b981]" 
                     bgColor="bg-[#0d1e18]" 
