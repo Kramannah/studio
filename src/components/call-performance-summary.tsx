@@ -278,7 +278,7 @@ export function CallPerformanceSummary({
                             </p>
                         </div>
                     </CardContent>
-                </div>
+                </Card>
             </div>
         </div>
     );
