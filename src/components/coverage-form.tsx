@@ -148,7 +148,7 @@ const SearchableSelect = ({
     const selectedOption = validOptions.find((o) => o.value === value);
 
     return (
-        <Popover open={open} onValueChange={setOpen}>
+        <Popover open={open} onValueChange={setOpen} modal={false}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
@@ -163,10 +163,14 @@ const SearchableSelect = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+            <PopoverContent 
+              className="w-[--radix-popover-trigger-width] p-0 shadow-2xl border-2 rounded-xl z-[120]" 
+              align="start"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
                 <Command shouldFilter={true}>
                     <CommandInput placeholder={`Search ${placeholder?.toLowerCase()}...`} />
-                    <CommandList>
+                    <CommandList className="max-h-[250px]">
                         <CommandEmpty>No items found.</CommandEmpty>
                         <CommandGroup>
                             {validOptions.map((option) => (
@@ -177,6 +181,12 @@ const SearchableSelect = ({
                                         onValueChange(option.value === value ? "" : option.value);
                                         setOpen(false);
                                     }}
+                                    onPointerDown={(e) => {
+                                      // Crucial for nested selection stability
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                    }}
+                                    className="p-2 cursor-pointer"
                                 >
                                     <Check
                                         className={cn(
@@ -185,9 +195,9 @@ const SearchableSelect = ({
                                         )}
                                     />
                                     <div className="flex justify-between w-full items-center gap-2">
-                                        <span className="truncate">{option.label}</span>
+                                        <span className="truncate text-sm">{option.label}</span>
                                         {showBalance && option.balance !== undefined && (
-                                            <Badge variant={option.balance <= 0 ? "destructive" : "outline"} className="text-[10px] shrink-0">
+                                            <Badge variant={option.balance <= 0 ? "destructive" : "outline"} className="text-[9px] shrink-0 h-5">
                                                 Bal: {option.balance}
                                             </Badge>
                                         )}
