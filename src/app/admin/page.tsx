@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -6,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3 } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3, Pill } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -31,6 +30,7 @@ import { format } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
 import { CallPerformanceSummary } from '@/components/call-performance-summary';
+import { SampleInventoryAudit } from '@/components/sample-inventory-audit';
 import { useDoctors } from '@/hooks/use-doctors';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
@@ -320,9 +320,14 @@ export default function AdminPage() {
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
                             {canSeePerformance && (
-                                <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                    <BarChart3 className="h-4 w-4" /> Performance
-                                </TabsTrigger>
+                                <>
+                                    <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                        <BarChart3 className="h-4 w-4" /> Performance
+                                    </TabsTrigger>
+                                    <TabsTrigger value="samples-audit" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                        <Pill className="h-4 w-4" /> Samples
+                                    </TabsTrigger>
+                                </>
                             )}
                             {isSuperAdmin && <TabsTrigger value="accounts" className="px-6 rounded-lg font-headline flex items-center gap-2"><UserCog className="h-4 w-4" /> Accounts</TabsTrigger>}
                         </TabsList>
@@ -412,13 +417,20 @@ export default function AdminPage() {
                     )}
 
                     {canSeePerformance && (
-                        <TabsContent value="performance">
-                            <CallPerformanceSummary 
-                                userProfiles={profiles}
-                                currentUserId={user?.uid}
-                                isSuperAdmin={true}
-                            />
-                        </TabsContent>
+                        <>
+                            <TabsContent value="performance">
+                                <CallPerformanceSummary 
+                                    userProfiles={profiles}
+                                    currentUserId={user?.uid}
+                                    isSuperAdmin={true}
+                                />
+                            </TabsContent>
+                            <TabsContent value="samples-audit">
+                                <SampleInventoryAudit 
+                                    userProfiles={profiles}
+                                />
+                            </TabsContent>
+                        </>
                     )}
 
                     {isSuperAdmin && (
