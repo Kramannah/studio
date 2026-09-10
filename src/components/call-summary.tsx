@@ -188,6 +188,15 @@ export function CallSummary({
         const totalHighFreqTarget = Math.max(targetHighFreqFromList, actualHighFreqAchieved);
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
+        // CONCENTRATION (3X) Threshold Logic
+        const actualMidFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
+        const targetMidFreqFromList = safeDoctors.filter(d => {
+            const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
+            return freqVal >= 3;
+        }).length;
+        const totalMidFreqTarget = Math.max(targetMidFreqFromList, actualMidFreqAchieved);
+        const percentageMidFreq = totalMidFreqTarget > 0 ? Math.round((actualMidFreqAchieved / totalMidFreqTarget) * 100) : 0;
+
         const actualUniqueVisited = Object.keys(providerVisits).length;
         const totalDoctorsInUniverse = Math.max(safeDoctors.length, actualUniqueVisited);
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
@@ -279,6 +288,7 @@ export function CallSummary({
             targetCalls,
             callRatePercentage,
             completedHighFreq: { actual: actualHighFreqAchieved, total: totalHighFreqTarget, percentage: percentageHighFreq },
+            completedMidFreq: { actual: actualMidFreqAchieved, total: totalMidFreqTarget, percentage: percentageMidFreq },
             coverageReach: { actual: actualUniqueVisited, total: totalDoctorsInUniverse, percentage: percentageReach },
             avgCallsPerDay,
             productUsage: sortedProductUsage,
@@ -356,16 +366,16 @@ export function CallSummary({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
                 <StatCard 
-                    title="CALL RATE (15/DAY)" 
+                    title="CALL RATE" 
                     value={
                         <div className="flex items-baseline gap-1">
                             <span>{insights.totalCalls}/{Math.round(insights.targetCalls)}</span>
                             <span className="text-sm font-bold text-white/50">({insights.callRatePercentage}<span className="text-[10px] ml-0.5">%</span>)</span>
                         </div>
                     }
-                    description="Monthly target achievement" 
+                    description="15 calls per day target" 
                     icon={Activity} 
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
@@ -382,6 +392,19 @@ export function CallSummary({
                     icon={Target} 
                     color="text-[#10b981]" 
                     bgColor="bg-[#0d1e18]" 
+                />
+                <StatCard 
+                    title="CONCENTRATION (3X)" 
+                    value={
+                        <div className="flex items-baseline gap-1">
+                            <span>{insights.completedMidFreq.actual}/{insights.completedMidFreq.total}</span>
+                            <span className="text-sm font-bold text-white/50">({insights.completedMidFreq.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                        </div>
+                    }
+                    description="Providers visited 3+ times" 
+                    icon={CheckCircle2} 
+                    color="text-[#3b82f6]" 
+                    bgColor="bg-[#0e1729]" 
                 />
                 <StatCard 
                     title="CALL REACH" 
