@@ -4,7 +4,7 @@ import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
-import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, MapPin, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon, Download } from "lucide-react";
+import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon, Download, MapPin } from "lucide-react";
 import { cn, parseAnyDate, PH_HOLIDAYS } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
@@ -15,12 +15,12 @@ import { Button } from "./ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import * as XLSX from 'xlsx';
 
-const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: string, value: React.ReactNode, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
+const StatCard = ({ title, value, subValue, description, icon: Icon, color, bgColor, footer }: { title: React.ReactNode, value: React.ReactNode, subValue?: string, description: string, icon: any, color: string, bgColor?: string, footer?: string }) => (
     <Card className={cn("border-none relative overflow-hidden transition-all hover:brightness-110", bgColor || "bg-[#111827]")}>
         <CardContent className="p-6">
             <div className="flex flex-col space-y-4">
                 <div className="flex justify-between items-start">
-                    <p className="font-black text-[10px] uppercase tracking-widest text-white/50">{title}</p>
+                    <div className="font-black text-[10px] uppercase tracking-widest text-white/50">{title}</div>
                     <Icon className={cn("w-5 h-5", color)} />
                 </div>
                 <div className="space-y-1">
@@ -73,6 +73,7 @@ export function CallSummary({
     pmrName?: string
 }) {
     const [doctorSearch, setDoctorSearch] = useState("");
+    const [concentrationType, setConcentrationType] = useState<"3x" | "4x">("4x");
 
     const months = useMemo(() => {
         const list = [];
@@ -336,6 +337,10 @@ export function CallSummary({
         XLSX.writeFile(wb, fileName);
     };
 
+    const activeConcentration = concentrationType === "4x" ? insights.completedHighFreq : insights.completedMidFreq;
+    const concentrationColor = concentrationType === "4x" ? "text-[#10b981]" : "text-[#3b82f6]";
+    const concentrationBg = concentrationType === "4x" ? "bg-[#0d1e18]" : "bg-[#0e1729]";
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -366,7 +371,7 @@ export function CallSummary({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <StatCard 
                     title="CALL RATE" 
                     value={
@@ -380,32 +385,34 @@ export function CallSummary({
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
                 />
+                
                 <StatCard 
-                    title="CONCENTRATION (4X)" 
-                    value={
-                        <div className="flex items-baseline gap-1">
-                            <span>{insights.completedHighFreq.actual}/{insights.completedHighFreq.total}</span>
-                            <span className="text-sm font-bold text-white/50">({insights.completedHighFreq.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                    title={
+                        <div className="flex items-center gap-2">
+                            <span>CONCENTRATION</span>
+                            <Select value={concentrationType} onValueChange={(v: any) => setConcentrationType(v)}>
+                                <SelectTrigger className="h-5 w-14 bg-white/10 border-none text-[8px] font-black p-0 px-1.5 focus:ring-0">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="3x" className="text-[10px] font-bold">3X</SelectItem>
+                                    <SelectItem value="4x" className="text-[10px] font-bold">4X</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     }
-                    description="Providers visited 4+ times" 
+                    value={
+                        <div className="flex items-baseline gap-1">
+                            <span>{activeConcentration.actual}/{activeConcentration.total}</span>
+                            <span className="text-sm font-bold text-white/50">({activeConcentration.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
+                        </div>
+                    }
+                    description={`Providers visited ${concentrationType === '4x' ? '4+' : '3+'} times`}
                     icon={Target} 
-                    color="text-[#10b981]" 
-                    bgColor="bg-[#0d1e18]" 
+                    color={concentrationColor} 
+                    bgColor={concentrationBg} 
                 />
-                <StatCard 
-                    title="CONCENTRATION (3X)" 
-                    value={
-                        <div className="flex items-baseline gap-1">
-                            <span>{insights.completedMidFreq.actual}/{insights.completedMidFreq.total}</span>
-                            <span className="text-sm font-bold text-white/50">({insights.completedMidFreq.percentage}<span className="text-[10px] ml-0.5">%</span>)</span>
-                        </div>
-                    }
-                    description="Providers visited 3+ times" 
-                    icon={CheckCircle2} 
-                    color="text-[#3b82f6]" 
-                    bgColor="bg-[#0e1729]" 
-                />
+
                 <StatCard 
                     title="CALL REACH" 
                     value={
