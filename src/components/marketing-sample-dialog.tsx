@@ -29,6 +29,8 @@ import { useUserProfiles } from "@/hooks/use-user-profiles"
 import { Loader2, Package, User, Globe, Search, X, Check, Info } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
+import { collection, doc } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 
 const formSchema = z.object({
   assignmentType: z.enum(["global", "individual"]),
@@ -46,13 +48,6 @@ const formSchema = z.object({
                 path: ["userId"],
             });
         }
-        if (!data.sampleId) {
-             ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "This product name was not found in the master list. Please check the spelling.",
-                path: ["materialName"],
-            });
-        }
     }
 });
 
@@ -64,7 +59,6 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  // Pass 'true' to both active and includeUsage to ensure the hook is alive and can fetch data
   const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true, true);
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,7 +80,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   const selectedUserId = form.watch("userId");
   const typedMaterialName = form.watch("materialName");
 
-  // Type-based Linking Logic: Find the Sample ID as the user types the name
+  // Lenient Background Linking: Link if found, but don't force it
   useEffect(() => {
       const q = typedMaterialName.toLowerCase().trim();
       if (!q) {
@@ -133,18 +127,36 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   }, [sample, form, isOpen]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    
     try {
+        let finalSampleId = values.sampleId;
+
+        // AUTO-CREATION LOGIC: If assigning to PMR and the item name is new, create global item first
+        if (values.assignmentType === 'individual' && !finalSampleId && db) {
+            const newDocRef = doc(collection(db, "marketingSamples"));
+            finalSampleId = newDocRef.id;
+            
+            await saveAllocation({
+                id: finalSampleId,
+                prodGroupProdSubGroup: values.productGroup || "Uncategorized",
+                displayMaterialName: values.materialName,
+                allocationQuantity: 0 // New items default to 0 global allocation
+            });
+        }
+
         if (values.assignmentType === 'global') {
             await saveAllocation({
-                id: sample?.id,
+                id: sample?.id || undefined,
                 prodGroupProdSubGroup: values.productGroup,
                 displayMaterialName: values.materialName,
                 allocationQuantity: values.allocationQuantity
             });
-        } else if (values.userId && values.sampleId) {
-            await saveIndividualAllocation(values.userId, values.sampleId, values.allocationQuantity);
+        } else if (values.userId && finalSampleId) {
+            await saveIndividualAllocation(values.userId, finalSampleId, values.allocationQuantity);
         }
+        
         onSave();
         onOpenChange(false);
     } catch (e) {
@@ -176,8 +188,6 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     return last ? `${last}, ${first}` : first;
   };
 
-  const isMatched = !!form.watch("sampleId");
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] gap-0">
@@ -189,7 +199,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
           <DialogDescription>
             {assignmentType === 'global' 
                 ? "Update items for the entire organization." 
-                : "Type the material name exactly as it appears in the master list to link it to a specific PMR."}
+                : "Type the material name exactly as it appears in the master list to link it, or type a new name to create it automatically."}
           </DialogDescription>
         </DialogHeader>
 
@@ -269,9 +279,9 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                     className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
                                 />
                             </div>
-                            <div className="max-h-[160px] overflow-y-auto border-2 rounded-xl bg-background divide-y shadow-inner scrollbar-hide">
+                            <div className="border-2 rounded-xl bg-background divide-y shadow-inner">
                                 {filteredUsers.length > 0 ? (
-                                    filteredUsers.map((p) => (
+                                    filteredUsers.slice(0, 50).map((p) => (
                                         <div 
                                             key={p.userId}
                                             onClick={() => form.setValue("userId", p.userId)}
@@ -301,23 +311,13 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">
-                                {assignmentType === 'individual' ? "2. Material Name (Must match exactly)" : "Material Name"}
+                                {assignmentType === 'individual' ? "2. Material Name" : "Material Name"}
                             </FormLabel>
                             <FormControl>
                                 <div className="relative">
-                                    <Input placeholder="e.g. Frutos Candy" {...field} className="h-12 border-2 rounded-xl pr-10" />
-                                    {assignmentType === 'individual' && isMatched && (
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                            <Check className="w-5 h-5 text-[#10b981]" />
-                                        </div>
-                                    )}
+                                    <Input placeholder="e.g. Frutos Candy" {...field} className="h-12 border-2 rounded-xl" />
                                 </div>
                             </FormControl>
-                            {assignmentType === 'individual' && isMatched && (
-                                <p className="text-[10px] text-[#10b981] font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
-                                    <Check className="w-3 h-3" /> Successfully Linked to Global Inventory
-                                </p>
-                            )}
                             <FormMessage />
                             </FormItem>
                         )}
@@ -334,7 +334,6 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                                     placeholder="e.g. Antihistamine" 
                                     {...field} 
                                     className="h-12 border-2 rounded-xl bg-muted/20" 
-                                    disabled={assignmentType === 'individual' && isMatched}
                                 />
                             </FormControl>
                             <FormMessage />
