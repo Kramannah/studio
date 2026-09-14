@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { format } from "date-fns"
 import type { NonCallDay } from "@/lib/types"
+import { AlertCircle } from "lucide-react"
 
 const nonCallDayFormSchema = z.object({
   category: z.string().min(1, "Please select a category."),
@@ -211,6 +212,24 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                 </FormItem>
               )}
             />
+
+            <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-destructive font-black uppercase text-[10px] tracking-widest">
+                    <AlertCircle className="w-3 h-3" /> Policy Reminder
+                </div>
+                <div className="space-y-1">
+                    <p className="text-[11px] font-bold text-destructive leading-tight">Activities Not Considered as VMC:</p>
+                    <ul className="text-[10px] text-muted-foreground space-y-0.5 list-disc pl-4">
+                        <li>Dine-Out Activities</li>
+                        <li>Round Table Discussions</li>
+                        <li>Focus Group Discussions</li>
+                        <li>Weekly District Huddles</li>
+                        <li>DSM Interviews</li>
+                        <li>Similar non-field activities not approved under VMC policy</li>
+                    </ul>
+                </div>
+            </div>
+
             <DialogFooter className="pt-2">
               <Button 
                 type="submit" 
