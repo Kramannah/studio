@@ -1,9 +1,9 @@
 "use client"
 
-import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
+import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid } from "date-fns";
+import { format, parseISO, isSameMonth, isValid, startOfMonth } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -42,6 +42,7 @@ type PlanningCalendarProps = {
   selectedMonth?: string;
   onMonthChange?: (month: string) => void;
   pmrName?: string;
+  profile?: UserProfile | null;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -79,7 +80,8 @@ export function PlanningCalendar({
     readOnly = false,
     selectedMonth,
     onMonthChange,
-    pmrName = "Representative"
+    pmrName = "Representative",
+    profile
 }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
@@ -272,49 +274,134 @@ export function PlanningCalendar({
 
         setIsExporting(true);
 
-        const dataToExport = plans.map(plan => {
-            const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
-                String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
-                String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
-            );
-
-            return {
-                "PMR Name": pmrName,
-                "Planned Date": plan.plannedDate ? format(parseISO(plan.plannedDate), 'yyyy-MM-dd') : 'N/A',
-                "Doctor Name": `${plan.doctorFirstName} ${plan.doctorLastName}`,
-                "Specialty": doctor?.specialty || "N/A",
-                "Clinic": doctor?.clinic || "N/A",
-                "HCP Code": doctor?.hcpCode || "N/A",
-                "Municipality": doctor?.municipality || "N/A",
-                "Province": doctor?.province || "N/A",
-                "Frequency Target": doctor?.frequency || "1x",
-                "Call Type": plan.callType || "unplanned"
-            };
-        });
-
-        // Sort by date then doctor name
-        dataToExport.sort((a, b) => a["Planned Date"].localeCompare(b["Planned Date"]) || a["Doctor Name"].localeCompare(b["Doctor Name"]));
-
-        const monthLabel = selectedMonth ? format(parseISO(selectedMonth + "-01"), "MMM_yyyy") : format(new Date(), "MMM_yyyy");
-        const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel}.xlsx`;
-
         try {
-            // DEFAULT LOGIC: Create a new workbook from scratch
-            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-            const wscols = [
-                { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 30 },
-                { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 12 },
-            ];
+            const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+            const monthLabel = format(referenceDate, "MMMM yyyy");
+            
+            // Build the data structure (AOA)
+            // Header takes 4 rows
+            // Each week takes 25 rows
+            // 4 weeks total = 104 rows approx
+            const rows: any[][] = [];
+            for (let i = 0; i < 120; i++) rows[i] = new Array(30).fill("");
+            
+            // Header Area
+            rows[0][1] = "PMR DAILY CALL PLAN";
+            rows[1][1] = `PMR Name: ${pmrName}`;
+            rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
+            rows[3][1] = `Month: ${monthLabel}`;
+
+            // Define Weeks for the month
+            const monthStart = startOfMonth(referenceDate);
+            const weeks: Date[] = [];
+            let weekIter = getWeekMonday(monthStart);
+            for (let i = 0; i < 4; i++) {
+                weeks.push(new Date(weekIter));
+                weekIter.setDate(weekIter.getDate() + 7);
+            }
+
+            const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
+            const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
+            const merges: any[] = [];
+
+            weeks.forEach((weekMon, weekIdx) => {
+                const weekRowStart = 4 + (weekIdx * 25);
+                
+                // WEEK BAR (Yellow style)
+                rows[weekRowStart][1] = `WEEK ${weekIdx + 1}`;
+                merges.push({ s: { r: weekRowStart, c: 1 }, e: { r: weekRowStart, c: 25 } });
+
+                // DAY BARS (Green style)
+                const dayRow = weekRowStart + 1;
+                dayNames.forEach((name, dIdx) => {
+                    const colStart = 1 + (dIdx * 5);
+                    rows[dayRow][colStart] = name;
+                    merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
+                    
+                    // SUBHEADERS
+                    const subRow = dayRow + 1;
+                    subHeaders.forEach((h, hIdx) => {
+                        rows[subRow][colStart + hIdx] = h;
+                    });
+
+                    // MD DATA SLOTS (16 rows)
+                    const dataRowStart = subRow + 1;
+                    for (let r = 0; r < 16; r++) {
+                        rows[dataRowStart + r][colStart] = (r + 1).toString();
+                    }
+
+                    // ACCT SECTION
+                    const acctHeaderRow = dataRowStart + 17;
+                    rows[acctHeaderRow][colStart] = "No";
+                    rows[acctHeaderRow][colStart + 1] = "Acct Name";
+                    rows[acctHeaderRow][colStart + 4] = "Address";
+                    
+                    for (let r = 0; r < 3; r++) {
+                        rows[acctHeaderRow + 1 + r][colStart] = (r + 1).toString();
+                    }
+                });
+            });
+
+            // Map Plans to Cells
+            plans.forEach(plan => {
+                const planDate = parseAnyDate(plan.plannedDate);
+                if (!planDate) return;
+
+                weeks.forEach((weekMon, wIdx) => {
+                    // Check if date falls within this week (Mon-Fri)
+                    const diffMs = planDate.getTime() - weekMon.getTime();
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays >= 0 && diffDays < 5) {
+                        const blockStartRow = 4 + (wIdx * 25) + 3;
+                        const colStart = 1 + (diffDays * 5);
+
+                        // Find first empty slot for this day
+                        for (let r = 0; r < 16; r++) {
+                            const targetRowIdx = blockStartRow + r;
+                            if (!rows[targetRowIdx][colStart + 1]) {
+                                const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
+                                    String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
+                                    String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
+                                );
+
+                                rows[targetRowIdx][colStart + 1] = `${plan.doctorFirstName} ${plan.doctorLastName}`;
+                                rows[targetRowIdx][colStart + 2] = doctor?.specialty || "";
+                                rows[targetRowIdx][colStart + 3] = doctor?.frequency || "";
+                                rows[targetRowIdx][colStart + 4] = doctor?.clinic || "";
+                                break;
+                            }
+                        }
+                    }
+                });
+            });
+
+            const worksheet = XLSX.utils.aoa_to_sheet(rows);
+            worksheet['!merges'] = merges;
+            
+            // Set widths for a better initial look
+            const wscols = [{ wch: 2 }]; // A gutter
+            for (let i = 0; i < 5; i++) {
+                wscols.push(
+                    { wch: 4 },  // No
+                    { wch: 25 }, // MD Name
+                    { wch: 10 }, // Spec
+                    { wch: 6 },  // Freq
+                    { wch: 20 }  // Clinic Add
+                );
+            }
             worksheet['!cols'] = wscols;
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
+
+            const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${format(referenceDate, "MMM_yyyy")}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
-            toast({ title: "Plan Exported", description: "Your call planning spreadsheet has been generated." });
+            toast({ title: "Plan Exported" });
         } catch (error) {
             console.error("Export Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "Could not generate the export file." });
+            toast({ variant: "destructive", title: "Export Failed", description: "An error occurred while building the Excel file." });
         } finally {
             setIsExporting(false);
         }
