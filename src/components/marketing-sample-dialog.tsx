@@ -29,7 +29,6 @@ import { useUserProfiles } from "@/hooks/use-user-profiles"
 import { Loader2, Package, User, Globe, Search, X, Check, Info } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
-import { ScrollArea } from "./ui/scroll-area"
 
 const formSchema = z.object({
   assignmentType: z.enum(["global", "individual"]),
@@ -65,7 +64,8 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true);
+  // Pass 'true' to both active and includeUsage to ensure the hook is alive and can fetch data
+  const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true, true);
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -180,7 +180,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] gap-0">
         <DialogHeader className="p-6 pb-4 border-b bg-background shrink-0">
           <DialogTitle className="font-headline flex items-center gap-2 text-xl text-primary">
             <Package className="w-5 h-5" />
@@ -193,7 +193,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto scrollbar-hide">
           <div className="p-6 space-y-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -364,7 +364,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
               </form>
             </Form>
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="p-6 pt-4 border-t bg-muted/30 shrink-0">
           <Button 
