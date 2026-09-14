@@ -131,10 +131,14 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         return allocations.filter(s => {
             if (!s) return false;
             
-            // VISIBILITY RULE:
-            // In Admin 'Global' tab, hide private items.
-            // In PMR view (readOnly), private items are already filtered by the hook (they only see theirs).
-            if (!readOnly && activeTab === 'global' && s.isGlobal === false) return false;
+            // STRICT VISIBILITY RULES:
+            // 1. In PMR view (readOnly), items are private if isGlobal is false AND they have no override.
+            // 2. In Admin 'Global' tab, always hide private items (isGlobal: false).
+            if (readOnly) {
+                if (s.isGlobal === false && !s.isOverridden) return false;
+            } else if (activeTab === 'global' && s.isGlobal === false) {
+                return false;
+            }
 
             const name = (s.displayMaterialName ?? s.materialName ?? "").toString().toLowerCase();
             const group = (s.prodGroupProdSubGroup ?? s.productGroup ?? "").toString().toLowerCase();
@@ -283,7 +287,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
 
                     process(data.primarySampleName, data.primaryProductQty);
                     process(data.secondarySampleName, data.secondaryProductQty);
-                    data.reminderProducts?.forEach(rp => process(rp.sampleName, rp.quantity));
+                    data.reminderProducts?.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
                 });
 
                 totalFetched += snap.docs.length;

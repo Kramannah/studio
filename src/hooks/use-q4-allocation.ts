@@ -23,6 +23,7 @@ import type { Q4Allocation, CoverageEntry, IndividualAllocation } from '@/lib/ty
 // SINGLETON CACHE: Shared across all instances of the hook to prevent redundant master list downloads
 let cachedGlobalSamples: Q4Allocation[] | null = null;
 let lastGlobalFetch = 0;
+let lastCacheUserId: string | null = null;
 const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 Minutes
 
 // USAGE CACHE: Stores calculated balances per user to prevent heavy re-scans of coverageEntries
@@ -51,6 +52,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     try {
         const now = Date.now();
         
+        // SECURITY: Clear singleton cache if user has changed (prevents leaks during testing)
+        if (effectiveUserId && lastCacheUserId !== effectiveUserId && !isAdminView) {
+            cachedGlobalSamples = null;
+            lastGlobalFetch = 0;
+        }
+
         // 1. Resolve All Template Items (with Cache)
         let masterList: Q4Allocation[] = [];
         if (!force && cachedGlobalSamples && (now - lastGlobalFetch < GLOBAL_CACHE_TTL)) {
@@ -68,17 +75,21 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             masterList = samplesSnapshot.docs.map(docSnap => {
                 const data = docSnap.data();
+                // STRICT BOOELAN HANDLING: Ensure isGlobal is definitively true or false
+                const isGlobalFlag = data.isGlobal === true || data.isGlobal === undefined;
+                
                 return { 
                     id: docSnap.id, 
                     prodGroupProdSubGroup: (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim(), 
                     displayMaterialName: (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim(), 
                     allocationQuantity: Number(data.allocationQuantity || 0),
-                    isGlobal: data.isGlobal !== false // Default to global if undefined
+                    isGlobal: isGlobalFlag
                 } as Q4Allocation;
             });
             
             cachedGlobalSamples = masterList;
             lastGlobalFetch = now;
+            lastCacheUserId = effectiveUserId || null;
         }
 
         // 2. Parallel Resolve: Individual Overrides and Usage
@@ -155,10 +166,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }));
 
         // PMR VISIBILITY FILTER:
-        // If not in Admin view (Global management), hide items that are private and not assigned to this specific PMR.
+        // Hide items that are private and not assigned to this specific PMR.
         if (!isAdminView && effectiveUserId) {
             finalAllocations = finalAllocations.filter(s => 
-                s.isGlobal === true || s.isOverridden
+                s.isGlobal === true || s.isOverridden === true
             );
         }
 
