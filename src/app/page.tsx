@@ -275,7 +275,7 @@ export default function Home() {
             <SidebarFooter className="p-4 border-t bg-muted/20">
                  <div className="px-3 py-2 bg-background rounded-lg border shadow-sm mb-2"><p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 leading-none">Logged in as</p><p className="text-xs font-bold truncate text-primary leading-tight">{user?.email}</p></div>
                  {hasAdminAccess && (<div className="space-y-2 mb-2"><Link href="/admin" className="w-full block"><Button size="sm" variant="outline" className="w-full font-headline border-2 h-10"><LayoutDashboard className="mr-2 h-4 w-4 text-primary" /> Admin Dashboard</Button></Link></div>)}
-                 <Button variant="destructive" size="lg" logout={logout} className="w-full font-headline"><LogOut className="mr-2 h-5 w-5" /> Log Out</Button>
+                 <Button variant="destructive" size="lg" onClick={() => logout()} className="w-full font-headline"><LogOut className="mr-2 h-5 w-5" /> Log Out</Button>
             </SidebarFooter>
           </Sidebar>
           <main className="flex-1 w-full overflow-x-hidden">
