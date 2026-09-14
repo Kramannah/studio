@@ -396,6 +396,73 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         );
     }
 
+    const renderMaterialTable = () => (
+        <Table>
+            <TableHeader className="bg-muted/20">
+                <TableRow className="h-12 hover:bg-transparent">
+                    {!readOnly && <TableHead className="w-12 pl-6" />}
+                    <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
+                    <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
+                    <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
+                    <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
+                    {!readOnly && <TableHead className="text-right pr-6">Actions</TableHead>}
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {dataLoading ? (
+                    <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                ) : paginatedSamples.length > 0 ? (
+                    paginatedSamples.map((sample) => {
+                        const sId = sample.id;
+                        const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
+                        const group = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
+                        const used = usedQuantities[name.toLowerCase()] || 0;
+                        const bal = Math.max(0, (sample.allocationQuantity || 0) - used);
+                        
+                        return (
+                            <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                {!readOnly && (
+                                    <TableCell className="pl-6">
+                                        <Checkbox 
+                                            checked={selectedIds.includes(sId)}
+                                            onCheckedChange={(checked) => checked ? setSelectedIds(p => [...p, sId]) : setSelectedIds(p => p.filter(i => i !== sId))}
+                                        />
+                                    </TableCell>
+                                )}
+                                <TableCell className={cn(readOnly && "pl-6")}>
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-sm">{name}</span>
+                                        <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <span className="font-mono font-bold">{sample.allocationQuantity}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
+                                <TableCell className="text-center">
+                                    <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
+                                        {bal}
+                                    </Badge>
+                                </TableCell>
+                                {!readOnly && (
+                                    <TableCell className="text-right pr-6">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
+                                            <Edit className="w-4 h-4 text-muted-foreground" />
+                                        </Button>
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                        );
+                    })
+                ) : (
+                    <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
+                )}
+            </TableBody>
+        </Table>
+    );
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -405,17 +472,17 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <CardTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                                        <Package className="w-6 h-6" /> Inventory Management
+                                        <Package className="w-6 h-6" /> {readOnly ? "My Marketing Samples" : "Inventory Management"}
                                     </CardTitle>
                                     <CardDescription>
-                                        Control global distribution templates and specific representative overrides.
+                                        {readOnly ? "View your current sample allocations and remaining balances." : "Control global distribution templates and specific representative overrides."}
                                     </CardDescription>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 w-full max-w-lg justify-end">
                                     <div className="relative flex-1 min-w-[200px]">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                         <Input 
-                                            placeholder={activeTab === 'global' ? "Search materials or groups..." : "Search PMR name or material..."} 
+                                            placeholder={!readOnly && activeTab === 'specific' ? "Search PMR name or material..." : "Search materials or groups..."} 
                                             className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
@@ -439,85 +506,11 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                             </div>
                         </CardHeader>
                         
-                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                            <div className="bg-muted/10 border-b p-2">
-                                <TabsList className="bg-muted/50 p-1 rounded-xl w-full sm:w-fit">
-                                    <TabsTrigger value="global" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                        <Globe className="w-4 h-4" /> Global Template
-                                    </TabsTrigger>
-                                    <TabsTrigger value="specific" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                        <User className="w-4 h-4" /> Specific PMR Assignments
-                                    </TabsTrigger>
-                                </TabsList>
-                            </div>
-
-                            <TabsContent value="global" className="m-0">
+                        {readOnly ? (
+                            <div className="border-t">
                                 <CardContent className="p-0">
                                     <div className="overflow-x-auto">
-                                        <Table>
-                                            <TableHeader className="bg-muted/20">
-                                                <TableRow className="h-12 hover:bg-transparent">
-                                                    {!readOnly && <TableHead className="w-12 pl-6" />}
-                                                    <TableHead className={cn("font-bold text-foreground", readOnly && "pl-6")}>Material Name</TableHead>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Alloc</TableHead>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Used</TableHead>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Bal</TableHead>
-                                                    {!readOnly && <TableHead className="text-right pr-6">Actions</TableHead>}
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {dataLoading ? (
-                                                    <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                                                ) : paginatedSamples.length > 0 ? (
-                                                    paginatedSamples.map((sample) => {
-                                                        const sId = sample.id;
-                                                        const name = (sample.displayMaterialName ?? sample.materialName ?? "Unknown Item").toString().trim();
-                                                        const group = (sample.prodGroupProdSubGroup ?? sample.productGroup ?? "Uncategorized").toString().trim();
-                                                        const used = usedQuantities[name.toLowerCase()] || 0;
-                                                        const bal = Math.max(0, (sample.allocationQuantity || 0) - used);
-                                                        
-                                                        return (
-                                                            <TableRow key={sId} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                                {!readOnly && (
-                                                                    <TableCell className="pl-6">
-                                                                        <Checkbox 
-                                                                            checked={selectedIds.includes(sId)}
-                                                                            onCheckedChange={(checked) => checked ? setSelectedIds(p => [...p, sId]) : setSelectedIds(p => p.filter(i => i !== sId))}
-                                                                        />
-                                                                    </TableCell>
-                                                                )}
-                                                                <TableCell className={cn(readOnly && "pl-6")}>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold text-sm">{name}</span>
-                                                                        <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-center">
-                                                                    <div className="flex items-center justify-center gap-1.5">
-                                                                        <span className="font-mono font-bold">{sample.allocationQuantity}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-center font-mono font-bold text-orange-500">{used}</TableCell>
-                                                                <TableCell className="text-center">
-                                                                    <Badge variant={bal <= 0 ? "destructive" : "secondary"} className="font-mono font-black h-7 px-3">
-                                                                        {bal}
-                                                                    </Badge>
-                                                                </TableCell>
-                                                                {!readOnly && (
-                                                                    <TableCell className="text-right pr-6">
-                                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
-                                                                            <Edit className="w-4 h-4 text-muted-foreground" />
-                                                                        </Button>
-                                                                    </TableCell>
-                                                                )}
-                                                            </TableRow>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
+                                        {renderMaterialTable()}
                                     </div>
                                 </CardContent>
                                 {totalPages > 1 && (
@@ -529,87 +522,117 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                         </div>
                                     </div>
                                 )}
-                            </TabsContent>
+                            </div>
+                        ) : (
+                            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                                <div className="bg-muted/10 border-b p-2">
+                                    <TabsList className="bg-muted/50 p-1 rounded-xl w-full sm:w-fit">
+                                        <TabsTrigger value="global" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                            <Globe className="w-4 h-4" /> Global Template
+                                        </TabsTrigger>
+                                        <TabsTrigger value="specific" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                            <User className="w-4 h-4" /> Specific PMR Assignments
+                                        </TabsTrigger>
+                                    </TabsList>
+                                </div>
 
-                            <TabsContent value="specific" className="m-0">
-                                <CardContent className="p-0">
-                                    <div className="overflow-x-auto">
-                                        <Table>
-                                            <TableHeader className="bg-muted/20">
-                                                <TableRow className="h-12 hover:bg-transparent">
-                                                    <TableHead className="pl-6 font-bold text-foreground">Representative</TableHead>
-                                                    <TableHead className="font-bold text-foreground">Material Name</TableHead>
-                                                    <TableHead className="text-center font-bold text-foreground w-24">Specific Qty</TableHead>
-                                                    <TableHead className="text-right pr-6 font-bold text-foreground">Action</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {loadingOverrides ? (
-                                                    <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
-                                                ) : filteredOverrides.length > 0 ? (
-                                                    filteredOverrides.map((override) => {
-                                                        const pmr = profiles[override.userId];
-                                                        const sample = allocations.find(a => a.id === override.sampleId);
-                                                        const materialName = sample?.displayMaterialName || "Deleted Item";
-                                                        const materialGroup = sample?.prodGroupProdSubGroup || "Uncategorized";
+                                <TabsContent value="global" className="m-0">
+                                    <CardContent className="p-0">
+                                        <div className="overflow-x-auto">
+                                            {renderMaterialTable()}
+                                        </div>
+                                    </CardContent>
+                                    {totalPages > 1 && (
+                                        <div className="flex items-center justify-between p-4 border-t bg-muted/5">
+                                            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></p>
+                                            <div className="flex items-center gap-2">
+                                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="border-2 rounded-xl h-10 px-4"><ChevronLeft className="h-4 w-4 mr-1" /> Prev</Button>
+                                                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="border-2 rounded-xl h-10 px-4">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </TabsContent>
 
-                                                        return (
-                                                            <TableRow key={override.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
-                                                                <TableCell className="pl-6">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold text-sm">{pmr ? `${pmr.lastName}, ${pmr.firstName}` : "Unknown User"}</span>
-                                                                        <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">{pmr?.code || "PMR"}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-bold text-sm">{materialName}</span>
-                                                                        <span className="text-[10px] uppercase font-black text-primary/70">{materialGroup}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-center font-mono font-black text-primary text-lg">
-                                                                    {override.quantity}
-                                                                </TableCell>
-                                                                <TableCell className="text-right pr-6">
-                                                                    <AlertDialog>
-                                                                        <AlertDialogTrigger asChild>
-                                                                            <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full">
-                                                                                <Trash2 className="h-4 w-4" />
-                                                                            </Button>
-                                                                        </AlertDialogTrigger>
-                                                                        <AlertDialogContent>
-                                                                            <AlertDialogHeader>
-                                                                                <AlertDialogTitle>Remove Specific Assignment?</AlertDialogTitle>
-                                                                                <AlertDialogDescription>
-                                                                                    This will remove the custom override for Dr. {pmr?.lastName}'s bag. They will revert to the global template quantity for this item.
-                                                                                </AlertDialogDescription>
-                                                                            </AlertDialogHeader>
-                                                                            <AlertDialogFooter>
-                                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                                <AlertDialogAction onClick={() => handleDeleteOverride(override.id)} className="bg-destructive text-white">Remove Override</AlertDialogAction>
-                                                                            </AlertDialogFooter>
-                                                                        </AlertDialogContent>
-                                                                    </AlertDialog>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <TableRow>
-                                                        <TableCell colSpan={4} className="h-64 text-center">
-                                                            <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                                                <User className="w-8 h-8 opacity-20" />
-                                                                <p className="italic">No specific PMR overrides found.</p>
-                                                            </div>
-                                                        </TableCell>
+                                <TabsContent value="specific" className="m-0">
+                                    <CardContent className="p-0">
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader className="bg-muted/20">
+                                                    <TableRow className="h-12 hover:bg-transparent">
+                                                        <TableHead className="pl-6 font-bold text-foreground">Representative</TableHead>
+                                                        <TableHead className="font-bold text-foreground">Material Name</TableHead>
+                                                        <TableHead className="text-center font-bold text-foreground w-24">Specific Qty</TableHead>
+                                                        <TableHead className="text-right pr-6 font-bold text-foreground">Action</TableHead>
                                                     </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </CardContent>
-                            </TabsContent>
-                        </Tabs>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {loadingOverrides ? (
+                                                        <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                                                    ) : filteredOverrides.length > 0 ? (
+                                                        filteredOverrides.map((override) => {
+                                                            const pmr = profiles[override.userId];
+                                                            const sample = allocations.find(a => a.id === override.sampleId);
+                                                            const materialName = sample?.displayMaterialName || "Deleted Item";
+                                                            const materialGroup = sample?.prodGroupProdSubGroup || "Uncategorized";
+
+                                                            return (
+                                                                <TableRow key={override.id} className="h-16 hover:bg-muted/30 border-b last:border-0">
+                                                                    <TableCell className="pl-6">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold text-sm">{pmr ? `${pmr.lastName}, ${pmr.firstName}` : "Unknown User"}</span>
+                                                                            <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">{pmr?.code || "PMR"}</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold text-sm">{materialName}</span>
+                                                                            <span className="text-[10px] uppercase font-black text-primary/70">{materialGroup}</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center font-mono font-black text-primary text-lg">
+                                                                        {override.quantity}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right pr-6">
+                                                                        <AlertDialog>
+                                                                            <AlertDialogTrigger asChild>
+                                                                                <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full">
+                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                </Button>
+                                                                            </AlertDialogTrigger>
+                                                                            <AlertDialogContent>
+                                                                                <AlertDialogHeader>
+                                                                                    <AlertDialogTitle>Remove Specific Assignment?</AlertDialogTitle>
+                                                                                    <AlertDialogDescription>
+                                                                                        This will remove the custom override for Dr. {pmr?.lastName}'s bag. They will revert to the global template quantity for this item.
+                                                                                    </AlertDialogDescription>
+                                                                                </AlertDialogHeader>
+                                                                                <AlertDialogFooter>
+                                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                                    <AlertDialogAction onClick={() => handleDeleteOverride(override.id)} className="bg-destructive text-white">Remove Override</AlertDialogAction>
+                                                                                </AlertDialogFooter>
+                                                                            </AlertDialogContent>
+                                                                        </AlertDialog>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={4} className="h-64 text-center">
+                                                                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                                                    <User className="w-8 h-8 opacity-20" />
+                                                                    <p className="italic">No specific PMR overrides found.</p>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </CardContent>
+                                </TabsContent>
+                            </Tabs>
+                        )}
                     </Card>
                 </div>
 
