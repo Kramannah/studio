@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
@@ -56,7 +57,8 @@ interface Q4AllocationViewProps {
 }
 
 export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
-    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId);
+    // Pass !readOnly as isAdminView to the hook to control internal filtering
+    const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId, !readOnly);
     const { profiles, loading: profilesLoading } = useUserProfiles();
     const { toast } = useToast();
     
@@ -126,15 +128,19 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         if (!mounted || !allocations) return [];
         const q = (search ?? "").toString().toLowerCase().trim();
         
-        const uniqueMap = new Map<string, Q4Allocation>();
-        allocations.forEach(s => { if (s && s.id) uniqueMap.set(s.id, s); });
+        return allocations.filter(s => {
+            if (!s) return false;
+            
+            // VISIBILITY RULE:
+            // In Admin 'Global' tab, hide private items.
+            // In PMR view (readOnly), private items are already filtered by the hook (they only see theirs).
+            if (!readOnly && activeTab === 'global' && s.isGlobal === false) return false;
 
-        return Array.from(uniqueMap.values()).filter(s => {
             const name = (s.displayMaterialName ?? s.materialName ?? "").toString().toLowerCase();
             const group = (s.prodGroupProdSubGroup ?? s.productGroup ?? "").toString().toLowerCase();
             return name.includes(q) || group.includes(q);
         });
-    }, [allocations, search, mounted]);
+    }, [allocations, search, mounted, readOnly, activeTab]);
 
     const filteredOverrides = useMemo(() => {
         const q = (search ?? "").toLowerCase().trim();
@@ -364,7 +370,8 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                 const samplesToAdd: Omit<Q4Allocation, 'id'>[] = bodyRows.map(row => ({
                     prodGroupProdSubGroup: (row[colMap.group] ?? "Uncategorized").toString().trim(),
                     displayMaterialName: (row[colMap.name] ?? "").toString().trim(),
-                    allocationQuantity: Math.round(Number(String(row[colMap.qty] ?? '0').replace(/[^0-9.]/g, '')))
+                    allocationQuantity: Math.round(Number(String(row[colMap.qty] ?? '0').replace(/[^0-9.]/g, ''))),
+                    isGlobal: true // Bulk imports are global by default
                 })).filter(s => s.displayMaterialName);
                 
                 if (samplesToAdd.length > 0) {
@@ -386,7 +393,8 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
             id: sample.id,
             productGroup: sample.prodGroupProdSubGroup,
             materialName: sample.displayMaterialName,
-            allocationQuantity: sample.allocationQuantity
+            allocationQuantity: sample.allocationQuantity,
+            isGlobal: sample.isGlobal
         });
         setIsDialogOpen(true);
     };
@@ -724,13 +732,13 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                 <div className="flex items-start gap-2">
                                     <Globe className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                        <strong>Global Template:</strong> Applies to the entire organization automatically.
+                                        <strong>Global Template:</strong> Standard stock levels for the whole team.
                                     </p>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <User className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                        <strong>PMR Overrides:</strong> Takes precedence over the global template for specific individuals.
+                                        <strong>Private Assignment:</strong> Individual items visible only to the assigned PMR.
                                     </p>
                                 </div>
                             </div>

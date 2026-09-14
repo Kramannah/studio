@@ -59,7 +59,8 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true, true);
+  // Use isAdminView: true to see all materials for linking purposes
+  const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true, true, undefined, true);
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,7 +81,6 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
   const selectedUserId = form.watch("userId");
   const typedMaterialName = form.watch("materialName");
 
-  // Lenient Background Linking: Link if found, but don't force it
   useEffect(() => {
       const q = typedMaterialName.toLowerCase().trim();
       if (!q) {
@@ -133,7 +133,8 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     try {
         let finalSampleId = values.sampleId;
 
-        // AUTO-CREATION LOGIC: If assigning to PMR and the item name is new, create global item first
+        // PRIVATE AUTO-CREATION: If assigning to a specific PMR and the item is new, 
+        // create it as isGlobal: false so it stays hidden from others.
         if (values.assignmentType === 'individual' && !finalSampleId && db) {
             const newDocRef = doc(collection(db, "marketingSamples"));
             finalSampleId = newDocRef.id;
@@ -142,7 +143,8 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 id: finalSampleId,
                 prodGroupProdSubGroup: values.productGroup || "Uncategorized",
                 displayMaterialName: values.materialName,
-                allocationQuantity: 0 // New items default to 0 global allocation
+                allocationQuantity: 0, 
+                isGlobal: false // Hidden from Global section and other PMRs
             });
         }
 
@@ -151,7 +153,8 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 id: sample?.id || undefined,
                 prodGroupProdSubGroup: values.productGroup,
                 displayMaterialName: values.materialName,
-                allocationQuantity: values.allocationQuantity
+                allocationQuantity: values.allocationQuantity,
+                isGlobal: true 
             });
         } else if (values.userId && finalSampleId) {
             await saveIndividualAllocation(values.userId, finalSampleId, values.allocationQuantity);
@@ -190,7 +193,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] gap-0">
+      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] gap-0 scrollbar-hide">
         <DialogHeader className="p-6 pb-4 border-b bg-background shrink-0">
           <DialogTitle className="font-headline flex items-center gap-2 text-xl text-primary">
             <Package className="w-5 h-5" />
@@ -199,7 +202,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
           <DialogDescription>
             {assignmentType === 'global' 
                 ? "Update items for the entire organization." 
-                : "Type the material name exactly as it appears in the master list to link it, or type a new name to create it automatically."}
+                : "Assigned items are private and visible only to the selected representative."}
           </DialogDescription>
         </DialogHeader>
 

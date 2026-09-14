@@ -33,7 +33,7 @@ const USAGE_CACHE_TTL = 5 * 60 * 1000; // 5 Minutes
  * Hook for managing inventory allocations.
  * Supports Global Template and Individual PMR Overrides with optimized caching.
  */
-export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string) => {
+export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = false, targetUserId?: string, isAdminView: boolean = false) => {
   const { user } = useAuth();
   const effectiveUserId = targetUserId || user?.uid;
   const [allocations, setAllocations] = useState<Q4Allocation[]>([]);
@@ -51,12 +51,12 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     try {
         const now = Date.now();
         
-        // 1. Resolve Global Template (with Cache)
+        // 1. Resolve All Template Items (with Cache)
         let masterList: Q4Allocation[] = [];
         if (!force && cachedGlobalSamples && (now - lastGlobalFetch < GLOBAL_CACHE_TTL)) {
             masterList = cachedGlobalSamples;
         } else {
-            const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(1000)))
+            const samplesSnapshot = await getDocs(query(collection(db!, "marketingSamples"), limit(2000)))
                 .catch(async (error) => {
                     const permissionError = new FirestorePermissionError({
                         path: 'marketingSamples',
@@ -72,7 +72,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
                     id: docSnap.id, 
                     prodGroupProdSubGroup: (data.prodGroupProdSubGroup || data.productGroup || "Uncategorized").toString().trim(), 
                     displayMaterialName: (data.displayMaterialName || data.materialName || "Unknown Item").toString().trim(), 
-                    allocationQuantity: Number(data.allocationQuantity || 0) 
+                    allocationQuantity: Number(data.allocationQuantity || 0),
+                    isGlobal: data.isGlobal !== false // Default to global if undefined
                 } as Q4Allocation;
             });
             
@@ -146,12 +147,22 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
         const [overrides, used] = await Promise.all(fetchPromises);
 
-        // 3. Merge and Sort
-        const finalAllocations = masterList.map(sample => ({
+        // 3. Filter and Merge
+        let finalAllocations = masterList.map(sample => ({
             ...sample,
             allocationQuantity: overrides.has(sample.id) ? overrides.get(sample.id)! : sample.allocationQuantity,
             isOverridden: overrides.has(sample.id)
-        })).sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
+        }));
+
+        // PMR VISIBILITY FILTER:
+        // If not in Admin view (Global management), hide items that are private and not assigned to this specific PMR.
+        if (!isAdminView && effectiveUserId) {
+            finalAllocations = finalAllocations.filter(s => 
+                s.isGlobal === true || s.isOverridden
+            );
+        }
+
+        finalAllocations.sort((a, b) => a.displayMaterialName.toLowerCase().localeCompare(b.displayMaterialName.toLowerCase()));
 
         setAllocations(finalAllocations);
         setUsedQuantities(used);
@@ -161,14 +172,13 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [effectiveUserId, active, includeUsage]);
+  }, [effectiveUserId, active, includeUsage, isAdminView]);
 
   useEffect(() => {
     if (active) performFetch();
   }, [performFetch, active]);
 
   const refetch = useCallback(() => {
-    // Force a fresh fetch and invalidate both global and specific user usage cache
     lastGlobalFetch = 0;
     if (effectiveUserId) {
         delete USAGE_CACHE[effectiveUserId];
@@ -181,7 +191,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
-    // Invalidate singleton cache immediately
+    // Ensure isGlobal is explicitly set if missing
+    if (rest.isGlobal === undefined) rest.isGlobal = true;
+
     lastGlobalFetch = 0;
 
     setDoc(docRef, rest, { merge: true })
@@ -219,7 +231,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             errorEmitter.emit('permission-error', permissionError);
         });
 
-    // Invalidate specific user cache
     if (USAGE_CACHE[userId]) delete USAGE_CACHE[userId];
     
     refetch();
@@ -229,7 +240,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const addAllocationsBulk = async (data: Omit<Q4Allocation, 'id'>[]) => {
     if (!db) return false;
     const batch = writeBatch(db!);
-    data.forEach(item => batch.set(doc(collection(db!, "marketingSamples")), item));
+    data.forEach(item => {
+        const payload = { ...item, isGlobal: item.isGlobal !== false };
+        batch.set(doc(collection(db!, "marketingSamples")), payload);
+    });
     
     lastGlobalFetch = 0;
 

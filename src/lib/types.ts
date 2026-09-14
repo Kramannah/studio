@@ -126,6 +126,7 @@ export interface Q4Allocation {
     allocationQuantity: number;
     quarter?: 'Q3' | 'Q4';
     isOverridden?: boolean;
+    isGlobal?: boolean;
 }
 
 export interface IndividualAllocation {
@@ -141,6 +142,7 @@ export interface MarketingSample {
     productGroup: string;
     materialName: string;
     allocationQuantity: number;
+    isGlobal?: boolean;
 }
 
 export interface TimeLog {
