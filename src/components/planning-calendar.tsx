@@ -191,22 +191,32 @@ export function PlanningCalendar({
     }, [nonCallDaysByDate, selectedDate]);
 
     const selectedDayStats = useMemo(() => {
-        if (!selectedDate) return { total: 0, planned: 0, unplanned: 0 };
+        if (!selectedDate) return { total: 0, covered: 0, planned: 0, unplanned: 0 };
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        // Planned calls: Scheduled visits that have a matching entry
-        const plannedCount = dayPlans.filter(p => 
+        // 1. Covered: How many of the plotted visits have a matching report
+        const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
                 String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
             )
         ).length;
 
-        // Unplanned calls: Reports submitted that were NOT in the day's schedule
+        // 2. Planned (Achieved): Reports that match a plotted call marked as 'planned'
+        const plannedCount = dayEntries.filter(e => 
+            dayPlans.some(p => 
+                p.callType === 'planned' &&
+                String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
+                String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
+            )
+        ).length;
+
+        // 3. Unplanned (Achieved): Reports that do NOT match a plotted call marked as 'planned'
         const unplannedCount = dayEntries.filter(e => 
             !dayPlans.some(p => 
+                p.callType === 'planned' &&
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
                 String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
             )
@@ -214,6 +224,7 @@ export function PlanningCalendar({
 
         return {
             total: dayPlans.length,
+            covered: coveredCount,
             planned: plannedCount,
             unplanned: unplannedCount
         };
@@ -538,7 +549,8 @@ export function PlanningCalendar({
                             </h3>
                             <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Total Visits: {selectedDayStats.total}</Badge>
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Planned: {selectedDayStats.planned}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Covered: {selectedDayStats.covered}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-teal-500/30 text-teal-500 bg-teal-500/10">Planned: {selectedDayStats.planned}</Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned: {selectedDayStats.unplanned}</Badge>
                             </div>
                         </div>
