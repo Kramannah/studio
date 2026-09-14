@@ -113,6 +113,15 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         }
     };
 
+    const handleDeleteBulk = async () => {
+        if (selectedIds.length === 0) return;
+        const success = await deleteAllocationsBulk(selectedIds);
+        if (success) {
+            setSelectedIds([]);
+            toast({ title: "Items Deleted", description: "Successfully removed selected materials from global template." });
+        }
+    };
+
     const filteredSamples = useMemo(() => {
         if (!mounted || !allocations) return [];
         const q = (search ?? "").toString().toLowerCase().trim();
@@ -410,7 +419,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
             </TableHeader>
             <TableBody>
                 {dataLoading ? (
-                    <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></TableCell></TableRow>
                 ) : paginatedSamples.length > 0 ? (
                     paginatedSamples.map((sample) => {
                         const sId = sample.id;
@@ -448,16 +457,37 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                 </TableCell>
                                 {!readOnly && (
                                     <TableCell className="text-right pr-6">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
-                                            <Edit className="w-4 h-4 text-muted-foreground" />
-                                        </Button>
+                                        <div className="flex justify-end gap-1">
+                                            <Button variant="ghost" size="icon" onClick={() => handleEdit(sample)} className="h-8 w-8 rounded-full">
+                                                <Edit className="w-4 h-4 text-muted-foreground" />
+                                            </Button>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete Material?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Are you sure you want to remove <strong>{name}</strong> from the global inventory list? This action cannot be undone.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => deleteAllocationsBulk([sId])} className="bg-destructive text-white">Delete Item</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
                                     </TableCell>
                                 )}
                             </TableRow>
                         );
                     })
                 ) : (
-                    <TableRow><TableCell colSpan={5} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
                 )}
             </TableBody>
         </Table>
@@ -491,6 +521,30 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                     <Button variant="outline" size="icon" onClick={handleExportExcel} className="h-11 w-11 shrink-0 rounded-xl" title="Export current view to Excel">
                                         <FileSpreadsheet className="h-5 w-5" />
                                     </Button>
+                                    
+                                    {!readOnly && selectedIds.length > 0 && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive" className="h-11 font-headline px-4 gap-2 rounded-xl shadow-lg animate-in zoom-in-95 duration-200">
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Delete ({selectedIds.length})
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Bulk Delete Items?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        You are about to remove <strong>{selectedIds.length}</strong> items from the global inventory list. This will affect the bag allocations for all representatives.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleDeleteBulk} className="bg-destructive text-white">Confirm Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
+
                                     {!readOnly && (
                                         <Button 
                                             variant="secondary" 
