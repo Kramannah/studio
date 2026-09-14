@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,6 +27,7 @@ import { format } from "date-fns"
 import type { NonCallDay } from "@/lib/types"
 
 const nonCallDayFormSchema = z.object({
+  category: z.string().min(1, "Please select a category."),
   reason: z.string().min(1, "Please select a reason."),
   dayType: z.enum(['wholeday', 'halfday-am', 'halfday-pm']),
   remarks: z.string().optional(),
@@ -39,28 +40,51 @@ type NonCallDayDialogProps = {
   selectedDate: Date;
 }
 
-const leaveReasons = [
-    "Vacation Leave",
-    "Sick Leave",
-    "Emergency Leave",
-    "Marketing Activity",
-    "Training/Orientation",
-    "Sales/Marketing Event",
-    "Paternity/Maternity Leave",
-    "District Meeting",
-    "Enroute",
-    "VMC",
-]
+const categories = [
+    { value: "leave-related", label: "Leave-Related Activities" },
+    { value: "business", label: "Company and Business Activities" },
+    { value: "other", label: "Other" },
+];
+
+const reasonsByCategory: Record<string, string[]> = {
+    "leave-related": [
+        "Vacation Leave",
+        "Sick Leave",
+        "Emergency Leave",
+        "Maternity/Paternity Leave",
+        "Solo Parent Leave",
+        "Absence Without Pay",
+        "Leave Without Pay",
+        "Forced Leave",
+        "Offset",
+    ],
+    "business": [
+        "Training/Orientation",
+        "Workshops",
+        "Company Meeting",
+        "Booth Manning Activities",
+        "Medical Mission",
+        "Trade Activity",
+        "District Meeting",
+        "Other management-approved business activities conducted outside regular field work",
+    ],
+    "other": [
+        "Enroute",
+    ],
+};
 
 export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }: NonCallDayDialogProps) {
   const form = useForm<z.infer<typeof nonCallDayFormSchema>>({
     resolver: zodResolver(nonCallDayFormSchema),
     defaultValues: {
+      category: "",
       reason: "",
       remarks: "",
       dayType: "wholeday",
     },
   })
+
+  const selectedCategory = form.watch("category");
 
   useEffect(() => {
     if (!isOpen) {
@@ -68,31 +92,44 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
     }
   }, [isOpen, form]);
 
+  // Reset reason when category changes
+  useEffect(() => {
+    if (selectedCategory) {
+        form.setValue("reason", "");
+    }
+  }, [selectedCategory, form]);
+
   const onSubmit = (values: z.infer<typeof nonCallDayFormSchema>) => {
-    onSave(values);
+    // The component expectation is to omit certain fields to match database structure
+    const { category, ...rest } = values;
+    onSave(rest);
     onOpenChange(false);
   }
+
+  const currentReasons = useMemo(() => {
+      return reasonsByCategory[selectedCategory] || [];
+  }, [selectedCategory]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-headline">Log Non-Call Day</DialogTitle>
+          <DialogTitle className="font-headline text-xl">Log Non-Call Day</DialogTitle>
           <DialogDescription>
             Submit a request for a non-call day on {format(selectedDate, "PPP")}.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
              <FormField
               control={form.control}
               name="dayType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Leave Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-11 border-2 rounded-xl">
                         <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
                     </FormControl>
@@ -106,20 +143,48 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Activity Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger className="h-11 border-2 rounded-xl">
+                        <SelectValue placeholder="Select a category..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {categories.map(cat => (
+                          <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="reason"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Reason for Leave</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Reason for Leave</FormLabel>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    value={field.value}
+                    disabled={!selectedCategory}
+                  >
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a reason..." />
+                      <SelectTrigger className="h-11 border-2 rounded-xl">
+                        <SelectValue placeholder={selectedCategory ? "Select a specific reason..." : "Please select category first"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {leaveReasons.map(reason => (
+                      {currentReasons.map(reason => (
                           <SelectItem key={reason} value={reason}>{reason}</SelectItem>
                       ))}
                     </SelectContent>
@@ -128,21 +193,32 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                 </FormItem>
               )}
             />
+            
             <FormField
               control={form.control}
               name="remarks"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline">Remarks (Optional)</FormLabel>
+                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Remarks (Optional)</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Add any additional details here..." {...field} />
+                    <Textarea 
+                        placeholder="Add any additional details here..." 
+                        {...field} 
+                        className="min-h-[100px] border-2 rounded-xl focus-visible:ring-primary"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <DialogFooter>
-              <Button type="submit">Submit for Approval</Button>
+            <DialogFooter className="pt-2">
+              <Button 
+                type="submit" 
+                className="w-full h-12 font-headline text-lg rounded-xl shadow-lg transition-all active:scale-[0.98]"
+                disabled={!selectedCategory || !form.watch("reason")}
+              >
+                Submit for Approval
+              </Button>
             </DialogFooter>
           </form>
         </Form>
