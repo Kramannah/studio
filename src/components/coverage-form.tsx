@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -369,9 +370,9 @@ export function CoverageForm({
 
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
-      const isPastOrToday = initialDate ? (isToday(initialDate) || isBefore(initialDate, startOfToday())) : true;
+      // Fix: If initialDoctor is set, it's coming from the planned calendar. Always record as 'planned'.
       form.reset({
-        callType: isPastOrToday ? "unplanned" : "planned",
+        callType: "planned",
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,

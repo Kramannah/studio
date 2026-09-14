@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -68,6 +69,7 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
+            // Audit Padding: Ensure we catch records at the boundaries
             const queryStart = subDays(monthStart, 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
@@ -151,12 +153,13 @@ export function CallPerformanceSummary({
                 });
 
                 const uniqueVisitedCount = visitMap.size;
-                // CONCENTRATION (4X) Audit Logic
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
 
-                // CALL TYPE SPLIT LOGIC
+                // Fix: Accurate Call Type Split
+                // 1. Explicitly filter for 'planned'
                 const plannedCalls = uEntries.filter(e => e.callType === 'planned').length;
-                const unplannedCalls = uEntries.filter(e => e.callType === 'unplanned').length;
+                // 2. Count everything else (including legacy records) as 'unplanned' to keep sum accurate
+                const unplannedCalls = uEntries.length - plannedCalls;
 
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
@@ -269,7 +272,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Active Days match the PMR Dashboard logic: weighted sum of reporting days adjusting for partial leaves.
+                                Planned vs Unplanned counts are strictly derived from the submission workflow. Legacy records default to unplanned.
                             </p>
                         </div>
                     </CardContent>
@@ -278,9 +281,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">High Frequency Audit</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Verification</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Concentration is now calculated based on a 4-visit threshold per provider per month.
+                                Total Call Rate always equals the sum of Planned + Unplanned calls to ensure data integrity.
                             </p>
                         </div>
                     </CardContent>

@@ -126,7 +126,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
-    const callType = (isToday(plannedDate) || isBefore(plannedDate, startOfToday())) ? 'unplanned' : 'planned';
+    // Fix: Visits added through the Planning interface are explicitly 'planned' calls.
+    const callType = 'planned';
     const newPlan = {
       userId: user.uid,
       doctorId: doctor.id,
@@ -158,7 +159,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     if (doctors.length === 0 || !user || !db) return false;
     const batch = writeBatch(db);
     const dateISO = plannedDate.toISOString();
-    const callType = (isToday(plannedDate) || isBefore(plannedDate, startOfToday())) ? 'unplanned' : 'planned';
+    // Fix: Visits added through the Planning interface are explicitly 'planned' calls.
+    const callType = 'planned';
     
     const newPlans: any[] = doctors.map(doctor => ({
       userId: user.uid,
