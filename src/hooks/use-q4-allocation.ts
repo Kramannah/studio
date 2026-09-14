@@ -203,7 +203,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
-    // Default to global if strategy is not specified
+    // Default to global ONLY if strategy is truly not specified (safety fallback)
     if (rest.isGlobal === undefined) rest.isGlobal = true;
 
     lastGlobalFetch = 0;

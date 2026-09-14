@@ -25,7 +25,6 @@ import {
     FileSpreadsheet,
     FileUp,
     User,
-    ArrowRight,
     Info,
     ShieldAlert
 } from "lucide-react";
@@ -132,8 +131,9 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         return allocations.filter(s => {
             if (!s) return false;
             
-            // STRICT VISIBILITY RULES (REDUNDANT):
-            // 1. For PMRs (readOnly): Item is hidden if NOT Global AND they have no manual override.
+            // STRICT VISIBILITY RULES:
+            // 1. For PMRs (readOnly): Hook already filters Global OR Overridden items. 
+            //    We add a secondary safety filter here to ensure absolute exclusion of unassigned private items.
             if (readOnly) {
                 if (s.isGlobal !== true && !s.isOverridden) return false;
             } 
@@ -676,7 +676,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                                                         <AlertDialog>
                                                                             <AlertDialogTrigger asChild>
                                                                                 <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full">
-                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                    <Trash2 className="w-4 h-4" />
                                                                                 </Button>
                                                                             </AlertDialogTrigger>
                                                                             <AlertDialogContent>
