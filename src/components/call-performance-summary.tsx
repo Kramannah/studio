@@ -119,13 +119,16 @@ export function CallPerformanceSummary({
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // Create a plan lookup key: "date|first|last"
-                const planLookup = new Set<string>();
+                // Create a plan lookup map: "date|first|last" -> "callType"
+                const planLookup = new Map<string, string>();
                 uPlans.forEach(p => {
                     const d = parseAnyDate(p.plannedDate);
                     if (d && isValid(d)) {
                         const key = `${format(d, 'yyyy-MM-dd')}|${(p.doctorFirstName || "").toLowerCase().trim()}|${(p.doctorLastName || "").toLowerCase().trim()}`;
-                        planLookup.add(key);
+                        // Explicitly check Call Type from Planning. If multiple entries exist, prioritize 'planned'.
+                        if (!planLookup.has(key) || p.callType === 'planned') {
+                            planLookup.set(key, p.callType || 'planned');
+                        }
                     }
                 });
 
@@ -158,9 +161,11 @@ export function CallPerformanceSummary({
                         const dateStr = format(d, 'yyyy-MM-dd');
                         daysWithCalls.add(dateStr);
                         
-                        // Accurate Planned vs Unplanned logic derived from Planning collection
+                        // Reconciliation: Check if this specific visit was planned in the calendar
                         const matchKey = `${dateStr}|${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
-                        if (planLookup.has(matchKey)) {
+                        const matchingPlanType = planLookup.get(matchKey);
+                        
+                        if (matchingPlanType === 'planned') {
                             plannedCalls++;
                         } else {
                             unplannedCalls++;
@@ -296,7 +301,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Planned vs Unplanned counts are derived by matching reports against plotted calls in the Planning collection.
+                                Planned vs Unplanned counts are derived by strictly matching reports against 'Planned' status calls in the schedule.
                             </p>
                         </div>
                     </CardContent>

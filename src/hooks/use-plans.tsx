@@ -126,8 +126,10 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
 
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
-    // Fix: Visits added through the Planning interface are explicitly 'planned' calls.
+    
+    // VISIBILITY: Calls plotted in the Planning interface are the source of truth for 'planned' metrics.
     const callType = 'planned';
+    
     const newPlan = {
       userId: user.uid,
       doctorId: doctor.id,
@@ -159,7 +161,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     if (doctors.length === 0 || !user || !db) return false;
     const batch = writeBatch(db);
     const dateISO = plannedDate.toISOString();
-    // Fix: Visits added through the Planning interface are explicitly 'planned' calls.
+    
+    // VISIBILITY: Batch scheduling from the calendar is always marked as 'planned' visits.
     const callType = 'planned';
     
     const newPlans: any[] = doctors.map(doctor => ({
