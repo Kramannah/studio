@@ -26,7 +26,8 @@ import {
     FileUp,
     User,
     ArrowRight,
-    Info
+    Info,
+    ShieldAlert
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
@@ -131,12 +132,13 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         return allocations.filter(s => {
             if (!s) return false;
             
-            // STRICT VISIBILITY RULES:
-            // 1. In PMR view (readOnly), items are private if isGlobal is false AND they have no override.
-            // 2. In Admin 'Global' tab, always hide private items (isGlobal: false).
+            // STRICT VISIBILITY RULES (REDUNDANT):
+            // 1. For PMRs (readOnly): Item is hidden if NOT Global AND they have no manual override.
             if (readOnly) {
-                if (s.isGlobal === false && !s.isOverridden) return false;
-            } else if (activeTab === 'global' && s.isGlobal === false) {
+                if (s.isGlobal !== true && !s.isOverridden) return false;
+            } 
+            // 2. In Admin 'Global' tab: Only show organization-wide items.
+            else if (activeTab === 'global' && s.isGlobal !== true) {
                 return false;
             }
 
@@ -452,7 +454,12 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                 )}
                                 <TableCell className={cn(readOnly && "pl-6")}>
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-sm">{name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-sm">{name}</span>
+                                            {!readOnly && !sample.isGlobal && (
+                                                <Badge variant="outline" className="text-[8px] h-4 px-1 opacity-50 bg-orange-500/10 border-orange-500/20 text-orange-600">Private</Badge>
+                                            )}
+                                        </div>
                                         <span className="text-[10px] uppercase font-black text-primary opacity-70 tracking-tight">{group}</span>
                                     </div>
                                 </TableCell>
@@ -499,7 +506,14 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                         );
                     })
                 ) : (
-                    <TableRow><TableCell colSpan={6} className="h-64 text-center text-muted-foreground italic">No products found matching filters.</TableCell></TableRow>
+                    <TableRow>
+                        <TableCell colSpan={6} className="h-64 text-center">
+                            <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                                <Search className="w-10 h-10 opacity-10" />
+                                <p className="italic">No products found matching filters.</p>
+                            </div>
+                        </TableCell>
+                    </TableRow>
                 )}
             </TableBody>
         </Table>
@@ -743,6 +757,12 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                                     <User className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                                         <strong>Private Assignment:</strong> Individual items visible only to the assigned PMR.
+                                    </p>
+                                </div>
+                                <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl mt-2">
+                                    <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                                    <p className="text-[10px] font-bold text-red-600 leading-tight">
+                                        Private items are strictly hidden from Global sections and other representative accounts.
                                     </p>
                                 </div>
                             </div>

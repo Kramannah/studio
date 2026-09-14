@@ -75,8 +75,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             masterList = samplesSnapshot.docs.map(docSnap => {
                 const data = docSnap.data();
-                // STRICT BOOELAN HANDLING: Ensure isGlobal is definitively true or false
-                const isGlobalFlag = data.isGlobal === true || data.isGlobal === undefined;
+                // STRICT BOOELAN HANDLING: Item is global ONLY if explicitly true. 
+                // Default to false for legacy/missing data to ensure privacy.
+                const isGlobalFlag = data.isGlobal === true;
                 
                 return { 
                     id: docSnap.id, 
@@ -166,7 +167,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }));
 
         // PMR VISIBILITY FILTER:
-        // Hide items that are private and not assigned to this specific PMR.
+        // Strictly exclude items that are private and not assigned to this specific PMR.
         if (!isAdminView && effectiveUserId) {
             finalAllocations = finalAllocations.filter(s => 
                 s.isGlobal === true || s.isOverridden === true
@@ -202,7 +203,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
-    // Ensure isGlobal is explicitly set if missing
+    // Default to global if strategy is not specified
     if (rest.isGlobal === undefined) rest.isGlobal = true;
 
     lastGlobalFetch = 0;
