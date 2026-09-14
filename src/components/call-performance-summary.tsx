@@ -25,7 +25,7 @@ import { db } from "@/lib/firebase";
 import { parseAnyDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CoverageEntry, NonCallDay, UserProfile } from "@/lib/types";
+import type { CoverageEntry, NonCallDay, UserProfile, Plan } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -98,9 +98,10 @@ export function CallPerformanceSummary({
             const excelRows: any[] = [];
 
             for (const uid of targetUserIds) {
-                const [entriesSnap, ncdSnap] = await Promise.all([
+                const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
                     getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(2000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200)))
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(2000)))
                 ]);
 
                 const uEntries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => {
@@ -111,6 +112,21 @@ export function CallPerformanceSummary({
                 const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay).filter(n => {
                     const d = parseAnyDate(n.date);
                     return d && d >= monthStart && d <= monthEnd;
+                });
+
+                const uPlans = plansSnap.docs.map(d => d.data() as Plan).filter(p => {
+                    const d = parseAnyDate(p.plannedDate);
+                    return d && d >= monthStart && d <= monthEnd;
+                });
+
+                // Create a plan lookup key: "date|first|last"
+                const planLookup = new Set<string>();
+                uPlans.forEach(p => {
+                    const d = parseAnyDate(p.plannedDate);
+                    if (d && isValid(d)) {
+                        const key = `${format(d, 'yyyy-MM-dd')}|${(p.doctorFirstName || "").toLowerCase().trim()}|${(p.doctorLastName || "").toLowerCase().trim()}`;
+                        planLookup.add(key);
+                    }
                 });
 
                 let pmrManagerName = "Unassigned";
@@ -133,9 +149,23 @@ export function CallPerformanceSummary({
                 });
 
                 const daysWithCalls = new Set<string>();
+                let plannedCalls = 0;
+                let unplannedCalls = 0;
+
                 uEntries.forEach(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
-                    if (d && isValid(d)) daysWithCalls.add(format(d, 'yyyy-MM-dd'));
+                    if (d && isValid(d)) {
+                        const dateStr = format(d, 'yyyy-MM-dd');
+                        daysWithCalls.add(dateStr);
+                        
+                        // Accurate Planned vs Unplanned logic derived from Planning collection
+                        const matchKey = `${dateStr}|${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
+                        if (planLookup.has(matchKey)) {
+                            plannedCalls++;
+                        } else {
+                            unplannedCalls++;
+                        }
+                    }
                 });
 
                 let activeDaysCount = 0;
@@ -154,12 +184,6 @@ export function CallPerformanceSummary({
 
                 const uniqueVisitedCount = visitMap.size;
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
-
-                // Fix: Accurate Call Type Split
-                // 1. Explicitly filter for 'planned'
-                const plannedCalls = uEntries.filter(e => e.callType === 'planned').length;
-                // 2. Count everything else (including legacy records) as 'unplanned' to keep sum accurate
-                const unplannedCalls = uEntries.length - plannedCalls;
 
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
@@ -272,7 +296,7 @@ export function CallPerformanceSummary({
                         <div className="space-y-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Planned vs Unplanned counts are strictly derived from the submission workflow. Legacy records default to unplanned.
+                                Planned vs Unplanned counts are derived by matching reports against plotted calls in the Planning collection.
                             </p>
                         </div>
                     </CardContent>
