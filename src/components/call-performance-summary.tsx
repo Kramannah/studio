@@ -154,6 +154,10 @@ export function CallPerformanceSummary({
                 // CONCENTRATION (4X) Audit Logic
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
 
+                // CALL TYPE SPLIT LOGIC
+                const plannedCalls = uEntries.filter(e => e.callType === 'planned').length;
+                const unplannedCalls = uEntries.filter(e => e.callType === 'unplanned').length;
+
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
 
@@ -161,7 +165,9 @@ export function CallPerformanceSummary({
                     "District Manager": pmrManagerName,
                     "Employee Code": profile?.code || meta?.code || "PMR",
                     "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
-                    "Call Rate": uEntries.length,
+                    "Planned Calls": plannedCalls,
+                    "Unplanned Calls": unplannedCalls,
+                    "Total Call Rate": uEntries.length,
                     "Call Concentration (4X)": highFreqAchievedCount,
                     "Call Reach": uniqueVisitedCount,
                     "Active days": activeDaysCount
