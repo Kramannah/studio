@@ -261,15 +261,26 @@ export function SubmittedList({
     }, [entries]);
 
     const handleExportExcel = () => {
-        const data = filtered.map(e => ({
-            "Provider": `${e.firstName} ${e.lastName}`,
-            "Specialty": e.specialty,
-            "Clinic": e.clinic,
-            "Date": e.coverageDate ? format(parseISO(e.coverageDate), "yyyy-MM-dd") : "N/A",
-            "Submitted": e.submittedAt ? format(parseISO(e.submittedAt), "Pp") : "N/A",
-            "Type": e.coverageType,
-            "Objective": e.callObjective
-        }));
+        const data = filtered.map(e => {
+            const eFirst = (e.firstName || "").toLowerCase().trim();
+            const eLast = (e.lastName || "").toLowerCase().trim();
+            
+            const doctor = (doctors || []).find(d => 
+                (d.firstName || "").toLowerCase().trim() === eFirst && 
+                (d.lastName || "").toLowerCase().trim() === eLast
+            );
+
+            return {
+                "Provider": `${e.firstName} ${e.lastName}`,
+                "Specialty": e.specialty,
+                "Clinic": e.clinic,
+                "Frequency": doctor?.frequency || "—",
+                "Date": e.coverageDate ? format(parseISO(e.coverageDate), "yyyy-MM-dd") : "N/A",
+                "Submitted": e.submittedAt ? format(parseISO(e.submittedAt), "Pp") : "N/A",
+                "Type": e.coverageType,
+                "Objective": e.callObjective
+            };
+        });
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Reports");
