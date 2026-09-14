@@ -1,4 +1,3 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -59,7 +58,7 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  // Use isAdminView: true to see all materials for linking purposes
+  // Always keep the hook active to ensure data link consistency
   const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true, true, undefined, true);
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -134,7 +133,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
         let finalSampleId = values.sampleId;
 
         // PRIVATE AUTO-CREATION: If assigning to a specific PMR and the item is new, 
-        // create it as isGlobal: false so it stays hidden from others.
+        // create it as isGlobal: false so it stays hidden from others and the Global section.
         if (values.assignmentType === 'individual' && !finalSampleId && db) {
             const newDocRef = doc(collection(db, "marketingSamples"));
             finalSampleId = newDocRef.id;
@@ -144,7 +143,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                 prodGroupProdSubGroup: values.productGroup || "Uncategorized",
                 displayMaterialName: values.materialName,
                 allocationQuantity: 0, 
-                isGlobal: false // Hidden from Global section and other PMRs
+                isGlobal: false // Strict privacy
             });
         }
 
@@ -201,7 +200,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
           </DialogTitle>
           <DialogDescription>
             {assignmentType === 'global' 
-                ? "Update items for the entire organization." 
+                ? "Update items for the entire organization. Legacy items are Global by default." 
                 : "Assigned items are private and visible only to the selected representative."}
           </DialogDescription>
         </DialogHeader>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -75,9 +74,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             masterList = samplesSnapshot.docs.map(docSnap => {
                 const data = docSnap.data();
-                // STRICT BOOELAN HANDLING: Item is global ONLY if explicitly true. 
-                // Default to false for legacy/missing data to ensure privacy.
-                const isGlobalFlag = data.isGlobal === true;
+                // RESTORED: Treat undefined as true (Global) to prevent legacy data disappearance.
+                // An item is only private if explicitly set to false.
+                const isGlobalFlag = data.isGlobal !== false;
                 
                 return { 
                     id: docSnap.id, 
@@ -167,10 +166,10 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }));
 
         // PMR VISIBILITY FILTER:
-        // Strictly exclude items that are private and not assigned to this specific PMR.
+        // Strictly exclude items that are private (isGlobal === false) AND not assigned to this specific PMR.
         if (!isAdminView && effectiveUserId) {
             finalAllocations = finalAllocations.filter(s => 
-                s.isGlobal === true || s.isOverridden === true
+                s.isGlobal !== false || s.isOverridden === true
             );
         }
 
@@ -253,6 +252,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (!db) return false;
     const batch = writeBatch(db!);
     data.forEach(item => {
+        // Bulk imports are Global by default
         const payload = { ...item, isGlobal: item.isGlobal !== false };
         batch.set(doc(collection(db!, "marketingSamples")), payload);
     });

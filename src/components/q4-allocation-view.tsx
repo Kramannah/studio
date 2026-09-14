@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
@@ -131,14 +130,13 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         return allocations.filter(s => {
             if (!s) return false;
             
-            // STRICT VISIBILITY RULES:
-            // 1. For PMRs (readOnly): Hook already filters Global OR Overridden items. 
-            //    We add a secondary safety filter here to ensure absolute exclusion of unassigned private items.
+            // RESTORED VISIBILITY RULES:
+            // 1. For PMRs (readOnly): Show all Global (isGlobal not false) AND their manual overrides.
             if (readOnly) {
-                if (s.isGlobal !== true && !s.isOverridden) return false;
+                if (s.isGlobal === false && !s.isOverridden) return false;
             } 
-            // 2. In Admin 'Global' tab: Only show organization-wide items.
-            else if (activeTab === 'global' && s.isGlobal !== true) {
+            // 2. In Admin 'Global' tab: Show all team items (isGlobal not false).
+            else if (activeTab === 'global' && s.isGlobal === false) {
                 return false;
             }
 
