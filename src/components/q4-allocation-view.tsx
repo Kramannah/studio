@@ -514,10 +514,10 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <CardTitle className="text-2xl font-black font-headline text-primary flex items-center gap-2">
-                                        <Package className="w-6 h-6" /> {readOnly ? "My Marketing Samples" : "Inventory Management"}
+                                        <Package className="w-6 h-6" /> {readOnly ? "Master Material List" : "Inventory Management"}
                                     </CardTitle>
                                     <CardDescription>
-                                        {readOnly ? "View your current sample allocations and remaining balances." : "Control global distribution templates and specific representative overrides."}
+                                        {readOnly ? "Items defined here are automatically assigned to all PMRs in the system." : "Control global distribution templates and specific representative overrides."}
                                     </CardDescription>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 w-full max-w-lg justify-end">
