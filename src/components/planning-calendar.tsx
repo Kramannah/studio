@@ -191,13 +191,22 @@ export function PlanningCalendar({
     }, [nonCallDaysByDate, selectedDate]);
 
     const selectedDayStats = useMemo(() => {
-        if (!selectedDate) return { total: 0, covered: 0, notCovered: 0 };
+        if (!selectedDate) return { total: 0, planned: 0, unplanned: 0 };
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        const coveredCount = dayPlans.filter(p => 
+        // Planned calls: Scheduled visits that have a matching entry
+        const plannedCount = dayPlans.filter(p => 
             dayEntries.some(e => 
+                String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
+                String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
+            )
+        ).length;
+
+        // Unplanned calls: Reports submitted that were NOT in the day's schedule
+        const unplannedCount = dayEntries.filter(e => 
+            !dayPlans.some(p => 
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
                 String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
             )
@@ -205,8 +214,8 @@ export function PlanningCalendar({
 
         return {
             total: dayPlans.length,
-            covered: coveredCount,
-            notCovered: Math.max(0, dayPlans.length - coveredCount)
+            planned: plannedCount,
+            unplanned: unplannedCount
         };
     }, [selectedDate, plansByDate, entriesByDate]);
 
@@ -527,9 +536,10 @@ export function PlanningCalendar({
                                 Daily Plan for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
-                            <div className="flex wrap gap-2">
+                            <div className="flex flex-wrap gap-2">
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Total Visits: {selectedDayStats.total}</Badge>
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Covered: {selectedDayStats.covered}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Planned: {selectedDayStats.planned}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned: {selectedDayStats.unplanned}</Badge>
                             </div>
                         </div>
                         <div className="flex wrap gap-2">
