@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Doctor": {
@@ -187,6 +188,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "firstName", "lastName"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "Global system configurations and assets such as report templates.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -203,6 +215,7 @@
     "/q4Allocation/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Legacy inventory allocations." },
     "/marketingSamples/{id}": { "schema": { "$ref": "#/backend/entities/Q4Allocation" }, "description": "Official marketing items and samples." },
     "/individualAllocations/{id}": { "schema": { "$ref": "#/backend/entities/IndividualAllocation" }, "description": "PMR-specific overrides for sample quantities." },
-    "/userProfiles/{id}": { "schema": { "$ref": "#/backend/entities/UserProfile" }, "description": "User profile overrides." }
+    "/userProfiles/{id}": { "schema": { "$ref": "#/backend/entities/UserProfile" }, "description": "User profile overrides." },
+    "/systemConfig/{id}": { "schema": { "$ref": "#/backend/entities/SystemConfig" }, "description": "Global system configurations and report assets." }
   }
 }

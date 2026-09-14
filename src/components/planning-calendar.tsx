@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -24,6 +25,7 @@ import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayNa
 import { Checkbox } from "./ui/checkbox";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
+import { useSystemConfig } from "@/hooks/use-system-config";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -88,8 +90,10 @@ export function PlanningCalendar({
     const [doctorFilter, setDoctorFilter] = useState("");
     const [selectedDoctorIds, setSelectedDoctorIds] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [mounted, setMounted] = useState(false);
     const { toast } = useToast();
+    const { planningTemplate } = useSystemConfig();
 
     useEffect(() => {
         setSelectedDate(new Date());
@@ -263,11 +267,13 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
         if (plans.length === 0) {
             toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export for the current view." });
             return;
         }
+
+        setIsExporting(true);
 
         const dataToExport = plans.map(plan => {
             const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
@@ -292,31 +298,42 @@ export function PlanningCalendar({
         // Sort by date then doctor name
         dataToExport.sort((a, b) => a["Planned Date"].localeCompare(b["Planned Date"]) || a["Doctor Name"].localeCompare(b["Doctor Name"]));
 
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        
-        // Auto-size columns
-        const wscols = [
-            { wch: 20 }, // PMR Name
-            { wch: 15 }, // Planned Date
-            { wch: 25 }, // Doctor Name
-            { wch: 20 }, // Specialty
-            { wch: 30 }, // Clinic
-            { wch: 12 }, // HCP Code
-            { wch: 20 }, // Municipality
-            { wch: 20 }, // Province
-            { wch: 15 }, // Frequency
-            { wch: 12 }, // Call Type
-        ];
-        worksheet['!cols'] = wscols;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-        
         const monthLabel = selectedMonth ? format(parseISO(selectedMonth + "-01"), "MMM_yyyy") : format(new Date(), "MMM_yyyy");
         const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
 
-        toast({ title: "Plan Exported", description: "Your call planning spreadsheet has been generated." });
+        try {
+            if (planningTemplate?.fileUrl) {
+                // TEMPLATE LOGIC: Download the template and append data
+                const response = await fetch(planningTemplate.fileUrl);
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+
+                // Append data starting from row 2 (assuming row 1 is headers)
+                XLSX.utils.sheet_add_json(worksheet, dataToExport, { skipHeader: true, origin: "A2" });
+                XLSX.writeFile(workbook, fileName);
+            } else {
+                // DEFAULT LOGIC: Create a new workbook from scratch
+                const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+                const wscols = [
+                    { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 30 },
+                    { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 12 },
+                ];
+                worksheet['!cols'] = wscols;
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
+                XLSX.writeFile(workbook, fileName);
+            }
+
+            toast({ title: "Plan Exported", description: planningTemplate ? "Plan generated using custom template." : "Your call planning spreadsheet has been generated." });
+        } catch (error) {
+            console.error("Export Error:", error);
+            toast({ variant: "destructive", title: "Export Failed", description: "Could not process the template file." });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
@@ -336,9 +353,9 @@ export function PlanningCalendar({
                     <h2 className="text-3xl font-bold font-headline text-primary">Call Planning</h2>
                     <p className="text-muted-foreground text-lg">Schedule and manage your doctor visits efficiently.</p>
                 </div>
-                <Button variant="outline" onClick={handleExportExcel} className="h-12 border-2 rounded-xl font-headline gap-2">
-                    <FileSpreadsheet className="w-5 h-5 text-primary" />
-                    Export Plan (.xlsx)
+                <Button variant="outline" onClick={handleExportExcel} disabled={isExporting} className="h-12 border-2 rounded-xl font-headline gap-2">
+                    {isExporting ? <Loader2 className="animate-spin h-5 w-5" /> : <FileSpreadsheet className="w-5 h-5 text-primary" />}
+                    {isExporting ? 'Exporting...' : 'Export Plan (.xlsx)'}
                 </Button>
             </div>
 

@@ -1,11 +1,12 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3, Pill, Package } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3, Pill, Package, FileUp, Trash2, FileSpreadsheet } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -26,13 +27,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { firebaseConfig } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 import { UserDashboard } from '@/components/user-dashboard';
 import { CallPerformanceSummary } from '@/components/call-performance-summary';
 import { SampleInventoryAudit } from '@/components/sample-inventory-audit';
 import { useDoctors } from '@/hooks/use-doctors';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
+import { useSystemConfig } from '@/hooks/use-system-config';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -40,6 +42,81 @@ const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
         <p className="ml-4 font-headline font-bold text-muted-foreground uppercase tracking-widest text-sm">{message}</p>
     </div>
 );
+
+function PlanningTemplateManager() {
+    const { planningTemplate, loading, uploadTemplate, deleteTemplate } = useSystemConfig();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploading, setIsUploading] = useState(false);
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        await uploadTemplate(file);
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    return (
+        <Card className="border-2 shadow-lg rounded-2xl overflow-hidden mt-8">
+            <CardHeader className="bg-muted/30 border-b pb-6">
+                <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                        <CardTitle className="text-xl font-black font-headline flex items-center gap-2">
+                            <FileSpreadsheet className="text-primary" /> Planning Export Template
+                        </CardTitle>
+                        <CardDescription>Upload a master Excel file to be used as the base for Call Planning exports.</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent className="p-6">
+                {loading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin h-4 w-4" /> Checking system configuration...</div>
+                ) : planningTemplate ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-6 bg-primary/5 rounded-2xl border-2 border-primary/10 animate-in fade-in zoom-in-95">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                                <FileSpreadsheet className="h-6 w-6 text-primary" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="font-black text-lg text-primary truncate max-w-[300px]">{planningTemplate.fileName}</p>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                    Last Updated: {format(parseISO(planningTemplate.updatedAt), 'PPp')}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="h-11 rounded-xl border-2 font-headline">
+                                <RefreshCw className={cn("mr-2 h-4 w-4", isUploading && "animate-spin")} />
+                                Update File
+                            </Button>
+                            <Button variant="destructive" onClick={deleteTemplate} disabled={isUploading} className="h-11 rounded-xl font-headline">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Remove Template
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-2xl bg-muted/5 gap-4">
+                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                            <FileUp className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="text-center space-y-1">
+                            <p className="font-bold text-lg">No template uploaded.</p>
+                            <p className="text-sm text-muted-foreground">The system will use the default professional export format.</p>
+                        </div>
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                        <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="h-12 px-8 rounded-xl shadow-lg font-headline text-lg font-black transition-all active:scale-95">
+                            {isUploading ? <><Loader2 className="mr-2 animate-spin" /> Uploading...</> : <><FileUp className="mr-2" /> Upload Excel Template</>}
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
 
 export default function AdminPage() {
     const { user, profile, loading: authLoading, logout } = useAuth();
@@ -441,7 +518,7 @@ export default function AdminPage() {
                     )}
 
                     {isSuperAdmin && (
-                        <TabsContent value="accounts">
+                        <TabsContent value="accounts" className="space-y-8">
                             <Card className="border-2 shadow-lg rounded-2xl overflow-hidden">
                                 <CardHeader className="bg-muted/30 border-b pb-6">
                                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -538,6 +615,9 @@ export default function AdminPage() {
                                     </div>
                                 </CardContent>
                             </Card>
+                            
+                            {/* NEW: Planning Template Manager UI */}
+                            <PlanningTemplateManager />
                         </TabsContent>
                     )}
                 </Tabs>

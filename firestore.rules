@@ -102,13 +102,14 @@ service cloud.firestore {
     }
     
     match /userProfiles/{id} {
-      // BREAK RECURSION: Allow any signed-in user to get (read) individual profiles.
-      // Dynamic role lookups in isManagerial() call get() on this path.
       allow read: if isSignedIn();
-      // Only Admins or the User themselves can modify profiles
       allow write: if isSignedIn() && (request.auth.uid == id || isManagerial());
-      // Listing the directory remains restricted to management
       allow list: if isSignedIn() && isManagerial();
+    }
+
+    match /systemConfig/{id} {
+      allow read: if isSignedIn();
+      allow write: if isManagerial();
     }
   }
 }

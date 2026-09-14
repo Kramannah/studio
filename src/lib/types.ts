@@ -167,6 +167,14 @@ export interface UserProfile {
     updatedAt: string;
 }
 
+export interface SystemConfig {
+    id: string;
+    type: string;
+    fileUrl: string;
+    fileName: string;
+    updatedAt: string;
+}
+
 export interface AdminData {
     allEntries: CoverageEntry[];
     allDoctors: Doctor[];

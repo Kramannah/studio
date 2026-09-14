@@ -1,7 +1,7 @@
 
 'use client';
 
-import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from "firebase/storage";
 import { storage, auth } from "./firebase";
 
 /**
@@ -59,6 +59,23 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     } catch (error: any) {
         console.warn("Storage Upload Warning:", error?.message || error);
         throw error; 
+    }
+}
+
+/**
+ * Uploads a raw File object to Firebase Storage and returns the download URL.
+ */
+export async function uploadFileToStorage(file: File, path: string): Promise<string> {
+    if (!storage) throw new Error("Firebase Storage is not initialized.");
+    if (!auth?.currentUser) throw new Error("Unauthorized: No active session.");
+
+    const storageRef = ref(storage, path);
+    try {
+        await uploadBytes(storageRef, file);
+        return await getDownloadURL(storageRef);
+    } catch (error: any) {
+        console.error("Storage Upload Error:", error);
+        throw error;
     }
 }
 
