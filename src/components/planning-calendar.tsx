@@ -297,7 +297,14 @@ export function PlanningCalendar({
 
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
-            const merges: any[] = [];
+            
+            // Header Area Merges - Spanning multiple columns to prevent text cut-off
+            const merges: any[] = [
+                { s: { r: 0, c: 1 }, e: { r: 0, c: 10 } }, // PMR DAILY CALL PLAN
+                { s: { r: 1, c: 1 }, e: { r: 1, c: 10 } }, // PMR Name
+                { s: { r: 2, c: 1 }, e: { r: 2, c: 10 } }, // Area/Territory
+                { s: { r: 3, c: 1 }, e: { r: 3, c: 10 } }, // Month
+            ];
 
             weeks.forEach((weekMon, weekIdx) => {
                 const weekRowStart = 4 + (weekIdx * 25);
@@ -408,6 +415,7 @@ export function PlanningCalendar({
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
                         cell.s.border = {}; // No borders for main header
+                        cell.s.alignment = { horizontal: 'left', vertical: 'center' };
                         if (R === 0) {
                             cell.s.font.sz = 14;
                             cell.s.font.underline = true;
