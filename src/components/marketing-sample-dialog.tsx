@@ -26,12 +26,10 @@ import { Input } from "@/components/ui/input"
 import type { MarketingSample, Q4Allocation } from "@/lib/types"
 import { useQ4Allocation } from "@/hooks/use-q4-allocation"
 import { useUserProfiles } from "@/hooks/use-user-profiles"
-import { Loader2, Package, User, Globe, Search, X, Check, ChevronsUpDown } from "lucide-react"
+import { Loader2, Package, User, Globe, Search, X, Check, Info } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "./ui/scroll-area"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 
 const formSchema = z.object({
   assignmentType: z.enum(["global", "individual"]),
@@ -52,8 +50,8 @@ const formSchema = z.object({
         if (!data.sampleId) {
              ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Please select a target product from the master list",
-                path: ["sampleId"],
+                message: "This product name was not found in the master list. Please check the spelling.",
+                path: ["materialName"],
             });
         }
     }
@@ -67,12 +65,10 @@ type MarketingSampleDialogProps = {
 }
 
 export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: MarketingSampleDialogProps) {
-  // CRITICAL: Set active to true so we can find existing sample IDs for overrides
   const { saveAllocation, saveIndividualAllocation, allocations, loading: dataLoading } = useQ4Allocation(true);
   const { profiles } = useUserProfiles();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [productPopoverOpen, setProductPopoverOpen] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -88,7 +84,28 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
 
   const assignmentType = form.watch("assignmentType");
   const selectedUserId = form.watch("userId");
-  const selectedSampleId = form.watch("sampleId");
+  const typedMaterialName = form.watch("materialName");
+
+  // Type-based Linking Logic: Find the Sample ID as the user types the name
+  useEffect(() => {
+      const q = typedMaterialName.toLowerCase().trim();
+      if (!q) {
+          if (assignmentType === 'individual') form.setValue("sampleId", "");
+          return;
+      }
+
+      const match = allocations.find(a => 
+          (a.displayMaterialName || "").toLowerCase().trim() === q ||
+          (a.materialName || "").toLowerCase().trim() === q
+      );
+
+      if (match) {
+          form.setValue("sampleId", match.id);
+          form.setValue("productGroup", match.prodGroupProdSubGroup || match.productGroup || "");
+      } else if (assignmentType === 'individual') {
+          form.setValue("sampleId", "");
+      }
+  }, [typedMaterialName, allocations, assignmentType, form]);
 
   useEffect(() => {
     if (isOpen) {
@@ -159,25 +176,24 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
     return last ? `${last}, ${first}` : first;
   };
 
-  const selectedSampleDetails = useMemo(() => 
-    allocations.find(a => a.id === selectedSampleId),
-    [allocations, selectedSampleId]
-  );
+  const isMatched = !!form.watch("sampleId");
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
+      <DialogContent className="sm:max-w-xl p-0 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         <DialogHeader className="p-6 pb-4 border-b bg-background shrink-0">
           <DialogTitle className="font-headline flex items-center gap-2 text-xl text-primary">
             <Package className="w-5 h-5" />
-            {assignmentType === 'global' ? (sample ? "Edit Global Material" : "Add Global Material") : "Assign Item to Specific PMR"}
+            {assignmentType === 'global' ? "Master Material Config" : "Individual Bag Assignment"}
           </DialogTitle>
           <DialogDescription>
-            Configure marketing items for the entire organization or set custom bag quantities for individuals.
+            {assignmentType === 'global' 
+                ? "Update items for the entire organization." 
+                : "Type the material name exactly as it appears in the master list to link it to a specific PMR."}
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 scrollbar-hide">
           <div className="p-6 space-y-6">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -194,6 +210,9 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                               field.onChange(v);
                               if (v === 'individual') {
                                   form.setValue("allocationQuantity", 0);
+                                  form.setValue("materialName", "");
+                                  form.setValue("productGroup", "");
+                                  form.setValue("sampleId", "");
                               }
                           }}
                           defaultValue={field.value}
@@ -218,80 +237,11 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                   )}
                 />
 
-                {assignmentType === 'individual' ? (
-                  <div className="space-y-8 animate-in fade-in slide-in-from-top-2 duration-300">
-                    
-                    {/* PRODUCT SELECTOR FOR OVERRIDES */}
-                    <FormField
-                      control={form.control}
-                      name="sampleId"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">1. Select Target Product</FormLabel>
-                          <Popover open={productPopoverOpen} onOpenChange={setProductPopoverOpen}>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant="outline"
-                                  role="combobox"
-                                  className={cn(
-                                    "w-full justify-between h-12 border-2 rounded-xl",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value
-                                    ? allocations.find((s) => s.id === field.value)?.displayMaterialName
-                                    : "Search global inventory..."}
-                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                              <Command>
-                                <CommandInput placeholder="Type material name..." />
-                                <CommandList>
-                                  <CommandEmpty>No products found in global list.</CommandEmpty>
-                                  <CommandGroup>
-                                    {allocations.map((sample) => (
-                                      <CommandItem
-                                        key={sample.id}
-                                        value={sample.displayMaterialName}
-                                        onSelect={() => {
-                                          form.setValue("sampleId", sample.id);
-                                          form.setValue("productGroup", sample.prodGroupProdSubGroup);
-                                          form.setValue("materialName", sample.displayMaterialName);
-                                          form.setValue("allocationQuantity", sample.allocationQuantity);
-                                          setProductPopoverOpen(false);
-                                        }}
-                                        className="p-3 cursor-pointer"
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4 text-primary",
-                                            sample.id === field.value ? "opacity-100" : "opacity-0"
-                                          )}
-                                        />
-                                        <div className="flex flex-col min-w-0">
-                                            <span className="font-bold text-sm truncate">{sample.displayMaterialName}</span>
-                                            <span className="text-[10px] uppercase text-muted-foreground font-black tracking-tight">{sample.prodGroupProdSubGroup}</span>
-                                        </div>
-                                      </CommandItem>
-                                    ))}
-                                  </CommandGroup>
-                                </CommandList>
-                              </Command>
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    {/* PMR SELECTOR */}
-                    <div className="space-y-4">
-                        <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">2. Select Representative</FormLabel>
+                {assignmentType === 'individual' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">1. Select Representative</FormLabel>
                         {selectedUserId ? (
-                        <div className="flex items-center justify-between p-4 bg-primary/10 border-2 border-primary/20 rounded-2xl animate-in zoom-in-95">
+                        <div className="flex items-center justify-between p-4 bg-primary/10 border-2 border-primary/20 rounded-2xl">
                             <div className="flex flex-col">
                                 <span className="font-bold text-base">{getDisplayName(profiles[selectedUserId])}</span>
                                 <span className="text-[10px] font-black uppercase text-primary tracking-widest">
@@ -313,23 +263,23 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                                 <Input 
-                                    placeholder="Search by name, code, or email..." 
+                                    placeholder="Search by name or code..." 
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-10 h-11 border-2 focus-visible:ring-primary rounded-xl"
                                 />
                             </div>
-                            <div className="max-h-[200px] overflow-y-auto border-2 rounded-xl bg-background divide-y shadow-inner scrollbar-hide">
+                            <div className="max-h-[160px] overflow-y-auto border-2 rounded-xl bg-background divide-y shadow-inner scrollbar-hide">
                                 {filteredUsers.length > 0 ? (
                                     filteredUsers.map((p) => (
                                         <div 
                                             key={p.userId}
                                             onClick={() => form.setValue("userId", p.userId)}
-                                            className="p-4 hover:bg-primary/5 cursor-pointer transition-colors flex items-center justify-between group"
+                                            className="p-3 hover:bg-primary/5 cursor-pointer transition-colors flex items-center justify-between group"
                                         >
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-sm group-hover:text-primary transition-colors">{getDisplayName(p)}</span>
-                                                <span className="text-[10px] text-muted-foreground uppercase">{p.code || "PMR"} • {p.email}</span>
+                                                <span className="text-[10px] text-muted-foreground uppercase">{p.code || "PMR"}</span>
                                             </div>
                                             <Check className="w-4 h-4 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
                                         </div>
@@ -342,30 +292,37 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                         )}
                         <FormMessage className="text-xs text-destructive">{form.formState.errors.userId?.message}</FormMessage>
                     </div>
+                )}
 
-                    {/* QUANTITY FOR OVERRIDE */}
+                <div className="space-y-6 pt-2">
                     <FormField
-                      control={form.control}
-                      name="allocationQuantity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">3. Custom Bag Quantity</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                                <Input type="number" {...field} className="h-16 text-4xl font-mono border-2 rounded-2xl bg-background text-center font-black pr-16" />
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Units</div>
-                            </div>
-                          </FormControl>
-                          <p className="text-[10px] text-muted-foreground mt-2 italic">
-                            This will replace the global {selectedSampleDetails?.allocationQuantity || 0} units for this PMR only.
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                        control={form.control}
+                        name="materialName"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">
+                                {assignmentType === 'individual' ? "2. Material Name (Must match exactly)" : "Material Name"}
+                            </FormLabel>
+                            <FormControl>
+                                <div className="relative">
+                                    <Input placeholder="e.g. Frutos Candy" {...field} className="h-12 border-2 rounded-xl pr-10" />
+                                    {assignmentType === 'individual' && isMatched && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            <Check className="w-5 h-5 text-[#10b981]" />
+                                        </div>
+                                    )}
+                                </div>
+                            </FormControl>
+                            {assignmentType === 'individual' && isMatched && (
+                                <p className="text-[10px] text-[#10b981] font-bold uppercase tracking-widest mt-1 flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Successfully Linked to Global Inventory
+                                </p>
+                            )}
+                            <FormMessage />
+                            </FormItem>
+                        )}
                     />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-6 pt-2 animate-in fade-in duration-300">
+
                     <FormField
                         control={form.control}
                         name="productGroup"
@@ -373,31 +330,26 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                             <FormItem>
                             <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">Product Category</FormLabel>
                             <FormControl>
-                                <Input placeholder="e.g. Antihistamine" {...field} className="h-12 border-2 rounded-xl" />
+                                <Input 
+                                    placeholder="e.g. Antihistamine" 
+                                    {...field} 
+                                    className="h-12 border-2 rounded-xl bg-muted/20" 
+                                    disabled={assignmentType === 'individual' && isMatched}
+                                />
                             </FormControl>
                             <FormMessage />
                             </FormItem>
                         )}
                     />
+
                     <FormField
-                        control={form.control}
-                        name="materialName"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">Material Name</FormLabel>
-                            <FormControl>
-                                <Input placeholder="e.g. PQ3_Frutos" {...field} className="h-12 border-2 rounded-xl" />
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                     <FormField
                       control={form.control}
                       name="allocationQuantity"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">Default Bag Quantity</FormLabel>
+                          <FormLabel className="font-headline text-xs uppercase tracking-wider text-muted-foreground">
+                            {assignmentType === 'individual' ? "3. Custom Bag Quantity" : "Default Bag Quantity"}
+                          </FormLabel>
                           <FormControl>
                              <div className="relative">
                                 <Input type="number" {...field} className="h-16 text-4xl font-mono border-2 rounded-2xl bg-background text-center font-black pr-16" />
@@ -408,8 +360,7 @@ export function MarketingSampleDialog({ isOpen, onOpenChange, onSave, sample }: 
                         </FormItem>
                       )}
                     />
-                  </div>
-                )}
+                </div>
               </form>
             </Form>
           </div>
