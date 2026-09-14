@@ -113,25 +113,25 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
+        <DialogHeader className="pb-2">
           <DialogTitle className="font-headline text-2xl">Log Non-Call Day</DialogTitle>
-          <DialogDescription className="text-base">
+          <DialogDescription className="text-sm">
             Submit a request for a non-call day on {format(selectedDate, "MMMM d, yyyy")}.
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="dayType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
+                      <FormLabel className="font-headline text-[10px] uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-12 border-2 rounded-xl text-base">
+                          <SelectTrigger className="h-10 border-2 rounded-xl text-sm">
                             <SelectValue placeholder="Select type..." />
                           </SelectTrigger>
                         </FormControl>
@@ -151,10 +151,10 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                   name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Activity Category</FormLabel>
+                      <FormLabel className="font-headline text-[10px] uppercase tracking-widest text-primary">Activity Category</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-12 border-2 rounded-xl text-base">
+                          <SelectTrigger className="h-10 border-2 rounded-xl text-sm">
                             <SelectValue placeholder="Select a category..." />
                           </SelectTrigger>
                         </FormControl>
@@ -175,14 +175,14 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               name="reason"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Reason for Leave</FormLabel>
+                  <FormLabel className="font-headline text-[10px] uppercase tracking-widest text-primary">Reason for Leave</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
                     value={field.value}
                     disabled={!selectedCategory}
                   >
                     <FormControl>
-                      <SelectTrigger className="h-12 border-2 rounded-xl text-base">
+                      <SelectTrigger className="h-10 border-2 rounded-xl text-sm">
                         <SelectValue placeholder={selectedCategory ? "Select a specific reason..." : "Please select category first"} />
                       </SelectTrigger>
                     </FormControl>
@@ -202,12 +202,12 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               name="remarks"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Remarks (Optional)</FormLabel>
+                  <FormLabel className="font-headline text-[10px] uppercase tracking-widest text-muted-foreground">Remarks (Optional)</FormLabel>
                   <FormControl>
                     <Textarea 
                         placeholder="Add any additional details here..." 
                         {...field} 
-                        className="min-h-[100px] border-2 rounded-xl focus-visible:ring-primary text-base"
+                        className="min-h-[60px] border-2 rounded-xl focus-visible:ring-primary text-sm"
                     />
                   </FormControl>
                   <FormMessage />
@@ -215,20 +215,24 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               )}
             />
 
-            <div className="bg-destructive/10 border-2 border-destructive/20 rounded-2xl p-6 space-y-4">
-                <div className="flex items-center gap-2 text-destructive font-black uppercase text-xs tracking-widest">
-                    <AlertCircle className="w-4 h-4" /> Policy Reminder
+            <div className="bg-destructive/10 border-2 border-destructive/20 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-destructive font-black uppercase text-[10px] tracking-widest">
+                    <AlertCircle className="w-3 h-3" /> Policy Reminder
                 </div>
-                <div className="space-y-2">
-                    <p className="text-sm font-black text-destructive uppercase tracking-tight">Activities Not Considered as VMC:</p>
-                    <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5 font-medium">
-                        <li>Dine-Out Activities</li>
-                        <li>Round Table Discussions</li>
-                        <li>Focus Group Discussions</li>
-                        <li>Weekly District Huddles</li>
-                        <li>DSM Interviews</li>
-                        <li>Similar non-field activities not approved under VMC policy</li>
-                    </ul>
+                <div className="space-y-1.5">
+                    <p className="text-xs font-black text-destructive uppercase tracking-tight">Activities Not Considered as VMC:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+                        <ul className="text-[10px] text-muted-foreground space-y-1 list-disc pl-4 font-medium">
+                            <li>Dine-Out Activities</li>
+                            <li>Round Table Discussions</li>
+                            <li>Focus Group Discussions</li>
+                        </ul>
+                        <ul className="text-[10px] text-muted-foreground space-y-1 list-disc pl-4 font-medium">
+                            <li>Weekly District Huddles</li>
+                            <li>DSM Interviews</li>
+                            <li>Similar non-field activities</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
@@ -236,7 +240,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               <Button 
                 type="submit" 
                 size="lg"
-                className="w-full h-14 font-headline text-xl rounded-2xl shadow-xl transition-all active:scale-[0.98] font-black"
+                className="w-full h-12 font-headline text-base rounded-xl shadow-lg transition-all active:scale-[0.98] font-black"
                 disabled={!selectedCategory || !form.watch("reason")}
               >
                 Submit for Approval
