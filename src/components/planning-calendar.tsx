@@ -279,21 +279,19 @@ export function PlanningCalendar({
             const monthLabel = format(referenceDate, "MMMM yyyy");
             const monthStart = startOfMonth(referenceDate);
             
-            // Generate 4 weeks (Monday starts)
+            // Generate 5 weeks (Monday starts)
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < 5; i++) {
                 weeks.push(new Date(weekIter));
                 weekIter.setDate(weekIter.getDate() + 7);
             }
 
             // PRE-CALCULATE PLAN GROUPING & DYNAMIC HEIGHTS
-            const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {
-                0: { 0: [], 1: [], 2: [], 3: [], 4: [] },
-                1: { 0: [], 1: [], 2: [], 3: [], 4: [] },
-                2: { 0: [], 1: [], 2: [], 3: [], 4: [] },
-                3: { 0: [], 1: [], 2: [], 3: [], 4: [] },
-            };
+            const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {};
+            for (let i = 0; i < 5; i++) {
+                plansByWeekAndDay[i] = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+            }
 
             plans.forEach(plan => {
                 const pDate = parseAnyDate(plan.plannedDate);
@@ -318,14 +316,14 @@ export function PlanningCalendar({
 
             const rows: any[][] = [];
             const merges: any[] = [
-                { s: { r: 0, c: 1 }, e: { r: 0, c: 15 } }, // Merged Header Area for text flow
-                { s: { r: 1, c: 1 }, e: { r: 1, c: 15 } },
-                { s: { r: 2, c: 1 }, e: { r: 2, c: 15 } },
-                { s: { r: 3, c: 1 }, e: { r: 3, c: 15 } },
+                { s: { r: 0, c: 1 }, e: { r: 0, c: 25 } }, // Merged Header Area for text flow
+                { s: { r: 1, c: 1 }, e: { r: 1, c: 25 } },
+                { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
+                { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
 
             // Initialize huge array
-            const totalEstRows = 200;
+            const totalEstRows = 300;
             for (let i = 0; i < totalEstRows; i++) rows[i] = new Array(30).fill("");
             
             // Main Static Header
@@ -431,7 +429,6 @@ export function PlanningCalendar({
                     }
 
                     // Identify Section Styling by inspecting neighbors and cell value patterns
-                    // (More robust than absolute coordinates given dynamic scaling)
                     const val = String(cell.v || "");
                     
                     // Week Title Bar (Yellow)
