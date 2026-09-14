@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useRef, useMemo, useEffect, useCallback } from "react";
@@ -25,7 +24,8 @@ import {
     FileSpreadsheet,
     FileUp,
     User,
-    ArrowRight
+    ArrowRight,
+    Info
 } from "lucide-react";
 import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
