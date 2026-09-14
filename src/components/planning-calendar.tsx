@@ -22,7 +22,7 @@ import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import { useToast } from "@/hooks/use-toast";
 
 type PlanningCalendarProps = {
@@ -278,10 +278,6 @@ export function PlanningCalendar({
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
             
-            // Build the data structure (AOA)
-            // Header takes 4 rows
-            // Each week takes 25 rows
-            // 4 weeks total = 104 rows approx
             const rows: any[][] = [];
             for (let i = 0; i < 120; i++) rows[i] = new Array(30).fill("");
             
@@ -291,7 +287,6 @@ export function PlanningCalendar({
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
             rows[3][1] = `Month: ${monthLabel}`;
 
-            // Define Weeks for the month
             const monthStart = startOfMonth(referenceDate);
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
@@ -307,30 +302,25 @@ export function PlanningCalendar({
             weeks.forEach((weekMon, weekIdx) => {
                 const weekRowStart = 4 + (weekIdx * 25);
                 
-                // WEEK BAR (Yellow style)
                 rows[weekRowStart][1] = `WEEK ${weekIdx + 1}`;
                 merges.push({ s: { r: weekRowStart, c: 1 }, e: { r: weekRowStart, c: 25 } });
 
-                // DAY BARS (Green style)
                 const dayRow = weekRowStart + 1;
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
                     rows[dayRow][colStart] = name;
                     merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
                     
-                    // SUBHEADERS
                     const subRow = dayRow + 1;
                     subHeaders.forEach((h, hIdx) => {
                         rows[subRow][colStart + hIdx] = h;
                     });
 
-                    // MD DATA SLOTS (16 rows)
                     const dataRowStart = subRow + 1;
                     for (let r = 0; r < 16; r++) {
                         rows[dataRowStart + r][colStart] = (r + 1).toString();
                     }
 
-                    // ACCT SECTION
                     const acctHeaderRow = dataRowStart + 17;
                     rows[acctHeaderRow][colStart] = "No";
                     rows[acctHeaderRow][colStart + 1] = "Acct Name";
@@ -342,13 +332,11 @@ export function PlanningCalendar({
                 });
             });
 
-            // Map Plans to Cells
             plans.forEach(plan => {
                 const planDate = parseAnyDate(plan.plannedDate);
                 if (!planDate) return;
 
                 weeks.forEach((weekMon, wIdx) => {
-                    // Check if date falls within this week (Mon-Fri)
                     const diffMs = planDate.getTime() - weekMon.getTime();
                     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
                     
@@ -356,7 +344,6 @@ export function PlanningCalendar({
                         const blockStartRow = 4 + (wIdx * 25) + 3;
                         const colStart = 1 + (diffDays * 5);
 
-                        // Find first empty slot for this day
                         for (let r = 0; r < 16; r++) {
                             const targetRowIdx = blockStartRow + r;
                             if (!rows[targetRowIdx][colStart + 1]) {
@@ -379,18 +366,89 @@ export function PlanningCalendar({
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             
-            // Set widths for a better initial look
-            const wscols = [{ wch: 2 }]; // A gutter
+            const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
                 wscols.push(
-                    { wch: 4 },  // No
-                    { wch: 25 }, // MD Name
-                    { wch: 10 }, // Spec
-                    { wch: 6 },  // Freq
-                    { wch: 20 }  // Clinic Add
+                    { wch: 4 }, 
+                    { wch: 25 },
+                    { wch: 10 },
+                    { wch: 6 },
+                    { wch: 20 }
                 );
             }
             worksheet['!cols'] = wscols;
+
+            // Apply Styles with Colors
+            const range = XLSX.utils.decode_range(worksheet['!ref']!);
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const cell_address = { c: C, r: R };
+                    const cell_ref = XLSX.utils.encode_cell(cell_address);
+                    if (!worksheet[cell_ref]) {
+                        if (R >= 4) worksheet[cell_ref] = { t: 's', v: '' };
+                        else continue;
+                    }
+                    
+                    const cell = worksheet[cell_ref];
+                    
+                    // Default Data Cell Style
+                    cell.s = {
+                        font: { name: 'Arial', sz: 8 },
+                        border: {
+                            top: { style: 'thin', color: { rgb: "000000" } },
+                            bottom: { style: 'thin', color: { rgb: "000000" } },
+                            left: { style: 'thin', color: { rgb: "000000" } },
+                            right: { style: 'thin', color: { rgb: "000000" } }
+                        },
+                        alignment: { vertical: 'center', wrapText: true }
+                    };
+
+                    // Global Header Area (Rows 0-3)
+                    if (R < 4) {
+                        cell.s.font.bold = true;
+                        cell.s.font.sz = 10;
+                        cell.s.border = {}; // No borders for main header
+                        if (R === 0) {
+                            cell.s.font.sz = 14;
+                            cell.s.font.underline = true;
+                        }
+                    }
+
+                    // Strategic Styling for Weekly Blocks
+                    const weekIdx = Math.floor((R - 4) / 25);
+                    if (weekIdx >= 0 && weekIdx < 4) {
+                        const weekRowStart = 4 + (weekIdx * 25);
+                        
+                        // Week Summary Bar (Yellow)
+                        if (R === weekRowStart && C >= 1 && C <= 25) {
+                            cell.s.fill = { fgColor: { rgb: "FFFF00" } }; 
+                            cell.s.font.bold = true;
+                            cell.s.alignment.horizontal = 'center';
+                        }
+
+                        // Day Names Bar (Green)
+                        if (R === weekRowStart + 1 && C >= 1 && C <= 25) {
+                            cell.s.fill = { fgColor: { rgb: "00B050" } }; 
+                            cell.s.font.bold = true;
+                            cell.s.font.color = { rgb: "FFFFFF" }; 
+                            cell.s.alignment.horizontal = 'center';
+                        }
+
+                        // Data Subheaders (Grey)
+                        if (R === weekRowStart + 2 && C >= 1 && C <= 25) {
+                            cell.s.font.bold = true;
+                            cell.s.fill = { fgColor: { rgb: "D9D9D9" } }; 
+                            cell.s.alignment.horizontal = 'center';
+                        }
+                        
+                        // Acct Section Header (Light Blue)
+                        if (R === weekRowStart + 20 && C >= 1 && C <= 25) {
+                            cell.s.fill = { fgColor: { rgb: "BDD7EE" } }; 
+                            cell.s.font.bold = true;
+                        }
+                    }
+                }
+            }
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
@@ -401,7 +459,7 @@ export function PlanningCalendar({
             toast({ title: "Plan Exported" });
         } catch (error) {
             console.error("Export Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "An error occurred while building the Excel file." });
+            toast({ variant: "destructive", title: "Export Failed", description: "An error occurred while building the styled Excel file." });
         } finally {
             setIsExporting(false);
         }
