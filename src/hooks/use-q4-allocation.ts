@@ -181,6 +181,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
+    // Invalidate singleton cache immediately
+    lastGlobalFetch = 0;
+
     setDoc(docRef, rest, { merge: true })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -216,6 +219,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             errorEmitter.emit('permission-error', permissionError);
         });
 
+    // Invalidate specific user cache
+    if (USAGE_CACHE[userId]) delete USAGE_CACHE[userId];
+    
     refetch();
     return true;
   };
@@ -225,6 +231,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const batch = writeBatch(db!);
     data.forEach(item => batch.set(doc(collection(db!, "marketingSamples")), item));
     
+    lastGlobalFetch = 0;
+
     batch.commit()
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -244,6 +252,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const batch = writeBatch(db!);
     ids.forEach(id => batch.delete(doc(db!, "marketingSamples", id)));
     
+    lastGlobalFetch = 0;
+
     batch.commit()
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
