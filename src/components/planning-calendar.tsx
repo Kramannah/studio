@@ -279,7 +279,6 @@ export function PlanningCalendar({
             const monthLabel = format(referenceDate, "MMMM yyyy");
             const monthStart = startOfMonth(referenceDate);
             
-            // Generate 5 weeks (Monday starts)
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
             for (let i = 0; i < 5; i++) {
@@ -287,7 +286,6 @@ export function PlanningCalendar({
                 weekIter.setDate(weekIter.getDate() + 7);
             }
 
-            // PRE-CALCULATE PLAN GROUPING & DYNAMIC HEIGHTS
             const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {};
             for (let i = 0; i < 5; i++) {
                 plansByWeekAndDay[i] = { 0: [], 1: [], 2: [], 3: [], 4: [] };
@@ -305,9 +303,8 @@ export function PlanningCalendar({
                 });
             });
 
-            // Calculate height per week to handle overflow
             const weekHeights = weeks.map((_, wIdx) => {
-                let max = 15; // Minimum grid height matching template
+                let max = 15;
                 for (let dIdx = 0; dIdx < 5; dIdx++) {
                     max = Math.max(max, plansByWeekAndDay[wIdx][dIdx].length);
                 }
@@ -316,17 +313,15 @@ export function PlanningCalendar({
 
             const rows: any[][] = [];
             const merges: any[] = [
-                { s: { r: 0, c: 1 }, e: { r: 0, c: 25 } }, // Merged Header Area for text flow
+                { s: { r: 0, c: 1 }, e: { r: 0, c: 25 } }, 
                 { s: { r: 1, c: 1 }, e: { r: 1, c: 25 } },
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
 
-            // Initialize huge array
-            const totalEstRows = 300;
+            const totalEstRows = 400;
             for (let i = 0; i < totalEstRows; i++) rows[i] = new Array(30).fill("");
             
-            // Main Static Header
             rows[0][1] = "PMR DAILY CALL PLAN";
             rows[1][1] = `PMR Name: ${pmrName}`;
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
@@ -334,29 +329,26 @@ export function PlanningCalendar({
 
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
+            const auxHeaders = ["No", "Acct Name", "", "Freq", "Address"];
             
             let currentRow = 4;
             weeks.forEach((_, wIdx) => {
                 const maxPlans = weekHeights[wIdx];
                 
-                // 1. Week Summary Bar (Yellow)
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
                 merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 25 } });
 
-                // 2. Day Titles (Green)
                 const dayRow = currentRow + 1;
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
                     rows[dayRow][colStart] = name;
                     merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
                     
-                    // 3. Column Subheaders (Grey)
                     const subRow = dayRow + 1;
                     subHeaders.forEach((h, hIdx) => {
                         rows[subRow][colStart + hIdx] = h;
                     });
 
-                    // 4. Populate Plotted Doctors
                     const dataRowStart = subRow + 1;
                     for (let r = 0; r < maxPlans; r++) {
                         const targetRowIdx = dataRowStart + r;
@@ -375,38 +367,36 @@ export function PlanningCalendar({
                         }
                     }
 
-                    // 5. Auxiliary Acct Section (Light Blue)
                     const acctHeaderRow = dataRowStart + maxPlans;
-                    rows[acctHeaderRow][colStart] = "No";
-                    rows[acctHeaderRow][colStart + 1] = "Acct Name";
-                    rows[acctHeaderRow][colStart + 4] = "Address";
+                    auxHeaders.forEach((h, hIdx) => {
+                        rows[acctHeaderRow][colStart + hIdx] = h;
+                    });
                     
                     for (let r = 0; r < 3; r++) {
-                        rows[acctHeaderRow + 1 + r][colStart] = (r + 1).toString();
+                        const targetRowIdx = acctHeaderRow + 1 + r;
+                        rows[targetRowIdx][colStart] = (r + 1).toString();
                     }
                 });
 
-                // Update Row Pointer for next week (Week Height + Headers + Acct Block + Padding)
                 currentRow += 1 + 1 + 1 + maxPlans + 4 + 2; 
             });
 
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             
-            // Set Column Widths
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
                 wscols.push({ wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
 
-            // Apply Template Styles
             const range = XLSX.utils.decode_range(worksheet['!ref']!);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 for (let C = range.s.c; C <= range.e.c; ++C) {
                     const addr = XLSX.utils.encode_cell({ c: C, r: R });
                     if (!worksheet[addr]) continue;
                     const cell = worksheet[addr];
+                    const val = String(cell.v || "");
                     
                     cell.s = {
                         font: { name: 'Arial', sz: 8 },
@@ -419,7 +409,6 @@ export function PlanningCalendar({
                         alignment: { vertical: 'center', wrapText: true }
                     };
 
-                    // Header Area (0-3)
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
@@ -428,26 +417,24 @@ export function PlanningCalendar({
                         continue;
                     }
 
-                    // Identify Section Styling by inspecting neighbors and cell value patterns
-                    const val = String(cell.v || "");
-                    
-                    // Week Title Bar (Yellow)
                     if (val.startsWith("WEEK ") && C === 1) {
                         cell.s.fill = { fgColor: { rgb: "FFFF00" } };
                         cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
                     }
 
-                    // Day Headers (Green)
-                    if (dayNames.includes(val)) {
+                    const isDayHeader = dayNames.includes(val);
+                    const isAuxHeader = (val === "Acct Name" || (val === "Address" && rows[R][C-3] === "Acct Name") || (val === "Freq" && rows[R][C-2] === "Acct Name"));
+                    const isAuxNo = val === "No" && rows[R][C+1] === "Acct Name";
+
+                    if (isDayHeader || isAuxHeader || isAuxNo) {
                         cell.s.fill = { fgColor: { rgb: "00B050" } };
                         cell.s.font.bold = true;
                         cell.s.font.color = { rgb: "FFFFFF" };
                         cell.s.alignment.horizontal = 'center';
                     }
 
-                    // Subheaders (Grey)
-                    if (subHeaders.includes(val) || val === "Acct Name" || val === "Address") {
+                    if (subHeaders.includes(val) && !isAuxHeader && !isAuxNo) {
                         cell.s.fill = { fgColor: { rgb: "D9D9D9" } };
                         cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
