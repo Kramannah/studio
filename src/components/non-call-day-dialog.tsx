@@ -112,17 +112,17 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="font-headline text-xl">Log Non-Call Day</DialogTitle>
-          <DialogDescription>
-            Submit a request for a non-call day on {format(selectedDate, "PPP")}.
+          <DialogTitle className="font-headline text-2xl">Log Non-Call Day</DialogTitle>
+          <DialogDescription className="text-base">
+            Submit a request for a non-call day on {format(selectedDate, "MMMM d, yyyy")}.
           </DialogDescription>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <FormField
                   control={form.control}
                   name="dayType"
@@ -131,7 +131,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                       <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 border-2 rounded-xl">
+                          <SelectTrigger className="h-12 border-2 rounded-xl text-base">
                             <SelectValue placeholder="Select type..." />
                           </SelectTrigger>
                         </FormControl>
@@ -154,7 +154,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                       <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Activity Category</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 border-2 rounded-xl">
+                          <SelectTrigger className="h-12 border-2 rounded-xl text-base">
                             <SelectValue placeholder="Select a category..." />
                           </SelectTrigger>
                         </FormControl>
@@ -182,7 +182,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                     disabled={!selectedCategory}
                   >
                     <FormControl>
-                      <SelectTrigger className="h-11 border-2 rounded-xl">
+                      <SelectTrigger className="h-12 border-2 rounded-xl text-base">
                         <SelectValue placeholder={selectedCategory ? "Select a specific reason..." : "Please select category first"} />
                       </SelectTrigger>
                     </FormControl>
@@ -207,7 +207,7 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                     <Textarea 
                         placeholder="Add any additional details here..." 
                         {...field} 
-                        className="min-h-[80px] border-2 rounded-xl focus-visible:ring-primary"
+                        className="min-h-[100px] border-2 rounded-xl focus-visible:ring-primary text-base"
                     />
                   </FormControl>
                   <FormMessage />
@@ -215,13 +215,13 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
               )}
             />
 
-            <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-destructive font-black uppercase text-[10px] tracking-widest">
-                    <AlertCircle className="w-3 h-3" /> Policy Reminder
+            <div className="bg-destructive/10 border-2 border-destructive/20 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center gap-2 text-destructive font-black uppercase text-xs tracking-widest">
+                    <AlertCircle className="w-4 h-4" /> Policy Reminder
                 </div>
-                <div className="space-y-1">
-                    <p className="text-[11px] font-bold text-destructive leading-tight">Activities Not Considered as VMC:</p>
-                    <ul className="text-[10px] text-muted-foreground space-y-0.5 list-disc pl-4">
+                <div className="space-y-2">
+                    <p className="text-sm font-black text-destructive uppercase tracking-tight">Activities Not Considered as VMC:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5 font-medium">
                         <li>Dine-Out Activities</li>
                         <li>Round Table Discussions</li>
                         <li>Focus Group Discussions</li>
@@ -232,10 +232,11 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
                 </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-2">
               <Button 
                 type="submit" 
-                className="w-full h-12 font-headline text-lg rounded-xl shadow-lg transition-all active:scale-[0.98]"
+                size="lg"
+                className="w-full h-14 font-headline text-xl rounded-2xl shadow-xl transition-all active:scale-[0.98] font-black"
                 disabled={!selectedCategory || !form.watch("reason")}
               >
                 Submit for Approval
