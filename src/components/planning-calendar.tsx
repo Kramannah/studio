@@ -277,17 +277,9 @@ export function PlanningCalendar({
         try {
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
-            
-            const rows: any[][] = [];
-            for (let i = 0; i < 120; i++) rows[i] = new Array(30).fill("");
-            
-            // Header Area
-            rows[0][1] = "PMR DAILY CALL PLAN";
-            rows[1][1] = `PMR Name: ${pmrName}`;
-            rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
-            rows[3][1] = `Month: ${monthLabel}`;
-
             const monthStart = startOfMonth(referenceDate);
+            
+            // Generate 4 weeks (Monday starts)
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
             for (let i = 0; i < 4; i++) {
@@ -295,40 +287,98 @@ export function PlanningCalendar({
                 weekIter.setDate(weekIter.getDate() + 7);
             }
 
+            // PRE-CALCULATE PLAN GROUPING & DYNAMIC HEIGHTS
+            const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {
+                0: { 0: [], 1: [], 2: [], 3: [], 4: [] },
+                1: { 0: [], 1: [], 2: [], 3: [], 4: [] },
+                2: { 0: [], 1: [], 2: [], 3: [], 4: [] },
+                3: { 0: [], 1: [], 2: [], 3: [], 4: [] },
+            };
+
+            plans.forEach(plan => {
+                const pDate = parseAnyDate(plan.plannedDate);
+                if (!pDate) return;
+                weeks.forEach((weekMon, wIdx) => {
+                    const diffMs = pDate.getTime() - weekMon.getTime();
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    if (diffDays >= 0 && diffDays < 5) {
+                        plansByWeekAndDay[wIdx][diffDays].push(plan);
+                    }
+                });
+            });
+
+            // Calculate height per week to handle overflow
+            const weekHeights = weeks.map((_, wIdx) => {
+                let max = 15; // Minimum grid height matching template
+                for (let dIdx = 0; dIdx < 5; dIdx++) {
+                    max = Math.max(max, plansByWeekAndDay[wIdx][dIdx].length);
+                }
+                return max;
+            });
+
+            const rows: any[][] = [];
+            const merges: any[] = [
+                { s: { r: 0, c: 1 }, e: { r: 0, c: 15 } }, // Merged Header Area for text flow
+                { s: { r: 1, c: 1 }, e: { r: 1, c: 15 } },
+                { s: { r: 2, c: 1 }, e: { r: 2, c: 15 } },
+                { s: { r: 3, c: 1 }, e: { r: 3, c: 15 } },
+            ];
+
+            // Initialize huge array
+            const totalEstRows = 200;
+            for (let i = 0; i < totalEstRows; i++) rows[i] = new Array(30).fill("");
+            
+            // Main Static Header
+            rows[0][1] = "PMR DAILY CALL PLAN";
+            rows[1][1] = `PMR Name: ${pmrName}`;
+            rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
+            rows[3][1] = `Month: ${monthLabel}`;
+
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
             
-            // Header Area Merges - Spanning multiple columns to prevent text cut-off
-            const merges: any[] = [
-                { s: { r: 0, c: 1 }, e: { r: 0, c: 10 } }, // PMR DAILY CALL PLAN
-                { s: { r: 1, c: 1 }, e: { r: 1, c: 10 } }, // PMR Name
-                { s: { r: 2, c: 1 }, e: { r: 2, c: 10 } }, // Area/Territory
-                { s: { r: 3, c: 1 }, e: { r: 3, c: 10 } }, // Month
-            ];
-
-            weeks.forEach((weekMon, weekIdx) => {
-                const weekRowStart = 4 + (weekIdx * 25);
+            let currentRow = 4;
+            weeks.forEach((_, wIdx) => {
+                const maxPlans = weekHeights[wIdx];
                 
-                rows[weekRowStart][1] = `WEEK ${weekIdx + 1}`;
-                merges.push({ s: { r: weekRowStart, c: 1 }, e: { r: weekRowStart, c: 25 } });
+                // 1. Week Summary Bar (Yellow)
+                rows[currentRow][1] = `WEEK ${wIdx + 1}`;
+                merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 25 } });
 
-                const dayRow = weekRowStart + 1;
+                // 2. Day Titles (Green)
+                const dayRow = currentRow + 1;
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
                     rows[dayRow][colStart] = name;
                     merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
                     
+                    // 3. Column Subheaders (Grey)
                     const subRow = dayRow + 1;
                     subHeaders.forEach((h, hIdx) => {
                         rows[subRow][colStart + hIdx] = h;
                     });
 
+                    // 4. Populate Plotted Doctors
                     const dataRowStart = subRow + 1;
-                    for (let r = 0; r < 16; r++) {
-                        rows[dataRowStart + r][colStart] = (r + 1).toString();
+                    for (let r = 0; r < maxPlans; r++) {
+                        const targetRowIdx = dataRowStart + r;
+                        rows[targetRowIdx][colStart] = (r + 1).toString();
+                        
+                        const plan = plansByWeekAndDay[wIdx][dIdx][r];
+                        if (plan) {
+                            const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
+                                String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
+                                String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
+                            );
+                            rows[targetRowIdx][colStart + 1] = `${plan.doctorFirstName} ${plan.doctorLastName}`;
+                            rows[targetRowIdx][colStart + 2] = doctor?.specialty || "";
+                            rows[targetRowIdx][colStart + 3] = doctor?.frequency || "";
+                            rows[targetRowIdx][colStart + 4] = doctor?.clinic || "";
+                        }
                     }
 
-                    const acctHeaderRow = dataRowStart + 17;
+                    // 5. Auxiliary Acct Section (Light Blue)
+                    const acctHeaderRow = dataRowStart + maxPlans;
                     rows[acctHeaderRow][colStart] = "No";
                     rows[acctHeaderRow][colStart + 1] = "Acct Name";
                     rows[acctHeaderRow][colStart + 4] = "Address";
@@ -337,68 +387,29 @@ export function PlanningCalendar({
                         rows[acctHeaderRow + 1 + r][colStart] = (r + 1).toString();
                     }
                 });
-            });
 
-            plans.forEach(plan => {
-                const planDate = parseAnyDate(plan.plannedDate);
-                if (!planDate) return;
-
-                weeks.forEach((weekMon, wIdx) => {
-                    const diffMs = planDate.getTime() - weekMon.getTime();
-                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                    
-                    if (diffDays >= 0 && diffDays < 5) {
-                        const blockStartRow = 4 + (wIdx * 25) + 3;
-                        const colStart = 1 + (diffDays * 5);
-
-                        for (let r = 0; r < 16; r++) {
-                            const targetRowIdx = blockStartRow + r;
-                            if (!rows[targetRowIdx][colStart + 1]) {
-                                const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
-                                    String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
-                                    String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
-                                );
-
-                                rows[targetRowIdx][colStart + 1] = `${plan.doctorFirstName} ${plan.doctorLastName}`;
-                                rows[targetRowIdx][colStart + 2] = doctor?.specialty || "";
-                                rows[targetRowIdx][colStart + 3] = doctor?.frequency || "";
-                                rows[targetRowIdx][colStart + 4] = doctor?.clinic || "";
-                                break;
-                            }
-                        }
-                    }
-                });
+                // Update Row Pointer for next week (Week Height + Headers + Acct Block + Padding)
+                currentRow += 1 + 1 + 1 + maxPlans + 4 + 2; 
             });
 
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             
+            // Set Column Widths
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
-                wscols.push(
-                    { wch: 4 }, 
-                    { wch: 25 },
-                    { wch: 10 },
-                    { wch: 6 },
-                    { wch: 20 }
-                );
+                wscols.push({ wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
 
-            // Apply Styles with Colors
+            // Apply Template Styles
             const range = XLSX.utils.decode_range(worksheet['!ref']!);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 for (let C = range.s.c; C <= range.e.c; ++C) {
-                    const cell_address = { c: C, r: R };
-                    const cell_ref = XLSX.utils.encode_cell(cell_address);
-                    if (!worksheet[cell_ref]) {
-                        if (R >= 4) worksheet[cell_ref] = { t: 's', v: '' };
-                        else continue;
-                    }
+                    const addr = XLSX.utils.encode_cell({ c: C, r: R });
+                    if (!worksheet[addr]) continue;
+                    const cell = worksheet[addr];
                     
-                    const cell = worksheet[cell_ref];
-                    
-                    // Default Data Cell Style
                     cell.s = {
                         font: { name: 'Arial', sz: 8 },
                         border: {
@@ -410,64 +421,52 @@ export function PlanningCalendar({
                         alignment: { vertical: 'center', wrapText: true }
                     };
 
-                    // Global Header Area (Rows 0-3)
+                    // Header Area (0-3)
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
-                        cell.s.border = {}; // No borders for main header
-                        cell.s.alignment = { horizontal: 'left', vertical: 'center' };
-                        if (R === 0) {
-                            cell.s.font.sz = 14;
-                            cell.s.font.underline = true;
-                        }
+                        cell.s.border = {}; 
+                        if (R === 0) { cell.s.font.sz = 14; cell.s.font.underline = true; }
+                        continue;
                     }
 
-                    // Strategic Styling for Weekly Blocks
-                    const weekIdx = Math.floor((R - 4) / 25);
-                    if (weekIdx >= 0 && weekIdx < 4) {
-                        const weekRowStart = 4 + (weekIdx * 25);
-                        
-                        // Week Summary Bar (Yellow)
-                        if (R === weekRowStart && C >= 1 && C <= 25) {
-                            cell.s.fill = { fgColor: { rgb: "FFFF00" } }; 
-                            cell.s.font.bold = true;
-                            cell.s.alignment.horizontal = 'center';
-                        }
+                    // Identify Section Styling by inspecting neighbors and cell value patterns
+                    // (More robust than absolute coordinates given dynamic scaling)
+                    const val = String(cell.v || "");
+                    
+                    // Week Title Bar (Yellow)
+                    if (val.startsWith("WEEK ") && C === 1) {
+                        cell.s.fill = { fgColor: { rgb: "FFFF00" } };
+                        cell.s.font.bold = true;
+                        cell.s.alignment.horizontal = 'center';
+                    }
 
-                        // Day Names Bar (Green)
-                        if (R === weekRowStart + 1 && C >= 1 && C <= 25) {
-                            cell.s.fill = { fgColor: { rgb: "00B050" } }; 
-                            cell.s.font.bold = true;
-                            cell.s.font.color = { rgb: "FFFFFF" }; 
-                            cell.s.alignment.horizontal = 'center';
-                        }
+                    // Day Headers (Green)
+                    if (dayNames.includes(val)) {
+                        cell.s.fill = { fgColor: { rgb: "00B050" } };
+                        cell.s.font.bold = true;
+                        cell.s.font.color = { rgb: "FFFFFF" };
+                        cell.s.alignment.horizontal = 'center';
+                    }
 
-                        // Data Subheaders (Grey)
-                        if (R === weekRowStart + 2 && C >= 1 && C <= 25) {
-                            cell.s.font.bold = true;
-                            cell.s.fill = { fgColor: { rgb: "D9D9D9" } }; 
-                            cell.s.alignment.horizontal = 'center';
-                        }
-                        
-                        // Acct Section Header (Light Blue)
-                        if (R === weekRowStart + 20 && C >= 1 && C <= 25) {
-                            cell.s.fill = { fgColor: { rgb: "BDD7EE" } }; 
-                            cell.s.font.bold = true;
-                        }
+                    // Subheaders (Grey)
+                    if (subHeaders.includes(val) || val === "Acct Name" || val === "Address") {
+                        cell.s.fill = { fgColor: { rgb: "D9D9D9" } };
+                        cell.s.font.bold = true;
+                        cell.s.alignment.horizontal = 'center';
                     }
                 }
             }
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-
             const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${format(referenceDate, "MMM_yyyy")}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
             toast({ title: "Plan Exported" });
         } catch (error) {
             console.error("Export Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "An error occurred while building the styled Excel file." });
+            toast({ variant: "destructive", title: "Export Failed" });
         } finally {
             setIsExporting(false);
         }
