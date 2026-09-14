@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest } from "@/lib/types";
@@ -25,7 +24,6 @@ import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayNa
 import { Checkbox } from "./ui/checkbox";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
-import { useSystemConfig } from "@/hooks/use-system-config";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -93,7 +91,6 @@ export function PlanningCalendar({
     const [isExporting, setIsExporting] = useState(false);
     const [mounted, setMounted] = useState(false);
     const { toast } = useToast();
-    const { planningTemplate } = useSystemConfig();
 
     useEffect(() => {
         setSelectedDate(new Date());
@@ -302,35 +299,22 @@ export function PlanningCalendar({
         const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel}.xlsx`;
 
         try {
-            if (planningTemplate?.fileUrl) {
-                // TEMPLATE LOGIC: Download the template and append data
-                const response = await fetch(planningTemplate.fileUrl);
-                const arrayBuffer = await response.arrayBuffer();
-                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
+            // DEFAULT LOGIC: Create a new workbook from scratch
+            const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+            const wscols = [
+                { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 30 },
+                { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 12 },
+            ];
+            worksheet['!cols'] = wscols;
 
-                // Append data starting from row 2 (assuming row 1 is headers)
-                XLSX.utils.sheet_add_json(worksheet, dataToExport, { skipHeader: true, origin: "A2" });
-                XLSX.writeFile(workbook, fileName);
-            } else {
-                // DEFAULT LOGIC: Create a new workbook from scratch
-                const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-                const wscols = [
-                    { wch: 20 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 30 },
-                    { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 12 },
-                ];
-                worksheet['!cols'] = wscols;
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
+            XLSX.writeFile(workbook, fileName);
 
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-                XLSX.writeFile(workbook, fileName);
-            }
-
-            toast({ title: "Plan Exported", description: planningTemplate ? "Plan generated using custom template." : "Your call planning spreadsheet has been generated." });
+            toast({ title: "Plan Exported", description: "Your call planning spreadsheet has been generated." });
         } catch (error) {
             console.error("Export Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "Could not process the template file." });
+            toast({ variant: "destructive", title: "Export Failed", description: "Could not generate the export file." });
         } finally {
             setIsExporting(false);
         }
