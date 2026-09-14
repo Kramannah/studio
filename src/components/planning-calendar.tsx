@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,8 @@ import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
+import * as XLSX from 'xlsx';
+import { useToast } from "@/hooks/use-toast";
 
 type PlanningCalendarProps = {
   doctors: Doctor[];
@@ -39,6 +41,7 @@ type PlanningCalendarProps = {
   readOnly?: boolean;
   selectedMonth?: string;
   onMonthChange?: (month: string) => void;
+  pmrName?: string;
 };
 
 const dayTypeLabels: Record<NonCallDay['dayType'], string> = {
@@ -75,7 +78,8 @@ export function PlanningCalendar({
     onAddNonCallDay, 
     readOnly = false,
     selectedMonth,
-    onMonthChange
+    onMonthChange,
+    pmrName = "Representative"
 }: PlanningCalendarProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
@@ -85,6 +89,7 @@ export function PlanningCalendar({
     const [selectedDoctorIds, setSelectedDoctorIds] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const { toast } = useToast();
 
     useEffect(() => {
         setSelectedDate(new Date());
@@ -226,7 +231,6 @@ export function PlanningCalendar({
     }, [selectedDate, onAddNonCallDay]);
     
     const handleLogCallClick = (plan: Plan) => {
-        // RESILIENT LINKING: Try ID first, then fallback to Name lookup
         const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
             String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
             String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
@@ -259,6 +263,62 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
+    const handleExportExcel = () => {
+        if (plans.length === 0) {
+            toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export for the current view." });
+            return;
+        }
+
+        const dataToExport = plans.map(plan => {
+            const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
+                String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
+                String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()
+            );
+
+            return {
+                "PMR Name": pmrName,
+                "Planned Date": plan.plannedDate ? format(parseISO(plan.plannedDate), 'yyyy-MM-dd') : 'N/A',
+                "Doctor Name": `${plan.doctorFirstName} ${plan.doctorLastName}`,
+                "Specialty": doctor?.specialty || "N/A",
+                "Clinic": doctor?.clinic || "N/A",
+                "HCP Code": doctor?.hcpCode || "N/A",
+                "Municipality": doctor?.municipality || "N/A",
+                "Province": doctor?.province || "N/A",
+                "Frequency Target": doctor?.frequency || "1x",
+                "Call Type": plan.callType || "unplanned"
+            };
+        });
+
+        // Sort by date then doctor name
+        dataToExport.sort((a, b) => a["Planned Date"].localeCompare(b["Planned Date"]) || a["Doctor Name"].localeCompare(b["Doctor Name"]));
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        
+        // Auto-size columns
+        const wscols = [
+            { wch: 20 }, // PMR Name
+            { wch: 15 }, // Planned Date
+            { wch: 25 }, // Doctor Name
+            { wch: 20 }, // Specialty
+            { wch: 30 }, // Clinic
+            { wch: 12 }, // HCP Code
+            { wch: 20 }, // Municipality
+            { wch: 20 }, // Province
+            { wch: 15 }, // Frequency
+            { wch: 12 }, // Call Type
+        ];
+        worksheet['!cols'] = wscols;
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
+        
+        const monthLabel = selectedMonth ? format(parseISO(selectedMonth + "-01"), "MMM_yyyy") : format(new Date(), "MMM_yyyy");
+        const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+
+        toast({ title: "Plan Exported", description: "Your call planning spreadsheet has been generated." });
+    };
+
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
 
     const handleMonthChange = (month: Date) => {
@@ -276,6 +336,10 @@ export function PlanningCalendar({
                     <h2 className="text-3xl font-bold font-headline text-primary">Call Planning</h2>
                     <p className="text-muted-foreground text-lg">Schedule and manage your doctor visits efficiently.</p>
                 </div>
+                <Button variant="outline" onClick={handleExportExcel} className="h-12 border-2 rounded-xl font-headline gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-primary" />
+                    Export Plan (.xlsx)
+                </Button>
             </div>
 
             <div className="flex flex-col xl:flex-row gap-8 items-start">
@@ -398,7 +462,6 @@ export function PlanningCalendar({
                             <TableBody>
                                 {selectedDayPlans.length > 0 ? (
                                     selectedDayPlans.map((plan) => {
-                                        // FUZZY LINKING: Resolves name-based link if ID is stale
                                         const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
                                             String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
                                             String(d.lastName || "").toLowerCase().trim() === String(plan.doctorLastName || "").toLowerCase().trim()

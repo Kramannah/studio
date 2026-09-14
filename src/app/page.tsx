@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -65,6 +64,10 @@ export default function Home() {
   
   useEffect(() => { setMounted(true); }, []);
 
+  const currentPmrName = useMemo(() => {
+    return profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
+  }, [profile, user]);
+
   const isUserAdmin = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
@@ -95,7 +98,6 @@ export default function Home() {
     fetchMasterEntries: refreshEntries 
   } = useOfflineSync(user?.uid, activeView !== 'master' && activeView !== 'allocation', selectedMonth, refetchAllocations);
   
-  // CACHE STABILITY: Keep doctors active as long as user is logged in to ensure selection components always have data
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
   
   const { plans, planningRequests, addPlan, addPlansBulk, removePlan, requestPlanningPermission, loading: plansLoading, fetchData: refreshPlans } = usePlans(activeView === 'planning' || activeView === 'coverage', selectedMonth);
@@ -182,12 +184,11 @@ export default function Home() {
     if (activeView === 'master' && (doctorsLoading && doctors.length === 0)) return <DynamicSkeleton />;
 
     switch (activeView) {
-      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
+      case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} pmrName={currentPmrName} />;
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} onDelete={deleteOfflineEntry} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'summary': 
-        const currentPmrName = profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
         return <CallSummary pmrName={currentPmrName} entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={handleUpdateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': return <Q4AllocationView readOnly={true} />;
