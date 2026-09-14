@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { format } from "date-fns"
 import type { NonCallDay } from "@/lib/types"
 import { AlertCircle } from "lucide-react"
+import { ScrollArea } from "./ui/scroll-area"
 
 const nonCallDayFormSchema = z.object({
   category: z.string().min(1, "Please select a category."),
@@ -101,7 +102,6 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
   }, [selectedCategory, form]);
 
   const onSubmit = (values: z.infer<typeof nonCallDayFormSchema>) => {
-    // The component expectation is to omit certain fields to match database structure
     const { category, ...rest } = values;
     onSave(rest);
     onOpenChange(false);
@@ -113,124 +113,129 @@ export function NonCallDayDialog({ isOpen, onOpenChange, onSave, selectedDate }:
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[450px] p-0 overflow-hidden flex flex-col max-h-[95vh]">
+        <DialogHeader className="p-6 pb-2 shrink-0">
           <DialogTitle className="font-headline text-xl">Log Non-Call Day</DialogTitle>
           <DialogDescription>
             Submit a request for a non-call day on {format(selectedDate, "PPP")}.
           </DialogDescription>
         </DialogHeader>
+        
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
-             <FormField
-              control={form.control}
-              name="dayType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-11 border-2 rounded-xl">
-                        <SelectValue placeholder="Select type..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="wholeday">Whole Day</SelectItem>
-                      <SelectItem value="halfday-am">Half Day (AM)</SelectItem>
-                      <SelectItem value="halfday-pm">Half Day (PM)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col overflow-hidden">
+            <ScrollArea className="flex-1 px-6 py-2">
+              <div className="space-y-6 pb-4">
+                <FormField
+                  control={form.control}
+                  name="dayType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Leave Duration</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 border-2 rounded-xl">
+                            <SelectValue placeholder="Select type..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="wholeday">Whole Day</SelectItem>
+                          <SelectItem value="halfday-am">Half Day (AM)</SelectItem>
+                          <SelectItem value="halfday-pm">Half Day (PM)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Activity Category</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-11 border-2 rounded-xl">
-                        <SelectValue placeholder="Select a category..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories.map(cat => (
-                          <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Activity Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 border-2 rounded-xl">
+                            <SelectValue placeholder="Select a category..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categories.map(cat => (
+                              <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="reason"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Reason for Leave</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    value={field.value}
-                    disabled={!selectedCategory}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="h-11 border-2 rounded-xl">
-                        <SelectValue placeholder={selectedCategory ? "Select a specific reason..." : "Please select category first"} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {currentReasons.map(reason => (
-                          <SelectItem key={reason} value={reason}>{reason}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <FormField
-              control={form.control}
-              name="remarks"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Remarks (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                        placeholder="Add any additional details here..." 
-                        {...field} 
-                        className="min-h-[100px] border-2 rounded-xl focus-visible:ring-primary"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="reason"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-primary">Reason for Leave</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value}
+                        disabled={!selectedCategory}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-11 border-2 rounded-xl">
+                            <SelectValue placeholder={selectedCategory ? "Select a specific reason..." : "Please select category first"} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {currentReasons.map(reason => (
+                              <SelectItem key={reason} value={reason}>{reason}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="font-headline text-xs uppercase tracking-widest text-muted-foreground">Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                            placeholder="Add any additional details here..." 
+                            {...field} 
+                            className="min-h-[100px] border-2 rounded-xl focus-visible:ring-primary"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 space-y-2">
-                <div className="flex items-center gap-2 text-destructive font-black uppercase text-[10px] tracking-widest">
-                    <AlertCircle className="w-3 h-3" /> Policy Reminder
+                <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-destructive font-black uppercase text-[10px] tracking-widest">
+                        <AlertCircle className="w-3 h-3" /> Policy Reminder
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[11px] font-bold text-destructive leading-tight">Activities Not Considered as VMC:</p>
+                        <ul className="text-[10px] text-muted-foreground space-y-0.5 list-disc pl-4">
+                            <li>Dine-Out Activities</li>
+                            <li>Round Table Discussions</li>
+                            <li>Focus Group Discussions</li>
+                            <li>Weekly District Huddles</li>
+                            <li>DSM Interviews</li>
+                            <li>Similar non-field activities not approved under VMC policy</li>
+                        </ul>
+                    </div>
                 </div>
-                <div className="space-y-1">
-                    <p className="text-[11px] font-bold text-destructive leading-tight">Activities Not Considered as VMC:</p>
-                    <ul className="text-[10px] text-muted-foreground space-y-0.5 list-disc pl-4">
-                        <li>Dine-Out Activities</li>
-                        <li>Round Table Discussions</li>
-                        <li>Focus Group Discussions</li>
-                        <li>Weekly District Huddles</li>
-                        <li>DSM Interviews</li>
-                        <li>Similar non-field activities not approved under VMC policy</li>
-                    </ul>
-                </div>
-            </div>
+              </div>
+            </ScrollArea>
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="p-6 pt-2 shrink-0">
               <Button 
                 type="submit" 
                 className="w-full h-12 font-headline text-lg rounded-xl shadow-lg transition-all active:scale-[0.98]"
