@@ -163,7 +163,7 @@ export function PlanningCalendar({
         (nonCallDays || []).forEach(day => {
             const d = parseAnyDate(day.date);
             if(d && isValid(d)) {
-                const dateStr = format(d, 'yyyy-MM-dd');
+                const dateStr = format(day, 'yyyy-MM-dd');
                 if (!groups[dateStr]) groups[dateStr] = [];
                 groups[dateStr].push(day);
             }
@@ -715,7 +715,8 @@ export function PlanningCalendar({
                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                             <AlertDialogAction onClick={() => setSelectedDoctorIds(new Set())} className="bg-destructive text-white">Confirm Unselect</AlertDialogAction>
                                         </AlertDialogFooter>
-                                    </AlertDialog>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                                 )}
                         </div>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="font-headline font-black shadow-lg">
