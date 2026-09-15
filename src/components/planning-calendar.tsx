@@ -80,7 +80,7 @@ const StatusIcon = ({ status }: { status: NonCallDay['status'] | 'holiday' }) =>
         default:
             return <Clock className="w-5 h-5 text-yellow-500" />;
     }
-}
+};
 
 export function PlanningCalendar({ 
     doctors = [], 
@@ -197,18 +197,6 @@ export function PlanningCalendar({
         return counts;
     }, [allEntries, selectedDate]);
 
-    const selectedDayPlans = useMemo(() => {
-        if (!selectedDate) return [];
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        return plansByDate[dateStr] || [];
-    }, [plansByDate, selectedDate]);
-
-    const selectedDayNonCallDays = useMemo(() => {
-        if (!selectedDate) return [];
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        return nonCallDaysByDate[dateStr] || [];
-    }, [nonCallDaysByDate, selectedDate]);
-
     const selectedDayStats = useMemo(() => {
         if (!selectedDate) return { total: 0, covered: 0, planned: 0, unplanned: 0 };
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -222,7 +210,6 @@ export function PlanningCalendar({
             )
         ).length;
 
-        // ACHIEVEMENT BASED COUNTERS (from submitted reports)
         const plannedAchievedCount = dayEntries.filter(e => e.callType === 'planned').length;
         const unplannedAchievedCount = dayEntries.filter(e => e.callType === 'unplanned').length;
 
@@ -246,14 +233,12 @@ export function PlanningCalendar({
                 String(d.municipality || "").toLowerCase().includes(q) ||
                 String(d.specialty || "").toLowerCase().includes(q)
             );
-            
             const matchesFreq = freq === "all" || d.frequency === freq;
-            
             return matchesSearch && matchesFreq;
         });
     }, [doctors, doctorFilter, frequencyFilter]);
 
-    const handleSaveNonCallDay = useCallback((data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
+    const handleSaveNonCallDay = (data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
             onAddNonCallDay({
                 date: selectedDate.toISOString(),
@@ -263,7 +248,7 @@ export function PlanningCalendar({
             });
             setIsNonCallDialogOpen(false);
         }
-    }, [selectedDate, onAddNonCallDay]);
+    };
     
     const handleLogCallClick = (plan: Plan) => {
         const doctor = (doctors || []).find(d => d.id === plan.doctorId) || (doctors || []).find(d => 
@@ -274,7 +259,7 @@ export function PlanningCalendar({
         if (doctor && plan.plannedDate) {
             onLogCall(doctor, parseAnyDate(plan.plannedDate) || new Date(), plan.callType || 'unplanned');
         }
-    }
+    };
 
     const toggleDoctorSelection = (id: string) => {
         setSelectedDoctorIds(prev => {
@@ -299,7 +284,7 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
-    const handleMonthChange = (month: Date) => {
+    const handleMonthChangeInternal = (month: Date) => {
         if (onMonthChange) {
             onMonthChange(format(month, 'yyyy-MM'));
         }
@@ -350,8 +335,7 @@ export function PlanningCalendar({
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
-            const totalEstRows = 400;
-            for (let i = 0; i < totalEstRows; i++) rows[i] = new Array(30).fill("");
+            for (let i = 0; i < 400; i++) rows[i] = new Array(30).fill("");
             rows[0][1] = "PMR DAILY CALL PLAN";
             rows[1][1] = `PMR Name: ${pmrName}`;
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
@@ -449,6 +433,16 @@ export function PlanningCalendar({
     };
 
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
+    
+    const selectedDayPlans = useMemo(() => {
+        if (!selectedDate) return [];
+        return plansByDate[format(selectedDate, 'yyyy-MM-dd')] || [];
+    }, [selectedDate, plansByDate]);
+
+    const selectedDayNonCallDays = useMemo(() => {
+        if (!selectedDate) return [];
+        return nonCallDaysByDate[format(selectedDate, 'yyyy-MM-dd')] || [];
+    }, [selectedDate, nonCallDaysByDate]);
 
     if (!mounted) return null;
 
@@ -473,7 +467,7 @@ export function PlanningCalendar({
                             selected={selectedDate}
                             onSelect={setSelectedDate}
                             month={selectedMonth ? parseISO(selectedMonth + "-01") : undefined}
-                            onMonthChange={handleMonthChange}
+                            onMonthChange={handleMonthChangeInternal}
                             modifiers={{ 
                                 planned: Object.keys(plansByDate).map(d => parseISO(d)),
                                 nonCall: Object.keys(nonCallDaysByDate).map(d => parseISO(d)),
@@ -510,7 +504,7 @@ export function PlanningCalendar({
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
                         <div className="space-y-3">
                             <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
-                                Daily Activity for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                                Activity for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
                             <div className="flex flex-wrap gap-2">
