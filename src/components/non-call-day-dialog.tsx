@@ -44,7 +44,6 @@ type NonCallDayDialogProps = {
 const categories = [
     { value: "leave-related", label: "Leave-Related Activities" },
     { value: "business", label: "Company and Business Activities" },
-    { value: "other", label: "Other" },
 ];
 
 const reasonsByCategory: Record<string, string[]> = {
@@ -68,9 +67,6 @@ const reasonsByCategory: Record<string, string[]> = {
         "Trade Activity",
         "District Meeting",
         "Other management-approved business activities conducted outside regular field work",
-    ],
-    "other": [
-        "Enroute",
     ],
 };
 
