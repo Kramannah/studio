@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "./ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
@@ -88,6 +95,7 @@ export function PlanningCalendar({
     const [isNonCallDialogOpen, setIsNonCallDialogOpen] = useState(false);
     const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
     const [doctorFilter, setDoctorFilter] = useState("");
+    const [frequencyFilter, setFrequencyFilter] = useState<string>("all");
     const [selectedDoctorIds, setSelectedDoctorIds] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -232,14 +240,23 @@ export function PlanningCalendar({
 
     const filteredDoctorsForSearch = useMemo(() => {
         const q = (doctorFilter ?? "").toString().toLowerCase().trim();
+        const freq = frequencyFilter;
+        
+        // Deduplicate by ID
         const doctorList = Array.from((doctors || []).reduce((acc, d) => d.id ? acc.set(d.id, d) : acc, new Map<string, Doctor>()).values());
-        if (!q) return doctorList;
-        return doctorList.filter(d => 
-            `${String(d.firstName || "")} ${String(d.lastName || "")}`.toLowerCase().includes(q) ||
-            String(d.municipality || "").toLowerCase().includes(q) ||
-            String(d.specialty || "").toLowerCase().includes(q)
-        );
-    }, [doctors, doctorFilter]);
+        
+        return doctorList.filter(d => {
+            const matchesSearch = !q || (
+                `${String(d.firstName || "")} ${String(d.lastName || "")}`.toLowerCase().includes(q) ||
+                String(d.municipality || "").toLowerCase().includes(q) ||
+                String(d.specialty || "").toLowerCase().includes(q)
+            );
+            
+            const matchesFreq = freq === "all" || d.frequency === freq;
+            
+            return matchesSearch && matchesFreq;
+        });
+    }, [doctors, doctorFilter, frequencyFilter]);
 
     const handleSaveNonCallDay = useCallback((data: {reason: string, remarks?: string, dayType: 'wholeday' | 'halfday-am' | 'halfday-pm'}) => {
         if(selectedDate) {
@@ -282,6 +299,7 @@ export function PlanningCalendar({
             setIsAddPlanDialogOpen(false);
             setSelectedDoctorIds(new Set());
             setDoctorFilter("");
+            setFrequencyFilter("all");
         }
         setIsSubmitting(false);
     };
@@ -670,27 +688,60 @@ export function PlanningCalendar({
                         <DialogTitle className="text-lg font-headline font-black">Plan Visits: {selectedDate ? format(selectedDate, "MMMM d, yyyy") : ""}</DialogTitle>
                     </DialogHeader>
                     <div className="flex-1 flex flex-col p-4 pt-0 space-y-4 overflow-hidden">
-                        <div className="relative shrink-0">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input placeholder="Search masterlist..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-10 border-2" />
+                        <div className="flex flex-col sm:flex-row gap-4 shrink-0">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input placeholder="Search name or location..." value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="pl-10 border-2" />
+                            </div>
+                            <div className="w-full sm:w-[220px]">
+                                <Select value={frequencyFilter} onValueChange={setFrequencyFilter}>
+                                    <SelectTrigger className="border-2 h-10">
+                                        <div className="flex items-center gap-2">
+                                            <Filter className="w-3.5 h-3.5 opacity-50" />
+                                            <SelectValue placeholder="All Frequencies" />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Frequencies</SelectItem>
+                                        <SelectItem value="1x">Target: 1x visits</SelectItem>
+                                        <SelectItem value="2x">Target: 2x visits</SelectItem>
+                                        <SelectItem value="3x">Target: 3x visits</SelectItem>
+                                        <SelectItem value="4x">Target: 4x visits</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-y-auto">
                             <Table className="w-full">
-                                <TableHeader className="sticky top-0 bg-background z-20"><TableRow><TableHead className="w-[40px]"></TableHead><TableHead className="text-xs font-bold">Doctor</TableHead><TableHead className="w-[60px] text-center text-xs font-bold">Left</TableHead></TableRow></TableHeader>
+                                <TableHeader className="sticky top-0 bg-background z-20"><TableRow><TableHead className="w-[40px]"></TableHead><TableHead className="text-xs font-bold">Doctor</TableHead><TableHead className="w-[80px] text-center text-xs font-bold">Freq</TableHead><TableHead className="w-[60px] text-center text-xs font-bold">Left</TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {filteredDoctorsForSearch.map(doctor => {
-                                        const first = String(doctor.firstName || "").toLowerCase().trim();
-                                        const last = String(doctor.lastName || "").toLowerCase().trim();
-                                        const actualCount = visitCountsForSelectedMonth[`${first}|${last}`] || 0;
-                                        const targetCount = parseInt(String(doctor.frequency || '1x').replace('x', ''), 10) || 0;
-                                        return (
-                                            <TableRow key={doctor.id}>
-                                                <TableCell><Checkbox checked={selectedDoctorIds.has(doctor.id)} onCheckedChange={() => toggleDoctorSelection(doctor.id)} /></TableCell>
-                                                <TableCell className="font-bold text-xs">{doctor.firstName} {doctor.lastName}</TableCell>
-                                                <TableCell className="w-[60px] font-mono text-xs font-black text-center">{Math.max(0, targetCount - actualCount)}</TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
+                                    {filteredDoctorsForSearch.length > 0 ? (
+                                        filteredDoctorsForSearch.map(doctor => {
+                                            const first = String(doctor.firstName || "").toLowerCase().trim();
+                                            const last = String(doctor.lastName || "").toLowerCase().trim();
+                                            const actualCount = visitCountsForSelectedMonth[`${first}|${last}`] || 0;
+                                            const targetCount = parseInt(String(doctor.frequency || '1x').replace('x', ''), 10) || 0;
+                                            return (
+                                                <TableRow key={doctor.id}>
+                                                    <TableCell><Checkbox checked={selectedDoctorIds.has(doctor.id)} onCheckedChange={() => toggleDoctorSelection(doctor.id)} /></TableCell>
+                                                    <TableCell className="font-bold text-xs">
+                                                        <div className="flex flex-col">
+                                                            <span>{doctor.firstName} {doctor.lastName}</span>
+                                                            <span className="text-[9px] text-muted-foreground uppercase font-black tracking-tighter">{doctor.specialty}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center"><Badge variant="outline" className="font-mono text-[10px]">{doctor.frequency}</Badge></TableCell>
+                                                    <TableCell className="w-[60px] font-mono text-xs font-black text-center">{Math.max(0, targetCount - actualCount)}</TableCell>
+                                                </TableRow>
+                                            )
+                                        })
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="h-40 text-center text-muted-foreground italic">
+                                                No doctors found matching filters.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
                                 </TableBody>
                             </Table>
                         </div>
