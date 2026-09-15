@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
@@ -215,18 +216,34 @@ export function PlanningCalendar({
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
+        // Reconcile entries against plans for accurate achievement metrics
+        const matchesPlan = (e: CoverageEntry, p: Plan) => {
+            return String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
+                   String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim();
+        };
+
+        const total = dayPlans.length;
+        
         const coveredCount = dayPlans.filter(p => 
-            dayEntries.some(e => 
-                String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
-                String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
-            )
+            dayEntries.some(e => matchesPlan(e, p))
         ).length;
 
-        const plannedAchievedCount = dayEntries.filter(e => e.callType === 'planned').length;
-        const unplannedAchievedCount = dayEntries.filter(e => e.callType === 'unplanned').length;
+        let plannedAchievedCount = 0;
+        let unplannedAchievedCount = 0;
+
+        dayEntries.forEach(entry => {
+            const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
+            // If the report matches a scheduled visit that was set as 'Planned', it's a Planned Achievement.
+            if (matchingPlan && matchingPlan.callType === 'planned') {
+                plannedAchievedCount++;
+            } else {
+                // Everything else (unplanned visits or visits to doctors not on the schedule) is Unplanned.
+                unplannedAchievedCount++;
+            }
+        });
 
         return {
-            total: dayPlans.length,
+            total,
             covered: coveredCount,
             planned: plannedAchievedCount,
             unplanned: unplannedAchievedCount
@@ -736,3 +753,4 @@ export function PlanningCalendar({
         </div>
     );
 }
+
