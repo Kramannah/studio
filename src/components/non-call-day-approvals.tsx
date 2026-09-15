@@ -7,10 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, Mail, BellRing, Loader2, AlertCircle } from "lucide-react";
+import { Check, X, Mail, BellRing, ExternalLink } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { sendApprovalReminderEmail } from "@/app/actions/email-actions";
 
 type NonCallDayApprovalsProps = {
     nonCallDays: NonCallDay[];
@@ -36,7 +35,6 @@ const safeParseDate = (date: any): Date | null => {
 
 export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, profiles = {}, isSuperAdmin = false }: NonCallDayApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
-    const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
     const { toast } = useToast();
 
     const filteredDays = useMemo(() => {
@@ -78,7 +76,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return Array.from(grouped.entries()).map(([id, data]) => ({ id, ...data }));
     }, [nonCallDays, profiles, isSuperAdmin, activeTab]);
 
-    const handleSendReminder = async (manager: { id: string; name: string; email: string; pmrs: string[]; count: number }) => {
+    const handleSendReminder = (manager: { id: string; name: string; email: string; pmrs: string[]; count: number }) => {
         if (!manager.email) {
             toast({
                 variant: "destructive",
@@ -88,34 +86,17 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             return;
         }
 
-        setSendingReminderId(manager.id);
+        const subject = `URGENT: ${manager.count} Pending Non-Call Day Approvals`;
+        const body = `Hi ${manager.name},\n\nYou have ${manager.count} pending Non-Call Day requests from your territory team that require your review in the SFE Dashboard.\n\nAffected Representatives:\n${manager.pmrs.map(name => `- ${name}`).join('\n')}\n\nPlease log in to take action.\n\nBest regards,\nAdministration Team`;
         
-        try {
-            const result = await sendApprovalReminderEmail(
-                manager.email, 
-                manager.name, 
-                manager.pmrs, 
-                manager.count
-            );
-
-            if (result.success) {
-                toast({ title: "Reminder Sent", description: `Notification successfully sent to ${manager.email}.` });
-            } else {
-                toast({ 
-                    variant: "destructive", 
-                    title: "Send Failed", 
-                    description: `${result.error || "Delivery failed"}. Please check your Resend API configuration.` 
-                });
-            }
-        } catch (e: any) {
-            toast({ 
-                variant: "destructive", 
-                title: "Service Error", 
-                description: e.message || "Failed to communicate with the email server." 
-            });
-        } finally {
-            setSendingReminderId(null);
-        }
+        const mailtoLink = `mailto:${manager.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        
+        window.location.href = mailtoLink;
+        
+        toast({ 
+            title: "Email Client Opened", 
+            description: `Sent reminder request for ${manager.name}.` 
+        });
     };
 
     return (
@@ -126,7 +107,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                         <CardTitle className="text-lg font-black font-headline flex items-center gap-2 text-primary">
                             <BellRing className="w-5 h-5" /> District Notification Hub
                         </CardTitle>
-                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent automatically to their Technical Email.</CardDescription>
+                        <CardDescription>Managers with outstanding approval requests. This will open your default email app to send a reminder.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -141,15 +122,10 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                                     <Button 
                                         size="sm" 
                                         variant="outline" 
-                                        disabled={sendingReminderId === m.id}
                                         onClick={() => handleSendReminder(m)}
                                         className="h-8 rounded-lg border-2 font-headline hover:bg-primary hover:text-white transition-all min-w-[90px]"
                                     >
-                                        {sendingReminderId === m.id ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                            <><Mail className="w-3.5 h-3.5 mr-1.5" /> Remind</>
-                                        )}
+                                        <Mail className="w-3.5 h-3.5 mr-1.5" /> Remind
                                     </Button>
                                 </div>
                             ))}
