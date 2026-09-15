@@ -3,7 +3,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay } from "date-fns";
+import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay, addMonths, subMonths } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
