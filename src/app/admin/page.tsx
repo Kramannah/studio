@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -665,8 +664,8 @@ export default function AdminPage() {
                                 </div>
                             </div>
                             <div className="grid gap-2">
-                                <Label>Technical Email (Identifier)</Label>
-                                <Input value={editingAccount.email} onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })} />
+                                <Label>Technical Email (for Notifications)</Label>
+                                <Input value={editingAccount.email} onChange={(e) => setEditingAccount({ ...editingAccount, email: e.target.value })} placeholder="e.g. dsm@hovidinc.com" />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Assigned District Manager</Label>

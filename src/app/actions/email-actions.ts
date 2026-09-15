@@ -4,21 +4,24 @@ import { Resend } from 'resend';
 
 /**
  * Sends a background reminder to a District Sales Manager regarding pending approvals.
- * Uses the Resend service for high-reputation delivery.
+ * Uses the Resend service for background delivery.
  */
 export async function sendApprovalReminderEmail(email: string, managerName: string, pmrs: string[], count: number) {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-      console.error("CRITICAL: RESEND_API_KEY is not configured in environment variables.");
-      return { success: false, error: "System email service is not configured." };
+      console.warn("RESEND_API_KEY is not configured. Background emails will not be sent.");
+      return { 
+        success: false, 
+        error: "System email service is not configured. Please add RESEND_API_KEY to your environment variables." 
+      };
   }
 
   try {
     const resend = new Resend(apiKey);
     
-    // Note: The 'from' domain must be verified in your Resend dashboard.
-    // If delivery fails, verify that 'hovidinc.com' is authorized to send via Resend.
+    // Note: The 'from' email should ideally use a domain verified in your Resend account.
+    // If not verified, Resend might block the delivery or send from a generic address.
     const { data, error } = await resend.emails.send({
       from: 'SFE Notifications <notifications@hovidinc.com>',
       to: [email.trim()],
