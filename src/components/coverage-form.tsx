@@ -556,7 +556,7 @@ export function CoverageForm({
           toast({ 
               variant: "destructive", 
               title: "Weekly Deadline Passed", 
-              description: `The deadline for this week's reports passed on ${format(deadline, "PPPP")}. Please contact your Manager.` 
+              description: `The deadline for this week's reports passed on ${format(deadline, "PPPP")}.` 
           });
           setIsSubmitting(false);
           return;
