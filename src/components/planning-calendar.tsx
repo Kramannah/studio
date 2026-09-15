@@ -3,16 +3,15 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay, addMonths, subMonths } from "date-fns";
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay } from "date-fns";
+import React, { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter, RotateCcw } from "lucide-react";
+import { PlusCircle, CalendarOff, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter, RotateCcw, XCircle as XCircleIcon, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -118,7 +117,7 @@ export function PlanningCalendar({
         setMounted(true);
     }, []);
 
-    const allEntries = useMemo(() => [...entries, ...offlineEntries], [entries, offlineEntries]);
+    const allEntries = useMemo(() => [...entries, ...(offlineEntries || [])], [entries, offlineEntries]);
 
     const entriesByDate = useMemo(() => {
         const groups: Record<string, CoverageEntry[]> = {};
@@ -610,7 +609,7 @@ export function PlanningCalendar({
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive" /></Button>}
+                                                    {!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircleIcon size={18} className="text-destructive" /></Button>}
                                                 </TableCell>
                                             </TableRow>
                                         )
