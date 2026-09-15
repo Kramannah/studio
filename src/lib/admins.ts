@@ -1,5 +1,5 @@
 // Only the true Super Admins (National/IT Level) who have global oversight and directory access.
-export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2"];
+export const ADMIN_UIDS = ["SgOR5cjCC6dZ0oABv4nXdntu6pI3", "m2ZTNUi5v9ef82FxVRbwSmyGv9S2", "mFRIgRDWTvVwROXzCjWGzyxpjWK2"];
 
 // Explicit list of administrator emails for secure session verification.
 export const ADMIN_EMAILS = [
