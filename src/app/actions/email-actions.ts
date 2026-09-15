@@ -17,10 +17,16 @@ export async function sendApprovalReminderEmail(email: string, managerName: stri
   try {
     const resend = new Resend(apiKey);
     
+    // Note: The 'from' domain must be verified in your Resend dashboard.
+    // If delivery fails, verify that 'hovidinc.com' is authorized to send via Resend.
     const { data, error } = await resend.emails.send({
       from: 'SFE Notifications <notifications@hovidinc.com>',
-      to: [email],
+      to: [email.trim()],
       subject: `URGENT: ${count} Pending Non-Call Day Approvals`,
+      headers: {
+        'X-Entity-Ref-ID': `approval-${Date.now()}`,
+        'Importance': 'high'
+      },
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; color: #1e293b;">
           <div style="background-color: #10b981; padding: 32px 24px; text-align: center;">
@@ -47,18 +53,20 @@ export async function sendApprovalReminderEmail(email: string, managerName: stri
           </div>
           
           <div style="background-color: #f1f5f9; padding: 20px; text-align: center;">
-            <p style="margin: 0; font-size: 11px; color: #94a3b8;">This is a system-generated message from the SFE Offline App.<br/>Please do not reply to this automated email.</p>
+            <p style="margin: 0; font-size: 11px; color: #94a3b8;">This is a system-generated message from the SFE App.<br/>Please do not reply to this automated email.</p>
           </div>
         </div>
       `,
     });
 
     if (error) {
+      console.error("Resend API Error:", error);
       return { success: false, error: error.message };
     }
 
     return { success: true, id: data?.id };
   } catch (err: any) {
+    console.error("Internal Server Error during email dispatch:", err);
     return { success: false, error: err.message || "Internal server error during email dispatch." };
   }
 }

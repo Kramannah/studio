@@ -63,7 +63,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                 if (!grouped.has(managerId)) {
                     grouped.set(managerId, {
                         name: managerProfile ? `${managerProfile.firstName} ${managerProfile.lastName}` : "Assigned Manager",
-                        email: managerProfile?.email || "",
+                        email: (managerProfile?.email || "").trim(),
                         pmrs: [],
                         count: 0
                     });
@@ -104,7 +104,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                 toast({ 
                     variant: "destructive", 
                     title: "Send Failed", 
-                    description: result.error || "The email service could not deliver the message." 
+                    description: `${result.error || "Delivery failed"}. Please check your Resend API configuration.` 
                 });
             }
         } catch (e: any) {
@@ -126,7 +126,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                         <CardTitle className="text-lg font-black font-headline flex items-center gap-2 text-primary">
                             <BellRing className="w-5 h-5" /> District Notification Hub
                         </CardTitle>
-                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent automatically in the background.</CardDescription>
+                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent automatically to their Technical Email.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

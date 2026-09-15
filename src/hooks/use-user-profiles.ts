@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback } from "react";
@@ -106,7 +105,11 @@ export function useUserProfiles() {
             payload.managerId = null;
         }
 
-        if (email) payload.email = email;
+        // Ensure email is always handled correctly, allowing clearing via empty string
+        if (email !== undefined) {
+            payload.email = email.trim();
+        }
+        
         if (role) payload.role = role;
 
         // CRITICAL: NO await here. Chain .catch() and emit error.
