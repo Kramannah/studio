@@ -7,9 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, Mail, BellRing, ExternalLink } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
 
 type NonCallDayApprovalsProps = {
     nonCallDays: NonCallDay[];
@@ -33,9 +32,8 @@ const safeParseDate = (date: any): Date | null => {
     return null;
 }
 
-export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, profiles = {}, isSuperAdmin = false }: NonCallDayApprovalsProps) {
+export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: NonCallDayApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
-    const { toast } = useToast();
 
     const filteredDays = useMemo(() => {
         return nonCallDays.filter(day => day.status === activeTab);
@@ -46,94 +44,8 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return user ? `${user.firstName} ${user.lastName}` : (userId ? `UID: ${userId.substring(0,8)}` : "Unknown User");
     }
 
-    const managerNudgeList = useMemo(() => {
-        if (!isSuperAdmin || activeTab !== 'pending') return [];
-
-        const pending = nonCallDays.filter(d => d.status === 'pending');
-        const grouped = new Map<string, { name: string; email: string; pmrs: string[]; count: number }>();
-
-        pending.forEach(day => {
-            const pmrProfile = profiles[day.userId];
-            const managerId = pmrProfile?.managerId;
-            
-            if (managerId && managerId !== 'none') {
-                const managerProfile = profiles[managerId];
-                if (!grouped.has(managerId)) {
-                    grouped.set(managerId, {
-                        name: managerProfile ? `${managerProfile.firstName} ${managerProfile.lastName}` : "Assigned Manager",
-                        email: (managerProfile?.email || "").trim(),
-                        pmrs: [],
-                        count: 0
-                    });
-                }
-                const data = grouped.get(managerId)!;
-                const pmrName = pmrProfile ? `${pmrProfile.firstName} ${pmrProfile.lastName}` : "Unknown PMR";
-                if (!data.pmrs.includes(pmrName)) data.pmrs.push(pmrName);
-                data.count++;
-            }
-        });
-
-        return Array.from(grouped.entries()).map(([id, data]) => ({ id, ...data }));
-    }, [nonCallDays, profiles, isSuperAdmin, activeTab]);
-
-    const handleSendReminder = (manager: { id: string; name: string; email: string; pmrs: string[]; count: number }) => {
-        if (!manager.email) {
-            toast({
-                variant: "destructive",
-                title: "Missing Email",
-                description: `Please set a Technical Email for ${manager.name} in the Accounts tab first.`
-            });
-            return;
-        }
-
-        const subject = `URGENT: ${manager.count} Pending Non-Call Day Approvals`;
-        const body = `Hi ${manager.name},\n\nYou have ${manager.count} pending Non-Call Day requests from your territory team that require your review in the SFE Dashboard.\n\nAffected Representatives:\n${manager.pmrs.map(name => `- ${name}`).join('\n')}\n\nPlease log in to take action.\n\nBest regards,\nAdministration Team`;
-        
-        const mailtoLink = `mailto:${manager.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        
-        window.location.href = mailtoLink;
-        
-        toast({ 
-            title: "Email Client Opened", 
-            description: `Sent reminder request for ${manager.name}.` 
-        });
-    };
-
     return (
         <div className="space-y-6">
-            {isSuperAdmin && managerNudgeList.length > 0 && (
-                <Card className="border-2 border-primary/20 bg-primary/5 shadow-md animate-in fade-in slide-in-from-top-4 duration-500">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-lg font-black font-headline flex items-center gap-2 text-primary">
-                            <BellRing className="w-5 h-5" /> District Notification Hub
-                        </CardTitle>
-                        <CardDescription>Managers with outstanding approval requests. This will open your default email app to send a reminder.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {managerNudgeList.map(m => (
-                                <div key={m.id} className="flex items-center justify-between p-3 bg-background rounded-xl border-2 border-primary/10 shadow-sm group">
-                                    <div className="space-y-1">
-                                        <p className="font-bold text-sm leading-none">{m.name}</p>
-                                        <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px] h-5">
-                                            {m.count} Pending Requests
-                                        </Badge>
-                                    </div>
-                                    <Button 
-                                        size="sm" 
-                                        variant="outline" 
-                                        onClick={() => handleSendReminder(m)}
-                                        className="h-8 rounded-lg border-2 font-headline hover:bg-primary hover:text-white transition-all min-w-[90px]"
-                                    >
-                                        <Mail className="w-3.5 h-3.5 mr-1.5" /> Remind
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
             <Card className="border-2 shadow-sm">
                 <CardHeader>
                     <CardTitle className="font-headline">Non-Call Day Requests</CardTitle>
