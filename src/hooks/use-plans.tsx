@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -6,7 +5,7 @@ import type { Plan, Doctor, PlanningPermissionRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, deleteDoc, doc, writeBatch, limit } from 'firebase/firestore';
-import { isToday, isBefore, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns';
+import { isToday, isBefore, isAfter, startOfDay, startOfToday, isValid, parseISO, isWithinInterval, startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns';
 import { useAuth } from './use-auth';
 import { getMonthRangeISO, parseAnyDate, safeStorageSet } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -127,8 +126,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
   const addPlan = useCallback(async (doctor: Doctor, plannedDate: Date) => {
     if (!user || !db) return;
     
-    // VISIBILITY: Calls plotted in the Planning interface are the source of truth for 'planned' metrics.
-    const callType = 'planned';
+    // VISIBILITY: Future visits are "planned", Today/Past are "unplanned"
+    const callType = isAfter(startOfDay(plannedDate), startOfToday()) ? 'planned' : 'unplanned';
     
     const newPlan = {
       userId: user.uid,
@@ -162,8 +161,8 @@ export const usePlans = (active: boolean = true, selectedMonth?: string) => {
     const batch = writeBatch(db);
     const dateISO = plannedDate.toISOString();
     
-    // VISIBILITY: Batch scheduling from the calendar is always marked as 'planned' visits.
-    const callType = 'planned';
+    // VISIBILITY: Future visits are "planned", Today/Past are "unplanned"
+    const callType = isAfter(startOfDay(plannedDate), startOfToday()) ? 'planned' : 'unplanned';
     
     const newPlans: any[] = doctors.map(doctor => ({
       userId: user.uid,

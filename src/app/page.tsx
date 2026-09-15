@@ -59,6 +59,7 @@ export default function Home() {
   const [doctorToLog, setDoctorToLog] = useState<Doctor | null>(null);
   const [entryToEdit, setEntryToEdit] = useState<CoverageEntry | null>(null);
   const [plannedDateToLog, setPlannedDateToLog] = useState<Date | null>(null);
+  const [plannedCallTypeToLog, setPlannedCallTypeToLog] = useState<'planned' | 'unplanned' | null>(null);
   const [isTimeLogDialogOpen, setIsTimeLogDialogOpen] = useState(false);
   const [timeLogMode, setTimeLogMode] = useState<"time-in" | "time-out">("time-in");
   
@@ -123,9 +124,10 @@ export default function Home() {
       }
   }, [syncAllOfflineEntries, refreshEntries, refreshPlans, fetchTimeLogs, fetchNonCallDays, refetchAllocations, toast]);
 
-  const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date) => {
+  const handleLogPlannedCall = useCallback((doctor: Doctor, plannedDate: Date, callType: 'planned' | 'unplanned') => {
     setDoctorToLog(doctor);
     setPlannedDateToLog(plannedDate);
+    setPlannedCallTypeToLog(callType);
     setEntryToEdit(null);
     setActiveView('coverage');
   }, []);
@@ -134,12 +136,14 @@ export default function Home() {
     setEntryToEdit({ ...entry, isOffline });
     setDoctorToLog(null);
     setPlannedDateToLog(null);
+    setPlannedCallTypeToLog(null);
     setActiveView('coverage');
   }, []);
 
   const handleFormSubmit = useCallback(async (savedOnline: boolean) => {
     setDoctorToLog(null);
     setPlannedDateToLog(null);
+    setPlannedCallTypeToLog(null);
     setEntryToEdit(null);
     setActiveView(savedOnline ? 'submitted' : 'offline');
     if (savedOnline) {
@@ -185,7 +189,7 @@ export default function Home() {
 
     switch (activeView) {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} pmrName={currentPmrName} profile={profile} />;
-      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} usedQuantities={mergedUsedQuantities} />;
+      case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} initialCallType={plannedCallTypeToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} onDelete={deleteOfflineEntry} />;
       case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'summary': 

@@ -53,7 +53,7 @@ type PlanningCalendarProps = {
   onAddPlan: (doctor: Doctor, plannedDate: Date) => void;
   onAddPlansBulk: (doctors: Doctor[], plannedDate: Date) => Promise<boolean>;
   onRemovePlan: (planId: string) => void;
-  onLogCall: (doctor: Doctor, plannedDate: Date) => void;
+  onLogCall: (doctor: Doctor, plannedDate: Date, callType: 'planned' | 'unplanned') => void;
   nonCallDays: NonCallDay[];
   onAddNonCallDay: (entry: Omit<NonCallDay, 'id' | 'userId' | 'date' | 'status'>) => void;
   readOnly?: boolean;
@@ -288,7 +288,7 @@ export function PlanningCalendar({
         );
 
         if (doctor && plan.plannedDate) {
-            onLogCall(doctor, parseAnyDate(plan.plannedDate) || new Date());
+            onLogCall(doctor, parseAnyDate(plan.plannedDate) || new Date(), plan.callType || 'unplanned');
         }
     }
 

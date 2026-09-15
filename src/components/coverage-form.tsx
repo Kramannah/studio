@@ -112,6 +112,7 @@ type CoverageFormProps = {
   allocations: Q4Allocation[];
   masterEntries: CoverageEntry[];
   initialDoctor?: Doctor | null;
+  initialCallType?: 'planned' | 'unplanned' | null;
   entryToEdit?: (CoverageEntry & { isOffline?: boolean }) | null;
   onFormSubmit?: (isOnline: boolean) => void;
   todaysPlans: Plan[];
@@ -218,6 +219,7 @@ export function CoverageForm({
     allocations, 
     masterEntries, 
     initialDoctor, 
+    initialCallType,
     entryToEdit,
     onFormSubmit, 
     todaysPlans, 
@@ -369,9 +371,10 @@ export function CoverageForm({
 
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
-      // Fix: If initialDoctor is set, it's coming from the planned calendar. Always record as 'planned'.
+      // Fix: If initialDoctor is set, it's coming from the planned calendar.
+      // We use the provided initialCallType or fallback to 'planned'.
       form.reset({
-        callType: "planned",
+        callType: initialCallType || "planned",
         firstName: initialDoctor.firstName,
         lastName: initialDoctor.lastName,
         specialty: initialDoctor.specialty,
@@ -404,7 +407,7 @@ export function CoverageForm({
       setAutocompleteValue(''); 
       setProofMethod(null);
     }
-  }, [initialDoctor, entryToEdit, form, initialDate]);
+  }, [initialDoctor, initialCallType, entryToEdit, form, initialDate]);
   
   const resetForm = useCallback(() => {
     form.reset({
