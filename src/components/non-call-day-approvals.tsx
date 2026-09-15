@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { NonCallDay, UserProfile } from "@/lib/types";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, Mail, BellRing, Loader2 } from "lucide-react";
+import { Check, X, Mail, BellRing, Loader2, AlertCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { sendApprovalReminderEmail } from "@/app/actions/email-actions";
@@ -46,7 +45,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
 
     const getUserName = (userId: string) => {
         const user = userMap[userId];
-        return user ? `${user.firstName} ${user.lastName}` : `User ID: ${userId.substring(0,6)}...`;
+        return user ? `${user.firstName} ${user.lastName}` : (userId ? `UID: ${userId.substring(0,8)}` : "Unknown User");
     }
 
     const managerNudgeList = useMemo(() => {
@@ -84,7 +83,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             toast({
                 variant: "destructive",
                 title: "Missing Email",
-                description: `Please set an email for ${manager.name} in the Accounts tab first.`
+                description: `Please set a Technical Email for ${manager.name} in the Accounts tab first.`
             });
             return;
         }
@@ -100,19 +99,19 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             );
 
             if (result.success) {
-                toast({ title: "Reminder Sent", description: `Background notification dispatched to ${manager.email}.` });
+                toast({ title: "Reminder Sent", description: `Notification successfully sent to ${manager.email}.` });
             } else {
                 toast({ 
                     variant: "destructive", 
                     title: "Send Failed", 
-                    description: result.error || "The email service returned an error." 
+                    description: result.error || "The email service could not deliver the message." 
                 });
             }
-        } catch (e) {
+        } catch (e: any) {
             toast({ 
                 variant: "destructive", 
-                title: "System Error", 
-                description: "Failed to reach the notification server." 
+                title: "Service Error", 
+                description: e.message || "Failed to communicate with the email server." 
             });
         } finally {
             setSendingReminderId(null);
@@ -127,7 +126,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                         <CardTitle className="text-lg font-black font-headline flex items-center gap-2 text-primary">
                             <BellRing className="w-5 h-5" /> District Notification Hub
                         </CardTitle>
-                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent instantly in the background.</CardDescription>
+                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent automatically in the background.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

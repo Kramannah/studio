@@ -1,20 +1,22 @@
-
 'use server';
 
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 /**
  * Sends a background reminder to a District Sales Manager regarding pending approvals.
+ * Uses the Resend service for high-reputation delivery.
  */
 export async function sendApprovalReminderEmail(email: string, managerName: string, pmrs: string[], count: number) {
-  if (!process.env.RESEND_API_KEY) {
-      console.warn("RESEND_API_KEY is not configured. Email reminder will be logged but not sent.");
-      return { success: false, error: "System email key not configured." };
+  const apiKey = process.env.RESEND_API_KEY;
+
+  if (!apiKey) {
+      console.error("CRITICAL: RESEND_API_KEY is not configured in environment variables.");
+      return { success: false, error: "System email service is not configured." };
   }
 
   try {
+    const resend = new Resend(apiKey);
+    
     const { data, error } = await resend.emails.send({
       from: 'SFE Notifications <notifications@hovidinc.com>',
       to: [email],
@@ -52,13 +54,11 @@ export async function sendApprovalReminderEmail(email: string, managerName: stri
     });
 
     if (error) {
-      console.error("Email service error:", error);
       return { success: false, error: error.message };
     }
 
     return { success: true, id: data?.id };
   } catch (err: any) {
-    console.error("Server Action Exception:", err);
-    return { success: false, error: "Internal server error during email dispatch." };
+    return { success: false, error: err.message || "Internal server error during email dispatch." };
   }
 }
