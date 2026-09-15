@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
@@ -409,6 +410,8 @@ export default function AdminPage() {
                                         nonCallDays={filteredNonCallDays} 
                                         onUpdateStatus={updateNonCallDayStatus}
                                         userMap={mergedUserMap}
+                                        profiles={profiles}
+                                        isSuperAdmin={isSuperAdmin}
                                     />
                                     <PlanningRequestApprovals 
                                         requests={filteredPlanningRequests}
