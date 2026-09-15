@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { startOfWeek, isSameWeek, isBefore, parseISO, isValid, format, startOfMonth, endOfMonth, isSameMonth, isAfter } from "date-fns"
+import { startOfWeek, isSameWeek, isBefore, parseISO, isValid, format, startOfMonth, endOfMonth, isSameMonth, isAfter, endOfDay, addDays } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -18,6 +18,15 @@ export function isPastWeek(date: Date): boolean {
   const startOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 1 });
   const startOfTargetWeek = startOfWeek(date, { weekStartsOn: 1 });
   return isBefore(startOfTargetWeek, startOfThisWeek);
+}
+
+/**
+ * Returns the end of Friday (23:59:59) for the week containing the provided date.
+ */
+export function getWeekFridayDeadline(date: Date): Date {
+  const monday = startOfWeek(date, { weekStartsOn: 1 });
+  const friday = addDays(monday, 4);
+  return endOfDay(friday);
 }
 
 /**

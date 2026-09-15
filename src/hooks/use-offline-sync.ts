@@ -5,8 +5,8 @@ import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError, orderBy, startAt, endAt } from 'firebase/firestore';
-import { safeStorageSet, getMonthRangeISO, parseAnyDate } from '@/lib/utils';
-import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isWithinInterval } from 'date-fns';
+import { safeStorageSet, getMonthRangeISO, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
+import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isWithinInterval, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
@@ -234,9 +234,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     setIsSyncing(true);
     
     let successCount = 0;
+    let expiredCount = 0;
 
     for (const entry of currentOfflineQueue) {
         try {
+            const coverageDate = parseAnyDate(entry.coverageDate);
+            if (coverageDate) {
+                const deadline = getWeekFridayDeadline(coverageDate);
+                if (isAfter(new Date(), deadline)) {
+                    expiredCount++;
+                    continue;
+                }
+            }
+
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             const sanitized = sanitizePayload(dataToSync);
             
@@ -264,10 +274,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         }
     }
 
-    if (successCount > 0) {
+    if (successCount > 0 || expiredCount > 0) {
         await fetchMasterEntries(true);
         if (onSyncSuccess) onSyncSuccess();
-        toast({ title: successCount === currentOfflineQueue.length ? "Sync Complete" : `Synced ${successCount} reports.` });
+        
+        if (expiredCount > 0) {
+            toast({ 
+                variant: "destructive",
+                title: "Sync Partial", 
+                description: `${successCount} synced. ${expiredCount} reports were blocked due to the weekly Friday deadline.` 
+            });
+        } else {
+            toast({ title: successCount === currentOfflineQueue.length ? "Sync Complete" : `Synced ${successCount} reports.` });
+        }
     }
 
     setIsSyncing(false);

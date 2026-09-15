@@ -1,15 +1,14 @@
-
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import * as z from "zod"
 import { format, parseISO, isValid, isSameMonth, isSameDay, startOfToday, isAfter, isBefore, isToday } from "date-fns"
-import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown } from "lucide-react"
+import { Save, Camera, Trash2, X, Edit, PlusCircle, Calendar as CalendarIcon, Loader2, Check, ChevronsUpDown, AlertTriangle } from "lucide-react"
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import Image from "next/image"
 
-import { cn, parseAnyDate } from "@/lib/utils"
+import { cn, parseAnyDate, getWeekFridayDeadline } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -551,6 +550,18 @@ export function CoverageForm({
       const allEntries = [...masterEntries, ...offlineEntries];
       const newCoverageDate = values.coverageDate || new Date();
 
+      // DEADLINE CHECK: Every Friday is the cutoff for that week's reports.
+      const deadline = getWeekFridayDeadline(newCoverageDate);
+      if (isAfter(new Date(), deadline)) {
+          toast({ 
+              variant: "destructive", 
+              title: "Weekly Deadline Passed", 
+              description: `The deadline for this week's reports passed on ${format(deadline, "PPPP")}. Please contact your Manager.` 
+          });
+          setIsSubmitting(false);
+          return;
+      }
+
       if (!isEditMode) {
         const docFirstNameLower = String(values.firstName ?? "").toLowerCase().trim();
         const docLastNameLower = String(values.lastName ?? "").toLowerCase().trim();
@@ -723,6 +734,16 @@ export function CoverageForm({
 
                   <div className={cn((callType === 'planned' && !plannedDoctorId && !isEditMode) && 'hidden', 'space-y-6')}>
                       
+                      <div className="bg-destructive/10 border-2 border-destructive/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                              <p className="text-xs font-black uppercase text-destructive tracking-widest">Reporting Cutoff Rule</p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                  Every Friday is the deadline for the current week's reporting. Reports for any weekday (Mon-Fri) cannot be submitted after the Friday of that same week.
+                              </p>
+                          </div>
+                      </div>
+
                       <div>
                           <h3 className="mb-4 text-lg font-semibold border-b font-headline">Provider Information</h3>
                           {(callType === 'unplanned' || isEditMode) && (
