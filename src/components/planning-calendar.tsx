@@ -8,7 +8,20 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter, RotateCcw, XCircle as XCircleIcon, Search } from "lucide-react";
+import { 
+  PlusCircle, 
+  CalendarOff, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Unlock, 
+  Loader2, 
+  Lock, 
+  FileSpreadsheet, 
+  Filter, 
+  RotateCcw, 
+  Search 
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +52,7 @@ import { NonCallDayDialog } from "./non-call-day-dialog";
 import { PlanningPermissionDialog } from "./planning-permission-dialog";
 import { getWeekMonday, isCurrentWeek, isPastWeek, cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "./ui/checkbox";
-import XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx-js-style';
 import { useToast } from "@/hooks/use-toast";
 
 type PlanningCalendarProps = {
@@ -283,12 +296,6 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
-    const handleMonthChangeInternal = (month: Date) => {
-        if (onMonthChange) {
-            onMonthChange(format(month, 'yyyy-MM'));
-        }
-    };
-
     const handleExportExcel = async () => {
         if (plans.length === 0) {
             toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export." });
@@ -334,7 +341,7 @@ export function PlanningCalendar({
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
-            for (let i = 0; i < 400; i++) rows[i] = new Array(30).fill("");
+            for (let i = 0; i < 1000; i++) rows[i] = new Array(30).fill("");
             rows[0][1] = "PMR DAILY CALL PLAN";
             rows[1][1] = `PMR Name: ${pmrName}`;
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
@@ -466,7 +473,7 @@ export function PlanningCalendar({
                             selected={selectedDate}
                             onSelect={setSelectedDate}
                             month={selectedMonth ? parseISO(selectedMonth + "-01") : undefined}
-                            onMonthChange={handleMonthChangeInternal}
+                            onMonthChange={(m) => onMonthChange?.(format(m, 'yyyy-MM'))}
                             modifiers={{ 
                                 planned: Object.keys(plansByDate).map(d => parseISO(d)),
                                 nonCall: Object.keys(nonCallDaysByDate).map(d => parseISO(d)),
@@ -513,7 +520,7 @@ export function PlanningCalendar({
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned Achieved: {selectedDayStats.unplanned}</Badge>
                             </div>
                         </div>
-                        <div className="flex wrap gap-2">
+                        <div className="flex gap-2">
                             {!readOnly && (
                                 <>
                                     {isLocked ? (
@@ -609,7 +616,7 @@ export function PlanningCalendar({
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircleIcon size={18} className="text-destructive" /></Button>}
+                                                    {!readOnly && <Button variant="ghost" size="icon" onClick={() => onRemovePlan(plan.id)} disabled={isLocked || isCovered}><XCircle size={18} className="text-destructive" /></Button>}
                                                 </TableCell>
                                             </TableRow>
                                         )
@@ -709,8 +716,7 @@ export function PlanningCalendar({
                                             <AlertDialogAction onClick={() => setSelectedDoctorIds(new Set())} className="bg-destructive text-white">Confirm Unselect</AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialog>
-                                </AlertDialog>
-                            )}
+                                )}
                         </div>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="font-headline font-black shadow-lg">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
@@ -720,8 +726,12 @@ export function PlanningCalendar({
                 </DialogContent>
             </Dialog>
 
-            {selectedDate && <NonCallDayDialog isOpen={isNonCallDialogOpen} onOpenChange={setIsNonCallDialogOpen} onSave={handleSaveNonCallDay} selectedDate={selectedDate} />}
-            {selectedDate && <PlanningPermissionDialog isOpen={isUnlockDialogOpen} onOpenChange={setIsUnlockDialogOpen} onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)} weekStartDate={getWeekMonday(selectedDate)} />}
+            {selectedDate && (
+                <>
+                    <NonCallDayDialog isOpen={isNonCallDialogOpen} onOpenChange={setIsNonCallDialogOpen} onSave={handleSaveNonCallDay} selectedDate={selectedDate} />
+                    <PlanningPermissionDialog isOpen={isUnlockDialogOpen} onOpenChange={setIsUnlockDialogOpen} onConfirm={(reason) => onRequestUnlock(getWeekMonday(selectedDate), reason)} weekStartDate={getWeekMonday(selectedDate)} />
+                </>
+            )}
         </div>
     );
 }
