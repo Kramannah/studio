@@ -223,23 +223,11 @@ export function PlanningCalendar({
             )
         ).length;
 
-        // 2. Planned (Achieved): Reports that match a plotted call marked as 'planned'
-        const plannedCount = dayEntries.filter(e => 
-            dayPlans.some(p => 
-                p.callType === 'planned' &&
-                String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
-                String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
-            )
-        ).length;
+        // 2. Planned: Plotted visits for today marked as 'planned'
+        const plannedCount = dayPlans.filter(p => p.callType === 'planned').length;
 
-        // 3. Unplanned (Achieved): Reports that do NOT match a plotted call marked as 'planned'
-        const unplannedCount = dayEntries.filter(e => 
-            !dayPlans.some(p => 
-                p.callType === 'planned' &&
-                String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
-                String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim()
-            )
-        ).length;
+        // 3. Unplanned: Plotted visits for today marked as 'unplanned'
+        const unplannedCount = dayPlans.filter(p => p.callType === 'unplanned').length;
 
         return {
             total: dayPlans.length,
