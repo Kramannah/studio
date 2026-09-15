@@ -314,7 +314,7 @@ export function PlanningCalendar({
             toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export." });
             return;
         }
-        setIsExporting(true);
+        setIsExportingAll(true);
         try {
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
@@ -397,7 +397,7 @@ export function PlanningCalendar({
                         }
                     }
 
-                    // Account Section
+                    // Account Section per your template screenshot
                     const auxHeaderRow = dataRowStart + maxRows + 1;
                     rows[auxHeaderRow][colStart] = "No";
                     rows[auxHeaderRow][colStart + 1] = "Acct Name";
@@ -406,7 +406,11 @@ export function PlanningCalendar({
                     merges.push({ s: { r: auxHeaderRow, c: colStart + 3 }, e: { r: auxHeaderRow, c: colStart + 4 } });
                     
                     for (let r = 0; r < 3; r++) {
-                        rows[auxHeaderRow + 1 + r][colStart] = (r + 1).toString();
+                        const auxRowIdx = auxHeaderRow + 1 + r;
+                        rows[auxRowIdx][colStart] = (r + 1).toString();
+                        // Merge empty inputs to match header style
+                        merges.push({ s: { r: auxRowIdx, c: colStart + 1 }, e: { r: auxRowIdx, c: colStart + 2 } });
+                        merges.push({ s: { r: auxRowIdx, c: colStart + 3 }, e: { r: auxRowIdx, c: colStart + 4 } });
                     }
                 });
 
@@ -417,7 +421,7 @@ export function PlanningCalendar({
             worksheet['!merges'] = merges;
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
-                wscols.push({ wch: 4 }, { wch: 20 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
+                wscols.push({ wch: 4 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
 
@@ -453,13 +457,15 @@ export function PlanningCalendar({
                         cell.s.font.sz = 10;
                     }
 
-                    if (dayNames.includes(val) || subHeaders.includes(val) || val === "Acct Name" || val === "Address") {
+                    const isMainHeader = dayNames.includes(val) || subHeaders.includes(val);
+                    const isAuxHeader = val === "Acct Name" || val === "Address";
+                    
+                    if (isMainHeader || isAuxHeader) {
                         cell.s.fill = { fgColor: { rgb: "92D050" } };
                         cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
                     }
 
-                    // Frequency Column Styling (Index 4, 9, 14, 19, 24)
                     if (C > 0 && (C - 4) % 5 === 0 && R > 6) {
                         cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
                         cell.s.alignment.horizontal = 'center';
@@ -473,13 +479,14 @@ export function PlanningCalendar({
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan.xlsx`);
+            const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel.replace(/\s+/g, '_')}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
             toast({ title: "Plan Exported" });
         } catch (error) {
             console.error("Export Error:", error);
             toast({ variant: "destructive", title: "Export Failed" });
         } finally {
-            setIsExporting(false);
+            setIsExportingAll(false);
         }
     };
 
