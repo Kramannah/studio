@@ -216,8 +216,11 @@ export function PlanningCalendar({
         const dayEntries = entriesByDate[dateStr] || [];
         
         const matchesPlan = (e: CoverageEntry, p: Plan) => {
-            return String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
-                   String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim();
+            const eFirst = String(e.firstName || "").toLowerCase().trim();
+            const eLast = String(e.lastName || "").toLowerCase().trim();
+            const pFirst = String(p.doctorFirstName || "").toLowerCase().trim();
+            const pLast = String(p.doctorLastName || "").toLowerCase().trim();
+            return eFirst === pFirst && eLast === pLast;
         };
 
         const total = dayPlans.length;
@@ -228,7 +231,7 @@ export function PlanningCalendar({
 
         dayEntries.forEach(entry => {
             const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
-            if (matchingPlan && matchingPlan.callType === 'planned') {
+            if (matchingPlan) {
                 plannedAchievedCount++;
             } else {
                 unplannedAchievedCount++;
@@ -322,6 +325,7 @@ export function PlanningCalendar({
                 weeks.push(new Date(weekIter));
                 weekIter.setDate(weekIter.getDate() + 7);
             }
+
             const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {};
             for (let i = 0; i < 5; i++) {
                 plansByWeekAndDay[i] = { 0: [], 1: [], 2: [], 3: [], 4: [] };
@@ -337,13 +341,7 @@ export function PlanningCalendar({
                     }
                 });
             });
-            const weekHeights = weeks.map((_, wIdx) => {
-                let max = 15;
-                for (let dIdx = 0; dIdx < 5; dIdx++) {
-                    max = Math.max(max, plansByWeekAndDay[wIdx][dIdx].length);
-                }
-                return max;
-            });
+
             const rows: any[][] = [];
             const merges: any[] = [
                 { s: { r: 0, c: 1 }, e: { r: 0, c: 25 } }, 
@@ -351,6 +349,7 @@ export function PlanningCalendar({
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
+
             for (let i = 0; i < 1500; i++) rows[i] = new Array(30).fill("");
             
             rows[0][1] = "PMR DAILY CALL PLAN";
@@ -360,27 +359,32 @@ export function PlanningCalendar({
 
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
-            const auxHeaders = ["No", "Acct Name", "", "Freq", "Address"];
             let currentRow = 4;
 
             weeks.forEach((_, wIdx) => {
-                const maxPlans = weekHeights[wIdx];
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
                 merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 25 } });
-                const dayRow = currentRow + 1;
+                
+                const dayHeaderRow = currentRow + 1;
+                const subHeaderRow = dayHeaderRow + 1;
+                
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
-                    rows[dayRow][colStart] = name;
-                    merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
-                    const subRow = dayRow + 1;
+                    rows[dayHeaderRow][colStart] = name;
+                    merges.push({ s: { r: dayHeaderRow, c: colStart }, e: { r: dayHeaderRow, c: colStart + 4 } });
+                    
                     subHeaders.forEach((h, hIdx) => {
-                        rows[subRow][colStart + hIdx] = h;
+                        rows[subHeaderRow][colStart + hIdx] = h;
                     });
-                    const dataRowStart = subRow + 1;
-                    for (let r = 0; r < maxPlans; r++) {
+
+                    const dayPlans = plansByWeekAndDay[wIdx][dIdx];
+                    const dataRowStart = subHeaderRow + 1;
+                    const maxRows = Math.max(16, dayPlans.length);
+                    
+                    for (let r = 0; r < maxRows; r++) {
                         const targetRowIdx = dataRowStart + r;
                         rows[targetRowIdx][colStart] = (r + 1).toString();
-                        const plan = plansByWeekAndDay[wIdx][dIdx][r];
+                        const plan = dayPlans[r];
                         if (plan) {
                             const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
                                 String(d.firstName || "").toLowerCase().trim() === String(plan.doctorFirstName || "").toLowerCase().trim() &&
@@ -392,23 +396,28 @@ export function PlanningCalendar({
                             rows[targetRowIdx][colStart + 4] = doctor?.clinic || "";
                         }
                     }
-                    const acctHeaderRow = dataRowStart + maxPlans;
-                    auxHeaders.forEach((h, hIdx) => {
-                        rows[acctHeaderRow][colStart + hIdx] = h;
-                    });
+
+                    // Account Section
+                    const auxHeaderRow = dataRowStart + maxRows + 1;
+                    rows[auxHeaderRow][colStart] = "No";
+                    rows[auxHeaderRow][colStart + 1] = "Acct Name";
+                    merges.push({ s: { r: auxHeaderRow, c: colStart + 1 }, e: { r: auxHeaderRow, c: colStart + 2 } });
+                    rows[auxHeaderRow][colStart + 3] = "Address";
+                    merges.push({ s: { r: auxHeaderRow, c: colStart + 3 }, e: { r: auxHeaderRow, c: colStart + 4 } });
+                    
                     for (let r = 0; r < 3; r++) {
-                        const targetRowIdx = acctHeaderRow + 1 + r;
-                        rows[targetRowIdx][colStart] = (r + 1).toString();
+                        rows[auxHeaderRow + 1 + r][colStart] = (r + 1).toString();
                     }
                 });
-                currentRow += 1 + 1 + 1 + maxPlans + 4 + 2; 
+
+                currentRow += 1 + 1 + 1 + 16 + 1 + 4 + 1; 
             });
 
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
-                wscols.push({ wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
+                wscols.push({ wch: 4 }, { wch: 20 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
 
@@ -418,56 +427,44 @@ export function PlanningCalendar({
                     const addr = XLSX.utils.encode_cell({ c: C, r: R });
                     if (!worksheet[addr]) continue;
                     const cell = worksheet[addr];
-                    
+                    const val = String(cell.v || "");
+
                     cell.s = {
                         font: { name: 'Arial', sz: 8 },
                         border: {
-                            top: { style: 'thin', color: { rgb: "000000" } },
-                            bottom: { style: 'thin', color: { rgb: "000000" } },
-                            left: { style: 'thin', color: { rgb: "000000" } },
-                            right: { style: 'thin', color: { rgb: "000000" } }
+                            top: { style: 'thin' }, bottom: { style: 'thin' },
+                            left: { style: 'thin' }, right: { style: 'thin' }
                         },
                         alignment: { vertical: 'center', wrapText: true, horizontal: 'left' }
                     };
 
-                    const val = String(cell.v || "");
-
-                    // Style Metadata and Title
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
-                        cell.s.border = {}; 
-                        if (R === 0) { 
-                            cell.s.font.sz = 14; 
-                            cell.s.font.underline = true;
-                            cell.s.alignment.horizontal = 'center';
-                        }
+                        cell.s.border = {};
+                        if (R === 0) { cell.s.font.sz = 12; cell.s.font.underline = true; }
                         continue;
                     }
 
-                    // Style WEEK Headers (Yellow)
                     if (val.startsWith("WEEK ") && C === 1) {
                         cell.s.fill = { fgColor: { rgb: "FFFF00" } };
                         cell.s.font.bold = true;
+                        cell.s.alignment.horizontal = 'center';
                         cell.s.font.sz = 10;
+                    }
+
+                    if (dayNames.includes(val) || subHeaders.includes(val) || val === "Acct Name" || val === "Address") {
+                        cell.s.fill = { fgColor: { rgb: "92D050" } };
+                        cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
                     }
 
-                    // Style DAY Headers (MONDAY, etc.)
-                    if (dayNames.includes(val)) {
-                        cell.s.font.bold = true;
+                    // Frequency Column Styling (Index 4, 9, 14, 19, 24)
+                    if (C > 0 && (C - 4) % 5 === 0 && R > 6) {
+                        cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
                         cell.s.alignment.horizontal = 'center';
-                        cell.s.fill = { fgColor: { rgb: "EEEEEE" } };
-                    }
-
-                    // Style Sub-headers (MD Name, Spec, etc.)
-                    if (subHeaders.includes(val) || auxHeaders.includes(val)) {
-                        cell.s.font.bold = true;
-                        cell.s.alignment.horizontal = 'center';
-                        cell.s.fill = { fgColor: { rgb: "F8F8F8" } };
                     }
                     
-                    // Center the Number column
                     if (C % 5 === 1 && R > 4) {
                         cell.s.alignment.horizontal = 'center';
                     }
@@ -476,7 +473,7 @@ export function PlanningCalendar({
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel.replace(/\s+/g, '_')}.xlsx`);
+            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan.xlsx`);
             toast({ title: "Plan Exported" });
         } catch (error) {
             console.error("Export Error:", error);
