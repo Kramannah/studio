@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, Mail, BellRing, AlertCircle } from "lucide-react";
+import { Check, X, Mail, BellRing, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { sendApprovalReminderEmail } from "@/app/actions/email-actions";
 
 type NonCallDayApprovalsProps = {
     nonCallDays: NonCallDay[];
@@ -36,6 +37,7 @@ const safeParseDate = (date: any): Date | null => {
 
 export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, profiles = {}, isSuperAdmin = false }: NonCallDayApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
+    const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
     const { toast } = useToast();
 
     const filteredDays = useMemo(() => {
@@ -47,7 +49,6 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return user ? `${user.firstName} ${user.lastName}` : `User ID: ${userId.substring(0,6)}...`;
     }
 
-    // Logic to group pending approvals by Manager for Super Admin nudge
     const managerNudgeList = useMemo(() => {
         if (!isSuperAdmin || activeTab !== 'pending') return [];
 
@@ -78,7 +79,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return Array.from(grouped.entries()).map(([id, data]) => ({ id, ...data }));
     }, [nonCallDays, profiles, isSuperAdmin, activeTab]);
 
-    const handleSendReminder = (manager: { name: string; email: string; pmrs: string[]; count: number }) => {
+    const handleSendReminder = async (manager: { id: string; name: string; email: string; pmrs: string[]; count: number }) => {
         if (!manager.email) {
             toast({
                 variant: "destructive",
@@ -88,18 +89,34 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             return;
         }
 
-        const subject = encodeURIComponent("ACTION REQUIRED: Pending Non-Call Day Approvals");
-        const body = encodeURIComponent(
-            `Hi ${manager.name},\n\n` +
-            `This is a reminder that there are ${manager.count} pending Non-Call Day requests from your team that require your review in the SFE Dashboard.\n\n` +
-            `Affected Representatives:\n` +
-            manager.pmrs.map(p => `- ${p}`).join('\n') +
-            `\n\nPlease log in to approve or reject these requests as soon as possible.\n\n` +
-            `Best regards,\nAdmin Team`
-        );
+        setSendingReminderId(manager.id);
+        
+        try {
+            const result = await sendApprovalReminderEmail(
+                manager.email, 
+                manager.name, 
+                manager.pmrs, 
+                manager.count
+            );
 
-        window.location.href = `mailto:${manager.email}?subject=${subject}&body=${body}`;
-        toast({ title: "Reminder Drafted", description: "Opening your mail client..." });
+            if (result.success) {
+                toast({ title: "Reminder Sent", description: `Background notification dispatched to ${manager.email}.` });
+            } else {
+                toast({ 
+                    variant: "destructive", 
+                    title: "Send Failed", 
+                    description: result.error || "The email service returned an error." 
+                });
+            }
+        } catch (e) {
+            toast({ 
+                variant: "destructive", 
+                title: "System Error", 
+                description: "Failed to reach the notification server." 
+            });
+        } finally {
+            setSendingReminderId(null);
+        }
     };
 
     return (
@@ -110,7 +127,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                         <CardTitle className="text-lg font-black font-headline flex items-center gap-2 text-primary">
                             <BellRing className="w-5 h-5" /> District Notification Hub
                         </CardTitle>
-                        <CardDescription>Managers with outstanding approval requests. Click to send an email reminder.</CardDescription>
+                        <CardDescription>Managers with outstanding approval requests. Reminder emails are sent instantly in the background.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -125,10 +142,15 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                                     <Button 
                                         size="sm" 
                                         variant="outline" 
+                                        disabled={sendingReminderId === m.id}
                                         onClick={() => handleSendReminder(m)}
-                                        className="h-8 rounded-lg border-2 font-headline hover:bg-primary hover:text-white transition-all"
+                                        className="h-8 rounded-lg border-2 font-headline hover:bg-primary hover:text-white transition-all min-w-[90px]"
                                     >
-                                        <Mail className="w-3.5 h-3.5 mr-1.5" /> Remind
+                                        {sendingReminderId === m.id ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <><Mail className="w-3.5 h-3.5 mr-1.5" /> Remind</>
+                                        )}
                                     </Button>
                                 </div>
                             ))}
