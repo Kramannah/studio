@@ -215,7 +215,7 @@ export function PlanningCalendar({
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        // 1. Covered: How many of the plotted visits have a matching report
+        // 1. Covered: How many of the PLOTTED visits have a matching report
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
@@ -223,17 +223,17 @@ export function PlanningCalendar({
             )
         ).length;
 
-        // 2. Planned: Plotted visits for today marked as 'planned'
-        const plannedCount = dayPlans.filter(p => p.callType === 'planned').length;
+        // 2. Planned Achievement: Reports for today specifically marked as 'planned'
+        const plannedAchieved = dayEntries.filter(e => e.callType === 'planned').length;
 
-        // 3. Unplanned: Plotted visits for today marked as 'unplanned'
-        const unplannedCount = dayPlans.filter(p => p.callType === 'unplanned').length;
+        // 3. Unplanned Achievement: Reports for today specifically marked as 'unplanned'
+        const unplannedAchieved = dayEntries.filter(e => e.callType === 'unplanned').length;
 
         return {
             total: dayPlans.length,
             covered: coveredCount,
-            planned: plannedCount,
-            unplanned: unplannedCount
+            planned: plannedAchieved,
+            unplanned: unplannedAchieved
         };
     }, [selectedDate, plansByDate, entriesByDate]);
 
@@ -241,7 +241,6 @@ export function PlanningCalendar({
         const q = (doctorFilter ?? "").toString().toLowerCase().trim();
         const freq = frequencyFilter;
         
-        // Deduplicate by ID
         const doctorList = Array.from((doctors || []).reduce((acc, d) => d.id ? acc.set(d.id, d) : acc, new Map<string, Doctor>()).values());
         
         return doctorList.filter(d => {
@@ -561,14 +560,14 @@ export function PlanningCalendar({
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-xl border-2">
                         <div className="space-y-3">
                             <h3 className="text-2xl font-black font-headline tracking-tight flex items-center gap-2">
-                                Daily Plan for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
+                                Daily Activity for {selectedDate ? format(selectedDate, "MMMM d, yyyy") : "No date selected"}
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
                             <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Total Visits: {selectedDayStats.total}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Scheduled: {selectedDayStats.total}</Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Covered: {selectedDayStats.covered}</Badge>
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-teal-500/30 text-teal-500 bg-teal-500/10">Planned: {selectedDayStats.planned}</Badge>
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned: {selectedDayStats.unplanned}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-teal-500/30 text-teal-500 bg-teal-500/10">Planned Achieved: {selectedDayStats.planned}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned Achieved: {selectedDayStats.unplanned}</Badge>
                             </div>
                         </div>
                         <div className="flex wrap gap-2">
@@ -766,7 +765,7 @@ export function PlanningCalendar({
                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                             <AlertDialogAction onClick={() => setSelectedDoctorIds(new Set())} className="bg-destructive text-white">Confirm Unselect</AlertDialogAction>
                                         </AlertDialogFooter>
-                                    </AlertDialogContent>
+                                    </AlertDialog>
                                 </AlertDialog>
                             )}
                         </div>
