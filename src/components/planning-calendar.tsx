@@ -163,7 +163,7 @@ export function PlanningCalendar({
         (nonCallDays || []).forEach(day => {
             const d = parseAnyDate(day.date);
             if(d && isValid(d)) {
-                const dateStr = format(day, 'yyyy-MM-dd');
+                const dateStr = format(d, 'yyyy-MM-dd');
                 if (!groups[dateStr]) groups[dateStr] = [];
                 groups[dateStr].push(day);
             }
