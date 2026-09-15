@@ -3,7 +3,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid, startOfMonth } from "date-fns";
+import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -215,7 +215,7 @@ export function PlanningCalendar({
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        // 1. Covered: How many of the PLOTTED visits have a matching report
+        // Covered: Plotted visits with a matching report
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
@@ -223,17 +223,15 @@ export function PlanningCalendar({
             )
         ).length;
 
-        // 2. Planned Achievement: Reports for today specifically marked as 'planned'
-        const plannedAchieved = dayEntries.filter(e => e.callType === 'planned').length;
-
-        // 3. Unplanned Achievement: Reports for today specifically marked as 'unplanned'
-        const unplannedAchieved = dayEntries.filter(e => e.callType === 'unplanned').length;
+        // Achievement-based counters (from achieved reports)
+        const plannedAchievedCount = dayEntries.filter(e => e.callType === 'planned').length;
+        const unplannedAchievedCount = dayEntries.filter(e => e.callType === 'unplanned').length;
 
         return {
             total: dayPlans.length,
             covered: coveredCount,
-            planned: plannedAchieved,
-            unplanned: unplannedAchieved
+            planned: plannedAchievedCount,
+            unplanned: unplannedAchievedCount
         };
     }, [selectedDate, plansByDate, entriesByDate]);
 
