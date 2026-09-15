@@ -3,7 +3,7 @@
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday } from "date-fns";
+import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay } from "date-fns";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -215,7 +215,6 @@ export function PlanningCalendar({
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        // Covered: Plotted visits with a matching report
         const coveredCount = dayPlans.filter(p => 
             dayEntries.some(e => 
                 String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
@@ -223,7 +222,7 @@ export function PlanningCalendar({
             )
         ).length;
 
-        // Achievement-based counters (from achieved reports)
+        // ACHIEVEMENT BASED COUNTERS (from submitted reports)
         const plannedAchievedCount = dayEntries.filter(e => e.callType === 'planned').length;
         const unplannedAchievedCount = dayEntries.filter(e => e.callType === 'unplanned').length;
 
@@ -300,31 +299,32 @@ export function PlanningCalendar({
         setIsSubmitting(false);
     };
 
+    const handleMonthChange = (month: Date) => {
+        if (onMonthChange) {
+            onMonthChange(format(month, 'yyyy-MM'));
+        }
+    };
+
     const handleExportExcel = async () => {
         if (plans.length === 0) {
-            toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export for the current view." });
+            toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export." });
             return;
         }
-
         setIsExporting(true);
-
         try {
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
             const monthStart = startOfMonth(referenceDate);
-            
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
             for (let i = 0; i < 5; i++) {
                 weeks.push(new Date(weekIter));
                 weekIter.setDate(weekIter.getDate() + 7);
             }
-
             const plansByWeekAndDay: Record<number, Record<number, Plan[]>> = {};
             for (let i = 0; i < 5; i++) {
                 plansByWeekAndDay[i] = { 0: [], 1: [], 2: [], 3: [], 4: [] };
             }
-
             plans.forEach(plan => {
                 const pDate = parseAnyDate(plan.plannedDate);
                 if (!pDate) return;
@@ -336,7 +336,6 @@ export function PlanningCalendar({
                     }
                 });
             });
-
             const weekHeights = weeks.map((_, wIdx) => {
                 let max = 15;
                 for (let dIdx = 0; dIdx < 5; dIdx++) {
@@ -344,7 +343,6 @@ export function PlanningCalendar({
                 }
                 return max;
             });
-
             const rows: any[][] = [];
             const merges: any[] = [
                 { s: { r: 0, c: 1 }, e: { r: 0, c: 25 } }, 
@@ -352,42 +350,33 @@ export function PlanningCalendar({
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
-
             const totalEstRows = 400;
             for (let i = 0; i < totalEstRows; i++) rows[i] = new Array(30).fill("");
-            
             rows[0][1] = "PMR DAILY CALL PLAN";
             rows[1][1] = `PMR Name: ${pmrName}`;
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
             rows[3][1] = `Month: ${monthLabel}`;
-
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
             const auxHeaders = ["No", "Acct Name", "", "Freq", "Address"];
-            
             let currentRow = 4;
             weeks.forEach((_, wIdx) => {
                 const maxPlans = weekHeights[wIdx];
-                
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
                 merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 25 } });
-
                 const dayRow = currentRow + 1;
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
                     rows[dayRow][colStart] = name;
                     merges.push({ s: { r: dayRow, c: colStart }, e: { r: dayRow, c: colStart + 4 } });
-                    
                     const subRow = dayRow + 1;
                     subHeaders.forEach((h, hIdx) => {
                         rows[subRow][colStart + hIdx] = h;
                     });
-
                     const dataRowStart = subRow + 1;
                     for (let r = 0; r < maxPlans; r++) {
                         const targetRowIdx = dataRowStart + r;
                         rows[targetRowIdx][colStart] = (r + 1).toString();
-                        
                         const plan = plansByWeekAndDay[wIdx][dIdx][r];
                         if (plan) {
                             const doctor = doctors.find(d => d.id === plan.doctorId) || doctors.find(d => 
@@ -400,38 +389,30 @@ export function PlanningCalendar({
                             rows[targetRowIdx][colStart + 4] = doctor?.clinic || "";
                         }
                     }
-
                     const acctHeaderRow = dataRowStart + maxPlans;
                     auxHeaders.forEach((h, hIdx) => {
                         rows[acctHeaderRow][colStart + hIdx] = h;
                     });
-                    
                     for (let r = 0; r < 3; r++) {
                         const targetRowIdx = acctHeaderRow + 1 + r;
                         rows[targetRowIdx][colStart] = (r + 1).toString();
                     }
                 });
-
                 currentRow += 1 + 1 + 1 + maxPlans + 4 + 2; 
             });
-
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
-            
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
                 wscols.push({ wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
-
             const range = XLSX.utils.decode_range(worksheet['!ref']!);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 for (let C = range.s.c; C <= range.e.c; ++C) {
                     const addr = XLSX.utils.encode_cell({ c: C, r: R });
                     if (!worksheet[addr]) continue;
                     const cell = worksheet[addr];
-                    const val = String(cell.v || "");
-                    
                     cell.s = {
                         font: { name: 'Arial', sz: 8 },
                         border: {
@@ -442,7 +423,6 @@ export function PlanningCalendar({
                         },
                         alignment: { vertical: 'center', wrapText: true }
                     };
-
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
@@ -450,40 +430,18 @@ export function PlanningCalendar({
                         if (R === 0) { cell.s.font.sz = 14; cell.s.font.underline = true; }
                         continue;
                     }
-
+                    const val = String(cell.v || "");
                     if (val.startsWith("WEEK ") && C === 1) {
                         cell.s.fill = { fgColor: { rgb: "FFFF00" } };
                         cell.s.font.bold = true;
-                        cell.s.alignment.horizontal = 'center';
-                    }
-
-                    const isDayHeader = dayNames.includes(val);
-                    const isAuxHeader = (val === "Acct Name" || (val === "Address" && rows[R][C-3] === "Acct Name") || (val === "Freq" && rows[R][C-2] === "Acct Name"));
-                    const isAuxNo = val === "No" && rows[R][C+1] === "Acct Name";
-
-                    if (isDayHeader || isAuxHeader || isAuxNo) {
-                        cell.s.fill = { fgColor: { rgb: "00B050" } };
-                        cell.s.font.bold = true;
-                        cell.s.font.color = { rgb: "FFFFFF" };
-                        cell.s.alignment.horizontal = 'center';
-                    }
-
-                    if (subHeaders.includes(val) && !isAuxHeader && !isAuxNo) {
-                        cell.s.fill = { fgColor: { rgb: "D9D9D9" } };
-                        cell.s.font.bold = true;
-                        cell.s.alignment.horizontal = 'center';
                     }
                 }
             }
-
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-            const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${format(referenceDate, "MMM_yyyy")}.xlsx`;
-            XLSX.writeFile(workbook, fileName);
-
+            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan.xlsx`);
             toast({ title: "Plan Exported" });
         } catch (error) {
-            console.error("Export Error:", error);
             toast({ variant: "destructive", title: "Export Failed" });
         } finally {
             setIsExporting(false);
@@ -491,12 +449,6 @@ export function PlanningCalendar({
     };
 
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
-
-    const handleMonthChange = (month: Date) => {
-        if (onMonthChange) {
-            onMonthChange(format(month, 'yyyy-MM'));
-        }
-    };
 
     if (!mounted) return null;
 
@@ -562,7 +514,7 @@ export function PlanningCalendar({
                                 {isLocked && <Lock className="w-5 h-5 text-destructive" />}
                             </h3>
                             <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Scheduled: {selectedDayStats.total}</Badge>
+                                <Badge variant="outline" className="h-7 px-3 font-bold border-2 bg-background/50">Total Scheduled: {selectedDayStats.total}</Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-primary/30 text-primary bg-primary/10">Covered: {selectedDayStats.covered}</Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-teal-500/30 text-teal-500 bg-teal-500/10">Planned Achieved: {selectedDayStats.planned}</Badge>
                                 <Badge variant="outline" className="h-7 px-3 font-bold border-2 border-orange-500/30 text-orange-500 bg-orange-500/10">Unplanned Achieved: {selectedDayStats.unplanned}</Badge>
