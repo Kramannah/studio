@@ -76,15 +76,17 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
                                             filteredDays.map((day) => {
                                                 const nonCallDate = safeParseDate(day.date);
                                                 return (
-                                                <TableRow key={day.id} className="h-14 border-b last:border-0 hover:bg-muted/10 transition-colors">
-                                                    <TableCell className="font-bold text-sm pl-4">{getUserName(day.userId)}</TableCell>
-                                                    <TableCell className="text-xs font-medium text-muted-foreground">{nonCallDate && isValid(nonCallDate) ? format(nonCallDate, "MMM d, yyyy") : "Invalid Date"}</TableCell>
-                                                    <TableCell>
+                                                <TableRow key={day.id} className="h-auto border-b last:border-0 hover:bg-muted/10 transition-colors">
+                                                    <TableCell className="font-bold text-sm pl-4 whitespace-nowrap">{getUserName(day.userId)}</TableCell>
+                                                    <TableCell className="text-xs font-medium text-muted-foreground whitespace-nowrap">{nonCallDate && isValid(nonCallDate) ? format(nonCallDate, "MMM d, yyyy") : "Invalid Date"}</TableCell>
+                                                    <TableCell className="whitespace-nowrap">
                                                         <Badge variant="outline" className="text-[10px] font-bold uppercase">{dayTypeLabels[day.dayType]}</Badge>
                                                     </TableCell>
-                                                    <TableCell className="text-sm font-bold text-primary">{day.reason}</TableCell>
-                                                    <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground italic">{day.remarks || '—'}</TableCell>
-                                                    <TableCell className="text-right pr-6">
+                                                    <TableCell className="text-sm font-bold text-primary whitespace-nowrap">{day.reason}</TableCell>
+                                                    <TableCell className="min-w-[200px] max-w-[400px] py-4 text-xs text-muted-foreground italic leading-relaxed whitespace-normal break-words">
+                                                        {day.remarks || '—'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6 whitespace-nowrap">
                                                         {day.status === 'pending' ? (
                                                             <div className="flex justify-end gap-2">
                                                                 <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-2 rounded-lg" onClick={() => onUpdateStatus(day.id, 'approved')}>
