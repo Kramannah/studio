@@ -8,7 +8,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter } from "lucide-react";
+import { PlusCircle, CalendarOff, Search, Clock, CheckCircle, XCircle, Unlock, Loader2, Lock, FileSpreadsheet, Filter, RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "./ui/input";
 import {
   Select,
@@ -746,8 +757,31 @@ export function PlanningCalendar({
                             </Table>
                         </div>
                     </div>
-                    <DialogFooter className="p-4 pt-0 gap-3 shrink-0">
-                        <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="font-bold border-2">Close</Button>
+                    <DialogFooter className="p-4 pt-0 gap-3 shrink-0 flex-col sm:flex-row items-stretch sm:items-center">
+                        <div className="flex items-center gap-2 flex-1">
+                            <Button variant="outline" onClick={() => setIsAddPlanDialogOpen(false)} disabled={isSubmitting} className="font-bold border-2">Close</Button>
+                            {selectedDoctorIds.size > 0 && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" className="text-destructive hover:bg-destructive/10 font-bold gap-2">
+                                            <RotateCcw className="w-4 h-4" /> Unselect All
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Unselect all doctors?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This will clear your current selection of {selectedDoctorIds.size} doctor(s).
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => setSelectedDoctorIds(new Set())} className="bg-destructive text-white">Confirm Unselect</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
+                        </div>
                         <Button onClick={handleBulkSubmit} disabled={isSubmitting || selectedDoctorIds.size === 0} className="font-headline font-black shadow-lg">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
                             Schedule ({selectedDoctorIds.size})
