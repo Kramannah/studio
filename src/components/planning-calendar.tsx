@@ -722,7 +722,7 @@ export function PlanningCalendar({
                                 </Select>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto scrollbar-hide">
                             <Table className="w-full">
                                 <TableHeader className="sticky top-0 bg-background z-20"><TableRow><TableHead className="w-[40px]"></TableHead><TableHead className="text-xs font-bold">Doctor</TableHead><TableHead className="w-[80px] text-center text-xs font-bold">Freq</TableHead><TableHead className="w-[60px] text-center text-xs font-bold">Left</TableHead></TableRow></TableHeader>
                                 <TableBody>
