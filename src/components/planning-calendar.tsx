@@ -1,10 +1,9 @@
-
 "use client"
 
 import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest, UserProfile } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay } from "date-fns";
+import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay, addMonths, subMonths } from "date-fns";
 import React, { useState, useMemo, useEffect } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
@@ -216,28 +215,22 @@ export function PlanningCalendar({
         const dayPlans = plansByDate[dateStr] || [];
         const dayEntries = entriesByDate[dateStr] || [];
         
-        // Reconcile entries against plans for accurate achievement metrics
         const matchesPlan = (e: CoverageEntry, p: Plan) => {
             return String(e.firstName || "").toLowerCase().trim() === String(p.doctorFirstName || "").toLowerCase().trim() && 
                    String(e.lastName || "").toLowerCase().trim() === String(p.doctorLastName || "").toLowerCase().trim();
         };
 
         const total = dayPlans.length;
-        
-        const coveredCount = dayPlans.filter(p => 
-            dayEntries.some(e => matchesPlan(e, p))
-        ).length;
+        const coveredCount = dayPlans.filter(p => dayEntries.some(e => matchesPlan(e, p))).length;
 
         let plannedAchievedCount = 0;
         let unplannedAchievedCount = 0;
 
         dayEntries.forEach(entry => {
             const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
-            // If the report matches a scheduled visit that was set as 'Planned', it's a Planned Achievement.
             if (matchingPlan && matchingPlan.callType === 'planned') {
                 plannedAchievedCount++;
             } else {
-                // Everything else (unplanned visits or visits to doctors not on the schedule) is Unplanned.
                 unplannedAchievedCount++;
             }
         });
@@ -358,15 +351,18 @@ export function PlanningCalendar({
                 { s: { r: 2, c: 1 }, e: { r: 2, c: 25 } },
                 { s: { r: 3, c: 1 }, e: { r: 3, c: 25 } },
             ];
-            for (let i = 0; i < 1000; i++) rows[i] = new Array(30).fill("");
+            for (let i = 0; i < 1500; i++) rows[i] = new Array(30).fill("");
+            
             rows[0][1] = "PMR DAILY CALL PLAN";
             rows[1][1] = `PMR Name: ${pmrName}`;
             rows[2][1] = `Area/Territory: ${profile?.code || "N/A"}`;
             rows[3][1] = `Month: ${monthLabel}`;
+
             const dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
             const auxHeaders = ["No", "Acct Name", "", "Freq", "Address"];
             let currentRow = 4;
+
             weeks.forEach((_, wIdx) => {
                 const maxPlans = weekHeights[wIdx];
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
@@ -407,6 +403,7 @@ export function PlanningCalendar({
                 });
                 currentRow += 1 + 1 + 1 + maxPlans + 4 + 2; 
             });
+
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             const wscols = [{ wch: 2 }]; 
@@ -414,12 +411,14 @@ export function PlanningCalendar({
                 wscols.push({ wch: 4 }, { wch: 25 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
+
             const range = XLSX.utils.decode_range(worksheet['!ref']!);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 for (let C = range.s.c; C <= range.e.c; ++C) {
                     const addr = XLSX.utils.encode_cell({ c: C, r: R });
                     if (!worksheet[addr]) continue;
                     const cell = worksheet[addr];
+                    
                     cell.s = {
                         font: { name: 'Arial', sz: 8 },
                         border: {
@@ -428,27 +427,59 @@ export function PlanningCalendar({
                             left: { style: 'thin', color: { rgb: "000000" } },
                             right: { style: 'thin', color: { rgb: "000000" } }
                         },
-                        alignment: { vertical: 'center', wrapText: true }
+                        alignment: { vertical: 'center', wrapText: true, horizontal: 'left' }
                     };
+
+                    const val = String(cell.v || "");
+
+                    // Style Metadata and Title
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
                         cell.s.border = {}; 
-                        if (R === 0) { cell.s.font.sz = 14; cell.s.font.underline = true; }
+                        if (R === 0) { 
+                            cell.s.font.sz = 14; 
+                            cell.s.font.underline = true;
+                            cell.s.alignment.horizontal = 'center';
+                        }
                         continue;
                     }
-                    const val = String(cell.v || "");
+
+                    // Style WEEK Headers (Yellow)
                     if (val.startsWith("WEEK ") && C === 1) {
                         cell.s.fill = { fgColor: { rgb: "FFFF00" } };
                         cell.s.font.bold = true;
+                        cell.s.font.sz = 10;
+                        cell.s.alignment.horizontal = 'center';
+                    }
+
+                    // Style DAY Headers (MONDAY, etc.)
+                    if (dayNames.includes(val)) {
+                        cell.s.font.bold = true;
+                        cell.s.alignment.horizontal = 'center';
+                        cell.s.fill = { fgColor: { rgb: "EEEEEE" } };
+                    }
+
+                    // Style Sub-headers (MD Name, Spec, etc.)
+                    if (subHeaders.includes(val) || auxHeaders.includes(val)) {
+                        cell.s.font.bold = true;
+                        cell.s.alignment.horizontal = 'center';
+                        cell.s.fill = { fgColor: { rgb: "F8F8F8" } };
+                    }
+                    
+                    // Center the Number column
+                    if (C % 5 === 1 && R > 4) {
+                        cell.s.alignment.horizontal = 'center';
                     }
                 }
             }
+
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan.xlsx`);
+            XLSX.writeFile(workbook, `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel.replace(/\s+/g, '_')}.xlsx`);
             toast({ title: "Plan Exported" });
         } catch (error) {
+            console.error("Export Error:", error);
             toast({ variant: "destructive", title: "Export Failed" });
         } finally {
             setIsExporting(false);
@@ -753,4 +784,3 @@ export function PlanningCalendar({
         </div>
     );
 }
-
