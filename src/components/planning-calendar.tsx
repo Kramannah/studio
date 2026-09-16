@@ -4,7 +4,7 @@ import type { Doctor, Plan, NonCallDay, CoverageEntry, PlanningPermissionRequest
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { format, parseISO, isSameMonth, isValid, startOfMonth, isAfter, startOfDay, startOfToday, isSameDay, addMonths, subMonths } from "date-fns";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -230,10 +230,16 @@ export function PlanningCalendar({
         let unplannedAchievedCount = 0;
 
         dayEntries.forEach(entry => {
-            const isPlanned = dayPlans.some(p => matchesPlan(entry, p));
-            if (isPlanned) {
-                plannedAchievedCount++;
+            const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
+            if (matchingPlan) {
+                // If it matches a plan, check the scheduled type
+                if (matchingPlan.callType === 'planned') {
+                    plannedAchievedCount++;
+                } else {
+                    unplannedAchievedCount++;
+                }
             } else {
+                // If it doesn't match any schedule, it's definitely unplanned
                 unplannedAchievedCount++;
             }
         });
@@ -445,13 +451,15 @@ export function PlanningCalendar({
                             top: { style: 'thin' }, bottom: { style: 'thin' },
                             left: { style: 'thin' }, right: { style: 'thin' }
                         },
-                        alignment: { vertical: 'center', wrapText: true, horizontal: 'left' }
+                        alignment: { vertical: 'center', wrapText: true, horizontal: 'left' },
+                        fill: { fgColor: { rgb: "FFFFFF" } } // Default to white
                     };
 
                     if (R < 4) {
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
                         cell.s.border = {};
+                        cell.s.fill = {};
                         if (R === 0) { cell.s.font.sz = 12; cell.s.font.underline = true; }
                         continue;
                     }
@@ -464,7 +472,7 @@ export function PlanningCalendar({
                     }
 
                     const isMainHeader = dayNames.includes(val) || subHeaders.includes(val);
-                    const isAuxSectionHeader = auxHeaderRows.includes(R) && (C % 5 !== 1); 
+                    const isAuxSectionHeader = auxHeaderRows.includes(R) && (C > 0 && C <= 25); 
 
                     if (isMainHeader || isAuxSectionHeader) {
                         cell.s.fill = { fgColor: { rgb: "92D050" } };
