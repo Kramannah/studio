@@ -314,7 +314,7 @@ export function PlanningCalendar({
             toast({ variant: "destructive", title: "No Plans Found", description: "There are no plotted calls to export." });
             return;
         }
-        setIsExportingAll(true);
+        setIsExporting(true);
         try {
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
@@ -486,7 +486,7 @@ export function PlanningCalendar({
             console.error("Export Error:", error);
             toast({ variant: "destructive", title: "Export Failed" });
         } finally {
-            setIsExportingAll(false);
+            setIsExporting(false);
         }
     };
 
