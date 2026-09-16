@@ -232,14 +232,12 @@ export function PlanningCalendar({
         dayEntries.forEach(entry => {
             const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
             if (matchingPlan) {
-                // If it matches a plan, check the scheduled type
                 if (matchingPlan.callType === 'planned') {
                     plannedAchievedCount++;
                 } else {
                     unplannedAchievedCount++;
                 }
             } else {
-                // If it doesn't match any schedule, it's definitely unplanned
                 unplannedAchievedCount++;
             }
         });
@@ -415,14 +413,13 @@ export function PlanningCalendar({
                     rows[auxHeaderRow][colStart] = "No";
                     rows[auxHeaderRow][colStart + 1] = "Acct Name";
                     merges.push({ s: { r: auxHeaderRow, c: colStart + 1 }, e: { r: auxHeaderRow, c: colStart + 2 } });
-                    rows[auxHeaderRow][colStart + 3] = "Address";
-                    merges.push({ s: { r: auxHeaderRow, c: colStart + 3 }, e: { r: auxHeaderRow, c: colStart + 4 } });
+                    rows[auxHeaderRow][colStart + 3] = "Freq";
+                    rows[auxHeaderRow][colStart + 4] = "Address";
                     
                     for (let r = 0; r < 3; r++) {
                         const auxRowIdx = auxHeaderRow + 1 + r;
                         rows[auxRowIdx][colStart] = (r + 1).toString();
                         merges.push({ s: { r: auxRowIdx, c: colStart + 1 }, e: { r: auxRowIdx, c: colStart + 2 } });
-                        merges.push({ s: { r: auxRowIdx, c: colStart + 3 }, e: { r: auxRowIdx, c: colStart + 4 } });
                     }
                 });
 
@@ -452,7 +449,7 @@ export function PlanningCalendar({
                             left: { style: 'thin' }, right: { style: 'thin' }
                         },
                         alignment: { vertical: 'center', wrapText: true, horizontal: 'left' },
-                        fill: { fgColor: { rgb: "FFFFFF" } } // Default to white
+                        fill: { fgColor: { rgb: "FFFFFF" } }
                     };
 
                     if (R < 4) {
@@ -471,16 +468,17 @@ export function PlanningCalendar({
                         cell.s.font.sz = 10;
                     }
 
-                    const isMainHeader = dayNames.includes(val) || subHeaders.includes(val);
-                    const isAuxSectionHeader = auxHeaderRows.includes(R) && (C > 0 && C <= 25); 
+                    const isHeaderCell = dayNames.includes(val) || subHeaders.includes(val) || val === "Acct Name" || val === "Address";
+                    const isAuxSectionHeaderRow = auxHeaderRows.includes(R) && (C > 0 && C <= 25); 
 
-                    if (isMainHeader || isAuxSectionHeader) {
+                    if (isHeaderCell || isAuxSectionHeaderRow) {
                         cell.s.fill = { fgColor: { rgb: "92D050" } };
                         cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
-                    } else if (C > 0 && (C - 4) % 5 === 0 && R > 6) {
+                    } else if (C > 0 && (C - 4) % 5 === 0 && R > 4) {
                         const isInMainDataRow = mainDataRowRanges.some(range => R >= range.start && R <= range.end);
-                        if (isInMainDataRow) {
+                        const isInAuxDataRow = auxHeaderRows.some(headerRow => R > headerRow && R <= headerRow + 3);
+                        if (isInMainDataRow || isInAuxDataRow) {
                             cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
                             cell.s.alignment.horizontal = 'center';
                         }
