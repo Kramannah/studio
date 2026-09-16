@@ -235,10 +235,10 @@ export function PlanningCalendar({
                 if (matchingPlan.callType === 'planned') {
                     plannedAchievedCount++;
                 } else {
-                    unplannedAchievedCount++;
+                    unplannedAchievedCount++; 
                 }
             } else {
-                unplannedAchievedCount++;
+                unplannedAchievedCount++; 
             }
         });
 
@@ -324,9 +324,9 @@ export function PlanningCalendar({
             const monthLabel = format(referenceDate, "MMMM yyyy");
             const monthName = format(referenceDate, "MMMM");
             const yearStr = format(referenceDate, "yyyy");
-            const monthStart = startOfMonth(referenceDate);
+            const monthStart = startOfToday(); 
             const weeks: Date[] = [];
-            let weekIter = getWeekMonday(monthStart);
+            let weekIter = getWeekMonday(startOfMonth(referenceDate));
             for (let i = 0; i < 5; i++) {
                 weeks.push(new Date(weekIter));
                 weekIter.setDate(weekIter.getDate() + 7);
@@ -369,6 +369,7 @@ export function PlanningCalendar({
 
             const mainDataRowRanges: { start: number, end: number }[] = [];
             const auxHeaderRows: number[] = [];
+            const auxFreqCols: number[] = [];
 
             weeks.forEach((_, wIdx) => {
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
@@ -410,6 +411,8 @@ export function PlanningCalendar({
 
                     const auxHeaderRow = dataRowStart + maxRows + 1;
                     auxHeaderRows.push(auxHeaderRow);
+                    auxFreqCols.push(colStart + 3);
+
                     rows[auxHeaderRow][colStart] = "No";
                     rows[auxHeaderRow][colStart + 1] = "Acct Name";
                     merges.push({ s: { r: auxHeaderRow, c: colStart + 1 }, e: { r: auxHeaderRow, c: colStart + 2 } });
@@ -456,7 +459,7 @@ export function PlanningCalendar({
                         cell.s.font.bold = true;
                         cell.s.font.sz = 10;
                         cell.s.border = {};
-                        cell.s.fill = {};
+                        cell.s.fill = { patternType: "none" };
                         if (R === 0) { cell.s.font.sz = 12; cell.s.font.underline = true; }
                         continue;
                     }
