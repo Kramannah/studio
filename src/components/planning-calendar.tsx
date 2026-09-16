@@ -160,12 +160,12 @@ export function PlanningCalendar({
     
     const nonCallDaysByDate = useMemo(() => {
         const groups: Record<string, NonCallDay[]> = {};
-        (nonCallDays || []).forEach(day => {
-            const d = parseAnyDate(day.date);
+        (nonCallDays || []).forEach(item => {
+            const d = parseAnyDate(item.date);
             if(d && isValid(d)) {
                 const dateStr = format(d, 'yyyy-MM-dd');
                 if (!groups[dateStr]) groups[dateStr] = [];
-                groups[dateStr].push(day);
+                groups[dateStr].push(item);
             }
         });
         return groups;
@@ -230,8 +230,8 @@ export function PlanningCalendar({
         let unplannedAchievedCount = 0;
 
         dayEntries.forEach(entry => {
-            const matchingPlan = dayPlans.find(p => matchesPlan(entry, p));
-            if (matchingPlan) {
+            const isPlanned = dayPlans.some(p => matchesPlan(entry, p));
+            if (isPlanned) {
                 plannedAchievedCount++;
             } else {
                 unplannedAchievedCount++;
@@ -318,6 +318,8 @@ export function PlanningCalendar({
         try {
             const referenceDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
             const monthLabel = format(referenceDate, "MMMM yyyy");
+            const monthName = format(referenceDate, "MMMM");
+            const yearStr = format(referenceDate, "yyyy");
             const monthStart = startOfMonth(referenceDate);
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(monthStart);
@@ -361,6 +363,9 @@ export function PlanningCalendar({
             const subHeaders = ["No", "MD Name", "Spec", "Freq", "Clinic Add"];
             let currentRow = 4;
 
+            const mainDataRowRanges: { start: number, end: number }[] = [];
+            const auxHeaderRows: number[] = [];
+
             weeks.forEach((_, wIdx) => {
                 rows[currentRow][1] = `WEEK ${wIdx + 1}`;
                 merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow, c: 25 } });
@@ -381,6 +386,8 @@ export function PlanningCalendar({
                     const dataRowStart = subHeaderRow + 1;
                     const maxRows = Math.max(16, dayPlans.length);
                     
+                    mainDataRowRanges.push({ start: dataRowStart, end: dataRowStart + maxRows - 1 });
+
                     for (let r = 0; r < maxRows; r++) {
                         const targetRowIdx = dataRowStart + r;
                         rows[targetRowIdx][colStart] = (r + 1).toString();
@@ -397,8 +404,8 @@ export function PlanningCalendar({
                         }
                     }
 
-                    // Account Section per your template screenshot
                     const auxHeaderRow = dataRowStart + maxRows + 1;
+                    auxHeaderRows.push(auxHeaderRow);
                     rows[auxHeaderRow][colStart] = "No";
                     rows[auxHeaderRow][colStart + 1] = "Acct Name";
                     merges.push({ s: { r: auxHeaderRow, c: colStart + 1 }, e: { r: auxHeaderRow, c: colStart + 2 } });
@@ -408,7 +415,6 @@ export function PlanningCalendar({
                     for (let r = 0; r < 3; r++) {
                         const auxRowIdx = auxHeaderRow + 1 + r;
                         rows[auxRowIdx][colStart] = (r + 1).toString();
-                        // Merge empty inputs to match header style
                         merges.push({ s: { r: auxRowIdx, c: colStart + 1 }, e: { r: auxRowIdx, c: colStart + 2 } });
                         merges.push({ s: { r: auxRowIdx, c: colStart + 3 }, e: { r: auxRowIdx, c: colStart + 4 } });
                     }
@@ -458,17 +464,18 @@ export function PlanningCalendar({
                     }
 
                     const isMainHeader = dayNames.includes(val) || subHeaders.includes(val);
-                    const isAuxHeader = val === "Acct Name" || val === "Address";
-                    
-                    if (isMainHeader || isAuxHeader) {
+                    const isAuxSectionHeader = auxHeaderRows.includes(R) && (C % 5 !== 1); 
+
+                    if (isMainHeader || isAuxSectionHeader) {
                         cell.s.fill = { fgColor: { rgb: "92D050" } };
                         cell.s.font.bold = true;
                         cell.s.alignment.horizontal = 'center';
-                    }
-
-                    if (C > 0 && (C - 4) % 5 === 0 && R > 6) {
-                        cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
-                        cell.s.alignment.horizontal = 'center';
+                    } else if (C > 0 && (C - 4) % 5 === 0 && R > 6) {
+                        const isInMainDataRow = mainDataRowRanges.some(range => R >= range.start && R <= range.end);
+                        if (isInMainDataRow) {
+                            cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
+                            cell.s.alignment.horizontal = 'center';
+                        }
                     }
                     
                     if (C % 5 === 1 && R > 4) {
@@ -479,7 +486,7 @@ export function PlanningCalendar({
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Call Plan");
-            const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthLabel.replace(/\s+/g, '_')}.xlsx`;
+            const fileName = `${pmrName.replace(/\s+/g, '_')}_Call_Plan_${monthName}_${yearStr}.xlsx`;
             XLSX.writeFile(workbook, fileName);
             toast({ title: "Plan Exported" });
         } catch (error) {
