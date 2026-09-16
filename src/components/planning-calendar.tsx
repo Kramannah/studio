@@ -324,7 +324,7 @@ export function PlanningCalendar({
             const monthLabel = format(referenceDate, "MMMM yyyy");
             const monthName = format(referenceDate, "MMMM");
             const yearStr = format(referenceDate, "yyyy");
-            const monthStart = startOfToday(); 
+            
             const weeks: Date[] = [];
             let weekIter = getWeekMonday(startOfMonth(referenceDate));
             for (let i = 0; i < 5; i++) {
@@ -378,6 +378,10 @@ export function PlanningCalendar({
                 const dayHeaderRow = currentRow + 1;
                 const subHeaderRow = dayHeaderRow + 1;
                 
+                // DYNAMIC ADJUSTMENT: Find max rows needed for this week block
+                const maxPlansInWeek = Math.max(...[0,1,2,3,4].map(d => plansByWeekAndDay[wIdx][d].length));
+                const maxRowsForWeek = Math.max(16, maxPlansInWeek);
+
                 dayNames.forEach((name, dIdx) => {
                     const colStart = 1 + (dIdx * 5);
                     rows[dayHeaderRow][colStart] = name;
@@ -389,11 +393,10 @@ export function PlanningCalendar({
 
                     const dayPlans = plansByWeekAndDay[wIdx][dIdx];
                     const dataRowStart = subHeaderRow + 1;
-                    const maxRows = Math.max(16, dayPlans.length);
                     
-                    mainDataRowRanges.push({ start: dataRowStart, end: dataRowStart + maxRows - 1 });
+                    mainDataRowRanges.push({ start: dataRowStart, end: dataRowStart + maxRowsForWeek - 1 });
 
-                    for (let r = 0; r < maxRows; r++) {
+                    for (let r = 0; r < maxRowsForWeek; r++) {
                         const targetRowIdx = dataRowStart + r;
                         rows[targetRowIdx][colStart] = (r + 1).toString();
                         const plan = dayPlans[r];
@@ -409,7 +412,7 @@ export function PlanningCalendar({
                         }
                     }
 
-                    const auxHeaderRow = dataRowStart + maxRows + 1;
+                    const auxHeaderRow = dataRowStart + maxRowsForWeek + 1;
                     auxHeaderRows.push(auxHeaderRow);
                     auxFreqCols.push(colStart + 3);
 
@@ -426,14 +429,15 @@ export function PlanningCalendar({
                     }
                 });
 
-                currentRow += 1 + 1 + 1 + 16 + 1 + 4 + 1; 
+                // Increment currentRow based on dynamic expansion
+                currentRow += 3 + maxRowsForWeek + 1 + 4 + 1; 
             });
 
             const worksheet = XLSX.utils.aoa_to_sheet(rows);
             worksheet['!merges'] = merges;
             const wscols = [{ wch: 2 }]; 
             for (let i = 0; i < 5; i++) {
-                wscols.push({ wch: 4 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
+                wscols.push({ wch: 4 }, { wch: 15 }, { wch: 10 }, { wch: 6 }, { wch: 20 });
             }
             worksheet['!cols'] = wscols;
 
@@ -480,8 +484,8 @@ export function PlanningCalendar({
                         cell.s.alignment.horizontal = 'center';
                     } else if (C > 0 && (C - 4) % 5 === 0 && R > 4) {
                         const isInMainDataRow = mainDataRowRanges.some(range => R >= range.start && R <= range.end);
-                        const isInAuxDataRow = auxHeaderRows.some(headerRow => R > headerRow && R <= headerRow + 3);
-                        if (isInMainDataRow || isInAuxDataRow) {
+                        const isInAuxFreqRow = auxHeaderRows.some(headerRow => R > headerRow && R <= headerRow + 3);
+                        if (isInMainDataRow || isInAuxFreqRow) {
                             cell.s.fill = { fgColor: { rgb: "DDEBF7" } };
                             cell.s.alignment.horizontal = 'center';
                         }
