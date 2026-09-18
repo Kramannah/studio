@@ -31,7 +31,8 @@ import {
     ChevronUp,
     Check,
     X,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Edit
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -68,7 +69,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     const { toast } = useToast();
     
     const [view, setView] = useState<'list' | 'form'>('list');
-    const [editingEvent, setEditingEvent] = useState<MarketingEvent | undefined>(undefined);
+    const [editingGroup, setEditingGroup] = useState<MarketingEvent[] | null>(null);
     const [activeTab, setActiveTab] = useState('pending');
     const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -121,7 +122,12 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     }, [filteredEvents]);
 
     const handleAdd = () => {
-        setEditingEvent(undefined);
+        setEditingGroup(null);
+        setView('form');
+    };
+
+    const handleEditGroup = (group: MarketingEvent[]) => {
+        setEditingGroup(group);
         setView('form');
     };
 
@@ -248,6 +254,55 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         return Object.values(individualAttendance).some(v => v === 'attended');
     }, [individualAttendance]);
 
+    const handleReconcileGroup = async (payload: { common: any, providers: any[] }) => {
+        setIsProcessing(true);
+        try {
+            const groupId = editingGroup ? (editingGroup[0].groupId || editingGroup[0].id) : `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            
+            // Reconcile Attendees
+            const existingIds = editingGroup?.map(e => e.id) || [];
+            const submittedEventIds = payload.providers.map(p => p.eventId).filter(Boolean);
+            
+            // 1. Delete removed attendees
+            const toDelete = existingIds.filter(id => !submittedEventIds.includes(id));
+            await Promise.all(toDelete.map(id => deleteEvent(id)));
+
+            // 2. Add or Update
+            await Promise.all(payload.providers.map(p => {
+                const eventPayload: any = {
+                    groupId,
+                    isListed: p.isListed,
+                    doctorId: p.id,
+                    doctorFirstName: p.firstName,
+                    doctorLastName: p.lastName,
+                    eventName: payload.common.eventName,
+                    eventDate: payload.common.eventDate.toISOString(),
+                    quarter: payload.common.quarter,
+                    eventType: 'RTD',
+                    status: 'planned'
+                };
+
+                if (p.eventId) {
+                    // Update existing record
+                    const original = editingGroup?.find(e => e.id === p.eventId);
+                    return updateEvent({ ...original, ...eventPayload, id: p.eventId });
+                } else {
+                    // Add new record to group
+                    return addEvent(eventPayload);
+                }
+            }));
+
+            setView('list');
+            setActiveTab('pending');
+            toast({ title: "Changes Saved", description: "Marketing event session updated successfully." });
+        } catch (error) {
+            console.error("Save failed:", error);
+            toast({ variant: 'destructive', title: "Save Error", description: "Failed to sync program changes." });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     if (view === 'form') {
         return (
             <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -257,19 +312,9 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 </Button>
                 <MarketingEventForm 
                     doctors={doctors}
-                    event={editingEvent}
+                    initialGroup={editingGroup || undefined}
                     onCancel={() => setView('list')}
-                    onSave={async (dataArray) => {
-                        if (editingEvent) {
-                            await updateEvent({ ...editingEvent, ...dataArray[0] });
-                        } else {
-                            for (const data of dataArray) {
-                                await addEvent(data as any);
-                            }
-                        }
-                        setView('list');
-                        setActiveTab('pending');
-                    }}
+                    onSave={handleReconcileGroup}
                 />
             </div>
         );
@@ -284,6 +329,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Events</h2>
+                    <p className="text-sm text-muted-foreground">Manage and track medical program attendance across your territory.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border-2">
@@ -390,6 +436,9 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                                 <TableCell className="text-right pr-6">
                                                     {!readOnly && activeTab === 'pending' && (
                                                         <div className="flex justify-end gap-2">
+                                                            <Button size="sm" variant="outline" onClick={() => handleEditGroup(group)} className="border-primary/30 text-primary hover:bg-primary/10 font-headline h-9">
+                                                                <Edit className="w-3.5 h-3.5 mr-1.5" /> Edit
+                                                            </Button>
                                                             <Button size="sm" onClick={() => handleOpenComplete(group)} className="bg-[#10b981] hover:bg-[#059669] font-headline h-9">
                                                                 Complete
                                                             </Button>
