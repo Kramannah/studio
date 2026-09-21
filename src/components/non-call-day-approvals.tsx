@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { NonCallDay, UserProfile } from "@/lib/types";
@@ -98,7 +97,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                         <div className="flex items-center gap-2">
                             <ShieldCheck className="w-5 h-5 text-primary" />
                             <CardTitle className="text-lg font-black font-headline text-primary uppercase tracking-tight">
-                                Leave Requests Per DSM
+                                VMC Request Per DSM
                             </CardTitle>
                         </div>
                     </CardHeader>
