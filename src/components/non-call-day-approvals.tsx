@@ -62,12 +62,9 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
                 if (manager) {
                     const managerName = `${manager.firstName} ${manager.lastName}`;
                     summary[managerName] = (summary[managerName] || 0) + 1;
-                } else {
-                    summary["Unassigned / HQ"] = (summary["Unassigned / HQ"] || 0) + 1;
                 }
-            } else {
-                summary["Unassigned / HQ"] = (summary["Unassigned / HQ"] || 0) + 1;
             }
+            // Note: Unassigned/HQ requests are excluded from this summary as requested
         });
 
         return Object.entries(summary).sort((a, b) => b[1] - a[1]);
