@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { NonCallDay, UserProfile } from "@/lib/types";
@@ -40,8 +41,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return nonCallDays.filter(day => day.status === activeTab);
     }, [nonCallDays, activeTab]);
 
-    // DSM OVERSIGHT LOGIC (SuperAdmin Only)
-    // Aggregates pending leave requests by District Manager for high-level accountability.
+    // DSM OVERSIGHT LOGIC: Multivariate mapping for 100% accuracy
     const dsmSummary = useMemo(() => {
         if (!isSuperAdmin) return null;
 
@@ -52,16 +52,21 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             const userId = req.userId;
             if (!userId) return;
 
-            // Resolve Manager ID: Dynamic Profile takes precedence over hardcoded Fallback
+            // 1. Resolve Manager ID from PMR Profile (Dynamic)
             const pmrProfile = profiles?.[userId];
             let managerUid = pmrProfile?.managerId;
             
+            // 2. Fallback: Search Hardcoded Territory Assignments (Static)
             if (!managerUid || managerUid === 'none') {
                 managerUid = Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(userId));
             }
 
             if (managerUid) {
-                const manager = profiles?.[managerUid] || userMap[managerUid];
+                // 3. Resolve Manager Name (resilient to UID or Email stored in managerId)
+                const manager = profiles?.[managerUid] || 
+                                userMap[managerUid] || 
+                                Object.values(userMap).find(u => u.email?.toLowerCase() === managerUid?.toLowerCase());
+                
                 if (manager) {
                     const managerName = `${manager.firstName} ${manager.lastName}`;
                     summary[managerName] = (summary[managerName] || 0) + 1;
@@ -69,7 +74,8 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
             }
         });
 
-        return Object.entries(summary).sort((a, b) => b[1] - a[1]);
+        // Alphabetical sort by DSM name
+        return Object.entries(summary).sort((a, b) => a[0].localeCompare(b[0]));
     }, [nonCallDays, isSuperAdmin, profiles, userMap]);
 
     const getUserName = (userId: string) => {

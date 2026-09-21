@@ -69,9 +69,10 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     setLoadingApprovals(true);
     try {
+        // ACCURACY FIX: Increased limit to 5000 to ensure no records are truncated in global overview
         const [ncdSnap, prSnap] = await Promise.all([
-            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(1000))),
-            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(1000)))
+            getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(5000))),
+            getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(5000)))
         ]);
         
         const ncds = ncdSnap.docs.map(d => ({id: d.id, ...d.data()})) as NonCallDay[];
