@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X } from "lucide-react";
+import { Check, X, MessageSquare, User, CalendarDays } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type NonCallDayApprovalsProps = {
@@ -46,76 +46,111 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
 
     return (
         <div className="space-y-6">
-            <Card className="border-2 shadow-sm">
-                <CardHeader>
-                    <CardTitle className="font-headline">Non-Call Day Requests</CardTitle>
-                    <CardDescription>Review, approve, or reject non-call day requests submitted by users.</CardDescription>
+            <Card className="border-2 shadow-sm rounded-2xl overflow-hidden">
+                <CardHeader className="bg-muted/30 border-b">
+                    <div className="flex items-center gap-2">
+                        <CalendarDays className="w-5 h-5 text-primary" />
+                        <CardTitle className="font-headline text-xl">Leave & Non-Call Activity</CardTitle>
+                    </div>
+                    <CardDescription>Process requests for vacation, sick leave, and company activities.</CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-                        <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-1 rounded-xl">
-                            <TabsTrigger value="pending" className="rounded-lg font-headline">Pending</TabsTrigger>
-                            <TabsTrigger value="approved" className="rounded-lg font-headline">Approved</TabsTrigger>
-                            <TabsTrigger value="rejected" className="rounded-lg font-headline">Rejected</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value={activeTab} className="mt-4">
-                            <div className="border-2 rounded-xl overflow-hidden shadow-inner bg-background">
-                                <Table>
-                                    <TableHeader className="bg-muted/50">
-                                        <TableRow className="h-12">
-                                            <TableHead className="font-bold">User</TableHead>
-                                            <TableHead className="font-bold">Date</TableHead>
-                                            <TableHead className="font-bold">Type</TableHead>
-                                            <TableHead className="font-bold">Reason</TableHead>
-                                            <TableHead className="font-bold">Remarks</TableHead>
-                                            <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                <CardContent className="p-0">
+                    <div className="p-4 bg-muted/10 border-b">
+                        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
+                            <TabsList className="grid w-full sm:w-[400px] grid-cols-3 bg-muted/50 p-1 rounded-xl">
+                                <TabsTrigger value="pending" className="rounded-lg font-headline">Pending</TabsTrigger>
+                                <TabsTrigger value="approved" className="rounded-lg font-headline">Approved</TabsTrigger>
+                                <TabsTrigger value="rejected" className="rounded-lg font-headline">Rejected</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader className="bg-muted/50">
+                                <TableRow className="h-12">
+                                    <TableHead className="font-bold pl-6">Representative</TableHead>
+                                    <TableHead className="font-bold">Scheduled Date</TableHead>
+                                    <TableHead className="font-bold">Leave Type</TableHead>
+                                    <TableHead className="font-bold">Reason</TableHead>
+                                    <TableHead className="font-bold">Remarks</TableHead>
+                                    <TableHead className="text-right font-bold pr-6">Action</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredDays.length > 0 ? (
+                                    filteredDays.map((day) => {
+                                        const nonCallDate = safeParseDate(day.date);
+                                        return (
+                                        <TableRow key={day.id} className="h-20 border-b last:border-0 hover:bg-muted/10 transition-colors">
+                                            <TableCell className="pl-6">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-sm">{getUserName(day.userId)}</span>
+                                                    <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">{userMap[day.userId]?.code || "PMR"}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-xs font-bold text-foreground">
+                                                {nonCallDate && isValid(nonCallDate) ? format(nonCallDate, "MMM d, yyyy") : "Invalid Date"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary" className="text-[10px] font-black uppercase bg-primary/10 text-primary border-primary/20">
+                                                    {dayTypeLabels[day.dayType]}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="font-bold text-sm text-primary">
+                                                {day.reason}
+                                            </TableCell>
+                                            <TableCell className="min-w-[200px] max-w-[350px]">
+                                                <div className="flex items-start gap-2">
+                                                    <MessageSquare className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                                                    <p className="text-[11px] text-muted-foreground italic leading-relaxed break-words">
+                                                        {day.remarks || 'No additional remarks provided.'}
+                                                    </p>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                {day.status === 'pending' ? (
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button 
+                                                            size="icon" 
+                                                            variant="outline" 
+                                                            className="h-9 w-9 text-primary border-2 rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm" 
+                                                            onClick={() => onUpdateStatus(day.id, 'approved')}
+                                                            title="Approve Request"
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button 
+                                                            size="icon" 
+                                                            variant="outline" 
+                                                            className="h-9 w-9 text-destructive border-2 rounded-xl hover:bg-destructive hover:text-white transition-all shadow-sm" 
+                                                            onClick={() => onUpdateStatus(day.id, 'rejected')}
+                                                            title="Reject Request"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <Badge variant={day.status === 'approved' ? 'default' : 'destructive'} className="capitalize px-4 py-1 h-8 font-headline">
+                                                        {day.status}
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredDays.length > 0 ? (
-                                            filteredDays.map((day) => {
-                                                const nonCallDate = safeParseDate(day.date);
-                                                return (
-                                                <TableRow key={day.id} className="h-auto border-b last:border-0 hover:bg-muted/10 transition-colors">
-                                                    <TableCell className="font-bold text-sm pl-4 whitespace-nowrap">{getUserName(day.userId)}</TableCell>
-                                                    <TableCell className="text-xs font-medium text-muted-foreground whitespace-nowrap">{nonCallDate && isValid(nonCallDate) ? format(nonCallDate, "MMM d, yyyy") : "Invalid Date"}</TableCell>
-                                                    <TableCell className="whitespace-nowrap">
-                                                        <Badge variant="outline" className="text-[10px] font-bold uppercase">{dayTypeLabels[day.dayType]}</Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm font-bold text-primary whitespace-nowrap">{day.reason}</TableCell>
-                                                    <TableCell className="min-w-[200px] max-w-[400px] py-4 text-xs text-muted-foreground italic leading-relaxed whitespace-normal break-words">
-                                                        {day.remarks || '—'}
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-6 whitespace-nowrap">
-                                                        {day.status === 'pending' ? (
-                                                            <div className="flex justify-end gap-2">
-                                                                <Button size="icon" variant="outline" className="h-8 w-8 text-primary border-2 rounded-lg" onClick={() => onUpdateStatus(day.id, 'approved')}>
-                                                                    <Check className="w-4 h-4" />
-                                                                </Button>
-                                                                <Button size="icon" variant="outline" className="h-8 w-8 text-destructive border-2 rounded-lg hover:bg-destructive hover:text-white" onClick={() => onUpdateStatus(day.id, 'rejected')}>
-                                                                    <X className="w-4 h-4" />
-                                                                </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <Badge variant={day.status === 'approved' ? 'default' : 'destructive'} className="capitalize px-3">
-                                                                {day.status}
-                                                            </Badge>
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            )})
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground italic">
-                                                    No {activeTab} requests found.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </TabsContent>
-                    </Tabs>
+                                    )})
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-48 text-center">
+                                            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                                <User className="w-8 h-8 opacity-20" />
+                                                <p className="italic text-sm">No {activeTab} leave requests found.</p>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
         </div>
