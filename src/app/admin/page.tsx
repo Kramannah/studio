@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { NonCallDayApprovals } from '@/components/non-call-day-approvals';
 import { PlanningRequestApprovals } from '@/components/planning-request-approvals';
+import { ApprovalTracker } from '@/components/approval-tracker';
 import { useUserProfiles } from '@/hooks/use-user-profiles';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -405,6 +406,13 @@ export default function AdminPage() {
                         <TabsContent value="approvals" className="space-y-8">
                             {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
                                 <>
+                                    {isSuperAdmin && (
+                                        <ApprovalTracker 
+                                            nonCallDays={allNonCallDays} 
+                                            planningRequests={allPlanningRequests}
+                                            profiles={profiles}
+                                        />
+                                    )}
                                     <NonCallDayApprovals 
                                         nonCallDays={filteredNonCallDays} 
                                         onUpdateStatus={updateNonCallDayStatus}
