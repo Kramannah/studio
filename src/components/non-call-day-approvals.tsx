@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { NonCallDay, UserProfile } from "@/lib/types";
@@ -7,8 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, MessageSquare, User, CalendarDays } from "lucide-react";
+import { Check, X, MessageSquare, User, CalendarDays, Users, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MANAGER_TEAMS } from "@/lib/admins";
 
 type NonCallDayApprovalsProps = {
     nonCallDays: NonCallDay[];
@@ -32,12 +34,44 @@ const safeParseDate = (date: any): Date | null => {
     return null;
 }
 
-export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: NonCallDayApprovalsProps) {
+export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, profiles, isSuperAdmin }: NonCallDayApprovalsProps) {
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
     const filteredDays = useMemo(() => {
         return nonCallDays.filter(day => day.status === activeTab);
     }, [nonCallDays, activeTab]);
+
+    const dsmSummary = useMemo(() => {
+        if (!isSuperAdmin || !profiles) return null;
+
+        const summary: Record<string, number> = {};
+        // Only track pending requests for the overview
+        const pendingRequests = nonCallDays.filter(d => d.status === 'pending');
+
+        pendingRequests.forEach(req => {
+            const pmrProfile = profiles[req.userId];
+            let managerUid = pmrProfile?.managerId;
+            
+            if (!managerUid || managerUid === 'none') {
+                // Fallback to hardcoded teams if profile managerId is missing
+                managerUid = Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(req.userId));
+            }
+
+            if (managerUid) {
+                const manager = profiles[managerUid] || userMap[managerUid];
+                if (manager) {
+                    const managerName = `${manager.firstName} ${manager.lastName}`;
+                    summary[managerName] = (summary[managerName] || 0) + 1;
+                } else {
+                    summary["Unassigned / HQ"] = (summary["Unassigned / HQ"] || 0) + 1;
+                }
+            } else {
+                summary["Unassigned / HQ"] = (summary["Unassigned / HQ"] || 0) + 1;
+            }
+        });
+
+        return Object.entries(summary).sort((a, b) => b[1] - a[1]);
+    }, [nonCallDays, isSuperAdmin, profiles, userMap]);
 
     const getUserName = (userId: string) => {
         const user = userMap[userId];
@@ -46,6 +80,40 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap }: No
 
     return (
         <div className="space-y-6">
+            {/* SuperAdmin Oversight Summary */}
+            {isSuperAdmin && dsmSummary && dsmSummary.length > 0 && (
+                <Card className="border-2 border-primary/20 bg-primary/5 shadow-md overflow-hidden">
+                    <CardHeader className="pb-4 bg-muted/30 border-b">
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-primary" />
+                            <CardTitle className="text-lg font-black font-headline text-primary uppercase tracking-tight">
+                                Leave Requests Per DSM
+                            </CardTitle>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {dsmSummary.map(([name, count]) => (
+                                <div key={name} className="bg-background rounded-xl border-2 p-4 shadow-sm flex items-center justify-between group hover:border-primary/40 transition-all">
+                                    <div className="space-y-0.5">
+                                        <p className="text-sm font-black text-primary group-hover:translate-x-1 transition-transform">
+                                            {name}
+                                        </p>
+                                        <p className="text-[10px] font-bold text-muted-foreground uppercase">District Manager</p>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-full">
+                                            <span className="text-base font-black text-primary">{count}</span>
+                                        </div>
+                                        <p className="text-[8px] font-black text-muted-foreground uppercase mt-1">Pending</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             <Card className="border-2 shadow-sm rounded-2xl overflow-hidden">
                 <CardHeader className="bg-muted/30 border-b">
                     <div className="flex items-center gap-2">
