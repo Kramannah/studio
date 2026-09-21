@@ -1,4 +1,3 @@
-
 "use client"
 
 import type { NonCallDay, UserProfile } from "@/lib/types";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, MessageSquare, User, CalendarDays, Users, ShieldCheck } from "lucide-react";
+import { Check, X, MessageSquare, User, CalendarDays, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MANAGER_TEAMS } from "@/lib/admins";
 
@@ -41,30 +40,33 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return nonCallDays.filter(day => day.status === activeTab);
     }, [nonCallDays, activeTab]);
 
+    // DSM OVERSIGHT LOGIC (SuperAdmin Only)
+    // Aggregates pending leave requests by District Manager for high-level accountability.
     const dsmSummary = useMemo(() => {
-        if (!isSuperAdmin || !profiles) return null;
+        if (!isSuperAdmin) return null;
 
         const summary: Record<string, number> = {};
-        // Only track pending requests for the overview
         const pendingRequests = nonCallDays.filter(d => d.status === 'pending');
 
         pendingRequests.forEach(req => {
-            const pmrProfile = profiles[req.userId];
+            const userId = req.userId;
+            if (!userId) return;
+
+            // Resolve Manager ID: Dynamic Profile takes precedence over hardcoded Fallback
+            const pmrProfile = profiles?.[userId];
             let managerUid = pmrProfile?.managerId;
             
             if (!managerUid || managerUid === 'none') {
-                // Fallback to hardcoded teams if profile managerId is missing
-                managerUid = Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(req.userId));
+                managerUid = Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(userId));
             }
 
             if (managerUid) {
-                const manager = profiles[managerUid] || userMap[managerUid];
+                const manager = profiles?.[managerUid] || userMap[managerUid];
                 if (manager) {
                     const managerName = `${manager.firstName} ${manager.lastName}`;
                     summary[managerName] = (summary[managerName] || 0) + 1;
                 }
             }
-            // Note: Unassigned/HQ requests are excluded from this summary as requested
         });
 
         return Object.entries(summary).sort((a, b) => b[1] - a[1]);

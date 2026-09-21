@@ -143,10 +143,11 @@ export default function AdminPage() {
     }, [allPlanningRequests, managedUserIds, isSuperAdmin, isMarketingOrHR]);
 
     useEffect(() => {
-        if (mounted && activeTab === 'approvals' && !isMarketingOrHR) {
+        // Fix: Allow SuperAdmins to trigger fetch even if they hold Marketing/HR roles
+        if (mounted && activeTab === 'approvals' && (!isMarketingOrHR || isSuperAdmin)) {
             fetchTeamApprovals();
         }
-    }, [activeTab, fetchTeamApprovals, mounted, isMarketingOrHR]);
+    }, [activeTab, fetchTeamApprovals, mounted, isMarketingOrHR, isSuperAdmin]);
 
     const mergedUserMap = useMemo(() => {
         const map: Record<string, { code: string; firstName: string; lastName: string; email: string }> = { ...USER_DATA_MAP };
@@ -319,7 +320,7 @@ export default function AdminPage() {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
-                            {!isMarketingOrHR && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
+                            {(isSuperAdmin || !isMarketingOrHR) && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
                             {canSeePerformance && (
                                 <>
                                     <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
@@ -401,7 +402,7 @@ export default function AdminPage() {
                         )}
                     </TabsContent>
 
-                    {!isMarketingOrHR && (
+                    {(isSuperAdmin || !isMarketingOrHR) && (
                         <TabsContent value="approvals" className="space-y-8">
                             {loadingApprovals ? <DynamicSkeleton message="Refreshing Approval Requests..." /> : (
                                 <>
