@@ -41,7 +41,7 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         return nonCallDays.filter(day => day.status === activeTab);
     }, [nonCallDays, activeTab]);
 
-    // DSM OVERSIGHT LOGIC: Multivariate mapping for 100% accuracy
+    // DSM OVERSIGHT LOGIC: Priority-based mapping for 100% accuracy
     const dsmSummary = useMemo(() => {
         if (!isSuperAdmin) return null;
 
@@ -49,20 +49,26 @@ export function NonCallDayApprovals({ nonCallDays, onUpdateStatus, userMap, prof
         const pendingRequests = nonCallDays.filter(d => d.status === 'pending');
 
         pendingRequests.forEach(req => {
-            const userId = req.userId;
+            const userId = (req.userId || "").trim();
             if (!userId) return;
 
-            // 1. Resolve Manager ID from PMR Profile (Dynamic)
-            const pmrProfile = profiles?.[userId];
-            let managerUid = pmrProfile?.managerId;
+            // REVERSED PRIORITY: Official Territory Mapping (admins.ts) takes precedence 
+            // over User Profile overrides to ensure organizational hierarchy matches reality.
             
-            // 2. Fallback: Search Hardcoded Territory Assignments (Static)
-            if (!managerUid || managerUid === 'none') {
-                managerUid = Object.keys(MANAGER_TEAMS).find(mId => (MANAGER_TEAMS[mId] || []).includes(userId));
+            // 1. Primary: Search Hardcoded Territory Assignments (Static)
+            let managerUid = Object.keys(MANAGER_TEAMS).find(mId => 
+                (MANAGER_TEAMS[mId] || []).some(pId => pId.trim() === userId)
+            );
+
+            // 2. Secondary Fallback: Resolve Manager ID from PMR Profile (Dynamic)
+            if (!managerUid) {
+                const pmrProfile = profiles?.[userId];
+                managerUid = pmrProfile?.managerId;
+                if (managerUid === 'none') managerUid = undefined;
             }
 
             if (managerUid) {
-                // 3. Resolve Manager Name (resilient to UID or Email stored in managerId)
+                // Resolve Manager Name (UID or Email resolution)
                 const manager = profiles?.[managerUid] || 
                                 userMap[managerUid] || 
                                 Object.values(userMap).find(u => u.email?.toLowerCase() === managerUid?.toLowerCase());
