@@ -38,6 +38,7 @@ import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { USER_DATA_MAP } from "@/lib/user-data";
+import { MANAGER_TEAMS } from "@/lib/admins";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,9 +109,33 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     }, [propPmrName, userId, user, profile, allProfiles]);
 
     const filteredEvents = useMemo(() => {
-        if (selectedQuarter === 'all') return events;
-        return events.filter(e => e.quarter === selectedQuarter);
-    }, [events, selectedQuarter]);
+        let list = events;
+        
+        // 1. Apply Quarter Filter
+        if (selectedQuarter !== 'all') {
+            list = list.filter(e => e.quarter === selectedQuarter);
+        }
+        
+        // 2. EXCLUSION LOGIC: Filter out Uncategorized PMRs in Global Admin mode
+        if (isGlobalMode) {
+            return list.filter(event => {
+                const uid = event.userId;
+                const pmrProfile = allProfiles[uid];
+                
+                // Priority 1: Check Hardcoded Official Territory Mapping
+                const isInTerritory = Object.values(MANAGER_TEAMS).some(team => 
+                    team.some(pId => pId.trim() === uid)
+                );
+                
+                // Priority 2: Check Dynamic Profile Manager Assignment
+                const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
+                
+                return isInTerritory || hasAssignedManager;
+            });
+        }
+        
+        return list;
+    }, [events, selectedQuarter, isGlobalMode, allProfiles]);
 
     // Grouping Logic: Treat multiple docs as 1 report based on groupId
     const groupedEvents = useMemo(() => {
@@ -213,7 +238,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     };
 
     const handleExportExcel = () => {
-        const completedOnly = events.filter(e => e.status === 'completed');
+        const completedOnly = filteredEvents.filter(e => e.status === 'completed');
 
         if (completedOnly.length === 0) {
             toast({ 
