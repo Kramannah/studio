@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { ADMIN_UIDS, ADMIN_EMAILS, MANAGER_TEAMS } from '@/lib/admins';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3, Pill, Package, FileUp, Trash2, FileSpreadsheet } from 'lucide-react';
+import { ShieldCheck, X, User, UserCog, Search, RefreshCw, AlertCircle, Fingerprint, Pencil, UserPlus, MapPin, KeyRound, Loader2, Briefcase, BarChart3, Pill, Package, FileUp, Trash2, FileSpreadsheet, Presentation } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useAdminData } from '@/hooks/use-admin-data';
@@ -33,6 +33,7 @@ import { CallPerformanceSummary } from '@/components/call-performance-summary';
 import { SampleInventoryAudit } from '@/components/sample-inventory-audit';
 import { useDoctors } from '@/hooks/use-doctors';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
+import { MarketingEventsView } from '@/components/marketing-events-view';
 
 const DynamicSkeleton = ({ message = "Accessing Firestore Records..." }) => (
     <div className="flex items-center justify-center mt-10 w-full p-20 border-2 border-dashed rounded-2xl bg-muted/5">
@@ -323,6 +324,9 @@ export default function AdminPage() {
                             {(isSuperAdmin || !isMarketingOrHR) && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
                             {canSeePerformance && (
                                 <>
+                                    <TabsTrigger value="marketing-events" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                        <Presentation className="h-4 w-4" /> Programs
+                                    </TabsTrigger>
                                     <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                         <BarChart3 className="h-4 w-4" /> Performance
                                     </TabsTrigger>
@@ -425,6 +429,9 @@ export default function AdminPage() {
 
                     {canSeePerformance && (
                         <>
+                            <TabsContent value="marketing-events">
+                                <MarketingEventsView isAdmin={true} />
+                            </TabsContent>
                             <TabsContent value="performance">
                                 <CallPerformanceSummary 
                                     userProfiles={profiles}

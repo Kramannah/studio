@@ -4,6 +4,7 @@ import React, { useState, useMemo, useRef } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
 import { useAuth } from "@/hooks/use-auth";
+import { useUserProfiles } from "@/hooks/use-user-profiles";
 import { MarketingEventForm } from "./marketing-event-dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
     Plus, 
     Calendar, 
@@ -37,6 +37,7 @@ import {
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { USER_DATA_MAP } from "@/lib/user-data";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +51,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import Image from "next/image";
 import { compressImage } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
@@ -60,11 +60,13 @@ interface MarketingEventsViewProps {
     userId?: string;
     readOnly?: boolean;
     pmrName?: string;
+    isAdmin?: boolean;
 }
 
-export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmrName }: MarketingEventsViewProps) {
+export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmrName, isAdmin = false }: MarketingEventsViewProps) {
     const { user, profile } = useAuth();
-    const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents(true, undefined, userId);
+    const { profiles: allProfiles } = useUserProfiles();
+    const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents(true, undefined, userId, isAdmin);
     const { doctors } = useDoctors();
     const { toast } = useToast();
     
@@ -87,13 +89,23 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     // Image Preview State
     const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
+    const isGlobalMode = isAdmin && !userId;
+
+    const getPmrName = (uid: string) => {
+        const p = allProfiles[uid];
+        if (p) return `${p.lastName}, ${p.firstName}`;
+        const u = USER_DATA_MAP[uid];
+        if (u) return `${u.lastName}, ${u.firstName}`;
+        return "Unknown PMR";
+    };
+
     const resolvedPmrName = useMemo(() => {
         if (propPmrName) return propPmrName;
         if (!userId || userId === user?.uid) {
             return profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
         }
-        return userId;
-    }, [propPmrName, userId, user, profile]);
+        return getPmrName(userId);
+    }, [propPmrName, userId, user, profile, allProfiles]);
 
     const filteredEvents = useMemo(() => {
         if (selectedQuarter === 'all') return events;
@@ -181,7 +193,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                     ...event,
                     status: 'completed',
                     attendanceStatus: status,
-                    // Only attach proof photo to records that were actually attended
                     proofPhoto: status === 'attended' ? proofPhoto || undefined : undefined
                 });
             }));
@@ -215,13 +226,16 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
 
         const dataToExport = completedOnly.map(event => {
             const dateStr = event.eventDate ? format(parseISO(event.eventDate), 'yyyy-MM-dd') : 'N/A';
-            
-            // Further simplify Batch ID: Last 5 chars of groupId/id in Uppercase
             const rawId = event.groupId || event.id;
             const simplifiedId = rawId.substring(rawId.length - 5).toUpperCase();
+            
+            // Accurate attribution in global view
+            const pmrNameForThisRow = isGlobalMode ? getPmrName(event.userId) : resolvedPmrName;
+            const pmrCodeForThisRow = isGlobalMode ? (allProfiles[event.userId]?.code || "PMR") : (profile?.code || "PMR");
 
             return {
-                "Representative": resolvedPmrName,
+                "Representative": pmrNameForThisRow,
+                "PMR Code": pmrCodeForThisRow,
                 "Batch ID": simplifiedId,
                 "Quarter": event.quarter || "N/A",
                 "Marketing Program": event.eventName,
@@ -232,28 +246,22 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             };
         });
 
-        // Sort by Batch ID and Date so group members are adjacent
         dataToExport.sort((a, b) => a["Batch ID"].localeCompare(b["Batch ID"]) || a["Event Date"].localeCompare(b["Event Date"]));
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         
-        // Auto-size columns for readability
         const wscols = [
-            { wch: 25 }, // Representative
-            { wch: 10 }, // Batch ID (Ultra Simplified)
-            { wch: 10 }, // Quarter
-            { wch: 30 }, // Program
-            { wch: 15 }, // Date
-            { wch: 25 }, // Doctor
-            { wch: 15 }, // Enrollment
-            { wch: 15 }  // Attendance
+            { wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 15 }
         ];
         worksheet['!cols'] = wscols;
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Completed Marketing Events");
         
-        const fileName = `${resolvedPmrName.replace(/\s+/g, '_')}_Completed_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+        const fileName = isGlobalMode 
+            ? `Global_Marketing_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`
+            : `${resolvedPmrName.replace(/\s+/g, '_')}_Completed_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+            
         XLSX.writeFile(workbook, fileName);
 
         toast({ title: "Report Generated", description: "Excel file for completed sessions downloaded." });
@@ -268,15 +276,12 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         try {
             const groupId = editingGroup ? (editingGroup[0].groupId || editingGroup[0].id) : `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             
-            // Reconcile Attendees
             const existingIds = editingGroup?.map(e => e.id) || [];
             const submittedEventIds = payload.providers.map(p => p.eventId).filter(Boolean);
             
-            // 1. Delete removed attendees
             const toDelete = existingIds.filter(id => !submittedEventIds.includes(id));
             await Promise.all(toDelete.map(id => deleteEvent(id)));
 
-            // 2. Add or Update
             await Promise.all(payload.providers.map(p => {
                 const eventPayload: any = {
                     groupId,
@@ -292,11 +297,9 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 };
 
                 if (p.eventId) {
-                    // Update existing record
                     const original = editingGroup?.find(e => e.id === p.eventId);
                     return updateEvent({ ...original, ...eventPayload, id: p.eventId });
                 } else {
-                    // Add new record to group
                     return addEvent(eventPayload);
                 }
             }));
@@ -337,8 +340,12 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-[1400px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">Marketing Events</h2>
-                    <p className="text-sm text-muted-foreground">Manage and track medical program attendance across your territory.</p>
+                    <h2 className="text-3xl font-black font-headline text-primary tracking-tight">
+                        {isGlobalMode ? "Organization Marketing Events" : "Marketing Events"}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        {isGlobalMode ? "Monitor medical program activities logged across all districts." : "Manage and track medical program attendance across your territory."}
+                    </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border-2">
@@ -362,7 +369,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                         Export Excel
                     </Button>
                     
-                    {!readOnly && (
+                    {!readOnly && !isGlobalMode && (
                         <Button onClick={handleAdd} size="lg" className="h-12 rounded-xl font-headline shadow-xl gap-2 transition-all active:scale-95">
                             <Plus className="w-5 h-5" />
                             Log New Event
@@ -383,7 +390,8 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                         <Table>
                             <TableHeader className="bg-muted/30">
                                 <TableRow className="h-14">
-                                    <TableHead className="font-bold pl-6">Doctor's Name</TableHead>
+                                    {isGlobalMode && <TableHead className="font-bold pl-6">Representative</TableHead>}
+                                    <TableHead className={cn("font-bold", !isGlobalMode && "pl-6")}>Doctor's Name</TableHead>
                                     <TableHead className="font-bold">Quarter</TableHead>
                                     <TableHead className="font-bold">Marketing Event</TableHead>
                                     <TableHead className="font-bold text-center">Scheduled Date</TableHead>
@@ -392,7 +400,9 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {currentGroups.length > 0 ? currentGroups.map((group) => {
+                                {loading && currentGroups.length === 0 ? (
+                                    <TableRow><TableCell colSpan={isGlobalMode ? 7 : 6} className="h-40 text-center"><Loader2 className="animate-spin inline-block mr-2" /> Loading program database...</TableCell></TableRow>
+                                ) : currentGroups.length > 0 ? currentGroups.map((group) => {
                                     const firstEvent = group[0];
                                     const gid = firstEvent.groupId || firstEvent.id;
                                     const isExpanded = expandedGroups.has(gid);
@@ -401,7 +411,15 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                     return (
                                         <React.Fragment key={gid}>
                                             <TableRow className={cn("h-20 hover:bg-muted/20 border-b", isExpanded && "bg-muted/10")}>
-                                                <TableCell className="pl-6 font-bold text-base">
+                                                {isGlobalMode && (
+                                                    <TableCell className="pl-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-sm">{getPmrName(firstEvent.userId)}</span>
+                                                            <span className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">{allProfiles[firstEvent.userId]?.code || "PMR"}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                )}
+                                                <TableCell className={cn("font-bold text-base", !isGlobalMode && "pl-6")}>
                                                     <div className="flex items-center gap-2">
                                                         <Button 
                                                             variant="ghost" 
@@ -443,7 +461,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                                 )}
 
                                                 <TableCell className="text-right pr-6">
-                                                    {!readOnly && activeTab === 'pending' && (
+                                                    {!readOnly && !isGlobalMode && activeTab === 'pending' && (
                                                         <div className="flex justify-end gap-2">
                                                             <Button size="sm" variant="outline" onClick={() => handleEditGroup(group)} className="border-primary/30 text-primary hover:bg-primary/10 font-headline h-9">
                                                                 <Edit className="w-3.5 h-3.5 mr-1.5" /> Edit
@@ -483,7 +501,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
 
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/5">
-                                                    <TableCell colSpan={activeTab === 'completed' ? 6 : 5} className="p-0">
+                                                    <TableCell colSpan={isGlobalMode ? 7 : 6} className="p-0">
                                                         <div className="px-12 py-4 space-y-2 border-l-4 border-primary/20 animate-in slide-in-from-top-2 duration-300">
                                                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3">Providers in this report:</p>
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -511,7 +529,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                         </React.Fragment>
                                     );
                                 }) : (
-                                    <TableRow><TableCell colSpan={activeTab === 'completed' ? 6 : 5} className="h-40 text-center text-muted-foreground italic">No entries found.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={isGlobalMode ? 7 : 6} className="h-40 text-center text-muted-foreground italic">No entries found.</TableCell></TableRow>
                                 )}
                             </TableBody>
                         </Table>

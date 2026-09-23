@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -22,9 +21,16 @@ const sanitizeData = (data: any) => {
   );
 };
 
-export const useMarketingEvents = (active: boolean = true, selectedMonth?: string, userId?: string) => {
+/**
+ * Hook for managing Marketing Events (RTDs, Presentations).
+ * Supports both individual PMR view and Global Admin oversight.
+ */
+export const useMarketingEvents = (active: boolean = true, selectedMonth?: string, userId?: string, isAdmin: boolean = false) => {
   const { toast } = useToast();
   const { user } = useAuth();
+  
+  // If a specific userId is passed, we use that. Otherwise, we default to the logged-in user.
+  // For global admin view (isAdmin=true, userId=undefined), we fetch everything.
   const effectiveUserId = userId || user?.uid;
   
   const [events, setEvents] = useState<MarketingEvent[]>([]);
@@ -32,25 +38,43 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
   const lastFetchRef = useRef<number>(0);
 
   const fetchEvents = useCallback(async (force = false) => {
-    if (!effectiveUserId || !db || (!active && !force) || !navigator.onLine) return;
+    if (!db || (!active && !force) || !navigator.onLine) return;
+    
+    // Safety: If not admin mode, we MUST have a userId to query.
+    if (!isAdmin && !effectiveUserId) return;
 
     const now = Date.now();
+    // Cache management: Skip fetch if data is fresh, unless forced.
     if (!force && (now - lastFetchRef.current < EVENTS_CACHE_TTL) && events.length > 0) return;
 
     setLoading(true);
     try {
       const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+      // Fetch current and previous month to capture overlapping batches
       const start = startOfMonth(subMonths(refDate, 1)).toISOString();
       const end = endOfMonth(refDate).toISOString();
 
-      const q = query(
-        collection(db, "marketingEvents"),
-        where("userId", "==", effectiveUserId),
-        where("eventDate", ">=", start),
-        where("eventDate", "<=", end),
-        orderBy("eventDate", "desc"),
-        limit(500)
-      );
+      let q;
+      if (isAdmin && !userId) {
+        // GLOBAL ADMIN QUERY: Fetch all events across the organization
+        q = query(
+          collection(db, "marketingEvents"),
+          where("eventDate", ">=", start),
+          where("eventDate", "<=", end),
+          orderBy("eventDate", "desc"),
+          limit(3000)
+        );
+      } else {
+        // PMR SPECIFIC QUERY: Fetch events for a single representative
+        q = query(
+          collection(db, "marketingEvents"),
+          where("userId", "==", effectiveUserId),
+          where("eventDate", ">=", start),
+          where("eventDate", "<=", end),
+          orderBy("eventDate", "desc"),
+          limit(1000)
+        );
+      }
 
       const snap = await getDocs(q);
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as MarketingEvent));
@@ -61,15 +85,17 @@ export const useMarketingEvents = (active: boolean = true, selectedMonth?: strin
     } finally {
       setLoading(false);
     }
-  }, [effectiveUserId, active, selectedMonth, events.length]);
+  }, [effectiveUserId, active, selectedMonth, events.length, isAdmin, userId]);
 
   useEffect(() => {
-    if (active && effectiveUserId) fetchEvents();
-  }, [fetchEvents, active, effectiveUserId]);
+    if (active && (effectiveUserId || isAdmin)) fetchEvents();
+  }, [fetchEvents, active, effectiveUserId, isAdmin]);
 
   const addEvent = async (eventData: Omit<MarketingEvent, 'id' | 'userId'>) => {
-    if (!effectiveUserId || !db) return;
-    const payload = { ...eventData, userId: effectiveUserId };
+    const targetUserId = effectiveUserId || user?.uid;
+    if (!targetUserId || !db) return;
+    
+    const payload = { ...eventData, userId: targetUserId };
     const sanitized = sanitizeData(payload);
 
     return addDoc(collection(db, "marketingEvents"), sanitized)
