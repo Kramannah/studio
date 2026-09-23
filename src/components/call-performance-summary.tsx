@@ -10,7 +10,9 @@ import {
     parseISO, 
     subDays,
     addDays,
-    isValid
+    isValid,
+    subMonths,
+    isSameMonth
 } from "date-fns";
 import { 
     Loader2, 
@@ -69,8 +71,14 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
-            // Audit Padding: Ensure we catch records at the boundaries
-            const queryStart = subDays(monthStart, 1).toISOString();
+            // Audit Range: Go back 3 months for historical trend data
+            const trendMonths = [
+                subMonths(refDate, 2),
+                subMonths(refDate, 1),
+                refDate
+            ];
+
+            const queryStart = subDays(startOfMonth(trendMonths[0]), 1).toISOString();
             const queryEnd = addDays(monthEnd, 1).toISOString();
 
             const allPmrIds = new Set<string>();
@@ -95,53 +103,57 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            const excelRows: any[] = [];
+            const performanceRows: any[] = [];
+            const trendRows: any[] = [];
+            const specialtyRows: any[] = [];
 
             for (const uid of targetUserIds) {
                 const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
-                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(2000))),
-                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(200))),
-                    getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(2000)))
+                    getDocs(query(collection(db!, "coverageEntries"), where("userId", "==", uid), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(3000))),
+                    getDocs(query(collection(db!, "nonCallDays"), where("userId", "==", uid), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(500))),
+                    getDocs(query(collection(db!, "plans"), where("userId", "==", uid), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(3000)))
                 ]);
 
-                const uEntries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry).filter(e => {
+                const profile = userProfiles[uid];
+                const meta = USER_DATA_MAP[uid];
+                const pmrName = profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User";
+                const pmrCode = profile?.code || meta?.code || "PMR";
+
+                let pmrManagerName = "Unassigned";
+                const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
+                const hManager = managers.find(m => m.uid === mId);
+                pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
+
+                const allFetchedEntries = entriesSnap.docs.map(d => ({id: d.id, ...d.data()}) as CoverageEntry);
+                const allFetchedNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay);
+                const allFetchedPlans = plansSnap.docs.map(d => d.data() as Plan);
+
+                // --- 1. PERFORMANCE KPI (Selected Month Only) ---
+                const uEntries = allFetchedEntries.filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
                 });
                 
-                const uNCDs = ncdSnap.docs.map(d => d.data() as NonCallDay).filter(n => {
+                const uNCDs = allFetchedNCDs.filter(n => {
                     const d = parseAnyDate(n.date);
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                const uPlans = plansSnap.docs.map(d => d.data() as Plan).filter(p => {
+                const uPlans = allFetchedPlans.filter(p => {
                     const d = parseAnyDate(p.plannedDate);
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                // Create a plan lookup map: "date|first|last" -> "callType"
                 const planLookup = new Map<string, string>();
                 uPlans.forEach(p => {
                     const d = parseAnyDate(p.plannedDate);
                     if (d && isValid(d)) {
                         const key = `${format(d, 'yyyy-MM-dd')}|${(p.doctorFirstName || "").toLowerCase().trim()}|${(p.doctorLastName || "").toLowerCase().trim()}`;
-                        // Explicitly check Call Type from Planning. If multiple entries exist, prioritize 'planned'.
                         if (!planLookup.has(key) || p.callType === 'planned') {
                             planLookup.set(key, p.callType || 'planned');
                         }
                     }
                 });
-
-                let pmrManagerName = "Unassigned";
-                if (selectedManagerId !== "all") {
-                    const selectedManager = managers.find(m => m.uid === selectedManagerId);
-                    pmrManagerName = selectedManager ? selectedManager.name : "District Manager";
-                } else {
-                    const profile = userProfiles[uid];
-                    const mId = profile?.managerId || Object.keys(MANAGER_TEAMS).find(m => (MANAGER_TEAMS[m] || []).includes(uid));
-                    const hManager = managers.find(m => m.uid === mId);
-                    pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
-                }
 
                 const uNcdMap = new Map<string, string>();
                 uNCDs.forEach(n => {
@@ -154,6 +166,7 @@ export function CallPerformanceSummary({
                 const daysWithCalls = new Set<string>();
                 let plannedCalls = 0;
                 let unplannedCalls = 0;
+                const specialtyCountMap: Record<string, number> = {};
 
                 uEntries.forEach(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
@@ -161,15 +174,14 @@ export function CallPerformanceSummary({
                         const dateStr = format(d, 'yyyy-MM-dd');
                         daysWithCalls.add(dateStr);
                         
-                        // Reconciliation: Check if this specific visit was planned in the calendar
                         const matchKey = `${dateStr}|${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
                         const matchingPlanType = planLookup.get(matchKey);
                         
-                        if (matchingPlanType === 'planned') {
-                            plannedCalls++;
-                        } else {
-                            unplannedCalls++;
-                        }
+                        if (matchingPlanType === 'planned') plannedCalls++;
+                        else unplannedCalls++;
+
+                        const spec = (e.specialty || "Unspecified").trim();
+                        specialtyCountMap[spec] = (specialtyCountMap[spec] || 0) + 1;
                     }
                 });
 
@@ -187,36 +199,66 @@ export function CallPerformanceSummary({
                     visitMap.set(key, (visitMap.get(key) || 0) + 1);
                 });
 
-                const uniqueVisitedCount = visitMap.size;
                 const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
 
-                const profile = userProfiles[uid];
-                const meta = USER_DATA_MAP[uid];
-
-                excelRows.push({
+                performanceRows.push({
                     "District Manager": pmrManagerName,
-                    "Employee Code": profile?.code || meta?.code || "PMR",
-                    "Representative": profile ? `${profile.lastName}, ${profile.firstName}` : meta ? `${meta.lastName}, ${meta.firstName}` : "Unknown User",
+                    "Employee Code": pmrCode,
+                    "Representative": pmrName,
                     "Planned Calls": plannedCalls,
                     "Unplanned Calls": unplannedCalls,
                     "Total Call Rate": uEntries.length,
                     "Call Concentration (4X)": highFreqAchievedCount,
-                    "Call Reach": uniqueVisitedCount,
+                    "Call Reach": visitMap.size,
                     "Active days": activeDaysCount
+                });
+
+                // --- 2. HISTORICAL TREND (Rolling 3 Months) ---
+                trendMonths.forEach(m => {
+                    const count = allFetchedEntries.filter(e => {
+                        const d = parseAnyDate(e.coverageDate || e.submittedAt);
+                        return d && isValid(d) && isSameMonth(d, m);
+                    }).length;
+
+                    trendRows.push({
+                        "District Manager": pmrManagerName,
+                        "Employee Code": pmrCode,
+                        "Representative": pmrName,
+                        "Period": format(m, 'MMMM yyyy'),
+                        "Total Sales Calls": count
+                    });
+                });
+
+                // --- 3. SPECIALTY DISTRIBUTION ---
+                Object.entries(specialtyCountMap).forEach(([spec, count]) => {
+                    specialtyRows.push({
+                        "District Manager": pmrManagerName,
+                        "Employee Code": pmrCode,
+                        "Representative": pmrName,
+                        "Medical Specialty": spec,
+                        "Total Visits": count,
+                        "Period": format(refDate, 'MMMM yyyy')
+                    });
                 });
             }
 
-            excelRows.sort((a, b) => a["Representative"].localeCompare(b["Representative"]));
-
-            const ws = XLSX.utils.json_to_sheet(excelRows);
+            // Export to Multiple Sheets
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Performance Audit");
+            
+            const wsPerf = XLSX.utils.json_to_sheet(performanceRows.sort((a,b) => a.Representative.localeCompare(b.Representative)));
+            XLSX.utils.book_append_sheet(wb, wsPerf, "Performance Audit");
+
+            const wsTrend = XLSX.utils.json_to_sheet(trendRows.sort((a,b) => a.Representative.localeCompare(b.Representative) || a.Period.localeCompare(b.Period)));
+            XLSX.utils.book_append_sheet(wb, wsTrend, "Calls for 3 Months");
+
+            const wsSpec = XLSX.utils.json_to_sheet(specialtyRows.sort((a,b) => a.Representative.localeCompare(b.Representative) || b["Total Visits"] - a["Total Visits"]));
+            XLSX.utils.book_append_sheet(wb, wsSpec, "Visits per Specialty");
             
             const territoryName = selectedManagerId === "all" ? "Global" : (managers.find(m => m.uid === selectedManagerId)?.name || "Territory");
-            const fileName = `Audit_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`;
+            const fileName = `Audit_Insights_${territoryName.replace(/\s+/g, '_')}_${selectedMonth}.xlsx`;
             XLSX.writeFile(wb, fileName);
 
-            toast({ title: "Audit Exported", description: `Compiled records for ${excelRows.length} representatives.` });
+            toast({ title: "Audit Exported", description: `Compiled insights for ${performanceRows.length} representatives.` });
 
         } catch (error: any) {
             console.error("Audit Engine Error:", error);
@@ -237,7 +279,7 @@ export function CallPerformanceSummary({
                         Performance Audit Engine
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                        Extract KPI records for field personnel based on monthly activity.
+                        Extract KPI records and multi-dimensional insights for field personnel.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-8">
@@ -285,9 +327,9 @@ export function CallPerformanceSummary({
                             className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
                         >
                             {loading ? (
-                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Compiling Records...</>
+                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Analyzing 3-Month Data...</>
                             ) : (
-                                <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Audit Report (.xlsx)</>
+                                <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Multi-Sheet Audit (.xlsx)</>
                             )}
                         </Button>
                     </div>
@@ -299,9 +341,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Calculation Consistency</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Consolidated Insight</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Planned vs Unplanned counts are derived by strictly matching reports against 'Planned' status calls in the schedule.
+                                The export now includes historical trends and specialty breakdowns as separate sheets for more granular auditing.
                             </p>
                         </div>
                     </CardContent>
@@ -310,9 +352,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Verification</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Data Integrity</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Total Call Rate always equals the sum of Planned + Unplanned calls to ensure data integrity.
+                                KPI calculations remain anchored to strictly matched reports against 'Planned' status calls in the schedule.
                             </p>
                         </div>
                     </CardContent>
