@@ -202,52 +202,61 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     };
 
     const handleExportExcel = () => {
-        if (events.length === 0) {
-            toast({ variant: "destructive", title: "No Data", description: "There are no marketing events to export for this period." });
+        const completedOnly = events.filter(e => e.status === 'completed');
+
+        if (completedOnly.length === 0) {
+            toast({ 
+                variant: "destructive", 
+                title: "No Completed Data", 
+                description: "Only completed sessions can be exported. Please finalize your events first." 
+            });
             return;
         }
 
-        const dataToExport = events.map(event => {
+        const dataToExport = completedOnly.map(event => {
             const dateStr = event.eventDate ? format(parseISO(event.eventDate), 'yyyy-MM-dd') : 'N/A';
+            
+            // Simplify Batch ID: Extracted from generated batch string
+            const rawId = event.groupId || event.id;
+            const simplifiedId = rawId.includes('_') ? rawId.split('_').pop() : rawId.substring(0, 8);
+
             return {
                 "Representative": resolvedPmrName,
-                "Session ID (Batch)": event.groupId || event.id,
+                "Batch ID": simplifiedId,
                 "Quarter": event.quarter || "N/A",
                 "Marketing Program": event.eventName,
                 "Event Date": dateStr,
                 "Doctor Name": `Dr. ${event.doctorFirstName} ${event.doctorLastName}`,
                 "Enrollment": event.isListed ? "Masterlist" : "Guest",
-                "Workflow Status": event.status.toUpperCase(),
-                "Attendance Status": event.attendanceStatus || (event.status === 'planned' ? 'PENDING' : 'N/A')
+                "Attendance Status": event.attendanceStatus === 'attended' ? 'ATTENDED' : 'NO-SHOW'
             };
         });
 
         // Sort by Batch ID and Date so group members are adjacent
-        dataToExport.sort((a, b) => a["Session ID (Batch)"].localeCompare(b["Session ID (Batch)"]) || a["Event Date"].localeCompare(b["Event Date"]));
+        dataToExport.sort((a, b) => a["Batch ID"].localeCompare(b["Batch ID"]) || a["Event Date"].localeCompare(b["Event Date"]));
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         
         // Auto-size columns for readability
         const wscols = [
             { wch: 25 }, // Representative
-            { wch: 25 }, // Session ID
+            { wch: 15 }, // Batch ID (Simplified)
             { wch: 10 }, // Quarter
             { wch: 30 }, // Program
             { wch: 15 }, // Date
             { wch: 25 }, // Doctor
             { wch: 15 }, // Enrollment
-            { wch: 15 }, // Status
             { wch: 15 }  // Attendance
         ];
         worksheet['!cols'] = wscols;
 
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Marketing Events Audit");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Completed Marketing Events");
         
-        const fileName = `${resolvedPmrName.replace(/\s+/g, '_')}_Marketing_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+        const fileName = `${resolvedPmrName.replace(/\s+/g, '_')}_Completed_Events_${format(new Date(), 'yyyyMMdd')}.xlsx`;
         XLSX.writeFile(workbook, fileName);
 
-        toast({ title: "Report Generated", description: "Excel file downloaded successfully." });
+        toast({ title: "Report Generated", description: "Excel file for completed sessions downloaded." });
     };
 
     const anyAttended = useMemo(() => {
