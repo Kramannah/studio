@@ -216,9 +216,9 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         const dataToExport = completedOnly.map(event => {
             const dateStr = event.eventDate ? format(parseISO(event.eventDate), 'yyyy-MM-dd') : 'N/A';
             
-            // Simplify Batch ID: Extracted from generated batch string
+            // Further simplify Batch ID: Last 5 chars of groupId/id in Uppercase
             const rawId = event.groupId || event.id;
-            const simplifiedId = rawId.includes('_') ? rawId.split('_').pop() : rawId.substring(0, 8);
+            const simplifiedId = rawId.substring(rawId.length - 5).toUpperCase();
 
             return {
                 "Representative": resolvedPmrName,
@@ -228,7 +228,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 "Event Date": dateStr,
                 "Doctor Name": `Dr. ${event.doctorFirstName} ${event.doctorLastName}`,
                 "Enrollment": event.isListed ? "Masterlist" : "Guest",
-                "Attendance Status": event.attendanceStatus === 'attended' ? 'ATTENDED' : 'NO-SHOW'
+                "Attendance": event.attendanceStatus === 'attended' ? 'ATTENDED' : 'NO-SHOW'
             };
         });
 
@@ -240,7 +240,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         // Auto-size columns for readability
         const wscols = [
             { wch: 25 }, // Representative
-            { wch: 15 }, // Batch ID (Simplified)
+            { wch: 10 }, // Batch ID (Ultra Simplified)
             { wch: 10 }, // Quarter
             { wch: 30 }, // Program
             { wch: 15 }, // Date
