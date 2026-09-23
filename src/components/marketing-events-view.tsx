@@ -100,6 +100,14 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         return "Unknown PMR";
     };
 
+    const getPmrCode = (uid: string) => {
+        const p = allProfiles[uid];
+        if (p?.code && p.code !== 'PMR') return p.code;
+        const u = USER_DATA_MAP[uid];
+        if (u?.code) return u.code;
+        return p?.code || "PMR";
+    };
+
     const resolvedPmrName = useMemo(() => {
         if (propPmrName) return propPmrName;
         if (!userId || userId === user?.uid) {
@@ -256,7 +264,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             
             // Accurate attribution in global view
             const pmrNameForThisRow = isGlobalMode ? getPmrName(event.userId) : resolvedPmrName;
-            const pmrCodeForThisRow = isGlobalMode ? (allProfiles[event.userId]?.code || "PMR") : (profile?.code || "PMR");
+            const pmrCodeForThisRow = isGlobalMode ? getPmrCode(event.userId) : (profile?.code || "PMR");
 
             return {
                 "Representative": pmrNameForThisRow,
@@ -440,7 +448,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                                     <TableCell className="pl-6">
                                                         <div className="flex flex-col">
                                                             <span className="font-bold text-sm">{getPmrName(firstEvent.userId)}</span>
-                                                            <span className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">{allProfiles[firstEvent.userId]?.code || "PMR"}</span>
+                                                            <span className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">{getPmrCode(firstEvent.userId)}</span>
                                                         </div>
                                                     </TableCell>
                                                 )}
