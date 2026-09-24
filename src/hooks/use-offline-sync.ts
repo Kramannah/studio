@@ -77,7 +77,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [pageHistory, setPageHistory] = useState<(QueryDocumentSnapshot<DocumentData> | null)[]>([null]);
+  
+  // Use a ref for cursors to avoid infinite loops in useEffect
+  const pageHistoryRef = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([null]);
   
   const isSyncInProgress = useRef(false);
   const lastFetchedKeyRef = useRef<string | null>(null);
@@ -121,15 +123,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const fetchSummaryEntries = useCallback(async (start: string, end: string) => {
     if (!userId || !db) return;
     try {
-        // We fetch ALL entries for the month to ensure Summary stats are correct.
-        // This is necessary because stats like "Concentration" require the full history.
         const q = query(
             collection(db!, "coverageEntries"),
             where("userId", "==", userId),
             where("coverageDate", ">=", start),
             where("coverageDate", "<=", end),
             orderBy("coverageDate", "desc"),
-            limit(1000) // Cap summary docs for safety
+            limit(1000)
         );
         const snap = await getDocs(q);
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
@@ -143,26 +143,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
-    
-    // Reset if forced or month changed
-    if (force || lastFetchedKeyRef.current !== fetchKey) {
-        setPageHistory([null]);
-        setCurrentPage(1);
-    }
-
-    setLoading(true);
-    
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
     const start = startOfMonth(subMonths(refDate, 1)).toISOString();
     const end = endOfMonth(refDate).toISOString();
-    
-    if (pageNumber === 1 || lastFetchedKeyRef.current !== fetchKey) {
+
+    // Reset history and counters if month changed or forced
+    if (force || lastFetchedKeyRef.current !== fetchKey) {
+        pageHistoryRef.current = [null];
+        setCurrentPage(1);
+        await Promise.all([
+            fetchTotalCount(start, end),
+            fetchSummaryEntries(start, end)
+        ]);
+    } else if (pageNumber === 1) {
+        // Refresh counts on first page even if not forced
         await Promise.all([
             fetchTotalCount(start, end),
             fetchSummaryEntries(start, end)
         ]);
     }
 
+    setLoading(true);
+    
     try {
         let q = query(
           collection(db!, "coverageEntries"), 
@@ -173,7 +175,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
           limit(PAGE_SIZE)
         );
         
-        const cursor = pageHistory[pageNumber - 1];
+        const cursor = pageHistoryRef.current[pageNumber - 1];
         if (cursor) {
             q = query(q, startAfter(cursor));
         }
@@ -183,14 +185,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         
         setMasterEntries(fetched);
         
-        // Prepare next page cursor
+        // Store next cursor for future pages
         if (querySnapshot.docs.length === PAGE_SIZE) {
             const nextCursor = querySnapshot.docs[querySnapshot.docs.length - 1];
-            setPageHistory(prev => {
-                const next = [...prev];
-                next[pageNumber] = nextCursor;
-                return next;
-            });
+            pageHistoryRef.current[pageNumber] = nextCursor;
         }
         
         setCurrentPage(pageNumber);
@@ -200,7 +198,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, active, selectedMonth, pageHistory, fetchTotalCount, fetchSummaryEntries]);
+  }, [userId, active, selectedMonth, fetchTotalCount, fetchSummaryEntries]);
 
   const goToNextPage = () => {
       if (currentPage * PAGE_SIZE < totalCount) {
