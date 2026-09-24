@@ -104,33 +104,63 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            // --- BULK FETCH STRATEGY ---
-            // Capped at 10,000 per request to respect Firestore Structured Query limits.
-            const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
-                getDocs(query(collection(db!, "coverageEntries"), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(10000))),
-                getDocs(query(collection(db!, "nonCallDays"), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(5000))),
-                getDocs(query(collection(db!, "plans"), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(10000)))
-            ]);
+            // --- SMART PARALLEL FETCHER (Concurrently fetch in batches of 10) ---
+            const allEntries: CoverageEntry[] = [];
+            const allNCDs: NonCallDay[] = [];
+            const allPlans: Plan[] = [];
+
+            const CHUNK_SIZE = 10;
+            for (let i = 0; i < targetUserIds.length; i += CHUNK_SIZE) {
+                const chunk = targetUserIds.slice(i, i + CHUNK_SIZE);
+                
+                // Fetch for multiple users in parallel within the chunk
+                await Promise.all(chunk.map(async (uid) => {
+                    const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
+                        getDocs(query(
+                            collection(db!, "coverageEntries"), 
+                            where("userId", "==", uid),
+                            where("coverageDate", ">=", queryStart), 
+                            where("coverageDate", "<=", queryEnd), 
+                            limit(2000)
+                        )),
+                        getDocs(query(
+                            collection(db!, "nonCallDays"), 
+                            where("userId", "==", uid),
+                            where("date", ">=", queryStart), 
+                            where("date", "<=", queryEnd), 
+                            limit(500)
+                        )),
+                        getDocs(query(
+                            collection(db!, "plans"), 
+                            where("userId", "==", uid),
+                            where("plannedDate", ">=", queryStart), 
+                            where("plannedDate", "<=", queryEnd), 
+                            limit(2000)
+                        ))
+                    ]);
+
+                    entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
+                    ncdSnap.docs.forEach(d => allNCDs.push({ id: d.id, ...d.data() } as NonCallDay));
+                    plansSnap.docs.forEach(d => allPlans.push({ id: d.id, ...d.data() } as Plan));
+                }));
+            }
 
             // Group data by userId for fast in-memory access
             const entriesByUser = new Map<string, CoverageEntry[]>();
             const ncdsByUser = new Map<string, NonCallDay[]>();
             const plansByUser = new Map<string, Plan[]>();
 
-            entriesSnap.docs.forEach(d => {
-                const data = { id: d.id, ...d.data() } as CoverageEntry;
+            allEntries.forEach(data => {
                 if (!entriesByUser.has(data.userId)) entriesByUser.set(data.userId, []);
                 entriesByUser.get(data.userId)!.push(data);
             });
 
-            ncdSnap.docs.forEach(d => {
-                const data = { id: d.id, ...d.data() } as NonCallDay;
+            allNCDs.forEach(data => {
                 if (!ncdsByUser.has(data.userId)) ncdsByUser.set(data.userId, []);
                 ncdsByUser.get(data.userId)!.push(data);
             });
 
-            plansSnap.docs.forEach(d => {
-                const data = { id: d.id, ...d.data() } as Plan;
+            allPlans.forEach(data => {
                 if (!plansByUser.has(data.userId)) plansByUser.set(data.userId, []);
                 plansByUser.get(data.userId)!.push(data);
             });
@@ -151,22 +181,17 @@ export function CallPerformanceSummary({
                 const hManager = managers.find(m => m.uid === mId);
                 pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
 
-                const allFetchedEntries = entriesByUser.get(uid) || [];
-                const allFetchedNCDs = ncdsByUser.get(uid) || [];
-                const allFetchedPlans = plansByUser.get(uid) || [];
-
-                // --- 1. PERFORMANCE KPI (Selected Month Only) ---
-                const uEntries = allFetchedEntries.filter(e => {
+                const uEntries = (entriesByUser.get(uid) || []).filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
                 });
                 
-                const uNCDs = allFetchedNCDs.filter(n => {
+                const uNCDs = (ncdsByUser.get(uid) || []).filter(n => {
                     const d = parseAnyDate(n.date);
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                const uPlans = allFetchedPlans.filter(p => {
+                const uPlans = (plansByUser.get(uid) || []).filter(p => {
                     const d = parseAnyDate(p.plannedDate);
                     return d && d >= monthStart && d <= monthEnd;
                 });
@@ -240,9 +265,8 @@ export function CallPerformanceSummary({
                     "Active days": activeDaysCount
                 });
 
-                // --- 2. HISTORICAL TREND (Rolling 3 Months) ---
                 trendMonths.forEach(m => {
-                    const count = allFetchedEntries.filter(e => {
+                    const count = (entriesByUser.get(uid) || []).filter(e => {
                         const d = parseAnyDate(e.coverageDate || e.submittedAt);
                         return d && isValid(d) && isSameMonth(d, m);
                     }).length;
@@ -256,7 +280,6 @@ export function CallPerformanceSummary({
                     });
                 });
 
-                // --- 3. SPECIALTY DISTRIBUTION ---
                 Object.entries(specialtyCountMap).forEach(([spec, count]) => {
                     specialtyRows.push({
                         "District Manager": pmrManagerName,
@@ -269,7 +292,6 @@ export function CallPerformanceSummary({
                 });
             }
 
-            // Export to Multiple Sheets
             const wb = XLSX.utils.book_new();
             
             const wsPerf = XLSX.utils.json_to_sheet(performanceRows.sort((a,b) => a.Representative.localeCompare(b.Representative)));
@@ -289,7 +311,7 @@ export function CallPerformanceSummary({
 
         } catch (error: any) {
             console.error("Audit Engine Error:", error);
-            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data is unavailable." });
+            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data was temporarily unavailable." });
         } finally {
             setLoading(false);
         }
@@ -354,7 +376,7 @@ export function CallPerformanceSummary({
                             className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
                         >
                             {loading ? (
-                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Analyzing 3-Month Data...</>
+                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Fetching Batch Records...</>
                             ) : (
                                 <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Multi-Sheet Audit (.xlsx)</>
                             )}
@@ -368,9 +390,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Bulk Fetch Strategy</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Smart Batch Ingestion</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                The export engine now uses a high-performance ingestion model that retrieves territory data in a single batch, reducing latency by up to 95%.
+                                The engine now uses targeted index queries per user to avoid timeouts while maintaining high-speed parallel retrieval.
                             </p>
                         </div>
                     </CardContent>

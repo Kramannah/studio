@@ -69,33 +69,10 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
         try {
             const startStr = startOfMonth(selectedDate).toISOString();
             const endStr = endOfMonth(selectedDate).toISOString();
-            // Filter out weekends from the days interval
             const allDays = eachDayOfInterval({ start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) });
             const businessDays = allDays.filter(day => !isWeekend(day));
 
-            // 1. Fetch relevant data
-            const entriesQuery = query(
-                collection(db, "coverageEntries"),
-                where("coverageDate", ">=", startStr),
-                where("coverageDate", "<=", endStr),
-                limit(10000)
-            );
-
-            const ncdQuery = query(
-                collection(db, "nonCallDays"),
-                where("date", ">=", startStr),
-                where("date", "<=", endStr)
-            );
-
-            const [entriesSnap, ncdSnap] = await Promise.all([
-                getDocs(entriesQuery),
-                getDocs(ncdQuery)
-            ]);
-
-            const entries = entriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
-            const nonCallDays = ncdSnap.docs.map(d => ({ id: d.id, ...d.data() } as NonCallDay));
-
-            // 2. Prepare PMR List
+            // Prepare PMR List
             const pmrList = Object.values(userProfiles)
                 .filter(p => p.role === 'PMR' || !p.role)
                 .sort((a, b) => {
@@ -105,7 +82,36 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                     return (a.lastName || "").localeCompare(b.lastName || "");
                 });
 
-            // 3. Build Data Matrix
+            const entries: CoverageEntry[] = [];
+            const nonCallDays: NonCallDay[] = [];
+
+            // Targeted Parallel Fetching to prevent timeouts
+            const CHUNK_SIZE = 10;
+            for (let i = 0; i < pmrList.length; i += CHUNK_SIZE) {
+                const chunk = pmrList.slice(i, i + CHUNK_SIZE);
+                await Promise.all(chunk.map(async (pmr) => {
+                    const [entriesSnap, ncdSnap] = await Promise.all([
+                        getDocs(query(
+                            collection(db!, "coverageEntries"),
+                            where("userId", "==", pmr.userId),
+                            where("coverageDate", ">=", startStr),
+                            where("coverageDate", "<=", endStr),
+                            limit(2000)
+                        )),
+                        getDocs(query(
+                            collection(db!, "nonCallDays"),
+                            where("userId", "==", pmr.userId),
+                            where("date", ">=", startStr),
+                            where("date", "<=", endStr),
+                            limit(200)
+                        ))
+                    ]);
+                    entriesSnap.docs.forEach(d => entries.push({ id: d.id, ...d.data() } as CoverageEntry));
+                    ncdSnap.docs.forEach(d => nonCallDays.push({ id: d.id, ...d.data() } as NonCallDay));
+                }));
+            }
+
+            // Build Data Matrix
             const matrix = new Map<string, Map<string, MonitoringCell>>();
             pmrList.forEach(p => matrix.set(p.userId, new Map()));
 
@@ -129,7 +135,6 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                 });
             });
 
-            // 4. Compile Excel Rows
             const excelRows = pmrList.map(pmr => {
                 const row: any = {
                     "District": getDistrictLabel(pmr),
@@ -158,36 +163,20 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                 return row;
             });
 
-            // 5. Trigger Download
             const worksheet = XLSX.utils.json_to_sheet(excelRows);
-            
-            // Set some column widths for better visual look immediately on open
-            const wscols = [
-                { wch: 10 }, // District
-                { wch: 10 }, // CODE
-                { wch: 25 }, // NAME
-            ];
+            const wscols = [{ wch: 10 }, { wch: 10 }, { wch: 25 }];
             businessDays.forEach(() => wscols.push({ wch: 8 }));
             worksheet['!cols'] = wscols;
 
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Coverage Audit");
-            
             const fileName = `Coverage_Monitoring_${format(selectedDate, 'MMM_yyyy')}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
-            toast({
-                title: "Report Generated",
-                description: `${pmrList.length} PMR records compiled for business days.`
-            });
-
+            toast({ title: "Report Generated", description: `${pmrList.length} PMR records compiled.` });
         } catch (error) {
-            console.error("Export generation error:", error);
-            toast({
-                variant: "destructive",
-                title: "Export Failed",
-                description: "An error occurred while compiling the organization data."
-            });
+            console.error("Monitoring export error:", error);
+            toast({ variant: "destructive", title: "Export Failed", description: "The server timed out or data was temporarily unavailable." });
         } finally {
             setLoading(false);
         }
@@ -213,74 +202,18 @@ export function CoverageMonitoring({ userProfiles }: { userProfiles: Record<stri
                     <div className="flex flex-col items-center gap-6">
                         <p className="text-sm font-black uppercase tracking-widest text-muted-foreground">Select Audit Period</p>
                         <div className="flex items-center gap-4 bg-muted/50 p-2 rounded-2xl border-2">
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => setSelectedDate(subMonths(selectedDate, 1))} 
-                                className="h-12 w-12 rounded-xl"
-                                disabled={loading}
-                            >
-                                <ChevronLeft className="h-6 w-6"/>
-                            </Button>
-                            <span className="px-8 font-black font-headline text-2xl uppercase tracking-tighter min-w-[200px] text-center">
-                                {format(selectedDate, 'MMMM yyyy')}
-                            </span>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => setSelectedDate(addMonths(selectedDate, 1))} 
-                                className="h-12 w-12 rounded-xl"
-                                disabled={loading}
-                            >
-                                <ChevronRight className="h-6 w-6"/>
-                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setSelectedDate(subMonths(selectedDate, 1))} className="h-12 w-12 rounded-xl" disabled={loading}><ChevronLeft className="h-6 w-6"/></Button>
+                            <span className="px-8 font-black font-headline text-2xl uppercase tracking-tighter min-w-[200px] text-center">{format(selectedDate, 'MMMM yyyy')}</span>
+                            <Button variant="ghost" size="icon" onClick={() => setSelectedDate(addMonths(selectedDate, 1))} className="h-12 w-12 rounded-xl" disabled={loading}><ChevronRight className="h-6 w-6"/></Button>
                         </div>
                     </div>
-
                     <div className="space-y-4 pt-4">
-                        <Button 
-                            onClick={handleGenerateExport} 
-                            disabled={loading} 
-                            size="lg"
-                            className="w-full h-16 text-lg font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95"
-                        >
-                            {loading ? (
-                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Compiling Records...</>
-                            ) : (
-                                <><FileSpreadsheet className="mr-3 h-6 w-6" /> Generate & Download Audit (.xlsx)</>
-                            )}
+                        <Button onClick={handleGenerateExport} disabled={loading} size="lg" className="w-full h-16 text-lg font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95">
+                            {loading ? <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Batch Processing...</> : <><FileSpreadsheet className="mr-3 h-6 w-6" /> Generate & Download Audit (.xlsx)</>}
                         </Button>
-                        <p className="text-center text-[10px] text-muted-foreground uppercase font-black tracking-widest">
-                            {loading ? "Aggregating coverage entries and approved leaves..." : "Ready to process business days for the entire organization"}
-                        </p>
                     </div>
                 </CardContent>
             </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
-                <Card className="border-2 shadow-sm bg-muted/20">
-                    <CardContent className="p-4 flex items-start gap-3">
-                        <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Audit Logic</p>
-                            <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                The export includes daily report counts and approved Non-Call reasons. Weekends (Sat/Sun) are automatically excluded.
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-2 shadow-sm bg-muted/20">
-                    <CardContent className="p-4 flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Compliance</p>
-                            <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                Columns are formatted as "d-MMM" (e.g., 1-Apr) to match field monitoring standards.
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
         </div>
     );
 }
