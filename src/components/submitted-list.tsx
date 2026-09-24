@@ -164,6 +164,7 @@ const EntryRow = ({
 
 export function SubmittedList({ 
     entries = [], 
+    allEntries = [],
     doctors = [], 
     nonCallDays = [],
     onDelete, 
@@ -178,6 +179,7 @@ export function SubmittedList({
     loading = false
 }: { 
     entries: CoverageEntry[], 
+    allEntries?: CoverageEntry[],
     doctors: Doctor[], 
     nonCallDays?: NonCallDay[], 
     onDelete: (id: string) => void, 
@@ -248,16 +250,19 @@ export function SubmittedList({
     const displayCurrentPage = isServerPaginated ? (serverCurrentPage || 1) : localPage;
     const displayTotalPages = isServerPaginated ? (serverTotalPages || 1) : Math.ceil(filtered.length / itemsPerPage);
 
+    // FIX: Use allEntries (full month metadata) for calendar markers, fallback to entries if missing
+    const calendarEntries = allEntries && allEntries.length > 0 ? allEntries : entries;
+
     const entryDates = useMemo(() => {
-        return (entries || []).map(e => {
+        return (calendarEntries || []).map(e => {
             const d = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
             return isValid(d) ? d : null;
         }).filter(Boolean) as Date[];
-    }, [entries]);
+    }, [calendarEntries]);
 
     const entriesCountByDate = useMemo(() => {
         const counts: Record<string, number> = {};
-        (entries || []).forEach(e => {
+        (calendarEntries || []).forEach(e => {
             const d = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
             if (isValid(d)) {
                 const dateStr = format(d, 'yyyy-MM-dd');
@@ -265,7 +270,7 @@ export function SubmittedList({
             }
         });
         return counts;
-    }, [entries]);
+    }, [calendarEntries]);
 
     const handleExportExcel = () => {
         const data = filtered.map(e => {

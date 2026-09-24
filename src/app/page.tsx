@@ -49,7 +49,7 @@ const DynamicSkeleton = () => (
   </div>
 );
 
-export default function Home() {
+export function Home() {
   const { user, profile, loading: authLoading, logout } = useAuth();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
@@ -191,7 +191,7 @@ export default function Home() {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={summaryEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} pmrName={currentPmrName} profile={profile} />;
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={summaryEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} initialCallType={plannedCallTypeToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} onDelete={deleteOfflineEntry} />;
-      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} currentPage={currentPage} totalPages={totalPages} goToNextPage={goToNextPage} goToPreviousPage={goToPreviousPage} loading={entriesLoading} />;
+      case 'submitted': return <SubmittedList entries={masterEntries} allEntries={summaryEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} currentPage={currentPage} totalPages={totalPages} goToNextPage={goToNextPage} goToPreviousPage={goToPreviousPage} loading={entriesLoading} />;
       case 'summary': 
         return <CallSummary pmrName={currentPmrName} entries={summaryEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'master': return <MasterList doctors={doctors} entries={summaryEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={handleUpdateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
@@ -293,3 +293,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+export default Home;

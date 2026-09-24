@@ -158,6 +158,7 @@ export function UserDashboard({
                     <TabsContent value="submitted" className="mt-0 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                         <SubmittedList 
                             entries={allEntries || []} 
+                            allEntries={allEntries || []}
                             doctors={allDoctors || []} 
                             nonCallDays={allNonCallDays || []}
                             onDelete={onDeleteEntry} 
