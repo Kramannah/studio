@@ -71,7 +71,7 @@ export function CallPerformanceSummary({
             const monthStart = startOfMonth(refDate);
             const monthEnd = endOfMonth(refDate);
 
-            // Audit Range: Go back 3 months for historical trend data
+            // Audit Range: Current month and 2 preceding months
             const trendMonths = [
                 subMonths(refDate, 2),
                 subMonths(refDate, 1),
@@ -104,72 +104,11 @@ export function CallPerformanceSummary({
                 return;
             }
 
-            // --- SMART PARALLEL FETCHER (Concurrently fetch in batches of 10) ---
-            const allEntries: CoverageEntry[] = [];
-            const allNCDs: NonCallDay[] = [];
-            const allPlans: Plan[] = [];
-
-            const CHUNK_SIZE = 10;
-            for (let i = 0; i < targetUserIds.length; i += CHUNK_SIZE) {
-                const chunk = targetUserIds.slice(i, i + CHUNK_SIZE);
-                
-                // Fetch for multiple users in parallel within the chunk
-                await Promise.all(chunk.map(async (uid) => {
-                    const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
-                        getDocs(query(
-                            collection(db!, "coverageEntries"), 
-                            where("userId", "==", uid),
-                            where("coverageDate", ">=", queryStart), 
-                            where("coverageDate", "<=", queryEnd), 
-                            limit(2000)
-                        )),
-                        getDocs(query(
-                            collection(db!, "nonCallDays"), 
-                            where("userId", "==", uid),
-                            where("date", ">=", queryStart), 
-                            where("date", "<=", queryEnd), 
-                            limit(500)
-                        )),
-                        getDocs(query(
-                            collection(db!, "plans"), 
-                            where("userId", "==", uid),
-                            where("plannedDate", ">=", queryStart), 
-                            where("plannedDate", "<=", queryEnd), 
-                            limit(2000)
-                        ))
-                    ]);
-
-                    entriesSnap.docs.forEach(d => allEntries.push({ id: d.id, ...d.data() } as CoverageEntry));
-                    ncdSnap.docs.forEach(d => allNCDs.push({ id: d.id, ...d.data() } as NonCallDay));
-                    plansSnap.docs.forEach(d => allPlans.push({ id: d.id, ...d.data() } as Plan));
-                }));
-            }
-
-            // Group data by userId for fast in-memory access
-            const entriesByUser = new Map<string, CoverageEntry[]>();
-            const ncdsByUser = new Map<string, NonCallDay[]>();
-            const plansByUser = new Map<string, Plan[]>();
-
-            allEntries.forEach(data => {
-                if (!entriesByUser.has(data.userId)) entriesByUser.set(data.userId, []);
-                entriesByUser.get(data.userId)!.push(data);
-            });
-
-            allNCDs.forEach(data => {
-                if (!ncdsByUser.has(data.userId)) ncdsByUser.set(data.userId, []);
-                ncdsByUser.get(data.userId)!.push(data);
-            });
-
-            allPlans.forEach(data => {
-                if (!plansByUser.has(data.userId)) plansByUser.set(data.userId, []);
-                plansByUser.get(data.userId)!.push(data);
-            });
-
             const performanceRows: any[] = [];
             const trendRows: any[] = [];
             const specialtyRows: any[] = [];
 
-            // Process each representative in-memory
+            // SEQUENTIAL FETCH: Process each user one by one to prevent timeouts
             for (const uid of targetUserIds) {
                 const profile = userProfiles[uid];
                 const meta = USER_DATA_MAP[uid];
@@ -181,17 +120,47 @@ export function CallPerformanceSummary({
                 const hManager = managers.find(m => m.uid === mId);
                 pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
 
-                const uEntries = (entriesByUser.get(uid) || []).filter(e => {
+                // Fetch data for this specific user
+                const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
+                    getDocs(query(
+                        collection(db!, "coverageEntries"), 
+                        where("userId", "==", uid),
+                        where("coverageDate", ">=", queryStart), 
+                        where("coverageDate", "<=", queryEnd), 
+                        limit(3000)
+                    )),
+                    getDocs(query(
+                        collection(db!, "nonCallDays"), 
+                        where("userId", "==", uid),
+                        where("date", ">=", queryStart), 
+                        where("date", "<=", queryEnd), 
+                        limit(500)
+                    )),
+                    getDocs(query(
+                        collection(db!, "plans"), 
+                        where("userId", "==", uid),
+                        where("plannedDate", ">=", queryStart), 
+                        where("plannedDate", "<=", queryEnd), 
+                        limit(3000)
+                    ))
+                ]);
+
+                const uEntriesAll = entriesSnap.docs.map(d => d.data() as CoverageEntry);
+                const uNCDsAll = ncdSnap.docs.map(d => d.data() as NonCallDay);
+                const uPlansAll = plansSnap.docs.map(d => d.data() as Plan);
+
+                // --- 1. PROCESS PERFORMANCE SHEET (Selected Month) ---
+                const uEntries = uEntriesAll.filter(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     return d && d >= monthStart && d <= monthEnd;
                 });
                 
-                const uNCDs = (ncdsByUser.get(uid) || []).filter(n => {
+                const uNCDs = uNCDsAll.filter(n => {
                     const d = parseAnyDate(n.date);
                     return d && d >= monthStart && d <= monthEnd;
                 });
 
-                const uPlans = (plansByUser.get(uid) || []).filter(p => {
+                const uPlans = uPlansAll.filter(p => {
                     const d = parseAnyDate(p.plannedDate);
                     return d && d >= monthStart && d <= monthEnd;
                 });
@@ -265,8 +234,9 @@ export function CallPerformanceSummary({
                     "Active days": activeDaysCount
                 });
 
+                // --- 2. PROCESS TREND SHEET ---
                 trendMonths.forEach(m => {
-                    const count = (entriesByUser.get(uid) || []).filter(e => {
+                    const count = uEntriesAll.filter(e => {
                         const d = parseAnyDate(e.coverageDate || e.submittedAt);
                         return d && isValid(d) && isSameMonth(d, m);
                     }).length;
@@ -280,6 +250,7 @@ export function CallPerformanceSummary({
                     });
                 });
 
+                // --- 3. PROCESS SPECIALTY SHEET ---
                 Object.entries(specialtyCountMap).forEach(([spec, count]) => {
                     specialtyRows.push({
                         "District Manager": pmrManagerName,
@@ -376,7 +347,7 @@ export function CallPerformanceSummary({
                             className="w-full h-20 text-xl font-black font-headline rounded-2xl shadow-xl transition-all active:scale-95 group"
                         >
                             {loading ? (
-                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Fetching Batch Records...</>
+                                <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Sequential Ingestion...</>
                             ) : (
                                 <><FileSpreadsheet className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" /> Generate Multi-Sheet Audit (.xlsx)</>
                             )}
@@ -390,9 +361,9 @@ export function CallPerformanceSummary({
                     <CardContent className="p-4 flex items-start gap-3">
                         <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Smart Batch Ingestion</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-primary">Sequential Strategy</p>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                                The engine now uses targeted index queries per user to avoid timeouts while maintaining high-speed parallel retrieval.
+                                The engine processes users one-by-one to ensure maximum database stability and prevent memory timeouts.
                             </p>
                         </div>
                     </CardContent>
