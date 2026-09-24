@@ -105,11 +105,11 @@ export function CallPerformanceSummary({
             }
 
             // --- BULK FETCH STRATEGY ---
-            // Instead of looping per user, fetch all records for the period once
+            // Capped at 10,000 per request to respect Firestore Structured Query limits.
             const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
-                getDocs(query(collection(db!, "coverageEntries"), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(15000))),
+                getDocs(query(collection(db!, "coverageEntries"), where("coverageDate", ">=", queryStart), where("coverageDate", "<=", queryEnd), limit(10000))),
                 getDocs(query(collection(db!, "nonCallDays"), where("date", ">=", queryStart), where("date", "<=", queryEnd), limit(5000))),
-                getDocs(query(collection(db!, "plans"), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(15000)))
+                getDocs(query(collection(db!, "plans"), where("plannedDate", ">=", queryStart), where("plannedDate", "<=", queryEnd), limit(10000)))
             ]);
 
             // Group data by userId for fast in-memory access
