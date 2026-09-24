@@ -1,3 +1,4 @@
+
 "use client"
 
 import type { CoverageEntry, Doctor, NonCallDay } from "@/lib/types";
@@ -170,8 +171,8 @@ export function SubmittedList({
     readOnly = false,
     selectedMonth,
     onMonthChange,
-    currentPage = 1,
-    totalPages = 1,
+    currentPage: serverCurrentPage,
+    totalPages: serverTotalPages,
     goToNextPage,
     goToPreviousPage,
     loading = false
@@ -194,6 +195,8 @@ export function SubmittedList({
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
+    const [localPage, setLocalPage] = useState(1);
+    const itemsPerPage = 10;
 
     const months = useMemo(() => {
         const list = [];
@@ -232,6 +235,18 @@ export function SubmittedList({
         
         return matchesSearch;
     }), [entries, searchQuery, viewMode, selectedDate]);
+
+    // Internal Pagination Fallback (used when server-side props are missing, e.g. in Admin dashboard)
+    const isServerPaginated = !!goToNextPage;
+    
+    const paginatedEntries = useMemo(() => {
+        if (isServerPaginated) return filtered; // Already sliced by hook
+        const start = (localPage - 1) * itemsPerPage;
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, localPage, isServerPaginated]);
+
+    const displayCurrentPage = isServerPaginated ? (serverCurrentPage || 1) : localPage;
+    const displayTotalPages = isServerPaginated ? (serverTotalPages || 1) : Math.ceil(filtered.length / itemsPerPage);
 
     const entryDates = useMemo(() => {
         return (entries || []).map(e => {
@@ -394,8 +409,8 @@ export function SubmittedList({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filtered.length > 0 ? (
-                                filtered.map(e => (
+                            {paginatedEntries.length > 0 ? (
+                                paginatedEntries.map(e => (
                                     <EntryRow 
                                         key={e.id} 
                                         entry={e} 
@@ -422,17 +437,17 @@ export function SubmittedList({
                     </Table>
                 </Card>
 
-                {viewMode === 'list' && totalPages > 0 && (
+                {viewMode === 'list' && displayTotalPages > 0 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between mt-8 pb-10 gap-4">
                         <p className="text-sm text-muted-foreground font-medium">
-                            Showing page <span className="text-foreground font-black">{currentPage}</span> of {totalPages}
+                            Showing page <span className="text-foreground font-black">{displayCurrentPage}</span> of {displayTotalPages}
                         </p>
                         <div className="flex items-center gap-2">
                             <Button 
                                 variant="outline" 
                                 size="sm" 
-                                onClick={goToPreviousPage} 
-                                disabled={currentPage === 1 || loading}
+                                onClick={isServerPaginated ? goToPreviousPage : () => setLocalPage(p => Math.max(1, p - 1))} 
+                                disabled={(isServerPaginated ? displayCurrentPage === 1 : localPage === 1) || loading}
                                 className="h-10 border-2 font-headline px-6 rounded-xl"
                             >
                                 <ChevronLeft className="w-4 h-4 mr-2" />
@@ -441,8 +456,8 @@ export function SubmittedList({
                             <Button 
                                 variant="outline" 
                                 size="sm" 
-                                onClick={goToNextPage} 
-                                disabled={currentPage === totalPages || loading}
+                                onClick={isServerPaginated ? goToNextPage : () => setLocalPage(p => Math.min(displayTotalPages, p + 1))} 
+                                disabled={(isServerPaginated ? displayCurrentPage === displayTotalPages : localPage === displayTotalPages) || loading}
                                 className="h-10 border-2 font-headline px-6 rounded-xl"
                             >
                                 Next

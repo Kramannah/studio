@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -67,7 +68,8 @@ const sanitizePayload = (data: any): any => {
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string, onSyncSuccess?: () => void) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
-  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]);
+  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]); // Paginated subset
+  const [summaryEntries, setSummaryEntries] = useState<CoverageEntry[]>([]); // Full month for stats
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -116,6 +118,27 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId]);
 
+  const fetchSummaryEntries = useCallback(async (start: string, end: string) => {
+    if (!userId || !db) return;
+    try {
+        // We fetch ALL entries for the month to ensure Summary stats are correct.
+        // This is necessary because stats like "Concentration" require the full history.
+        const q = query(
+            collection(db!, "coverageEntries"),
+            where("userId", "==", userId),
+            where("coverageDate", ">=", start),
+            where("coverageDate", "<=", end),
+            orderBy("coverageDate", "desc"),
+            limit(1000) // Cap summary docs for safety
+        );
+        const snap = await getDocs(q);
+        const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
+        setSummaryEntries(fetched);
+    } catch (e) {
+        console.error("Summary fetch failed:", e);
+    }
+  }, [userId]);
+
   const fetchMasterEntries = useCallback(async (force = false, pageNumber = 1) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
@@ -134,7 +157,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const end = endOfMonth(refDate).toISOString();
     
     if (pageNumber === 1 || lastFetchedKeyRef.current !== fetchKey) {
-        await fetchTotalCount(start, end);
+        await Promise.all([
+            fetchTotalCount(start, end),
+            fetchSummaryEntries(start, end)
+        ]);
     }
 
     try {
@@ -174,7 +200,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, active, selectedMonth, pageHistory, fetchTotalCount]);
+  }, [userId, active, selectedMonth, pageHistory, fetchTotalCount, fetchSummaryEntries]);
 
   const goToNextPage = () => {
       if (currentPage * PAGE_SIZE < totalCount) {
@@ -384,6 +410,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   return { 
     offlineEntries, 
     masterEntries, 
+    summaryEntries,
     saveEntry, 
     deleteMasterEntry, 
     deleteOfflineEntry,
