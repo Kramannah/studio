@@ -170,8 +170,10 @@ export function SubmittedList({
     readOnly = false,
     selectedMonth,
     onMonthChange,
-    hasMore = false,
-    onLoadMore,
+    currentPage = 1,
+    totalPages = 1,
+    goToNextPage,
+    goToPreviousPage,
     loading = false
 }: { 
     entries: CoverageEntry[], 
@@ -182,8 +184,10 @@ export function SubmittedList({
     readOnly?: boolean,
     selectedMonth?: string,
     onMonthChange?: (m: string) => void,
-    hasMore?: boolean,
-    onLoadMore?: () => void,
+    currentPage?: number,
+    totalPages?: number,
+    goToNextPage?: () => void,
+    goToPreviousPage?: () => void,
     loading?: boolean
 }) {
     const [searchQuery, setSearchQuery] = useState("");
@@ -278,28 +282,6 @@ export function SubmittedList({
     const openPreview = (src: string, title: string) => {
         setPreviewData({ src, title });
     };
-
-    if (entries.length === 0 && !searchQuery && !loading) return (
-        <div className="space-y-4">
-             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                    <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
-                    <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
-                </div>
-                <div className="w-[240px] shrink-0">
-                    <Select value={selectedMonth} onValueChange={onMonthChange}>
-                        <SelectTrigger className="bg-[#0a0c14] border-white/10 h-11 font-headline rounded-xl text-white">
-                            <SelectValue placeholder="Select Month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-            <Card className="p-20 text-center"><p className="text-muted-foreground italic">No reports found for this period.</p></Card>
-        </div>
-    );
 
     return (
       <div className="space-y-4 animate-in fade-in duration-500 w-full">
@@ -440,18 +422,33 @@ export function SubmittedList({
                     </Table>
                 </Card>
 
-                {viewMode === 'list' && hasMore && (
-                    <div className="flex justify-center mt-8 pb-10">
-                        <Button 
-                            variant="outline" 
-                            size="lg" 
-                            onClick={onLoadMore} 
-                            disabled={loading}
-                            className="h-12 border-2 font-headline px-10 rounded-xl gap-2 hover:bg-primary hover:text-white transition-all shadow-md"
-                        >
-                            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : null}
-                            {loading ? 'Retrieving Records...' : 'Load Previous Reports'}
-                        </Button>
+                {viewMode === 'list' && totalPages > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between mt-8 pb-10 gap-4">
+                        <p className="text-sm text-muted-foreground font-medium">
+                            Showing page <span className="text-foreground font-black">{currentPage}</span> of {totalPages}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={goToPreviousPage} 
+                                disabled={currentPage === 1 || loading}
+                                className="h-10 border-2 font-headline px-6 rounded-xl"
+                            >
+                                <ChevronLeft className="w-4 h-4 mr-2" />
+                                Previous
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={goToNextPage} 
+                                disabled={currentPage === totalPages || loading}
+                                className="h-10 border-2 font-headline px-6 rounded-xl"
+                            >
+                                Next
+                                <ChevronRight className="w-4 h-4 ml-2" />
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>

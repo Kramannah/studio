@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -12,9 +12,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
-const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v6';
-const CACHE_TTL = 15 * 60 * 1000; 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -73,11 +71,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   
-  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const lastFetchedKeyRef = useRef<string | null>(null);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [pageHistory, setPageHistory] = useState<(QueryDocumentSnapshot<DocumentData> | null)[]>([null]);
+  
   const isSyncInProgress = useRef(false);
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -99,91 +100,93 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId]);
 
-  const fetchMasterEntries = useCallback(async (force = false) => {
+  const fetchTotalCount = useCallback(async (start: string, end: string) => {
+    if (!userId || !db) return;
+    try {
+        const q = query(
+            collection(db!, "coverageEntries"),
+            where("userId", "==", userId),
+            where("coverageDate", ">=", start),
+            where("coverageDate", "<=", end)
+        );
+        const snapshot = await getCountFromServer(q);
+        setTotalCount(snapshot.data().count);
+    } catch (e) {
+        console.error("Count fetch failed:", e);
+    }
+  }, [userId]);
+
+  const fetchMasterEntries = useCallback(async (force = false, pageNumber = 1) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     
-    // If not forced and the key matches, we only reset pagination if the month changed
-    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
-        return;
+    // Reset if forced or month changed
+    if (force || lastFetchedKeyRef.current !== fetchKey) {
+        setPageHistory([null]);
+        setCurrentPage(1);
     }
 
     setLoading(true);
-    setHasMore(true);
-    lastDocRef.current = null;
     
-    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    const start = startOfMonth(subMonths(refDate, 1)).toISOString(); // Focused range
-    const end = endOfMonth(refDate).toISOString();
-    
-    try {
-        const q = query(
-          collection(db!, "coverageEntries"), 
-          where("userId", "==", userId),
-          where("coverageDate", ">=", start),
-          where("coverageDate", "<=", end),
-          orderBy("coverageDate", "desc"),
-          limit(PAGE_SIZE)
-        );
-        
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-            lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1];
-            const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
-            setMasterEntries(fetched);
-            setHasMore(querySnapshot.docs.length === PAGE_SIZE);
-        } else {
-            setMasterEntries([]);
-            setHasMore(false);
-        }
-        
-        lastFetchedKeyRef.current = fetchKey;
-    } catch (error: any) {
-        console.error("Initial fetch coverage failed:", error);
-        setHasMore(false);
-    } finally {
-        setLoading(false);
-    }
-  }, [userId, active, selectedMonth, masterEntries.length]);
-
-  const loadMore = useCallback(async () => {
-    if (!userId || !db || !hasMore || loading || !lastDocRef.current) return;
-    
-    setLoading(true);
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
     const start = startOfMonth(subMonths(refDate, 1)).toISOString();
     const end = endOfMonth(refDate).toISOString();
+    
+    if (pageNumber === 1 || lastFetchedKeyRef.current !== fetchKey) {
+        await fetchTotalCount(start, end);
+    }
 
     try {
-        const q = query(
+        let q = query(
           collection(db!, "coverageEntries"), 
           where("userId", "==", userId),
           where("coverageDate", ">=", start),
           where("coverageDate", "<=", end),
           orderBy("coverageDate", "desc"),
-          startAfter(lastDocRef.current),
           limit(PAGE_SIZE)
         );
         
-        const querySnapshot = await getDocs(q);
-        
-        if (!querySnapshot.empty) {
-            lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1];
-            const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
-            setMasterEntries(prev => [...prev, ...fetched]);
-            setHasMore(querySnapshot.docs.length === PAGE_SIZE);
-        } else {
-            setHasMore(false);
+        const cursor = pageHistory[pageNumber - 1];
+        if (cursor) {
+            q = query(q, startAfter(cursor));
         }
-    } catch (error) {
-        console.error("Load more coverage failed:", error);
-        setHasMore(false);
+        
+        const querySnapshot = await getDocs(q);
+        const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
+        
+        setMasterEntries(fetched);
+        
+        // Prepare next page cursor
+        if (querySnapshot.docs.length === PAGE_SIZE) {
+            const nextCursor = querySnapshot.docs[querySnapshot.docs.length - 1];
+            setPageHistory(prev => {
+                const next = [...prev];
+                next[pageNumber] = nextCursor;
+                return next;
+            });
+        }
+        
+        setCurrentPage(pageNumber);
+        lastFetchedKeyRef.current = fetchKey;
+    } catch (error: any) {
+        console.error("Fetch reports failed:", error);
     } finally {
         setLoading(false);
     }
-  }, [userId, hasMore, loading, selectedMonth]);
+  }, [userId, active, selectedMonth, pageHistory, fetchTotalCount]);
+
+  const goToNextPage = () => {
+      if (currentPage * PAGE_SIZE < totalCount) {
+          fetchMasterEntries(false, currentPage + 1);
+      }
+  };
+
+  const goToPreviousPage = () => {
+      if (currentPage > 1) {
+          fetchMasterEntries(false, currentPage - 1);
+      }
+  };
 
   useEffect(() => {
     if (active && userId) {
@@ -214,8 +217,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const colRef = collection(db!, "coverageEntries");
         addDoc(colRef, sanitized)
           .then((docRef) => {
-            const newEntry = { id: docRef.id, ...sanitized } as CoverageEntry;
-            setMasterEntries(prev => [newEntry, ...prev]);
+            fetchMasterEntries(true);
             toast({ title: "Report Saved" });
             if (onSyncSuccess) onSyncSuccess();
           })
@@ -327,7 +329,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     deleteDoc(docRef)
       .then(() => {
-        setMasterEntries(prev => prev.filter(e => e.id !== id));
+        fetchMasterEntries(true);
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();
       })
@@ -390,8 +392,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     isOnline, 
     updateMasterEntry, 
     loading,
-    hasMore,
-    loadMore,
+    currentPage,
+    totalCount,
+    totalPages: Math.ceil(totalCount / PAGE_SIZE),
+    goToNextPage,
+    goToPreviousPage,
     fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };
