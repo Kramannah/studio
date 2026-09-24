@@ -100,6 +100,9 @@ export default function AdminPage() {
 
     // PERFORMANCE RESTRICTION: Strictly hidden from DSMs/Managers. Only for SuperAdmin/HQ.
     const canSeePerformance = isSuperAdmin || isMarketingOrHR;
+    
+    // DSMs can now see Programs (Marketing Events)
+    const canSeePrograms = isSuperAdmin || isMarketingOrHR || isUserManager;
 
     useEffect(() => {
         if (mounted && isTerritoryManager && user?.uid) {
@@ -322,11 +325,13 @@ export default function AdminPage() {
                         <TabsList className="bg-muted/50 p-1 rounded-xl border-2 w-full justify-start sm:w-fit overflow-x-auto overflow-y-hidden">
                             <TabsTrigger value="district-reports" className="px-6 rounded-lg font-headline">District Reports</TabsTrigger>
                             {(isSuperAdmin || !isMarketingOrHR) && <TabsTrigger value="approvals" className="px-6 rounded-lg font-headline">Approvals</TabsTrigger>}
+                            {canSeePrograms && (
+                                <TabsTrigger value="marketing-events" className="px-6 rounded-lg font-headline flex items-center gap-2">
+                                    <Presentation className="h-4 w-4" /> Programs
+                                </TabsTrigger>
+                            )}
                             {canSeePerformance && (
                                 <>
-                                    <TabsTrigger value="marketing-events" className="px-6 rounded-lg font-headline flex items-center gap-2">
-                                        <Presentation className="h-4 w-4" /> Programs
-                                    </TabsTrigger>
                                     <TabsTrigger value="performance" className="px-6 rounded-lg font-headline flex items-center gap-2">
                                         <BarChart3 className="h-4 w-4" /> Performance
                                     </TabsTrigger>
@@ -427,11 +432,14 @@ export default function AdminPage() {
                         </TabsContent>
                     )}
 
+                    {canSeePrograms && (
+                        <TabsContent value="marketing-events">
+                            <MarketingEventsView isAdmin={true} />
+                        </TabsContent>
+                    )}
+
                     {canSeePerformance && (
                         <>
-                            <TabsContent value="marketing-events">
-                                <MarketingEventsView isAdmin={true} />
-                            </TabsContent>
                             <TabsContent value="performance">
                                 <CallPerformanceSummary 
                                     userProfiles={profiles}

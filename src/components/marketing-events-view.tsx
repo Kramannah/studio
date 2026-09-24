@@ -38,7 +38,7 @@ import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { USER_DATA_MAP } from "@/lib/user-data";
-import { MANAGER_TEAMS } from "@/lib/admins";
+import { MANAGER_TEAMS, ADMIN_UIDS, ADMIN_EMAILS } from "@/lib/admins";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,26 +124,41 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             list = list.filter(e => e.quarter === selectedQuarter);
         }
         
-        // 2. EXCLUSION LOGIC: Filter out Uncategorized PMRs in Global Admin mode
+        // 2. EXCLUSION / TERRITORY FILTERING
         if (isGlobalMode) {
+            const email = (user?.email ?? "").toLowerCase();
+            const isSuperAdmin = ADMIN_UIDS.includes(user?.uid || "") || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) || profile?.role === 'Admin';
+            const isMarketingOrHR = profile?.role === 'Marketing' || profile?.role === 'HR';
+            const isTerritoryManager = Object.keys(MANAGER_TEAMS).includes(user?.uid || "") || profile?.role === 'Manager';
+            
+            // If the user is a DSM, strictly show only their team
+            if (isTerritoryManager && !isSuperAdmin && !isMarketingOrHR) {
+                const managerUid = user?.uid;
+                const teamIds = MANAGER_TEAMS[managerUid!] || [];
+                
+                return list.filter(event => {
+                    const uid = event.userId;
+                    const pmrProfile = allProfiles[uid];
+                    const isHardcoded = teamIds.includes(uid);
+                    const isDynamic = pmrProfile?.managerId === managerUid;
+                    return isHardcoded || isDynamic;
+                });
+            }
+
+            // HQ Logic: Exclude totally unlinked accounts (Testing/Unknowns)
             return list.filter(event => {
                 const uid = event.userId;
                 const pmrProfile = allProfiles[uid];
-                
-                // Priority 1: Check Hardcoded Official Territory Mapping
                 const isInTerritory = Object.values(MANAGER_TEAMS).some(team => 
                     team.some(pId => pId.trim() === uid)
                 );
-                
-                // Priority 2: Check Dynamic Profile Manager Assignment
                 const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
-                
                 return isInTerritory || hasAssignedManager;
             });
         }
         
         return list;
-    }, [events, selectedQuarter, isGlobalMode, allProfiles]);
+    }, [events, selectedQuarter, isGlobalMode, allProfiles, user, profile]);
 
     // Grouping Logic: Treat multiple docs as 1 report based on groupId
     const groupedEvents = useMemo(() => {
@@ -377,7 +392,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                         {isGlobalMode ? "Organization Marketing Events" : "Marketing Events"}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        {isGlobalMode ? "Monitor medical program activities logged across all districts." : "Manage and track medical program attendance across your territory."}
+                        {isGlobalMode ? "Monitor medical program activities logged across authorized districts." : "Manage and track medical program attendance across your territory."}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
