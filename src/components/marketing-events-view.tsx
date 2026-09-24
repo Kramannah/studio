@@ -129,10 +129,23 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             const email = (user?.email ?? "").toLowerCase();
             const isSuperAdmin = ADMIN_UIDS.includes(user?.uid || "") || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) || profile?.role === 'Admin';
             const isMarketingOrHR = profile?.role === 'Marketing' || profile?.role === 'HR';
-            const isTerritoryManager = Object.keys(MANAGER_TEAMS).includes(user?.uid || "") || profile?.role === 'Manager';
+            const isManager = Object.keys(MANAGER_TEAMS).includes(user?.uid || "") || profile?.role === 'Manager';
+
+            // CASE 1: True Admin / HQ roles see everyone (filtered for validity)
+            if (isSuperAdmin || isMarketingOrHR) {
+                return list.filter(event => {
+                    const uid = event.userId;
+                    const pmrProfile = allProfiles[uid];
+                    const isInTerritory = Object.values(MANAGER_TEAMS).some(team => 
+                        team.some(pId => pId.trim() === uid)
+                    );
+                    const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
+                    return isInTerritory || hasAssignedManager;
+                });
+            }
             
-            // If the user is a DSM, strictly show only their team
-            if (isTerritoryManager && !isSuperAdmin && !isMarketingOrHR) {
+            // CASE 2: District Managers (DSMs) strictly restricted to their assigned team
+            if (isManager) {
                 const managerUid = user?.uid;
                 const teamIds = MANAGER_TEAMS[managerUid!] || [];
                 
@@ -145,16 +158,8 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 });
             }
 
-            // HQ Logic: Exclude totally unlinked accounts (Testing/Unknowns)
-            return list.filter(event => {
-                const uid = event.userId;
-                const pmrProfile = allProfiles[uid];
-                const isInTerritory = Object.values(MANAGER_TEAMS).some(team => 
-                    team.some(pId => pId.trim() === uid)
-                );
-                const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
-                return isInTerritory || hasAssignedManager;
-            });
+            // CASE 3: Authorized access without specific classification (Fallback protection)
+            return [];
         }
         
         return list;
@@ -392,7 +397,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                         {isGlobalMode ? "Organization Marketing Events" : "Marketing Events"}
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                        {isGlobalMode ? "Monitor medical program activities logged across authorized districts." : "Manage and track medical program attendance across your territory."}
+                        {isGlobalMode ? "Monitor medical program activities logged across authorized territories." : "Manage and track medical program attendance across your territory."}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -475,7 +480,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                                             onClick={() => toggleGroup(gid)}
                                                             className="p-0 h-auto hover:bg-transparent text-primary flex items-center gap-2"
                                                         >
-                                                            {isGroup ? `${group.length} Doctors Invited` : `Dr. ${firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`}
+                                                            {isGroup ? `${group.length} Doctors Invited` : `Dr. {firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`}
                                                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                         </Button>
                                                     </div>
@@ -638,7 +643,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                 {proofPhoto ? (
                                     <div className="relative aspect-video w-full rounded-2xl border-2 overflow-hidden bg-muted group">
                                         <Image src={proofPhoto} alt="Proof Preview" fill className="object-contain" />
-                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <Button variant="destructive" size="icon" className="h-12 w-12 rounded-full shadow-lg" onClick={() => setProofPhoto(null)} disabled={isProcessing}>
                                                 <Trash2 className="w-6 h-6" />
                                             </Button>
