@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
 import React, { useState, useMemo, useEffect } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -18,8 +18,6 @@ import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn, PH_HOLIDAYS, getHolidayName, parseAnyDate } from "@/lib/utils";
 import * as XLSX from 'xlsx';
-
-const ITEMS_PER_PAGE = 10;
 
 const DetailField = ({ label, value }: { label: string, value?: string | number | null }) => (
     <div className="space-y-1">
@@ -48,9 +46,6 @@ const EntryRow = ({
     const doctor = useMemo(() => {
         const eFirst = (entry.firstName || "").toLowerCase().trim();
         const eLast = (entry.lastName || "").toLowerCase().trim();
-        
-        // Priority 1: Direct lookup (can be unreliable if list was replaced)
-        // Priority 2: Name-based fuzzy lookup (the resilient way)
         return (doctors || []).find(d => 
             (d.firstName || "").toLowerCase().trim() === eFirst && 
             (d.lastName || "").toLowerCase().trim() === eLast
@@ -174,7 +169,10 @@ export function SubmittedList({
     onEdit, 
     readOnly = false,
     selectedMonth,
-    onMonthChange
+    onMonthChange,
+    hasMore = false,
+    onLoadMore,
+    loading = false
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -183,13 +181,15 @@ export function SubmittedList({
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
     selectedMonth?: string,
-    onMonthChange?: (m: string) => void
+    onMonthChange?: (m: string) => void,
+    hasMore?: boolean,
+    onLoadMore?: () => void,
+    loading?: boolean
 }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
-    const [currentPage, setCurrentPage] = useState(1);
 
     const months = useMemo(() => {
         const list = [];
@@ -228,18 +228,6 @@ export function SubmittedList({
         
         return matchesSearch;
     }), [entries, searchQuery, viewMode, selectedDate]);
-
-    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-    
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchQuery, selectedDate, viewMode]);
-
-    const paginatedEntries = useMemo(() => {
-        if (viewMode === 'calendar') return filtered;
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        return filtered.slice(start, start + ITEMS_PER_PAGE);
-    }, [filtered, currentPage, viewMode]);
 
     const entryDates = useMemo(() => {
         return (entries || []).map(e => {
@@ -282,16 +270,16 @@ export function SubmittedList({
             };
         });
         const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Reports");
-        XLSX.writeFile(wb, `Submitted_Coverage.xlsx`);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, ws, "Reports");
+        XLSX.writeFile(workbook, `Submitted_Coverage.xlsx`);
     }
 
     const openPreview = (src: string, title: string) => {
         setPreviewData({ src, title });
     };
 
-    if (entries.length === 0 && !searchQuery) return (
+    if (entries.length === 0 && !searchQuery && !loading) return (
         <div className="space-y-4">
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -318,7 +306,7 @@ export function SubmittedList({
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
                 <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
-                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Submitted reports for the selected period.</p>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Submitted reports (Server-Side Pagination enabled).</p>
             </div>
             <div className="w-[240px] shrink-0">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
@@ -338,7 +326,7 @@ export function SubmittedList({
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input 
-                            placeholder="Search records..." 
+                            placeholder="Search in current page..." 
                             value={searchQuery} 
                             onChange={(e) => setSearchQuery(e.target.value)} 
                             className="pl-10 h-10 border-2" 
@@ -424,8 +412,8 @@ export function SubmittedList({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {paginatedEntries.length > 0 ? (
-                                paginatedEntries.map(e => (
+                            {filtered.length > 0 ? (
+                                filtered.map(e => (
                                     <EntryRow 
                                         key={e.id} 
                                         entry={e} 
@@ -440,8 +428,10 @@ export function SubmittedList({
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-48 text-center">
                                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                            <Search size={32} className="opacity-20" />
-                                            <p className="italic">No matching reports found for {viewMode === 'calendar' && selectedDate ? format(selectedDate, "MMM d") : "this period"}.</p>
+                                            {loading ? <Loader2 className="animate-spin w-8 h-8" /> : <Search size={32} className="opacity-20" />}
+                                            <p className="italic">
+                                                {loading ? "Accessing Firestore..." : `No matching reports found for ${viewMode === 'calendar' && selectedDate ? format(selectedDate, "MMM d") : "this period"}.`}
+                                            </p>
                                         </div>
                                     </TableCell>
                                 </TableRow>
@@ -450,37 +440,23 @@ export function SubmittedList({
                     </Table>
                 </Card>
 
-                {viewMode === 'list' && totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4 px-1">
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                            Page {currentPage} of {totalPages}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                disabled={currentPage === 1}
-                                className="h-8 border-2 font-headline"
-                            >
-                                <ChevronLeft className="w-4 h-4 mr-1" /> Prev
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                disabled={currentPage === totalPages}
-                                className="h-8 border-2 font-headline"
-                            >
-                                Next <ChevronRight className="w-4 h-4 ml-1" />
-                            </Button>
-                        </div>
+                {viewMode === 'list' && hasMore && (
+                    <div className="flex justify-center mt-8 pb-10">
+                        <Button 
+                            variant="outline" 
+                            size="lg" 
+                            onClick={onLoadMore} 
+                            disabled={loading}
+                            className="h-12 border-2 font-headline px-10 rounded-xl gap-2 hover:bg-primary hover:text-white transition-all shadow-md"
+                        >
+                            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : null}
+                            {loading ? 'Retrieving Records...' : 'Load Previous Reports'}
+                        </Button>
                     </div>
                 )}
             </div>
         </div>
 
-        {/* Full-screen Proof Preview Dialog */}
         <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90 z-[1000]">
                 <DialogHeader className="sr-only">

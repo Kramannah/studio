@@ -4,16 +4,17 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, limit, FirestoreError, orderBy, startAt, endAt } from 'firebase/firestore';
-import { safeStorageSet, getMonthRangeISO, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
-import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isWithinInterval, isAfter } from 'date-fns';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
+import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const MASTER_ENTRIES_STORAGE_KEY = 'sfe-master-entries-v6';
-const CACHE_TTL = 15 * 60 * 1000; // Restored to 15 Minutes
+const CACHE_TTL = 15 * 60 * 1000; 
+const PAGE_SIZE = 15;
 
 const generateUniqueId = () => {
     return `offline_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -31,7 +32,6 @@ const sanitizePayload = (data: any): any => {
 
     if (val === undefined || val === "") return;
     
-    // Explicitly handle null values for proof fields so they can be cleared in Firestore
     if (val === null) {
         if (isProofField) {
             cleaned[key] = null;
@@ -73,9 +73,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   
+  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const lastFetchedKeyRef = useRef<string | null>(null);
-  const lastFetchTimeRef = useRef<number>(0);
   const isSyncInProgress = useRef(false);
 
   useEffect(() => {
@@ -95,75 +96,94 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (userId) {
         const localOffline = localStorage.getItem(`${OFFLINE_ENTRIES_KEY}_${userId}`);
         if (localOffline) setOfflineEntries(JSON.parse(localOffline));
-        
-        const cacheKey = `${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`;
-        const localMaster = localStorage.getItem(cacheKey);
-        if (localMaster) {
-            try {
-                const { data, timestamp } = JSON.parse(localMaster);
-                setMasterEntries(data || []);
-                lastFetchTimeRef.current = timestamp || 0;
-            } catch (e) {
-                setMasterEntries([]);
-            }
-        } else {
-            setMasterEntries([]);
-        }
     }
-  }, [userId, selectedMonth]);
+  }, [userId]);
 
   const fetchMasterEntries = useCallback(async (force = false) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
     const fetchKey = `${userId}_${selectedMonth || 'current'}`;
-    const now = Date.now();
     
-    if (!force && lastFetchedKeyRef.current === fetchKey && (now - lastFetchTimeRef.current < CACHE_TTL) && masterEntries.length > 0) {
+    // If not forced and the key matches, we only reset pagination if the month changed
+    if (!force && lastFetchedKeyRef.current === fetchKey && masterEntries.length > 0) {
         return;
     }
 
     setLoading(true);
+    setHasMore(true);
+    lastDocRef.current = null;
     
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    const start = startOfMonth(subMonths(refDate, 3)).toISOString();
+    const start = startOfMonth(subMonths(refDate, 1)).toISOString(); // Focused range
     const end = endOfMonth(refDate).toISOString();
     
     try {
-      let snapDocs: any[] = [];
-      try {
         const q = query(
           collection(db!, "coverageEntries"), 
           where("userId", "==", userId),
           where("coverageDate", ">=", start),
           where("coverageDate", "<=", end),
-          limit(2000)
+          orderBy("coverageDate", "desc"),
+          limit(PAGE_SIZE)
         );
+        
         const querySnapshot = await getDocs(q);
-        snapDocs = querySnapshot.docs;
-      } catch (err: any) {
-        const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(1500));
-        const snap = await getDocs(fallbackQ);
-        snapDocs = snap.docs.filter(d => {
-          const dateVal = String(d.data().coverageDate || "");
-          return dateVal >= start && dateVal <= end;
-        });
-      }
-      
-      const allFetched = snapDocs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as CoverageEntry));
-      allFetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
-      
-      setMasterEntries(allFetched);
-      lastFetchedKeyRef.current = fetchKey;
-      lastFetchTimeRef.current = now;
-      
-      const cacheData = { data: allFetched, timestamp: now };
-      safeStorageSet(`${MASTER_ENTRIES_STORAGE_KEY}_${userId}_${selectedMonth || 'current'}`, JSON.stringify(cacheData));
+        
+        if (!querySnapshot.empty) {
+            lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1];
+            const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
+            setMasterEntries(fetched);
+            setHasMore(querySnapshot.docs.length === PAGE_SIZE);
+        } else {
+            setMasterEntries([]);
+            setHasMore(false);
+        }
+        
+        lastFetchedKeyRef.current = fetchKey;
     } catch (error: any) {
-        console.error("Fetch coverage failed:", error);
+        console.error("Initial fetch coverage failed:", error);
+        setHasMore(false);
     } finally {
         setLoading(false);
     }
   }, [userId, active, selectedMonth, masterEntries.length]);
+
+  const loadMore = useCallback(async () => {
+    if (!userId || !db || !hasMore || loading || !lastDocRef.current) return;
+    
+    setLoading(true);
+    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+    const start = startOfMonth(subMonths(refDate, 1)).toISOString();
+    const end = endOfMonth(refDate).toISOString();
+
+    try {
+        const q = query(
+          collection(db!, "coverageEntries"), 
+          where("userId", "==", userId),
+          where("coverageDate", ">=", start),
+          where("coverageDate", "<=", end),
+          orderBy("coverageDate", "desc"),
+          startAfter(lastDocRef.current),
+          limit(PAGE_SIZE)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+            lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1];
+            const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
+            setMasterEntries(prev => [...prev, ...fetched]);
+            setHasMore(querySnapshot.docs.length === PAGE_SIZE);
+        } else {
+            setHasMore(false);
+        }
+    } catch (error) {
+        console.error("Load more coverage failed:", error);
+        setHasMore(false);
+    } finally {
+        setLoading(false);
+    }
+  }, [userId, hasMore, loading, selectedMonth]);
 
   useEffect(() => {
     if (active && userId) {
@@ -275,14 +295,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
 
     if (successCount > 0 || expiredCount > 0) {
-        await fetchMasterEntries(true);
+        fetchMasterEntries(true);
         if (onSyncSuccess) onSyncSuccess();
         
         if (expiredCount > 0) {
             toast({ 
                 variant: "destructive",
                 title: "Sync Partial", 
-                description: `${successCount} synced. ${expiredCount} reports were blocked due to the weekly Friday deadline.` 
+                description: `${successCount} synced. ${expiredCount} reports blocked (Friday deadline).` 
             });
         } else {
             toast({ title: successCount === currentOfflineQueue.length ? "Sync Complete" : `Synced ${successCount} reports.` });
@@ -370,6 +390,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     isOnline, 
     updateMasterEntry, 
     loading,
+    hasMore,
+    loadMore,
     fetchMasterEntries,
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };

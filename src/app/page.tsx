@@ -13,8 +13,7 @@ import {
   LogIn, 
   LogOut, 
   Notebook, 
-  LayoutDashboard,
-  Presentation
+  LayoutDashboard
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Doctor, Plan, CoverageEntry } from "@/lib/types";
@@ -69,18 +68,13 @@ export default function Home() {
     return profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || "PMR");
   }, [profile, user]);
 
-  const isUserAdmin = useMemo(() => {
+  const hasAdminAccess = useMemo(() => {
     if (!user) return false;
     const email = (user.email ?? "").toLowerCase();
-    return ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email) || profile?.role === 'Admin';
+    const isAdmin = ADMIN_UIDS.includes(user.uid) || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => e.toLowerCase() === email) || profile?.role === 'Admin';
+    const isManager = Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
+    return isAdmin || isManager || profile?.role === 'Marketing' || profile?.role === 'HR';
   }, [user, profile]);
-
-  const isUserManager = useMemo(() => {
-    if (!user) return false;
-    return Object.keys(MANAGER_TEAMS).includes(user.uid) || profile?.role === 'Manager';
-  }, [user, profile]);
-
-  const hasAdminAccess = isUserAdmin || isUserManager || profile?.role === 'Marketing' || profile?.role === 'HR';
 
   const { allocations, usedQuantities: globalUsedQuantities, refetch: refetchAllocations } = useQ4Allocation(activeView === 'coverage' || activeView === 'allocation', activeView === 'allocation' || activeView === 'coverage');
 
@@ -96,8 +90,10 @@ export default function Home() {
     updateMasterEntry, 
     updateOfflineEntry, 
     loading: entriesLoading, 
+    hasMore: hasMoreEntries,
+    loadMore: loadMoreEntries,
     fetchMasterEntries: refreshEntries 
-  } = useOfflineSync(user?.uid, activeView !== 'master' && activeView !== 'allocation', selectedMonth, refetchAllocations);
+  } = useOfflineSync(user?.uid, true, selectedMonth, refetchAllocations);
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
   
@@ -191,7 +187,7 @@ export default function Home() {
       case 'planning': return <PlanningCalendar doctors={doctors} plans={plans} planningRequests={planningRequests} onRequestUnlock={requestPlanningPermission} entries={masterEntries} offlineEntries={offlineEntries} onAddPlan={addPlan} onAddPlansBulk={addPlansBulk} onRemovePlan={removePlan} onLogCall={handleLogPlannedCall} nonCallDays={nonCallDays} onAddNonCallDay={addNonCallDay} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} pmrName={currentPmrName} profile={profile} />;
       case 'coverage': return <CoverageForm onSave={saveEntry} onUpdate={entryToEdit?.isOffline ? updateOfflineEntry : updateMasterEntry} isOnline={isOnline} doctors={doctors} allocations={allocations} masterEntries={masterEntries} initialDoctor={doctorToLog} onFormSubmit={handleFormSubmit} todaysPlans={todaysPlans} offlineEntries={offlineEntries} entryToEdit={entryToEdit} initialDate={plannedDateToLog} initialCallType={plannedCallTypeToLog} usedQuantities={mergedUsedQuantities} />;
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} onDelete={deleteOfflineEntry} />;
-      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
+      case 'submitted': return <SubmittedList entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} hasMore={hasMoreEntries} onLoadMore={loadMoreEntries} loading={entriesLoading} />;
       case 'summary': 
         return <CallSummary pmrName={currentPmrName} entries={masterEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
       case 'master': return <MasterList doctors={doctors} entries={masterEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={handleUpdateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
