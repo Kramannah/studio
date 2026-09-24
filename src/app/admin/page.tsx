@@ -434,7 +434,7 @@ export default function AdminPage() {
 
                     {canSeePrograms && (
                         <TabsContent value="marketing-events">
-                            <MarketingEventsView isAdmin={true} />
+                            <MarketingEventsView isAdmin={true} managerId={selectedManagerId} />
                         </TabsContent>
                     )}
 
@@ -725,6 +725,7 @@ function OpenSelector({ onValueChange, value, disabled }: { onValueChange: (v: s
                 <SelectValue placeholder="Select a DSM..." />
             </SelectTrigger>
             <SelectContent>
+                <SelectItem value="all">All Districts (Global)</SelectItem>
                 {managers.map(m => <SelectItem key={m.uid} value={m.uid}>{m.name}</SelectItem>)}
             </SelectContent>
         </Select>

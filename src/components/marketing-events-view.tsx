@@ -62,9 +62,10 @@ interface MarketingEventsViewProps {
     readOnly?: boolean;
     pmrName?: string;
     isAdmin?: boolean;
+    managerId?: string;
 }
 
-export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmrName, isAdmin = false }: MarketingEventsViewProps) {
+export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmrName, isAdmin = false, managerId }: MarketingEventsViewProps) {
     const { user, profile } = useAuth();
     const { profiles: allProfiles } = useUserProfiles();
     const { events, loading, addEvent, updateEvent, deleteEvent } = useMarketingEvents(true, undefined, userId, isAdmin);
@@ -124,46 +125,56 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             list = list.filter(e => e.quarter === selectedQuarter);
         }
         
-        // 2. EXCLUSION / TERRITORY FILTERING
+        // 2. EXCLUSION / TERRITORY FILTERING (Mirroring District Reports)
         if (isGlobalMode) {
             const email = (user?.email ?? "").toLowerCase();
             const isSuperAdmin = ADMIN_UIDS.includes(user?.uid || "") || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) || profile?.role === 'Admin';
             const isMarketingOrHR = profile?.role === 'Marketing' || profile?.role === 'HR';
-            const isManager = Object.keys(MANAGER_TEAMS).includes(user?.uid || "") || profile?.role === 'Manager';
-
-            // CASE 1: True Admin / HQ roles see everyone (filtered for validity)
-            if (isSuperAdmin || isMarketingOrHR) {
+            
+            // For DSMs, this will be their own UID passed from AdminPage
+            // For SuperAdmins, this is the manager currently selected in the dropdown
+            const targetManagerId = managerId || user?.uid;
+            
+            // If the user is NOT a global HQ admin, they are strictly restricted to their team
+            if (!isSuperAdmin && !isMarketingOrHR) {
+                if (!targetManagerId) return [];
+                
+                const teamIds = MANAGER_TEAMS[targetManagerId] || [];
                 return list.filter(event => {
-                    const uid = event.userId;
-                    const pmrProfile = allProfiles[uid];
-                    const isInTerritory = Object.values(MANAGER_TEAMS).some(team => 
-                        team.some(pId => pId.trim() === uid)
-                    );
-                    const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
-                    return isInTerritory || hasAssignedManager;
+                    const eventUid = event.userId;
+                    const pmrProfile = allProfiles[eventUid];
+                    const isHardcoded = teamIds.includes(eventUid);
+                    const isDynamic = pmrProfile?.managerId === targetManagerId;
+                    return isHardcoded || isDynamic;
                 });
             }
             
-            // CASE 2: District Managers (DSMs) strictly restricted to their assigned team
-            if (isManager) {
-                const managerUid = user?.uid;
-                const teamIds = MANAGER_TEAMS[managerUid!] || [];
-                
-                return list.filter(event => {
-                    const uid = event.userId;
-                    const pmrProfile = allProfiles[uid];
-                    const isHardcoded = teamIds.includes(uid);
-                    const isDynamic = pmrProfile?.managerId === managerUid;
+            // If a Global Admin has selected a specific manager, filter for that manager's team
+            if (managerId && managerId !== 'all' && (isSuperAdmin || isMarketingOrHR)) {
+                 const teamIds = MANAGER_TEAMS[managerId] || [];
+                 return list.filter(event => {
+                    const eventUid = event.userId;
+                    const pmrProfile = allProfiles[eventUid];
+                    const isHardcoded = teamIds.includes(eventUid);
+                    const isDynamic = pmrProfile?.managerId === managerId;
                     return isHardcoded || isDynamic;
                 });
             }
 
-            // CASE 3: Authorized access without specific classification (Fallback protection)
-            return [];
+            // Otherwise (Global Admin with 'all' or no manager selected), show everyone who is part of a territory
+            return list.filter(event => {
+                const uid = event.userId;
+                const pmrProfile = allProfiles[uid];
+                const isInAnyTerritory = Object.values(MANAGER_TEAMS).some(team => 
+                    team.some(pId => pId.trim() === uid)
+                );
+                const hasAssignedManager = pmrProfile?.managerId && pmrProfile.managerId !== 'none';
+                return isInAnyTerritory || hasAssignedManager;
+            });
         }
         
         return list;
-    }, [events, selectedQuarter, isGlobalMode, allProfiles, user, profile]);
+    }, [events, selectedQuarter, isGlobalMode, allProfiles, user, profile, managerId]);
 
     // Grouping Logic: Treat multiple docs as 1 report based on groupId
     const groupedEvents = useMemo(() => {
@@ -480,7 +491,7 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                                                             onClick={() => toggleGroup(gid)}
                                                             className="p-0 h-auto hover:bg-transparent text-primary flex items-center gap-2"
                                                         >
-                                                            {isGroup ? `${group.length} Doctors Invited` : `Dr. {firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`}
+                                                            {isGroup ? `${group.length} Doctors Invited` : `Dr. ${firstEvent.doctorFirstName} ${firstEvent.doctorLastName}`}
                                                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                         </Button>
                                                     </div>
