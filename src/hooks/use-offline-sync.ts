@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -68,17 +67,15 @@ const sanitizePayload = (data: any): any => {
 export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string, onSyncSuccess?: () => void) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
-  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]); // Paginated subset
-  const [summaryEntries, setSummaryEntries] = useState<CoverageEntry[]>([]); // Full month for stats
+  const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]); 
+  const [summaryEntries, setSummaryEntries] = useState<CoverageEntry[]>([]); 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   
-  // Use a ref for cursors to avoid infinite loops in useEffect
   const pageHistoryRef = useRef<(QueryDocumentSnapshot<DocumentData> | null)[]>([null]);
   
   const isSyncInProgress = useRef(false);
@@ -147,7 +144,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const start = startOfMonth(subMonths(refDate, 1)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
-    // Reset history and counters if month changed or forced
     if (force || lastFetchedKeyRef.current !== fetchKey) {
         pageHistoryRef.current = [null];
         setCurrentPage(1);
@@ -156,7 +152,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             fetchSummaryEntries(start, end)
         ]);
     } else if (pageNumber === 1) {
-        // Refresh counts on first page even if not forced
         await Promise.all([
             fetchTotalCount(start, end),
             fetchSummaryEntries(start, end)
@@ -185,7 +180,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         
         setMasterEntries(fetched);
         
-        // Store next cursor for future pages
         if (querySnapshot.docs.length === PAGE_SIZE) {
             const nextCursor = querySnapshot.docs[querySnapshot.docs.length - 1];
             pageHistoryRef.current[pageNumber] = nextCursor;
@@ -218,6 +212,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [fetchMasterEntries, active, userId]);
 
+  /**
+   * RELIABILITY UPDATE: saveEntry now awaits server confirmation before resolving.
+   */
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
@@ -238,22 +235,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const sanitized = sanitizePayload(rawPayload);
 
     if (isOnline) {
-        const colRef = collection(db!, "coverageEntries");
-        addDoc(colRef, sanitized)
-          .then((docRef) => {
-            fetchMasterEntries(true);
-            toast({ title: "Report Saved" });
+        try {
+            const colRef = collection(db!, "coverageEntries");
+            // CRITICAL: We await the server to ensure it's truly saved.
+            await addDoc(colRef, sanitized);
+            
+            await fetchMasterEntries(true);
+            toast({ title: "Report Saved Successfully" });
             if (onSyncSuccess) onSyncSuccess();
-          })
-          .catch(async (error) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: 'coverageEntries',
-                operation: 'create',
-                requestResourceData: sanitized,
-            }));
+            return true;
+        } catch (error: any) {
+            console.error("Online submission failed:", error);
+            if (error.code === 'permission-denied') {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: 'coverageEntries',
+                    operation: 'create',
+                    requestResourceData: sanitized,
+                }));
+            }
+            // Fallback to offline if server confirms failure
             saveEntryOffline(rawPayload);
-          });
-        return true;
+            return false;
+        }
     } else {
         saveEntryOffline(rawPayload);
         return false;
@@ -267,7 +270,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
         return next;
     });
-    toast({ title: "Saved Locally" });
+    toast({ title: "Network Weak: Saved Locally" });
   }
 
   const syncAllOfflineEntries = useCallback(async () => {

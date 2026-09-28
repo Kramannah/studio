@@ -371,8 +371,6 @@ export function CoverageForm({
 
   useEffect(() => {
     if (initialDoctor && !entryToEdit) {
-      // Fix: If initialDoctor is set, it's coming from the planned calendar.
-      // We use the provided initialCallType or fallback to 'planned'.
       form.reset({
         callType: initialCallType || "planned",
         firstName: initialDoctor.firstName,
@@ -518,8 +516,6 @@ export function CoverageForm({
         const isProofField = proofFields.includes(key);
 
         if (val === undefined || val === "") return;
-        
-        // Preserve nulls/empty arrays for proof fields so they can be explicitly cleared in Firestore
         if (val === null && !isProofField) return;
         
         if (Array.isArray(val)) {
@@ -544,6 +540,9 @@ export function CoverageForm({
     return cleaned;
   };
 
+  /**
+   * RELIABILITY UPDATE: onSubmit now awaits confirmation.
+   */
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -553,7 +552,6 @@ export function CoverageForm({
       const allEntries = [...masterEntries, ...offlineEntries];
       const newCoverageDate = values.coverageDate || new Date();
 
-      // DEADLINE CHECK: Every Friday is the cutoff for that week's reports.
       const deadline = getWeekFridayDeadline(newCoverageDate);
       if (isAfter(new Date(), deadline)) {
           toast({ 
@@ -575,20 +573,16 @@ export function CoverageForm({
             String(d.lastName ?? "").toLowerCase().trim() === docLastNameLower
         );
         
-        let coveragesInMonth = 0;
         let alreadyCoveredToday = false;
+        let coveragesInMonth = 0;
 
         for (const entry of allEntries) {
             if (String(entry.firstName ?? "").toLowerCase().trim() === docFirstNameLower && String(entry.lastName ?? "").toLowerCase().trim() === docLastNameLower) {
                 const dateStr = (entry.coverageDate || entry.submittedAt || "").toString();
                 const entryDate = parseAnyDate(dateStr);
                 if (entryDate && isValid(entryDate)) {
-                    if (isSameMonth(entryDate, newCoverageDate)) {
-                        coveragesInMonth++;
-                    }
-                    if (isSameDay(entryDate, newCoverageDate)) {
-                        alreadyCoveredToday = true;
-                    }
+                    if (isSameMonth(entryDate, newCoverageDate)) coveragesInMonth++;
+                    if (isSameDay(entryDate, newCoverageDate)) alreadyCoveredToday = true;
                 }
             }
         }
@@ -621,14 +615,13 @@ export function CoverageForm({
           const originalSubmittedAt = entryToEdit!.submittedAt;
           const isSubmittedAtValid = !!parseAnyDate(originalSubmittedAt);
           
-          onUpdate({
+          await onUpdate({
               ...entryToEdit,
               ...sanitizedPayload,
               id: entryToEdit!.id,
               submittedAt: isSubmittedAtValid ? originalSubmittedAt : new Date().toISOString()
           } as any);
           
-          toast({ title: "Report Updated" });
           resetForm();
           onFormSubmit?.(entryToEdit!.isOffline ? false : isOnline);
           setIsSubmitting(false);
@@ -636,7 +629,9 @@ export function CoverageForm({
       }
       
       const { plannedDoctorId: _pId, ...restOfValues } = sanitizedPayload;
+      // CRITICAL: We await the confirmation before resetting or navigating
       const savedOnline = await onSave(restOfValues as any);
+      
       resetForm();
       onFormSubmit?.(savedOnline);
     } catch (error) {
@@ -802,7 +797,7 @@ export function CoverageForm({
                                   render={({ field }) => (
                                   <FormItem>
                                       <FormLabel className="font-headline">Clinic</FormLabel>
-                                      <FormControl><Input {...field} disabled/></FormControl>
+                                      <FormControl><Textarea {...field} disabled /></FormControl>
                                   </FormItem>
                                   )}
                               />
@@ -1156,7 +1151,7 @@ export function CoverageForm({
                       </div>
                       
                       <Button type="submit" size="lg" className="w-full font-headline" disabled={isSubmitting}>
-                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
+                          {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalizing Submission...</> : <><Save className="mr-2" />{isEditMode ? 'Update Report' : 'Save Report'}</>}
                       </Button>
                   </div>
               </form>
