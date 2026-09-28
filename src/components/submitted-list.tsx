@@ -226,26 +226,40 @@ export function SubmittedList({
 
     const selectedHoliday = useMemo(() => selectedDate ? getHolidayName(selectedDate) : null, [selectedDate]);
 
-    const filtered = useMemo(() => (entries || []).filter(e => {
+    // SMART FILTERING LOGIC:
+    // If in Calendar Mode and a date is selected, we look through ALL monthly entries (summaryEntries)
+    // to find the specific reports for that day, ignoring the current page of the paginated list.
+    const filtered = useMemo(() => {
         const q = (searchQuery || "").toLowerCase().trim();
-        const matchesSearch = !q || `${e.firstName} ${e.lastName} ${e.clinic} ${e.specialty}`.toLowerCase().includes(q);
+        const isCalSelection = viewMode === 'calendar' && selectedDate;
         
-        if (viewMode === 'calendar' && selectedDate) {
-            const entryDate = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
-            return matchesSearch && isValid(entryDate) && isSameDay(entryDate, selectedDate);
-        }
+        // Source selection: Use the full month if clicking a specific day on the calendar
+        const source = isCalSelection ? (allEntries || []) : (entries || []);
         
-        return matchesSearch;
-    }), [entries, searchQuery, viewMode, selectedDate]);
+        return source.filter(e => {
+            const matchesSearch = !q || `${e.firstName} ${e.lastName} ${e.clinic} ${e.specialty}`.toLowerCase().includes(q);
+            
+            if (isCalSelection) {
+                const entryDate = e.coverageDate ? parseISO(e.coverageDate) : parseISO(e.submittedAt);
+                return matchesSearch && isValid(entryDate) && isSameDay(entryDate, selectedDate!);
+            }
+            
+            return matchesSearch;
+        });
+    }, [entries, allEntries, searchQuery, viewMode, selectedDate]);
 
     // Internal Pagination Fallback (used when server-side props are missing, e.g. in Admin dashboard)
     const isServerPaginated = !!goToNextPage;
     
     const paginatedEntries = useMemo(() => {
+        // If we are filtering by a specific calendar date, show all results for that date
+        // (Don't paginate the "filtered by date" view as it's usually few records)
+        if (viewMode === 'calendar' && selectedDate) return filtered;
+
         if (isServerPaginated) return filtered; // Already sliced by hook
         const start = (localPage - 1) * itemsPerPage;
         return filtered.slice(start, start + itemsPerPage);
-    }, [filtered, localPage, isServerPaginated]);
+    }, [filtered, localPage, isServerPaginated, viewMode, selectedDate]);
 
     const displayCurrentPage = isServerPaginated ? (serverCurrentPage || 1) : localPage;
     const displayTotalPages = isServerPaginated ? (serverTotalPages || 1) : Math.ceil(filtered.length / itemsPerPage);
@@ -328,7 +342,7 @@ export function SubmittedList({
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input 
-                            placeholder="Search in current page..." 
+                            placeholder={viewMode === 'calendar' ? "Search for provider on this date..." : "Search in current page..."} 
                             value={searchQuery} 
                             onChange={(e) => setSearchQuery(e.target.value)} 
                             className="pl-10 h-10 border-2" 
