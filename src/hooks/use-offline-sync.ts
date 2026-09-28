@@ -276,6 +276,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             return true;
         } catch (error: any) {
             console.warn("Online submission redirected to offline:", error.message || error);
+            // SURFACE ERROR TO USER
+            toast({ 
+              variant: 'destructive', 
+              title: "Sync Redirected", 
+              description: `Cloud upload encountered a hiccup (${error.message || 'Network'}). Your report is safe in the 'Offline Calls' tab and will retry automatically.` 
+            });
             saveEntryOffline(basePayload);
             return false;
         }
@@ -292,7 +298,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
         return next;
     });
-    toast({ title: "Network Weak: Saved Locally" });
+    // Already surfaced via Sync Redirect toast if triggered by failure
   }
 
   const syncAllOfflineEntries = useCallback(async () => {
@@ -364,9 +370,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             });
 
         } catch (error: any) {
-            // Using warn instead of error to prevent UI crash in dev mode
             console.warn(`Individual report sync failed (id: ${entry.id}). The system will retry.`, error.message || error);
-            // We continue the loop for other records
         }
     }
 

@@ -42,13 +42,14 @@ export async function compressImage(base64: string, maxWidth: number = 800, qual
  * Uploads a Base64 string to Firebase Storage and returns the public download URL.
  */
 export async function uploadBase64ToStorage(base64: string, path: string): Promise<string> {
-    if (!storage) throw new Error("Firebase Storage is not initialized.");
+    if (!storage) throw new Error("Cloud Storage was not ready. Saving report to your phone for later sync.");
     if (!base64 || !base64.startsWith('data:image')) return base64; 
 
-    // CRITICAL: Force session verification before any upload request
-    if (!auth?.currentUser) {
+    // VERIFY SESSION
+    const user = auth?.currentUser;
+    if (!user) {
         console.warn("Storage attempt blocked: No active authentication session.");
-        throw new Error("UNAUTHORIZED_STORAGE_REQUEST");
+        throw new Error("Your session expired. Please log out and back in to sync.");
     }
 
     const storageRef = ref(storage, path);
@@ -59,8 +60,7 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     } catch (error: any) {
         // Handle specific storage permission errors
         if (error.code === 'storage/unauthorized') {
-            // Using warn instead of error to prevent Next.js UI crash during background retries
-            console.warn("Firebase Storage permission denied. The system will retry during the next sync cycle.", { path, userId: auth.currentUser.uid });
+            console.warn("Permission denied for storage upload. Retrying in background...", { path, uid: user.uid });
         }
         throw error; 
     }
