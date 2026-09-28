@@ -275,12 +275,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.warn("Online submission redirected to offline:", error.message || error);
-            // SURFACE ERROR TO USER
+            console.warn("Online submission redirected to offline:", error);
+            // SURFACE DETAILED ERROR
             toast({ 
               variant: 'destructive', 
               title: "Sync Redirected", 
-              description: `Cloud upload encountered a hiccup (${error.code || error.message || 'Permission'}). Your report is safe in the 'Offline Calls' tab and will retry automatically.` 
+              description: `Submission failed (${error.code || error.message || 'Permission denied'}). Your report is safe in the 'Offline Calls' section and will retry later.` 
             });
             saveEntryOffline(basePayload);
             return false;
@@ -326,7 +326,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 }
             }
 
-            // SAFETY: Double-check auth inside the loop to catch mid-sync logouts
+            // SAFETY: Double-check auth inside the loop
             if (!auth.currentUser) break;
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
@@ -363,13 +363,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             
             successCount++;
             setOfflineEntries(prev => {
-                const next = prev.filter(item => item.id !== entry.id);
+                const next = prev.filter(item => item.id === entry.id ? false : true);
                 safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
                 return next;
             });
 
         } catch (error: any) {
-            console.warn(`Individual report sync failed (id: ${entry.id}). The system will retry.`, error.message || error);
+            console.warn(`Individual report sync failed (id: ${entry.id}). Retrying later.`, error);
         }
     }
 
