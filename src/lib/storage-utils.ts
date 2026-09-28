@@ -22,9 +22,9 @@ function base64ToBlob(base64: string): Blob {
 
 /**
  * Uploads a Base64 string to Firebase Storage and returns the URL.
- * Includes diagnostic logging for authorization troubleshooting.
+ * Enforces the use of the authenticated user's UID for the Storage path.
  */
-export async function uploadBase64ToStorage(base64: string, path: string): Promise<string> {
+export async function uploadBase64ToStorage(base64: string, folder: string, fileName: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
     if (!base64 || !base64.startsWith('data:image')) return base64; 
 
@@ -35,14 +35,16 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     }
 
     try {
-        // DIAGNOSTIC LOGGING (Per requirement #6)
-        console.log("--- STORAGE UPLOAD DIAGNOSTIC ---");
+        // AUTH SOURCE OF TRUTH: 
+        // We ignore any passed UIDs and use the real-time session UID to build the path.
+        const path = `${folder}/${user.uid}/${fileName}`;
+        
+        // Diagnostic Logging for confirmation
+        console.log("--- STORAGE UPLOAD INITIATED ---");
         console.log("Authenticated UID:", user.uid);
-        console.log("Authenticated Email:", user.email);
-        console.log("Project ID:", storage.app.options.projectId);
         console.log("Storage Bucket:", storage.app.options.storageBucket);
         console.log("Target Path:", path);
-        console.log("---------------------------------");
+        console.log("--------------------------------");
 
         // Force a token refresh to ensure the Storage backend sees an active session
         await user.getIdToken(true);
@@ -58,7 +60,7 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
             }
         };
 
-        // Execute binary upload
+        // Binary transfer for maximum stability
         const snapshot = await uploadBytes(storageRef, blob, metadata);
         const downloadUrl = await getDownloadURL(snapshot.ref);
         
@@ -90,9 +92,12 @@ export function isBase64Image(str: string | null | undefined): boolean {
     return !!str && str.startsWith('data:image');
 }
 
+/**
+ * Standard file upload (used for system templates).
+ */
 export async function uploadFileToStorage(file: File, path: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
     const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storage, storageRef, file); // This seems to have a typo in original lib, fixed below
+    const snapshot = await uploadBytes(storageRef, file);
     return getDownloadURL(snapshot.ref);
 }

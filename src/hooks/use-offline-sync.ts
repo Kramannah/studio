@@ -227,24 +227,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
             const timestamp = Date.now();
             
-            const processAsset = async (asset: string | null | undefined, path: string) => {
+            // Decoupled Asset Processing: Use real-time UID for paths
+            const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
                 if (!isBase64Image(asset)) return asset;
-                try {
-                    return await uploadBase64ToStorage(asset as string, path);
-                } catch (e: any) {
-                    console.warn(`Storage upload failed (${e.code}), falling back to Base64.`);
-                    return asset; 
-                }
+                return await uploadBase64ToStorage(asset as string, folder, fileName);
             };
 
             if (basePayload.photos?.[0]) {
-                basePayload.photos[0] = await processAsset(basePayload.photos[0], `coverage/${userId}/${timestamp}_photo.png`);
+                basePayload.photos[0] = await processAsset(basePayload.photos[0], 'coverage', `${timestamp}_photo.png`);
             }
             if (basePayload.signature) {
-                basePayload.signature = await processAsset(basePayload.signature, `signatures/${userId}/${timestamp}_dr_sig.png`);
+                basePayload.signature = await processAsset(basePayload.signature, 'signatures', `${timestamp}_dr_sig.png`);
             }
             if (basePayload.jointCallSignature) {
-                basePayload.jointCallSignature = await processAsset(basePayload.jointCallSignature, `signatures/${userId}/${timestamp}_joint_sig.png`);
+                basePayload.jointCallSignature = await processAsset(basePayload.jointCallSignature, 'signatures', `${timestamp}_joint_sig.png`);
             }
 
             const sanitized = sanitizePayload(basePayload);
@@ -304,23 +300,20 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             
             const timestamp = Date.now();
-            const processAsset = async (asset: string | null | undefined, path: string) => {
+            // Re-stamping path with source-of-truth UID from authenticated session
+            const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
                 if (!isBase64Image(asset)) return asset;
-                try {
-                    return await uploadBase64ToStorage(asset as string, path);
-                } catch (e) {
-                    return asset; 
-                }
+                return await uploadBase64ToStorage(asset as string, folder, fileName);
             };
 
             if (dataToSync.photos?.[0]) {
-                dataToSync.photos[0] = await processAsset(dataToSync.photos[0], `coverage/${userId}/${timestamp}_sync_photo.png`);
+                dataToSync.photos[0] = await processAsset(dataToSync.photos[0], 'coverage', `${timestamp}_sync_photo.png`);
             }
             if (dataToSync.signature) {
-                dataToSync.signature = await processAsset(dataToSync.signature, `signatures/${userId}/${timestamp}_sync_dr_sig.png`);
+                dataToSync.signature = await processAsset(dataToSync.signature, 'signatures', `${timestamp}_sync_dr_sig.png`);
             }
             if (dataToSync.jointCallSignature) {
-                dataToSync.jointCallSignature = await processAsset(dataToSync.jointCallSignature, `signatures/${userId}/${timestamp}_sync_joint_sig.png`);
+                dataToSync.jointCallSignature = await processAsset(dataToSync.jointCallSignature, 'signatures', `${timestamp}_sync_joint_sig.png`);
             }
 
             const sanitized = sanitizePayload(dataToSync);
@@ -414,23 +407,19 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     const timestamp = Date.now();
     try {
-        const processAsset = async (asset: string | null | undefined, path: string) => {
+        const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
             if (!isBase64Image(asset)) return asset;
-            try {
-                return await uploadBase64ToStorage(asset as string, path);
-            } catch (e) {
-                return asset; 
-            }
+            return await uploadBase64ToStorage(asset as string, folder, fileName);
         };
 
         if (data.photos?.[0]) {
-            data.photos[0] = await processAsset(data.photos[0], `coverage/${userId}/${timestamp}_edit.png`);
+            data.photos[0] = await processAsset(data.photos[0], 'coverage', `${timestamp}_edit.png`);
         }
         if (data.signature) {
-            data.signature = await processAsset(data.signature, `signatures/${userId}/${timestamp}_edit_dr.png`);
+            data.signature = await processAsset(data.signature, 'signatures', `${timestamp}_edit_dr.png`);
         }
         if (data.jointCallSignature) {
-            data.jointCallSignature = await processAsset(data.jointCallSignature, `signatures/${userId}/${timestamp}_edit_joint.png`);
+            data.jointCallSignature = await processAsset(data.jointCallSignature, 'signatures', `${timestamp}_edit_joint.png`);
         }
     } catch (err) {
         console.warn("Storage update fallback to Base64.");
@@ -476,7 +465,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };
         if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {
-            finalSubmittedAt = new Date().toISOString();
+            finalUpdate.submittedAt = new Date().toISOString();
         }
         
         const updated = offlineEntries.map(item => item.id === e.id ? { ...item, ...finalUpdate } : item);
