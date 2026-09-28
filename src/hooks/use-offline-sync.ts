@@ -275,12 +275,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.warn("Online submission redirected to offline:", error);
+            console.warn("Submission failed, rerouting to offline queue:", error);
             // SURFACE DETAILED ERROR
             toast({ 
               variant: 'destructive', 
               title: "Sync Redirected", 
-              description: `Submission failed (${error.code || error.message || 'Permission denied'}). Your report is safe in the 'Offline Calls' section and will retry later.` 
+              description: `Submission failed (${error.code || error.message || 'Permission denied'}). Your report is safe in the 'Offline Calls' tab.` 
             });
             saveEntryOffline(basePayload);
             return false;
