@@ -225,16 +225,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         try {
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
-            // FORWARD-ONLY STORAGE: Move large assets to Storage before saving record
+            // ASSET UPLOAD WITH RESILIENT FALLBACK
             const timestamp = Date.now();
-            if (isBase64Image(basePayload.photos?.[0])) {
-                basePayload.photos[0] = await uploadBase64ToStorage(basePayload.photos[0], `coverage/${userId}/${timestamp}_photo.png`);
+            
+            const processAsset = async (asset: string | null | undefined, path: string) => {
+                if (!isBase64Image(asset)) return asset;
+                try {
+                    return await uploadBase64ToStorage(asset as string, path);
+                } catch (e: any) {
+                    // RESILIENCE FALLBACK: If storage permission is denied, keep as Base64 in Firestore
+                    console.warn(`Storage upload failed (${e.code}), falling back to Base64 in document.`);
+                    return asset;
+                }
+            };
+
+            if (basePayload.photos?.[0]) {
+                basePayload.photos[0] = await processAsset(basePayload.photos[0], `coverage/${userId}/${timestamp}_photo.png`);
             }
-            if (isBase64Image(basePayload.signature)) {
-                basePayload.signature = await uploadBase64ToStorage(basePayload.signature, `signatures/${userId}/${timestamp}_dr_sig.png`);
+            if (basePayload.signature) {
+                basePayload.signature = await processAsset(basePayload.signature, `signatures/${userId}/${timestamp}_dr_sig.png`);
             }
-            if (isBase64Image(basePayload.jointCallSignature)) {
-                basePayload.jointCallSignature = await uploadBase64ToStorage(basePayload.jointCallSignature, `signatures/${userId}/${timestamp}_joint_sig.png`);
+            if (basePayload.jointCallSignature) {
+                basePayload.jointCallSignature = await processAsset(basePayload.jointCallSignature, `signatures/${userId}/${timestamp}_joint_sig.png`);
             }
 
             const sanitized = sanitizePayload(basePayload);
@@ -246,11 +258,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             return true;
         } catch (error: any) {
             console.warn("Direct upload failed, saving to offline queue:", error.message);
-            toast({ 
-                variant: "destructive", 
-                title: "Sync Redirected", 
-                description: `Reason: ${error.code || 'Signal unstable'}. Moved to 'Offline' for retry.` 
-            });
             saveEntryOffline(basePayload);
             return false;
         }
@@ -298,16 +305,26 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             
-            // FORWARD-ONLY STORAGE: Upload any local Base64 assets during sync
+            // ASSET SYNC WITH RESILIENT FALLBACK
             const timestamp = Date.now();
-            if (isBase64Image(dataToSync.photos?.[0])) {
-                dataToSync.photos[0] = await uploadBase64ToStorage(dataToSync.photos[0], `coverage/${userId}/${timestamp}_sync_photo.png`);
+            const processAsset = async (asset: string | null | undefined, path: string) => {
+                if (!isBase64Image(asset)) return asset;
+                try {
+                    return await uploadBase64ToStorage(asset as string, path);
+                } catch (e) {
+                    console.warn("Sync Storage upload failed, keeping Base64 data.");
+                    return asset;
+                }
+            };
+
+            if (dataToSync.photos?.[0]) {
+                dataToSync.photos[0] = await processAsset(dataToSync.photos[0], `coverage/${userId}/${timestamp}_sync_photo.png`);
             }
-            if (isBase64Image(dataToSync.signature)) {
-                dataToSync.signature = await uploadBase64ToStorage(dataToSync.signature, `signatures/${userId}/${timestamp}_sync_dr_sig.png`);
+            if (dataToSync.signature) {
+                dataToSync.signature = await processAsset(dataToSync.signature, `signatures/${userId}/${timestamp}_sync_dr_sig.png`);
             }
-            if (isBase64Image(dataToSync.jointCallSignature)) {
-                dataToSync.jointCallSignature = await uploadBase64ToStorage(dataToSync.jointCallSignature, `signatures/${userId}/${timestamp}_sync_joint_sig.png`);
+            if (dataToSync.jointCallSignature) {
+                dataToSync.jointCallSignature = await processAsset(dataToSync.jointCallSignature, `signatures/${userId}/${timestamp}_sync_joint_sig.png`);
             }
 
             const sanitized = sanitizePayload(dataToSync);
@@ -365,11 +382,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     
     try {
-        // DEFENSIVE CHECK: Get current data to cleanup storage, but bypass if permission is denied
         const snap = await getDoc(docRef).catch(() => null);
         if (snap && snap.exists()) {
             const data = snap.data();
-            // CLEANUP: Delete Storage files if they exist
             if (data.photos?.[0] && !isBase64Image(data.photos[0])) await deleteStorageFile(data.photos[0]);
             if (data.signature && !isBase64Image(data.signature)) await deleteStorageFile(data.signature);
             if (data.jointCallSignature && !isBase64Image(data.jointCallSignature)) await deleteStorageFile(data.jointCallSignature);
@@ -402,7 +417,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
-    // FORWARD-ONLY STORAGE: Handle updates of Base64 to Storage if edited
     const timestamp = Date.now();
     try {
         if (isBase64Image(data.photos?.[0])) {
@@ -415,7 +429,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             data.jointCallSignature = await uploadBase64ToStorage(data.jointCallSignature, `signatures/${userId}/${timestamp}_edit_joint.png`);
         }
     } catch (err) {
-        console.warn("Storage update failed during record edit.");
+        console.warn("Storage update fallback to Base64.");
     }
 
     if (data.submittedAt && !parseAnyDate(data.submittedAt)) {
