@@ -51,10 +51,9 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
             }
         };
 
-        console.log(`Starting Binary upload to: ${path}`);
+        // Binary upload method is most compatible with Security Rules auth checks
         const snapshot = await uploadBytes(storageRef, blob, metadata);
         const downloadUrl = await getDownloadURL(snapshot.ref);
-        console.log("Upload successful:", downloadUrl);
         
         return downloadUrl;
     } catch (error: any) {
