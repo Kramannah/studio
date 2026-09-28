@@ -280,7 +280,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             toast({ 
               variant: 'destructive', 
               title: "Sync Redirected", 
-              description: `Cloud upload encountered a hiccup (${error.message || 'Network'}). Your report is safe in the 'Offline Calls' tab and will retry automatically.` 
+              description: `Cloud upload encountered a hiccup (${error.code || error.message || 'Permission'}). Your report is safe in the 'Offline Calls' tab and will retry automatically.` 
             });
             saveEntryOffline(basePayload);
             return false;
@@ -298,7 +298,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(next));
         return next;
     });
-    // Already surfaced via Sync Redirect toast if triggered by failure
   }
 
   const syncAllOfflineEntries = useCallback(async () => {

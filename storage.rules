@@ -1,14 +1,23 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V4 ---
-// Updated: 2024-04-18
-// Standardizing access to ensure background sync resilience across all territories.
+// --- STORAGE SECURITY POLICIES V5 ---
+// Updated: 2024-05-20
+// Explicitly granting access to coverage and signature folders for authenticated field personnel.
 
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Allow any authenticated user to read/write to their own folders
-    // Using a global match to handle background sync reliably across sessions
+    // Core coverage data: Allow authenticated users to manage their own uploads
+    match /coverage/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Signatures: Allow authenticated users to manage their own uploads
+    match /signatures/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // System assets and general authenticated access
     match /{allPaths=**} {
       allow read, write: if request.auth != null;
     }

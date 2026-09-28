@@ -60,7 +60,7 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     } catch (error: any) {
         // Handle specific storage permission errors
         if (error.code === 'storage/unauthorized') {
-            console.warn("Permission denied for storage upload. Retrying in background...", { path, uid: user.uid });
+            console.warn("Firebase Storage permission denied. Please verify security rules or re-login.", { path, uid: user.uid });
         }
         throw error; 
     }
