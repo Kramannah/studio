@@ -9,7 +9,7 @@ import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { compressImage, uploadBase64ToStorage, deleteStorageFile } from '@/lib/storage-utils';
+import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const PAGE_SIZE = 10;
@@ -244,28 +244,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     if (isOnline) {
         try {
-            // AUTH GATE: Verify valid session before storage upload
+            // AUTH GATE: Verify valid session
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
-
-            if (processedPhotos && processedPhotos.length > 0) {
-                basePayload.photos = await Promise.all(processedPhotos.map((p, i) => {
-                    if (p.startsWith('data:image')) {
-                        const path = `coverage/${userId}/${Date.now()}_photo_${i}.jpg`;
-                        return uploadBase64ToStorage(p, path);
-                    }
-                    return p;
-                }));
-            }
-
-            if (processedSig && processedSig.startsWith('data:image')) {
-                const path = `signatures/${userId}/${Date.now()}_md_sig.jpg`;
-                basePayload.signature = await uploadBase64ToStorage(processedSig, path);
-            }
-
-            if (processedJointSig && processedJointSig.startsWith('data:image')) {
-                const path = `signatures/${userId}/${Date.now()}_joint_sig.jpg`;
-                basePayload.jointCallSignature = await uploadBase64ToStorage(processedJointSig, path);
-            }
 
             const sanitized = sanitizePayload(basePayload);
             await addDoc(collection(db!, "coverageEntries"), sanitized);
@@ -275,13 +255,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.warn("Submission failed, rerouting to offline queue:", error);
-            // SURFACE DETAILED ERROR
-            toast({ 
-              variant: 'destructive', 
-              title: "Sync Redirected", 
-              description: `Submission failed (${error.code || error.message || 'Permission denied'}). Your report is safe in the 'Offline Calls' tab.` 
-            });
+            console.warn("Online submission failed, saving to offline queue:", error);
             saveEntryOffline(basePayload);
             return false;
         }
@@ -306,7 +280,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     let currentOfflineQueue = [...offlineEntries];
     if (currentOfflineQueue.length === 0) return;
     
-    // AUTH GATE: Pause sync if session is lost
+    // AUTH GATE
     if (!auth?.currentUser) return;
 
     isSyncInProgress.current = true;
@@ -330,27 +304,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (!auth.currentUser) break;
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
-            
-            if (dataToSync.photos && dataToSync.photos.length > 0) {
-                dataToSync.photos = await Promise.all(dataToSync.photos.map((p: string, i: number) => {
-                    if (p.startsWith('data:image')) {
-                        const path = `coverage/${userId}/${Date.now()}_sync_photo_${i}.jpg`;
-                        return uploadBase64ToStorage(p, path);
-                    }
-                    return p;
-                }));
-            }
-
-            if (dataToSync.signature && dataToSync.signature.startsWith('data:image')) {
-                const path = `signatures/${userId}/${Date.now()}_sync_sig.jpg`;
-                dataToSync.signature = await uploadBase64ToStorage(dataToSync.signature, path);
-            }
-
-            if (dataToSync.jointCallSignature && dataToSync.jointCallSignature.startsWith('data:image')) {
-                const path = `signatures/${userId}/${Date.now()}_sync_joint_sig.jpg`;
-                dataToSync.jointCallSignature = await uploadBase64ToStorage(dataToSync.jointCallSignature, path);
-            }
-
             const sanitized = sanitizePayload(dataToSync);
             
             let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
@@ -406,14 +359,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     
     try {
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-            const data = snap.data() as CoverageEntry;
-            if (data.photos) await Promise.all(data.photos.map(p => deleteStorageFile(p)));
-            if (data.signature) await deleteStorageFile(data.signature);
-            if (data.jointCallSignature) await deleteStorageFile(data.jointCallSignature);
-        }
-
         await deleteDoc(docRef);
         fetchMasterEntries(true);
         toast({ title: "Report Deleted" });
@@ -438,11 +383,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     let processedPhotos = e.photos;
     if (e.photos && e.photos.length > 0) {
-        processedPhotos = await Promise.all(e.photos.map(async (p: string, i: number) => {
+        processedPhotos = await Promise.all(e.photos.map(async (p: string) => {
             if (p.startsWith('data:image')) {
-                const compressed = await compressImage(p, 800, 0.5);
-                const path = `coverage/${userId}/${Date.now()}_upd_photo_${i}.jpg`;
-                return uploadBase64ToStorage(compressed, path);
+                return await compressImage(p, 800, 0.5);
             }
             return p;
         }));
@@ -450,16 +393,12 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     let processedSig = e.signature;
     if (processedSig && processedSig.startsWith('data:image')) {
-        const compressed = await compressImage(processedSig, 400, 0.4);
-        const path = `signatures/${userId}/${Date.now()}_upd_sig.jpg`;
-        processedSig = await uploadBase64ToStorage(compressed, path);
+        processedSig = await compressImage(processedSig, 400, 0.4);
     }
 
     let processedJointSig = e.jointCallSignature;
     if (processedJointSig && processedJointSig.startsWith('data:image')) {
-        const compressed = await compressImage(processedJointSig, 400, 0.4);
-        const path = `signatures/${userId}/${Date.now()}_upd_joint_sig.jpg`;
-        processedJointSig = await uploadBase64ToStorage(compressed, path);
+        processedJointSig = await compressImage(processedJointSig, 400, 0.4);
     }
 
     const payload = { 
