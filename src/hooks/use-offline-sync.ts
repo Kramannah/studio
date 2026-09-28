@@ -9,7 +9,6 @@ import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { compressImage } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const PAGE_SIZE = 10;
@@ -215,36 +214,15 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
-    // COMPRESSION
-    let processedPhotos = entry.photos;
-    if (entry.photos && entry.photos.length > 0) {
-        try {
-            processedPhotos = await Promise.all(entry.photos.map(p => compressImage(p, 800, 0.5)));
-        } catch (e) { console.warn("Compression failed, using raw", e); }
-    }
-
-    let processedSig = entry.signature;
-    if (processedSig && processedSig.startsWith('data:image')) {
-        try { processedSig = await compressImage(processedSig, 400, 0.4); } catch(e) {}
-    }
-
-    let processedJointSig = entry.jointCallSignature;
-    if (processedJointSig && processedJointSig.startsWith('data:image')) {
-        try { processedJointSig = await compressImage(processedJointSig, 400, 0.4); } catch(e) {}
-    }
-
+    // VISUALS: Image compression removed to preserve high-fidelity proof and signatures.
     const basePayload: any = {
       ...entry,
-      photos: processedPhotos,
-      signature: processedSig,
-      jointCallSignature: processedJointSig,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
 
     if (isOnline) {
         try {
-            // AUTH GATE: Verify valid session
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
             const sanitized = sanitizePayload(basePayload);
@@ -280,7 +258,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     let currentOfflineQueue = [...offlineEntries];
     if (currentOfflineQueue.length === 0) return;
     
-    // AUTH GATE
     if (!auth?.currentUser) return;
 
     isSyncInProgress.current = true;
@@ -300,7 +277,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 }
             }
 
-            // SAFETY: Double-check auth inside the loop
             if (!auth.currentUser) break;
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
@@ -381,34 +357,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const updateMasterEntry = async (e: any) => {
     if (!db) return;
 
-    let processedPhotos = e.photos;
-    if (e.photos && e.photos.length > 0) {
-        processedPhotos = await Promise.all(e.photos.map(async (p: string) => {
-            if (p.startsWith('data:image')) {
-                return await compressImage(p, 800, 0.5);
-            }
-            return p;
-        }));
-    }
-
-    let processedSig = e.signature;
-    if (processedSig && processedSig.startsWith('data:image')) {
-        processedSig = await compressImage(processedSig, 400, 0.4);
-    }
-
-    let processedJointSig = e.jointCallSignature;
-    if (processedJointSig && processedJointSig.startsWith('data:image')) {
-        processedJointSig = await compressImage(processedJointSig, 400, 0.4);
-    }
-
-    const payload = { 
-        ...e, 
-        photos: processedPhotos, 
-        signature: processedSig, 
-        jointCallSignature: processedJointSig 
-    };
-    
-    const sanitized = sanitizePayload(payload);
+    // VISUALS: Compression logic removed for updates to ensure consistency in quality.
+    const sanitized = sanitizePayload(e);
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     

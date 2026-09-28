@@ -53,7 +53,6 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import Image from "next/image";
-import { compressImage } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
@@ -120,22 +119,17 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     const filteredEvents = useMemo(() => {
         let list = events;
         
-        // 1. Apply Quarter Filter
         if (selectedQuarter !== 'all') {
             list = list.filter(e => e.quarter === selectedQuarter);
         }
         
-        // 2. EXCLUSION / TERRITORY FILTERING (Mirroring District Reports)
         if (isGlobalMode) {
             const email = (user?.email ?? "").toLowerCase();
             const isSuperAdmin = ADMIN_UIDS.includes(user?.uid || "") || email === 'mbustamante@hovidinc.com' || ADMIN_EMAILS.some(e => (e ?? "").toLowerCase() === email) || profile?.role === 'Admin';
             const isMarketingOrHR = profile?.role === 'Marketing' || profile?.role === 'HR';
             
-            // For DSMs, this will be their own UID passed from AdminPage
-            // For SuperAdmins, this is the manager currently selected in the dropdown
             const targetManagerId = managerId || user?.uid;
             
-            // If the user is NOT a global HQ admin, they are strictly restricted to their team
             if (!isSuperAdmin && !isMarketingOrHR) {
                 if (!targetManagerId) return [];
                 
@@ -149,7 +143,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 });
             }
             
-            // If a Global Admin has selected a specific manager, filter for that manager's team
             if (managerId && managerId !== 'all' && (isSuperAdmin || isMarketingOrHR)) {
                  const teamIds = MANAGER_TEAMS[managerId] || [];
                  return list.filter(event => {
@@ -161,7 +154,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 });
             }
 
-            // Otherwise (Global Admin with 'all' or no manager selected), show everyone who is part of a territory
             return list.filter(event => {
                 const uid = event.userId;
                 const pmrProfile = allProfiles[uid];
@@ -176,7 +168,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         return list;
     }, [events, selectedQuarter, isGlobalMode, allProfiles, user, profile, managerId]);
 
-    // Grouping Logic: Treat multiple docs as 1 report based on groupId
     const groupedEvents = useMemo(() => {
         const groups: Record<string, MarketingEvent[]> = {};
         
@@ -237,10 +228,10 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
         const file = e.target.files?.[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = async (event) => {
+            reader.onload = (event) => {
                 const base64 = event.target?.result as string;
-                const compressed = await compressImage(base64, 800, 0.5);
-                setProofPhoto(compressed);
+                // QUALITY: Removed compression to ensure proof-of-attendance photos stay clear and legible.
+                setProofPhoto(base64);
             };
             reader.readAsDataURL(file);
         }
@@ -293,7 +284,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             const rawId = event.groupId || event.id;
             const simplifiedId = rawId.substring(rawId.length - 5).toUpperCase();
             
-            // Accurate attribution in global view
             const pmrNameForThisRow = isGlobalMode ? getPmrName(event.userId) : resolvedPmrName;
             const pmrCodeForThisRow = isGlobalMode ? getPmrCode(event.userId) : (profile?.code || "PMR");
 
@@ -601,7 +591,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 </TabsContent>
             </Tabs>
 
-            {/* Completion Dialog */}
             <Dialog open={completionDialog.isOpen} onOpenChange={(open) => !open && !isProcessing && setCompletionDialog({ isOpen: false, group: null })}>
                 <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto border-2 border-primary/20 shadow-2xl p-6">
                     <DialogHeader className="mb-6">
@@ -701,7 +690,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
                 </DialogContent>
             </Dialog>
 
-            {/* Proof Preview Dialog */}
             <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
                 <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/95 z-[1000]">
                     <DialogHeader className="sr-only">
