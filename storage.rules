@@ -1,21 +1,31 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V14 ---
-// Explicit bucket mapping for maximum reliability.
+// --- STORAGE SECURITY POLICIES V15 ---
+// Optimized for UID-specific path matching and reliable auth verification.
 
 service firebase.storage {
-  match /b/hovidcoverage.firebasestorage.app/o {
-    match /{allPaths=**} {
-      // Allow read/write access to any logged-in representative.
-      // This is the most resilient rule for field teams.
-      allow read, write: if request.auth != null;
-    }
-  }
-  
-  // Fallback for default bucket naming conventions
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+    // Explicit rule for Proof of Coverage photos
+    match /coverage/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Explicit rule for Signatures (Doctor/Joint)
+    match /signatures/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Fallback for organizational assets (e.g. system templates)
+    match /system/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email.toLower() in [
+          "mbustamante@hovidinc.com", 
+          "admin@hovidinc.com", 
+          "wbmaralit@hovidinc.com"
+        ]);
     }
   }
 }

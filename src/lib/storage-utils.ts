@@ -1,17 +1,34 @@
 'use client';
 
-import { ref, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
+import { ref, getDownloadURL, deleteObject, uploadBytes } from "firebase/storage";
 import { storage, auth } from "./firebase";
 
 /**
+ * Helper to convert Base64 Data URL to a raw binary Blob.
+ * This is more reliable for Storage uploads than string-based methods.
+ */
+function base64ToBlob(base64: string): Blob {
+    const parts = base64.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+
+    for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+    }
+
+    return new Blob([uInt8Array], { type: contentType });
+}
+
+/**
  * Uploads a Base64 string to Firebase Storage and returns the URL.
- * Uses 'data_url' format for maximum compatibility with Auth headers.
+ * Uses binary Blobs for maximum stability and auth-token propagation.
  */
 export async function uploadBase64ToStorage(base64: string, path: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
     if (!base64 || !base64.startsWith('data:image')) return base64; 
 
-    // Verify Auth State and Force Token Refresh if necessary
     const user = auth?.currentUser;
     if (!user) {
         console.warn("Storage upload attempted without active user session.");
@@ -19,20 +36,23 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     }
 
     try {
+        // CRITICAL FIX: Force a token refresh to ensure the Storage backend sees an active session
+        await user.getIdToken(true);
+
         const storageRef = ref(storage, path);
+        const blob = base64ToBlob(base64);
         
         // Metadata for organizational tracking
         const metadata = {
-            contentType: base64.split(';')[0].split(':')[1] || 'image/png',
+            contentType: blob.type,
             customMetadata: {
                 'userId': user.uid,
                 'uploadedAt': new Date().toISOString()
             }
         };
 
-        // uploadString with 'data_url' is the most robust method for Base64 captures
-        console.log(`Starting DataURL upload to: ${path}`);
-        const snapshot = await uploadString(storageRef, base64, 'data_url', metadata);
+        console.log(`Starting Binary upload to: ${path}`);
+        const snapshot = await uploadBytes(storageRef, blob, metadata);
         const downloadUrl = await getDownloadURL(snapshot.ref);
         console.log("Upload successful:", downloadUrl);
         
@@ -66,8 +86,8 @@ export function isBase64Image(str: string | null | undefined): boolean {
 
 export async function uploadFileToStorage(file: File, path: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
-    const { uploadBytes } = await import("firebase/storage");
+    const { uploadBytes: uploadBytesNative } = await import("firebase/storage");
     const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
+    const snapshot = await uploadBytesNative(storageRef, file);
     return getDownloadURL(snapshot.ref);
 }
