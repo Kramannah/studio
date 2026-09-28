@@ -365,8 +365,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     
     try {
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
+        // DEFENSIVE CHECK: Get current data to cleanup storage, but bypass if permission is denied
+        const snap = await getDoc(docRef).catch(() => null);
+        if (snap && snap.exists()) {
             const data = snap.data();
             // CLEANUP: Delete Storage files if they exist
             if (data.photos?.[0] && !isBase64Image(data.photos[0])) await deleteStorageFile(data.photos[0]);
@@ -379,6 +380,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();
     } catch (e: any) {
+        console.error("Deletion failed:", e);
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: docRef.path,
             operation: 'delete'

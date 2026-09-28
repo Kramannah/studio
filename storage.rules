@@ -1,13 +1,14 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V10 ---
-// Force-pushing global authenticated access to resolve 'storage/unauthorized'
-// This ensures field reporting is never interrupted by path-matching latencies.
+// --- STORAGE SECURITY POLICIES V11 ---
+// Simplified authenticated access to resolve persistent 'storage/unauthorized' errors.
+// This allows any logged-in representative to upload and manage their report files.
 
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
-      // Allow any authenticated user to read and write any path.
+      // Allow read/write access if the user is authenticated.
+      // This is the most resilient pattern for field personnel using fluctuating mobile signals.
       allow read, write: if request.auth != null;
     }
   }

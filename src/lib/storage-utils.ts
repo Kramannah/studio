@@ -50,7 +50,8 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
             contentType: 'image/png', // Native format for highest clarity
             customMetadata: {
                 'userId': user.uid,
-                'uploadedAt': new Date().toISOString()
+                'uploadedAt': new Date().toISOString(),
+                'originalPath': path
             }
         });
         
