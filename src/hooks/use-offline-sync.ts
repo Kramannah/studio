@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData, getDoc } from 'firebase/firestore';
 import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
@@ -113,7 +113,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const snapshot = await getCountFromServer(q);
         setTotalCount(snapshot.data().count);
     } catch (e) {
-        console.error("Count fetch failed:", e);
+        console.warn("Count fetch failed:", e);
     }
   }, [userId]);
 
@@ -132,7 +132,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
         setSummaryEntries(fetched);
     } catch (e) {
-        console.error("Summary fetch failed:", e);
+        console.warn("Summary fetch failed:", e);
     }
   }, [userId]);
 
@@ -188,7 +188,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         setCurrentPage(pageNumber);
         lastFetchedKeyRef.current = fetchKey;
     } catch (error: any) {
-        console.error("Fetch reports failed:", error);
+        console.warn("Fetch reports failed:", error);
     } finally {
         setLoading(false);
     }
@@ -244,7 +244,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     if (isOnline) {
         try {
-            // FORWARD-ONLY STORAGE MIGRATION
+            // AUTH GATE: Verify valid session before storage upload
+            if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
+
             if (processedPhotos && processedPhotos.length > 0) {
                 basePayload.photos = await Promise.all(processedPhotos.map((p, i) => {
                     if (p.startsWith('data:image')) {
@@ -273,14 +275,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.error("Online submission failed:", error);
-            if (error.code === 'permission-denied') {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: 'coverageEntries',
-                    operation: 'create',
-                    requestResourceData: basePayload,
-                }));
-            }
+            console.warn("Online submission redirected to offline:", error.message || error);
             saveEntryOffline(basePayload);
             return false;
         }
@@ -306,6 +301,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     let currentOfflineQueue = [...offlineEntries];
     if (currentOfflineQueue.length === 0) return;
     
+    // AUTH GATE: Pause sync if session is lost
+    if (!auth?.currentUser) return;
+
     isSyncInProgress.current = true;
     setIsSyncing(true);
     
@@ -323,9 +321,11 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 }
             }
 
+            // SAFETY: Double-check auth inside the loop to catch mid-sync logouts
+            if (!auth.currentUser) break;
+
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             
-            // FORWARD-ONLY STORAGE MIGRATION FOR OFFLINE SYNC
             if (dataToSync.photos && dataToSync.photos.length > 0) {
                 dataToSync.photos = await Promise.all(dataToSync.photos.map((p: string, i: number) => {
                     if (p.startsWith('data:image')) {
@@ -364,7 +364,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             });
 
         } catch (error: any) {
-            console.error(`Sync failed for report ${entry.id}:`, error);
+            console.warn(`Individual report sync failed (id: ${entry.id}):`, error.message || error);
+            // We continue the loop for other records
         }
     }
 
@@ -404,7 +405,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const snap = await getDoc(docRef);
         if (snap.exists()) {
             const data = snap.data() as CoverageEntry;
-            // CLEANUP STORAGE
             if (data.photos) await Promise.all(data.photos.map(p => deleteStorageFile(p)));
             if (data.signature) await deleteStorageFile(data.signature);
             if (data.jointCallSignature) await deleteStorageFile(data.jointCallSignature);

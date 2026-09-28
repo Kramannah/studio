@@ -1,4 +1,3 @@
-
 'use client';
 
 import { ref, uploadString, getDownloadURL, deleteObject, uploadBytes } from "firebase/storage";
@@ -46,18 +45,22 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     if (!storage) throw new Error("Firebase Storage is not initialized.");
     if (!base64 || !base64.startsWith('data:image')) return base64; 
 
-    // Verify auth state before upload to provide better local diagnostic
+    // CRITICAL: Force session verification before any upload request
     if (!auth?.currentUser) {
-        throw new Error("Unauthorized: No active Firebase Auth session.");
+        console.warn("Storage attempt blocked: No active authentication session.");
+        throw new Error("UNAUTHORIZED_STORAGE_REQUEST");
     }
 
     const storageRef = ref(storage, path);
     try {
-        // High-compression base64 string upload
+        // High-compression base64 string upload using data_url format
         await uploadString(storageRef, base64, 'data_url');
         return await getDownloadURL(storageRef);
     } catch (error: any) {
-        console.warn("Storage Upload Warning:", error?.message || error);
+        // Handle specific storage permission errors
+        if (error.code === 'storage/unauthorized') {
+            console.error("Firebase Storage permission denied. Please verify security rules or re-login.");
+        }
         throw error; 
     }
 }
