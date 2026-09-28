@@ -59,7 +59,8 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     } catch (error: any) {
         // Handle specific storage permission errors
         if (error.code === 'storage/unauthorized') {
-            console.error("Firebase Storage permission denied. Please verify security rules or re-login.");
+            // Using warn instead of error to prevent Next.js UI crash during background retries
+            console.warn("Firebase Storage permission denied. The system will retry during the next sync cycle.", { path, userId: auth.currentUser.uid });
         }
         throw error; 
     }

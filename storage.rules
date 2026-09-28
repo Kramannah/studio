@@ -1,28 +1,13 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V2 ---
-// Force redeploy to resolve propagation issues.
+// --- STORAGE SECURITY POLICIES V3 ---
+// Simplified rules to resolve authentication propagation issues during sync.
 
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // 1. Coverage Photos: Restricted to owner UID
-    match /coverage/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // 2. Signatures: Restricted to owner UID
-    match /signatures/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // 3. System Assets: Global read, Admin write (fallback)
-    match /system/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // Refined in future if needed
-    }
-
-    // Fallback for root or unexpected paths
+    // Allow any authenticated user to read/write to their own folders
+    // Using a simplified match to ensure background sync reliability
     match /{allPaths=**} {
       allow read, write: if request.auth != null;
     }

@@ -364,7 +364,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             });
 
         } catch (error: any) {
-            console.warn(`Individual report sync failed (id: ${entry.id}):`, error.message || error);
+            // Using warn instead of error to prevent UI crash in dev mode
+            console.warn(`Individual report sync failed (id: ${entry.id}). The system will retry.`, error.message || error);
             // We continue the loop for other records
         }
     }
@@ -425,7 +426,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const deleteOfflineEntry = (id: string) => {
     const updated = offlineEntries.filter(e => e.id !== id);
     setOfflineEntries(updated);
-    safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.stringify(updated));
+    safeStorageSet(`${OFFLINE_ENTRIES_KEY}_${userId}`, JSON.parse(JSON.stringify(updated)));
     toast({ title: "Offline report removed" });
   };
 
