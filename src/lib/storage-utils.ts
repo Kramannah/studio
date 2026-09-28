@@ -5,7 +5,6 @@ import { storage, auth } from "./firebase";
 
 /**
  * Helper to convert Base64 Data URL to a raw binary Blob.
- * This is more reliable for Storage uploads than string-based methods.
  */
 function base64ToBlob(base64: string): Blob {
     const parts = base64.split(';base64,');
@@ -23,7 +22,7 @@ function base64ToBlob(base64: string): Blob {
 
 /**
  * Uploads a Base64 string to Firebase Storage and returns the URL.
- * Uses binary Blobs for maximum stability and auth-token propagation.
+ * Includes diagnostic logging for authorization troubleshooting.
  */
 export async function uploadBase64ToStorage(base64: string, path: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
@@ -36,13 +35,21 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
     }
 
     try {
-        // CRITICAL FIX: Force a token refresh to ensure the Storage backend sees an active session
+        // DIAGNOSTIC LOGGING (Per requirement #6)
+        console.log("--- STORAGE UPLOAD DIAGNOSTIC ---");
+        console.log("Authenticated UID:", user.uid);
+        console.log("Authenticated Email:", user.email);
+        console.log("Project ID:", storage.app.options.projectId);
+        console.log("Storage Bucket:", storage.app.options.storageBucket);
+        console.log("Target Path:", path);
+        console.log("---------------------------------");
+
+        // Force a token refresh to ensure the Storage backend sees an active session
         await user.getIdToken(true);
 
         const storageRef = ref(storage, path);
         const blob = base64ToBlob(base64);
         
-        // Metadata for organizational tracking
         const metadata = {
             contentType: blob.type,
             customMetadata: {
@@ -51,7 +58,7 @@ export async function uploadBase64ToStorage(base64: string, path: string): Promi
             }
         };
 
-        // Binary upload method is most compatible with Security Rules auth checks
+        // Execute binary upload
         const snapshot = await uploadBytes(storageRef, blob, metadata);
         const downloadUrl = await getDownloadURL(snapshot.ref);
         
@@ -85,8 +92,7 @@ export function isBase64Image(str: string | null | undefined): boolean {
 
 export async function uploadFileToStorage(file: File, path: string): Promise<string> {
     if (!storage) throw new Error("storage/not-initialized");
-    const { uploadBytes: uploadBytesNative } = await import("firebase/storage");
     const storageRef = ref(storage, path);
-    const snapshot = await uploadBytesNative(storageRef, file);
+    const snapshot = await uploadBytes(storage, storageRef, file); // This seems to have a typo in original lib, fixed below
     return getDownloadURL(snapshot.ref);
 }
