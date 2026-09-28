@@ -1,27 +1,27 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V14 ---
-// Updated to allow authenticated owners AND authorized managers to write to coverage paths.
+// --- STORAGE SECURITY POLICIES V15 ---
+// Fixed evaluation crash by adding null-safety check for the email claim.
 
 service firebase.storage {
   match /b/{bucket}/o {
     
     // Helper to identify administrative/managerial accounts
     function isManagerial() {
-      return request.auth != null && (
-        request.auth.token.email.lower() in [
-          "mbustamante@hovidinc.com", 
-          "admin@hovidinc.com", 
-          "wbmaralit@hovidinc.com",
-          "lsldsm@hovidinc.com",
-          "gmasdsm@hovidinc.com",
-          "mnldsm@hovidinc.com",
-          "visdsm@hovidinc.com",
-          "cldsm@hosm.com",
-          "mindsm@hovidinc.com",
-          "nldsm@hovidinc.com"
-        ]
-      );
+      return request.auth != null && 
+             request.auth.token.email != null &&
+             request.auth.token.email.lower() in [
+               "mbustamante@hovidinc.com", 
+               "admin@hovidinc.com", 
+               "wbmaralit@hovidinc.com",
+               "lsldsm@hovidinc.com",
+               "gmasdsm@hovidinc.com",
+               "mnldsm@hovidinc.com",
+               "visdsm@hovidinc.com", 
+               "cldsm@hosm.com",
+               "mindsm@hovidinc.com",
+               "nldsm@hovidinc.com"
+             ];
     }
 
     // Proof of Coverage & Signatures
