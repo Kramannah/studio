@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData, getDoc } from 'firebase/firestore';
 import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { compressImage } from '@/lib/storage-utils';
+import { compressImage, uploadBase64ToStorage, deleteStorageFile } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const PAGE_SIZE = 10;
@@ -212,12 +212,10 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [fetchMasterEntries, active, userId]);
 
-  /**
-   * RELIABILITY UPDATE: saveEntry now awaits server confirmation before resolving.
-   */
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
+    // COMPRESSION
     let processedPhotos = entry.photos;
     if (entry.photos && entry.photos.length > 0) {
         try {
@@ -225,20 +223,50 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         } catch (e) { console.warn("Compression failed, using raw", e); }
     }
 
-    const rawPayload: any = {
+    let processedSig = entry.signature;
+    if (processedSig && processedSig.startsWith('data:image')) {
+        try { processedSig = await compressImage(processedSig, 400, 0.4); } catch(e) {}
+    }
+
+    let processedJointSig = entry.jointCallSignature;
+    if (processedJointSig && processedJointSig.startsWith('data:image')) {
+        try { processedJointSig = await compressImage(processedJointSig, 400, 0.4); } catch(e) {}
+    }
+
+    const basePayload: any = {
       ...entry,
       photos: processedPhotos,
+      signature: processedSig,
+      jointCallSignature: processedJointSig,
       userId: userId,
       submittedAt: new Date().toISOString(),
     };
 
-    const sanitized = sanitizePayload(rawPayload);
-
     if (isOnline) {
         try {
-            const colRef = collection(db!, "coverageEntries");
-            // CRITICAL: We await the server to ensure it's truly saved.
-            await addDoc(colRef, sanitized);
+            // FORWARD-ONLY STORAGE MIGRATION
+            if (processedPhotos && processedPhotos.length > 0) {
+                basePayload.photos = await Promise.all(processedPhotos.map((p, i) => {
+                    if (p.startsWith('data:image')) {
+                        const path = `coverage/${userId}/${Date.now()}_photo_${i}.jpg`;
+                        return uploadBase64ToStorage(p, path);
+                    }
+                    return p;
+                }));
+            }
+
+            if (processedSig && processedSig.startsWith('data:image')) {
+                const path = `signatures/${userId}/${Date.now()}_md_sig.jpg`;
+                basePayload.signature = await uploadBase64ToStorage(processedSig, path);
+            }
+
+            if (processedJointSig && processedJointSig.startsWith('data:image')) {
+                const path = `signatures/${userId}/${Date.now()}_joint_sig.jpg`;
+                basePayload.jointCallSignature = await uploadBase64ToStorage(processedJointSig, path);
+            }
+
+            const sanitized = sanitizePayload(basePayload);
+            await addDoc(collection(db!, "coverageEntries"), sanitized);
             
             await fetchMasterEntries(true);
             toast({ title: "Report Saved Successfully" });
@@ -250,15 +278,14 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: 'coverageEntries',
                     operation: 'create',
-                    requestResourceData: sanitized,
+                    requestResourceData: basePayload,
                 }));
             }
-            // Fallback to offline if server confirms failure
-            saveEntryOffline(rawPayload);
+            saveEntryOffline(basePayload);
             return false;
         }
     } else {
-        saveEntryOffline(rawPayload);
+        saveEntryOffline(basePayload);
         return false;
     }
   };
@@ -297,6 +324,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             }
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
+            
+            // FORWARD-ONLY STORAGE MIGRATION FOR OFFLINE SYNC
+            if (dataToSync.photos && dataToSync.photos.length > 0) {
+                dataToSync.photos = await Promise.all(dataToSync.photos.map((p: string, i: number) => {
+                    if (p.startsWith('data:image')) {
+                        const path = `coverage/${userId}/${Date.now()}_sync_photo_${i}.jpg`;
+                        return uploadBase64ToStorage(p, path);
+                    }
+                    return p;
+                }));
+            }
+
+            if (dataToSync.signature && dataToSync.signature.startsWith('data:image')) {
+                const path = `signatures/${userId}/${Date.now()}_sync_sig.jpg`;
+                dataToSync.signature = await uploadBase64ToStorage(dataToSync.signature, path);
+            }
+
+            if (dataToSync.jointCallSignature && dataToSync.jointCallSignature.startsWith('data:image')) {
+                const path = `signatures/${userId}/${Date.now()}_sync_joint_sig.jpg`;
+                dataToSync.jointCallSignature = await uploadBase64ToStorage(dataToSync.jointCallSignature, path);
+            }
+
             const sanitized = sanitizePayload(dataToSync);
             
             let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
@@ -304,11 +353,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 finalSubmittedAt = new Date().toISOString();
             }
             
-            const finalData = {
-                ...sanitized,
-                submittedAt: finalSubmittedAt
-            };
-            
+            const finalData = { ...sanitized, submittedAt: finalSubmittedAt };
             await addDoc(collection(db!, "coverageEntries"), finalData);
             
             successCount++;
@@ -354,18 +399,27 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
     const docRef = doc(db!, "coverageEntries", id);
-    deleteDoc(docRef)
-      .then(() => {
+    
+    try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+            const data = snap.data() as CoverageEntry;
+            // CLEANUP STORAGE
+            if (data.photos) await Promise.all(data.photos.map(p => deleteStorageFile(p)));
+            if (data.signature) await deleteStorageFile(data.signature);
+            if (data.jointCallSignature) await deleteStorageFile(data.jointCallSignature);
+        }
+
+        await deleteDoc(docRef);
         fetchMasterEntries(true);
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();
-      })
-      .catch(async (e: any) => {
+    } catch (e: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: docRef.path,
             operation: 'delete'
         }));
-      });
+    }
   };
 
   const deleteOfflineEntry = (id: string) => {
@@ -380,12 +434,38 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
     let processedPhotos = e.photos;
     if (e.photos && e.photos.length > 0) {
-        try {
-            processedPhotos = await Promise.all(e.photos.map((p: string) => compressImage(p, 800, 0.5)));
-        } catch (err) { console.warn("Update compression failed", err); }
+        processedPhotos = await Promise.all(e.photos.map(async (p: string, i: number) => {
+            if (p.startsWith('data:image')) {
+                const compressed = await compressImage(p, 800, 0.5);
+                const path = `coverage/${userId}/${Date.now()}_upd_photo_${i}.jpg`;
+                return uploadBase64ToStorage(compressed, path);
+            }
+            return p;
+        }));
     }
 
-    const sanitized = sanitizePayload({ ...e, photos: processedPhotos });
+    let processedSig = e.signature;
+    if (processedSig && processedSig.startsWith('data:image')) {
+        const compressed = await compressImage(processedSig, 400, 0.4);
+        const path = `signatures/${userId}/${Date.now()}_upd_sig.jpg`;
+        processedSig = await uploadBase64ToStorage(compressed, path);
+    }
+
+    let processedJointSig = e.jointCallSignature;
+    if (processedJointSig && processedJointSig.startsWith('data:image')) {
+        const compressed = await compressImage(processedJointSig, 400, 0.4);
+        const path = `signatures/${userId}/${Date.now()}_upd_joint_sig.jpg`;
+        processedJointSig = await uploadBase64ToStorage(compressed, path);
+    }
+
+    const payload = { 
+        ...e, 
+        photos: processedPhotos, 
+        signature: processedSig, 
+        jointCallSignature: processedJointSig 
+    };
+    
+    const sanitized = sanitizePayload(payload);
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
