@@ -249,7 +249,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             toast({ 
                 variant: "destructive", 
                 title: "Sync Redirected", 
-                description: "Signal unstable. Report moved to 'Offline Calls' for later retry." 
+                description: `Reason: ${error.code || 'Signal unstable'}. Moved to 'Offline' for retry.` 
             });
             saveEntryOffline(basePayload);
             return false;
@@ -328,7 +328,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             });
 
         } catch (error: any) {
-            console.warn(`Sync retry failed for report ${entry.id}. Remaining in queue.`, error.message);
+            console.warn(`Sync retry failed for report ${entry.id}. Code: ${error.code}`);
         }
     }
 

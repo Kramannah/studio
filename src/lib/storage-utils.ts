@@ -5,10 +5,25 @@ import { storage, auth } from "./firebase";
 
 /**
  * Converts a Base64 string to a Blob for reliable binary upload.
+ * Uses a hybrid approach to ensure compatibility across all mobile browsers.
  */
 async function base64ToBlob(base64: string): Promise<Blob> {
-    const response = await fetch(base64);
-    return await response.blob();
+    try {
+        // Primary method: Use browser fetch
+        const response = await fetch(base64);
+        if (!response.ok) throw new Error("Fetch failed");
+        return await response.blob();
+    } catch (e) {
+        // Fallback: Manual conversion for strict security environments
+        const parts = base64.split(';base64,');
+        const contentType = parts[0].split(':')[1];
+        const raw = window.atob(parts[1]);
+        const uInt8Array = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+        }
+        return new Blob([uInt8Array], { type: contentType });
+    }
 }
 
 /**
