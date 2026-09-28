@@ -225,7 +225,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         try {
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
-            // ASSET UPLOAD WITH RESILIENT FALLBACK
             const timestamp = Date.now();
             
             const processAsset = async (asset: string | null | undefined, path: string) => {
@@ -233,9 +232,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
                 try {
                     return await uploadBase64ToStorage(asset as string, path);
                 } catch (e: any) {
-                    // RESILIENCE FALLBACK: If storage permission is denied, keep as Base64 in Firestore
-                    console.warn(`Storage upload failed (${e.code}), falling back to Base64 in document.`);
-                    return asset;
+                    console.warn(`Storage upload failed (${e.code}), falling back to Base64.`);
+                    return asset; 
                 }
             };
 
@@ -257,7 +255,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.warn("Direct upload failed, saving to offline queue:", error.message);
+            console.error("Firestore submission failed:", error.message);
             saveEntryOffline(basePayload);
             return false;
         }
@@ -305,15 +303,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
             
-            // ASSET SYNC WITH RESILIENT FALLBACK
             const timestamp = Date.now();
             const processAsset = async (asset: string | null | undefined, path: string) => {
                 if (!isBase64Image(asset)) return asset;
                 try {
                     return await uploadBase64ToStorage(asset as string, path);
                 } catch (e) {
-                    console.warn("Sync Storage upload failed, keeping Base64 data.");
-                    return asset;
+                    return asset; 
                 }
             };
 
@@ -345,7 +341,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             });
 
         } catch (error: any) {
-            console.warn(`Sync retry failed for report ${entry.id}. Code: ${error.code}`);
+            console.warn(`Sync retry failed for report ${entry.id}.`);
         }
     }
 
@@ -395,7 +391,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();
     } catch (e: any) {
-        console.error("Deletion failed:", e);
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: docRef.path,
             operation: 'delete'
@@ -419,14 +414,23 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     
     const timestamp = Date.now();
     try {
-        if (isBase64Image(data.photos?.[0])) {
-            data.photos[0] = await uploadBase64ToStorage(data.photos[0], `coverage/${userId}/${timestamp}_edit.png`);
+        const processAsset = async (asset: string | null | undefined, path: string) => {
+            if (!isBase64Image(asset)) return asset;
+            try {
+                return await uploadBase64ToStorage(asset as string, path);
+            } catch (e) {
+                return asset; 
+            }
+        };
+
+        if (data.photos?.[0]) {
+            data.photos[0] = await processAsset(data.photos[0], `coverage/${userId}/${timestamp}_edit.png`);
         }
-        if (isBase64Image(data.signature)) {
-            data.signature = await uploadBase64ToStorage(data.signature, `signatures/${userId}/${timestamp}_edit_dr.png`);
+        if (data.signature) {
+            data.signature = await processAsset(data.signature, `signatures/${userId}/${timestamp}_edit_dr.png`);
         }
-        if (isBase64Image(data.jointCallSignature)) {
-            data.jointCallSignature = await uploadBase64ToStorage(data.jointCallSignature, `signatures/${userId}/${timestamp}_edit_joint.png`);
+        if (data.jointCallSignature) {
+            data.jointCallSignature = await processAsset(data.jointCallSignature, `signatures/${userId}/${timestamp}_edit_joint.png`);
         }
     } catch (err) {
         console.warn("Storage update fallback to Base64.");
@@ -472,7 +476,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };
         if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {
-            finalUpdate.submittedAt = new Date().toISOString();
+            finalSubmittedAt = new Date().toISOString();
         }
         
         const updated = offlineEntries.map(item => item.id === e.id ? { ...item, ...finalUpdate } : item);

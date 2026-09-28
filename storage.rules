@@ -1,16 +1,20 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V12 ---
-// Ultra-simplified authenticated access. 
-// This version uses a flattened rule structure to ensure the Storage backend 
-// correctly resolves 'request.auth' during fluctuating mobile signals.
+// --- STORAGE SECURITY POLICIES V14 ---
+// Explicit bucket mapping for maximum reliability.
 
 service firebase.storage {
-  match /b/{bucket}/o {
-    // Top-level permission check for all folders
+  match /b/hovidcoverage.firebasestorage.app/o {
     match /{allPaths=**} {
       // Allow read/write access to any logged-in representative.
-      // We rely on Firestore Security Rules for row-level report security.
+      // This is the most resilient rule for field teams.
+      allow read, write: if request.auth != null;
+    }
+  }
+  
+  // Fallback for default bucket naming conventions
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
       allow read, write: if request.auth != null;
     }
   }
