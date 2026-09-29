@@ -39,13 +39,6 @@ export async function uploadBase64ToStorage(base64: string, folder: string, file
         // We ignore any passed UIDs and use the real-time session UID to build the path.
         const path = `${folder}/${user.uid}/${fileName}`;
         
-        // Diagnostic Logging for confirmation
-        console.log("--- STORAGE UPLOAD INITIATED ---");
-        console.log("Authenticated UID:", user.uid);
-        console.log("Storage Bucket:", storage.app.options.storageBucket);
-        console.log("Target Path:", path);
-        console.log("--------------------------------");
-
         // Force a token refresh to ensure the Storage backend sees an active session
         await user.getIdToken(true);
 
@@ -59,6 +52,15 @@ export async function uploadBase64ToStorage(base64: string, folder: string, file
                 'uploadedAt': new Date().toISOString()
             }
         };
+
+        console.log("=== STORAGE RUNTIME DIAGNOSTIC ===");
+        console.log("Project ID:", storage.app.options.projectId);
+        console.log("Storage Bucket:", storage.app.options.storageBucket);
+        console.log("Auth App Project ID:", auth?.app?.options?.projectId);
+        console.log("Auth Current UID:", auth?.currentUser?.uid);
+        console.log("Storage App === Auth App:", storage.app === auth?.app);
+        console.log("Upload Path:", path);
+        console.log("=================================");
 
         // Binary transfer for maximum stability
         const snapshot = await uploadBytes(storageRef, blob, metadata);
