@@ -1,7 +1,9 @@
 rules_version = '2';
 
-// --- STORAGE SECURITY POLICIES V15 ---
-// Fixed evaluation crash by adding null-safety check for the email claim.
+// --- STORAGE SECURITY POLICIES V17 ---
+// Structural update: Separated write rules for the coverage path to ensure 
+// that UID-matching authorization is evaluated independently from the 
+// managerial check.
 
 service firebase.storage {
   match /b/{bucket}/o {
@@ -24,13 +26,16 @@ service firebase.storage {
              ];
     }
 
-    // Proof of Coverage & Signatures
-    // Permitted if the user owns the folder OR is a manager.
+    // Proof of Coverage
     match /coverage/{userId}/{allPaths=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && (request.auth.uid == userId || isManagerial());
+      // Rule 1: Authorize the folder owner (independent)
+      allow write: if request.auth != null && request.auth.uid == userId;
+      // Rule 2: Authorize managers (independent)
+      allow write: if isManagerial();
     }
     
+    // Signatures
     match /signatures/{userId}/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && (request.auth.uid == userId || isManagerial());
