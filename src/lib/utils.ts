@@ -157,3 +157,13 @@ export function safeStorageSet(key: string, value: string) {
 export function getStartOfYearISO() {
   return new Date(new Date().getFullYear(), 0, 1).toISOString();
 }
+
+/**
+ * Returns the ISO string for the start of the current calendar quarter.
+ */
+export function getStartOfQuarterISO() {
+  const now = new Date();
+  const quarter = Math.floor(now.getMonth() / 3);
+  const startOfQuarter = new Date(now.getFullYear(), quarter * 3, 1);
+  return startOfQuarter.toISOString();
+}

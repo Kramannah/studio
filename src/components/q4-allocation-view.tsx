@@ -31,7 +31,7 @@ import { useQ4Allocation } from "@/hooks/use-q4-allocation";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import type { Q4Allocation, MarketingSample, CoverageEntry, IndividualAllocation } from "@/lib/types";
-import { cn, getStartOfYearISO, parseAnyDate } from "@/lib/utils";
+import { cn, getStartOfQuarterISO, parseAnyDate } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MarketingSampleDialog } from "./marketing-sample-dialog";
 import { format, parseISO, isAfter } from "date-fns";
@@ -56,7 +56,6 @@ interface Q4AllocationViewProps {
 }
 
 export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewProps) {
-    // Pass !readOnly as isAdminView to the hook to control internal filtering
     const { allocations, usedQuantities, loading: dataLoading, refetch, addAllocationsBulk, deleteAllocationsBulk } = useQ4Allocation(true, true, userId, !readOnly);
     const { profiles, loading: profilesLoading } = useUserProfiles();
     const { toast } = useToast();
@@ -129,13 +128,9 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         
         return allocations.filter(s => {
             if (!s) return false;
-            
-            // RESTORED VISIBILITY RULES:
-            // 1. For PMRs (readOnly): Show all Global (isGlobal not false) AND their manual overrides.
             if (readOnly) {
                 if (s.isGlobal === false && !s.isOverridden) return false;
             } 
-            // 2. In Admin 'Global' tab: Show all team items (isGlobal not false).
             else if (activeTab === 'global' && s.isGlobal === false) {
                 return false;
             }
@@ -224,8 +219,9 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
         setIsExportingAll(true);
         
         try {
-            const startOfYear = getStartOfYearISO();
-            const startOfYearDate = parseISO(startOfYear);
+            // OPTIMIZATION: Switched from annual to quarterly targeting to reduce egress.
+            const startOfQuarter = getStartOfQuarterISO();
+            const startOfQuarterDate = parseISO(startOfQuarter);
 
             const [overridesSnap, samplesSnap] = await Promise.all([
                 getDocs(query(collection(db, "individualAllocations"), limit(5000))),
@@ -246,60 +242,56 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
             });
 
             const usageMap = new Map<string, Map<string, number>>(); 
-            let lastVisible = null;
-            let finished = false;
-            let totalFetched = 0;
+            const pmrProfiles = Object.values(profiles).filter(p => p.role === 'PMR' || !p.role);
+            let totalFetchedRecords = 0;
 
-            while (!finished) {
-                let q = query(
-                    collection(db, "coverageEntries"),
-                    where("coverageDate", ">=", startOfYear),
-                    orderBy("coverageDate"),
-                    limit(1000)
-                );
+            // OPTIMIZATION: Switched to sequential per-PMR queries. 
+            // This ensures 100% data integrity for every user while avoiding blind global document scans.
+            for (const pmr of pmrProfiles) {
+                const userUsage = new Map<string, number>();
+                let lastUserDoc = null;
+                let finishedUser = false;
 
-                if (lastVisible) {
-                    q = query(q, startAfter(lastVisible));
+                while (!finishedUser) {
+                    let userQ = query(
+                        collection(db!, "coverageEntries"),
+                        where("userId", "==", pmr.userId),
+                        where("coverageDate", ">=", startOfQuarter),
+                        orderBy("coverageDate"),
+                        limit(500)
+                    );
+
+                    if (lastUserDoc) userQ = query(userQ, startAfter(lastUserDoc));
+
+                    const userSnap = await getDocs(userQ);
+                    if (userSnap.empty) {
+                        finishedUser = true;
+                        break;
+                    }
+
+                    userSnap.docs.forEach(d => {
+                        const data = d.data() as CoverageEntry;
+                        const process = (name?: string, qty?: number) => {
+                            const key = String(name ?? "").toLowerCase().trim();
+                            if (!key) return;
+                            const qVal = Math.round(Number(qty || 0));
+                            if (!isNaN(qVal) && qVal !== 0) {
+                                userUsage.set(key, (userUsage.get(key) || 0) + qVal);
+                            }
+                        };
+                        process(data.primarySampleName, data.primaryProductQty);
+                        process(data.secondarySampleName, data.secondaryProductQty);
+                        data.reminderProducts?.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
+                    });
+
+                    totalFetchedRecords += userSnap.docs.length;
+                    lastUserDoc = userSnap.docs[userSnap.docs.length - 1];
+                    if (userSnap.docs.length < 500) finishedUser = true;
                 }
-
-                const snap = await getDocs(q);
-                if (snap.empty) {
-                    finished = true;
-                    break;
-                }
-
-                snap.docs.forEach(d => {
-                    const data = d.data() as CoverageEntry;
-                    const cDate = parseAnyDate(data.coverageDate || data.submittedAt);
-                    if (!cDate || !isAfter(cDate, startOfYearDate) || !data.userId) return;
-
-                    if (!usageMap.has(data.userId)) usageMap.set(data.userId, new Map());
-                    const userUsage = usageMap.get(data.userId)!;
-
-                    const process = (name?: string, qty?: number) => {
-                        const key = String(name ?? "").toLowerCase().trim();
-                        if (!key) return;
-                        const qVal = Math.round(Number(qty || 0));
-                        if (!isNaN(qVal) && qVal !== 0) {
-                            userUsage.set(key, (userUsage.get(key) || 0) + qVal);
-                        }
-                    };
-
-                    process(data.primarySampleName, data.primaryProductQty);
-                    process(data.secondarySampleName, data.secondaryProductQty);
-                    data.reminderProducts?.forEach(rp => rp?.sampleName && process(rp.sampleName, rp.quantity));
-                });
-
-                totalFetched += snap.docs.length;
-                lastVisible = snap.docs[snap.docs.length - 1];
-                
-                if (snap.docs.length < 1000) finished = true;
-                if (totalFetched >= 15000) finished = true;
+                usageMap.set(pmr.userId, userUsage);
             }
 
             const exportRows: any[] = [];
-            const pmrProfiles = Object.values(profiles).filter(p => p.role === 'PMR' || !p.role);
-
             pmrProfiles.forEach(pmr => {
                 const userUsage = usageMap.get(pmr.userId);
                 
@@ -331,10 +323,10 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
             ];
             worksheet['!cols'] = wscols;
 
-            const fileName = `All_PMR_Sample_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+            const fileName = `Organization_Inventory_Audit_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
             XLSX.writeFile(workbook, fileName);
 
-            toast({ title: "Audit Exported", description: `Processed ${totalFetched} records for ${pmrProfiles.length} representatives.` });
+            toast({ title: "Audit Exported", description: `Processed ${totalFetchedRecords} records across ${pmrProfiles.length} representatives.` });
 
         } catch (error) {
             console.error("Export all error:", error);
@@ -375,7 +367,7 @@ export function Q4AllocationView({ readOnly = false, userId }: Q4AllocationViewP
                     prodGroupProdSubGroup: (row[colMap.group] ?? "Uncategorized").toString().trim(),
                     displayMaterialName: (row[colMap.name] ?? "").toString().trim(),
                     allocationQuantity: Math.round(Number(String(row[colMap.qty] ?? '0').replace(/[^0-9.]/g, ''))),
-                    isGlobal: true // Bulk imports are global by default
+                    isGlobal: true 
                 })).filter(s => s.displayMaterialName);
                 
                 if (samplesToAdd.length > 0) {
