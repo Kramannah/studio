@@ -9,7 +9,6 @@ import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { uploadBase64ToStorage, deleteStorageFile, isBase64Image } from '@/lib/storage-utils';
 
 const OFFLINE_ENTRIES_KEY = 'sfe-offline-coverage-entries-v3';
 const PAGE_SIZE = 10;
@@ -225,24 +224,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         try {
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
-            const timestamp = Date.now();
-            
-            // Decoupled Asset Processing: Use real-time UID for paths
-            const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
-                if (!isBase64Image(asset)) return asset;
-                return await uploadBase64ToStorage(asset as string, folder, fileName);
-            };
-
-            if (basePayload.photos?.[0]) {
-                basePayload.photos[0] = await processAsset(basePayload.photos[0], 'coverage', `${timestamp}_photo.png`);
-            }
-            if (basePayload.signature) {
-                basePayload.signature = await processAsset(basePayload.signature, 'signatures', `${timestamp}_dr_sig.png`);
-            }
-            if (basePayload.jointCallSignature) {
-                basePayload.jointCallSignature = await processAsset(basePayload.jointCallSignature, 'signatures', `${timestamp}_joint_sig.png`);
-            }
-
             const sanitized = sanitizePayload(basePayload);
             await addDoc(collection(db!, "coverageEntries"), sanitized);
             
@@ -298,24 +279,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (!auth.currentUser) break;
 
             const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
-            
-            const timestamp = Date.now();
-            // Re-stamping path with source-of-truth UID from authenticated session
-            const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
-                if (!isBase64Image(asset)) return asset;
-                return await uploadBase64ToStorage(asset as string, folder, fileName);
-            };
-
-            if (dataToSync.photos?.[0]) {
-                dataToSync.photos[0] = await processAsset(dataToSync.photos[0], 'coverage', `${timestamp}_sync_photo.png`);
-            }
-            if (dataToSync.signature) {
-                dataToSync.signature = await processAsset(dataToSync.signature, 'signatures', `${timestamp}_sync_dr_sig.png`);
-            }
-            if (dataToSync.jointCallSignature) {
-                dataToSync.jointCallSignature = await processAsset(dataToSync.jointCallSignature, 'signatures', `${timestamp}_sync_joint_sig.png`);
-            }
-
             const sanitized = sanitizePayload(dataToSync);
             
             let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
@@ -371,14 +334,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const docRef = doc(db!, "coverageEntries", id);
     
     try {
-        const snap = await getDoc(docRef).catch(() => null);
-        if (snap && snap.exists()) {
-            const data = snap.data();
-            if (data.photos?.[0] && !isBase64Image(data.photos[0])) await deleteStorageFile(data.photos[0]);
-            if (data.signature && !isBase64Image(data.signature)) await deleteStorageFile(data.signature);
-            if (data.jointCallSignature && !isBase64Image(data.jointCallSignature)) await deleteStorageFile(data.jointCallSignature);
-        }
-
         await deleteDoc(docRef);
         fetchMasterEntries(true);
         toast({ title: "Report Deleted" });
@@ -405,26 +360,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const { id, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
-    const timestamp = Date.now();
-    try {
-        const processAsset = async (asset: string | null | undefined, folder: string, fileName: string) => {
-            if (!isBase64Image(asset)) return asset;
-            return await uploadBase64ToStorage(asset as string, folder, fileName);
-        };
-
-        if (data.photos?.[0]) {
-            data.photos[0] = await processAsset(data.photos[0], 'coverage', `${timestamp}_edit.png`);
-        }
-        if (data.signature) {
-            data.signature = await processAsset(data.signature, 'signatures', `${timestamp}_edit_dr.png`);
-        }
-        if (data.jointCallSignature) {
-            data.jointCallSignature = await processAsset(data.jointCallSignature, 'signatures', `${timestamp}_edit_joint.png`);
-        }
-    } catch (err) {
-        console.warn("Storage update fallback to Base64.");
-    }
-
     if (data.submittedAt && !parseAnyDate(data.submittedAt)) {
         data.submittedAt = new Date().toISOString();
     }
