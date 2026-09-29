@@ -53,15 +53,6 @@ export async function uploadBase64ToStorage(base64: string, folder: string, file
             }
         };
 
-        console.log("=== STORAGE RUNTIME DIAGNOSTIC ===");
-        console.log("Project ID:", storage.app.options.projectId);
-        console.log("Storage Bucket:", storage.app.options.storageBucket);
-        console.log("Auth App Project ID:", auth?.app?.options?.projectId);
-        console.log("Auth Current UID:", auth?.currentUser?.uid);
-        console.log("Storage App === Auth App:", storage.app === auth?.app);
-        console.log("Upload Path:", path);
-        console.log("=================================");
-
         // Binary transfer for maximum stability
         const snapshot = await uploadBytes(storageRef, blob, metadata);
         const downloadUrl = await getDownloadURL(snapshot.ref);
