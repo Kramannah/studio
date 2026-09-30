@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -96,7 +95,8 @@ export function Home() {
     totalPages,
     goToNextPage,
     goToPreviousPage,
-    fetchMasterEntries: refreshEntries 
+    fetchMasterEntries: refreshEntries,
+    syncSource
   } = useOfflineSync(user?.uid, true, selectedMonth, refetchAllocations);
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
@@ -181,6 +181,28 @@ export function Home() {
   if (!mounted || authLoading) return <div className="flex items-center justify-center min-h-screen bg-background"><RefreshCw className="w-12 h-12 animate-spin text-primary" /></div>;
   if (!user) return <LoginPage />;
 
+  const renderCacheStatus = () => {
+    if (offlineEntries.length > 0) return (
+      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-yellow-500/50 text-yellow-500 bg-yellow-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
+        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+        🟡 Offline cache
+      </Badge>
+    );
+    if (syncSource === 'server') return (
+      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-blue-500/50 text-blue-500 bg-blue-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
+        <div className="w-2 h-2 rounded-full bg-blue-500" />
+        🔵 Fetched from Firestore
+      </Badge>
+    );
+    if (syncSource === 'cache') return (
+      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-green-500/50 text-green-500 bg-green-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
+        <div className="w-2 h-2 rounded-full bg-green-500" />
+        🟢 Loaded from local cache
+      </Badge>
+    );
+    return null;
+  };
+
   const renderContent = () => {
     if (activeView === 'summary' && (entriesLoading && summaryEntries.length === 0)) return <DynamicSkeleton />;
     if (activeView === 'planning' && (plansLoading && plans.length === 0)) return <DynamicSkeleton />;
@@ -210,6 +232,7 @@ export function Home() {
             </div>
             
             <div className="flex items-center gap-2">
+                {renderCacheStatus()}
                 <Button size="sm" variant="secondary" onClick={handleManualSync} disabled={isManualSyncing || !isOnline} className="font-headline hidden sm:flex">
                     <RefreshCw className={cn("mr-2", isManualSyncing && "animate-spin")} /> {isManualSyncing ? 'Syncing...' : 'Sync All'}
                 </Button>

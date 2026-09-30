@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo, useRef } from "react";
@@ -34,6 +33,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
   
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [loadingIndividual, setLoadingIndividual] = useState(false);
+  const [syncSource, setSyncSource] = useState<'cache' | 'server' | null>(null);
   
   const activeFetchIdRef = useRef<string | null>(null);
 
@@ -100,6 +100,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         setIndividualTimeLogs(cached.logs);
         setIndividualNonCallDays(cached.ncds);
         setIndividualPlanningRequests(cached.requests);
+        setSyncSource('cache');
         
         const cachedDocs = DOCTOR_MASTER_CACHE[uid];
         if (cachedDocs) setIndividualDoctors(cachedDocs.data);
@@ -131,8 +132,9 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     docs: snap.docs.filter(doc => {
                         const val = String(doc.data()[dateField] || "");
                         return val >= filterStart && val <= filterEnd;
-                    })
-                };
+                    }),
+                    metadata: snap.metadata
+                } as any;
             } catch (e) {
                 const desperateQ = query(collection(db!, collName), where("userId", "==", uid), limit(2000));
                 const snap = await getDocs(desperateQ);
@@ -140,19 +142,23 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
                     docs: snap.docs.filter(doc => {
                         const val = String(doc.data()[dateField] || "");
                         return val >= filterStart && val <= filterEnd;
-                    })
-                };
+                    }),
+                    metadata: snap.metadata
+                } as any;
             }
         }
     };
 
     try {
+        let lastSource: 'cache' | 'server' = 'cache';
+
         const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void) => {
             const snap = await resilientGetDocs(name, field, start, end);
             if (activeFetchIdRef.current === fetchId) {
                 const data = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() }));
                 if (name === 'coverageEntries') {
                     data.sort((a: any, b: any) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+                    lastSource = snap.metadata.fromCache ? 'cache' : 'server';
                 }
                 setter(data);
                 return data;
@@ -185,6 +191,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
         const [entries, plans, logs, ncds] = await Promise.all([pEntries, pPlans, pLogs, pNcds]);
         
         if (activeFetchIdRef.current === fetchId) {
+            setSyncSource(lastSource);
             ADMIN_SESSION_CACHE[cacheKey] = {
                 entries, plans, logs, ncds, requests: requestsData, timestamp: Date.now()
             };
@@ -252,6 +259,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     fetchUserData, 
     fetchTeamApprovals,
     updateNonCallDayStatus,
-    updatePlanningRequestStatus
+    updatePlanningRequestStatus,
+    syncSource
   };
 }

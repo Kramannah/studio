@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -9,6 +8,7 @@ import { MasterList } from "@/components/master-list";
 import { PlanningCalendar } from "@/components/planning-calendar";
 import { CallSummary } from "@/components/call-summary";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -35,6 +35,7 @@ interface UserDashboardProps {
     onFetchUserData?: (uid: string, month: string, force?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
+    syncSource?: 'cache' | 'server' | null;
 }
 
 export function UserDashboard({ 
@@ -55,7 +56,8 @@ export function UserDashboard({
     onDeleteDoctorsBulk = () => {},
     onFetchUserData,
     selectedMonth,
-    onMonthChange
+    onMonthChange,
+    syncSource
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -85,48 +87,68 @@ export function UserDashboard({
     const pmrInfo = userMap?.[userId];
     const dashboardPmrName = pmrInfo ? `${pmrInfo.firstName} ${pmrInfo.lastName}` : (userId || "PMR");
     
+    const renderCacheStatus = () => {
+      if (syncSource === 'server') return (
+        <Badge variant="outline" className="h-7 px-3 border-blue-500/50 text-blue-500 bg-blue-500/5 text-[9px] font-black uppercase tracking-widest gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          🔵 Fetched from Firestore
+        </Badge>
+      );
+      if (syncSource === 'cache') return (
+        <Badge variant="outline" className="h-7 px-3 border-green-500/50 text-green-500 bg-green-500/5 text-[9px] font-black uppercase tracking-widest gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          🟢 Loaded from local cache
+        </Badge>
+      );
+      return null;
+    };
+
     return (
         <div className="space-y-6 w-full animate-in fade-in duration-500">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <div className="flex items-center justify-between gap-4 bg-[#0a0c14] p-1.5 rounded-xl border border-white/5 shadow-2xl overflow-x-auto overflow-y-hidden scrollbar-hide mb-6">
-                    <TabsList className="bg-transparent h-10 p-0 flex gap-1">
-                        <TabsTrigger 
-                            value="summary" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Call Summary
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="submitted" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Reports
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="planning" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Planning
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="events" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Marketing Events
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="master" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Masterlist
-                        </TabsTrigger>
-                        <TabsTrigger 
-                            value="allocation" 
-                            className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
-                        >
-                            Samples
-                        </TabsTrigger>
-                    </TabsList>
+                    <div className="flex items-center gap-4">
+                        <TabsList className="bg-transparent h-10 p-0 flex gap-1">
+                            <TabsTrigger 
+                                value="summary" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Call Summary
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="submitted" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Reports
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="planning" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Planning
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="events" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Marketing Events
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="master" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Masterlist
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="allocation" 
+                                className="rounded-lg font-headline px-6 data-[state=active]:bg-[#10b981] data-[state=active]:text-white transition-all h-9"
+                            >
+                                Samples
+                            </TabsTrigger>
+                        </TabsList>
+                        
+                        {renderCacheStatus()}
+                    </div>
 
                     {onFetchUserData && (
                         <Button 

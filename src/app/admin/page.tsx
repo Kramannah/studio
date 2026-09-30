@@ -124,7 +124,8 @@ export default function AdminPage() {
         updatePlanningRequestStatus,
         loadingApprovals,
         fetchUserData,
-        fetchTeamApprovals
+        fetchTeamApprovals,
+        syncSource
     } = useAdminData(selectedManagerId, profiles, mounted);
 
     const managedUserIds = useMemo(() => {
@@ -395,6 +396,7 @@ export default function AdminPage() {
                                 onFetchUserData={fetchUserData}
                                 selectedMonth={selectedMonth}
                                 onMonthChange={setSelectedMonth}
+                                syncSource={syncSource}
                             />
                         ) : selectedManagerId ? (
                             <Alert className="border-2 py-12 flex flex-col items-center text-center">

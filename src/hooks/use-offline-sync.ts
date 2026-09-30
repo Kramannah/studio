@@ -71,6 +71,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [syncSource, setSyncSource] = useState<'cache' | 'server' | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -130,6 +131,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const snap = await getDocs(q);
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
         setSummaryEntries(fetched);
+        setSyncSource(snap.metadata.fromCache ? 'cache' : 'server');
     } catch (e) {
         console.warn("Summary fetch failed:", e);
     }
@@ -178,6 +180,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
         
         setMasterEntries(fetched);
+        setSyncSource(querySnapshot.metadata.fromCache ? 'cache' : 'server');
         
         if (querySnapshot.docs.length === PAGE_SIZE) {
             const nextCursor = querySnapshot.docs[querySnapshot.docs.length - 1];
@@ -397,6 +400,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     goToNextPage,
     goToPreviousPage,
     fetchMasterEntries,
+    syncSource,
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };
         if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {
