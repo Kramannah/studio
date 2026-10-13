@@ -84,7 +84,6 @@ const EntryRow = ({
                 const data = snap.data();
                 onPreview({ photo: data.photos?.[0], signature: data.signature }, title);
             } else {
-                // If doc doesn't exist, show empty or whatever we have in main doc
                 onPreview({ photo: entry.photos?.[0], signature: entry.signature || undefined }, title);
             }
         } catch (e) {
@@ -515,9 +514,9 @@ export function SubmittedList({
                 </DialogHeader>
                 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-full">
-                        {previewProofs?.photo ? (
-                            <div className="flex flex-col items-center gap-3 flex-1 w-full animate-in fade-in zoom-in-95 duration-300">
+                    <div className="flex flex-col items-center justify-center gap-12 min-h-full">
+                        {previewProofs?.photo && (
+                            <div className="flex flex-col items-center gap-3 w-full animate-in fade-in zoom-in-95 duration-300">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-primary">Capture Photo</p>
                                 <div className="relative w-full aspect-[4/3] max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 shadow-2xl">
                                     <Image 
@@ -528,15 +527,10 @@ export function SubmittedList({
                                     />
                                 </div>
                             </div>
-                        ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/5 rounded-2xl border-2 border-dashed border-white/10 opacity-30">
-                                <Camera className="w-12 h-12 mb-2" />
-                                <p className="text-xs font-bold uppercase">No Photo Captured</p>
-                            </div>
                         )}
 
-                        {previewProofs?.signature ? (
-                            <div className="flex flex-col items-center gap-3 flex-1 w-full animate-in fade-in zoom-in-95 duration-300">
+                        {previewProofs?.signature && (
+                            <div className="flex flex-col items-center gap-3 w-full animate-in fade-in zoom-in-95 duration-300">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-primary">Doctor Signature</p>
                                 <div className="relative w-full aspect-video max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 bg-white p-10 shadow-2xl">
                                     <Image 
@@ -546,11 +540,6 @@ export function SubmittedList({
                                         className="object-contain" 
                                     />
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/5 rounded-2xl border-2 border-dashed border-white/10 opacity-30">
-                                <UserCircle className="w-12 h-12 mb-2" />
-                                <p className="text-xs font-bold uppercase">No Signature Captured</p>
                             </div>
                         )}
                     </div>
