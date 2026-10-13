@@ -42,7 +42,7 @@ const EntryRow = ({
     onDelete: (id: string) => void, 
     onEdit: (entry: CoverageEntry) => void, 
     readOnly?: boolean,
-    onPreview: (src: string, title: string) => void
+    onPreview: (proofs: { photo?: string, signature?: string }, title: string) => void
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [isFetchingProof, setIsFetchingProof] = useState(false);
@@ -64,15 +64,15 @@ const EntryRow = ({
         } catch (e) { return false; }
     }, [entry.submittedAt, readOnly]);
 
-    // SUB-COLLECTION PROOF RESOLUTION
-    const handleFetchAndPreview = useCallback(async (type: 'photo' | 'signature') => {
-        const title = type === 'photo' ? `Photo: ${entry.firstName} ${entry.lastName}` : `Signature: ${entry.firstName} ${entry.lastName}`;
+    const handleViewProofs = useCallback(async () => {
+        const title = `Proofs: ${entry.firstName} ${entry.lastName}`;
         
-        // 1. Legacy Check: If data is already in the main object, show it immediately
-        if (type === 'photo' && entry.photos?.[0]) return onPreview(entry.photos[0], title);
-        if (type === 'signature' && entry.signature) return onPreview(entry.signature, title);
+        // 1. Legacy Check
+        if (entry.photos?.[0] || entry.signature) {
+            return onPreview({ photo: entry.photos?.[0], signature: entry.signature || undefined }, title);
+        }
         
-        // 2. Optimized Fetch: Retrieve from sub-collection
+        // 2. Optimized Fetch
         if (!db || isFetchingProof) return;
         
         setIsFetchingProof(true);
@@ -82,8 +82,10 @@ const EntryRow = ({
             
             if (snap.exists()) {
                 const data = snap.data();
-                const src = type === 'photo' ? data.photos?.[0] : data.signature;
-                if (src) onPreview(src, title);
+                onPreview({ photo: data.photos?.[0], signature: data.signature }, title);
+            } else {
+                // If doc doesn't exist, show empty or whatever we have in main doc
+                onPreview({ photo: entry.photos?.[0], signature: entry.signature || undefined }, title);
             }
         } catch (e) {
             console.error("Failed to load proof data:", e);
@@ -112,27 +114,15 @@ const EntryRow = ({
                     {doctor?.frequency && <Badge variant="outline" className="font-mono text-[10px] font-black">{doctor.frequency}</Badge>}
                 </TableCell>
                 <TableCell>
-                    <div className="flex items-center gap-2">
-                        {/* PHOTO THUMBNAIL */}
+                    <div className="flex items-center justify-center">
                         <Button 
                             variant="outline" 
                             size="sm" 
                             className="h-10 w-10 p-0 rounded-lg relative overflow-hidden bg-muted group"
-                            onClick={() => handleFetchAndPreview('photo')}
+                            onClick={handleViewProofs}
                             disabled={isFetchingProof}
                         >
                             {isFetchingProof ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Camera className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />}
-                        </Button>
-
-                        {/* SIGNATURE THUMBNAIL */}
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-10 w-10 p-0 rounded-lg bg-muted group"
-                            onClick={() => handleFetchAndPreview('signature')}
-                            disabled={isFetchingProof}
-                        >
-                            <UserCircle className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                         </Button>
                     </div>
                 </TableCell>
@@ -236,7 +226,7 @@ export function SubmittedList({
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-    const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
+    const [previewProofs, setPreviewProofs] = useState<{ photo?: string, signature?: string, title: string } | null>(null);
     const [localPage, setLocalPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -343,8 +333,8 @@ export function SubmittedList({
         XLSX.writeFile(workbook, `Submitted_Coverage.xlsx`);
     }
 
-    const openPreview = (src: string, title: string) => {
-        setPreviewData({ src, title });
+    const openPreview = (proofs: { photo?: string, signature?: string }, title: string) => {
+        setPreviewProofs({ ...proofs, title });
     };
 
     return (
@@ -352,7 +342,7 @@ export function SubmittedList({
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
                 <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
-                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Optimized Sub-collection Storage Active.</p>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Consolidated Proof Viewing Active.</p>
             </div>
             <div className="w-[240px] shrink-0">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
@@ -453,7 +443,7 @@ export function SubmittedList({
                                 <TableHead className="hidden md:table-cell font-black uppercase tracking-widest text-[10px]">Clinic/Hospital</TableHead>
                                 <TableHead className="font-black uppercase tracking-widest text-[10px]">Coverage</TableHead>
                                 <TableHead className="hidden sm:table-cell font-black uppercase tracking-widest text-[10px] text-center">Freq</TableHead>
-                                <TableHead className="font-black uppercase tracking-widest text-[10px] text-center">Proof</TableHead>
+                                <TableHead className="font-black uppercase tracking-widest text-[10px] text-center">Proofs</TableHead>
                                 <TableHead className="text-right font-black uppercase tracking-widest text-[10px] pr-6">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -518,29 +508,56 @@ export function SubmittedList({
             </div>
         </div>
 
-        <Dialog open={!!previewData} onOpenChange={(open) => !open && setPreviewData(null)}>
-            <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/95 z-[1000]">
-                <DialogHeader className="sr-only">
-                    <DialogTitle>{previewData?.title || "Proof Preview"}</DialogTitle>
+        <Dialog open={!!previewProofs} onOpenChange={(open) => !open && setPreviewProofs(null)}>
+            <DialogContent className="max-w-5xl p-0 overflow-hidden border-none bg-black/95 z-[1000] flex flex-col h-[90vh]">
+                <DialogHeader className="p-4 border-b border-white/10 shrink-0">
+                    <DialogTitle className="text-white font-headline text-lg">{previewProofs?.title}</DialogTitle>
                 </DialogHeader>
-                <div className="relative w-full h-[85vh] flex items-center justify-center p-4">
-                    {previewData?.src && (
-                        <Image 
-                            src={previewData.src} 
-                            alt="Full Proof" 
-                            width={1600} 
-                            height={1200} 
-                            className={cn(
-                                "max-w-full max-h-full object-contain rounded-lg shadow-2xl",
-                                previewData.title.includes("Signature") ? "bg-white p-12" : ""
-                            )} 
-                        />
-                    )}
+                
+                <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-8 min-h-full">
+                        {previewProofs?.photo ? (
+                            <div className="flex flex-col items-center gap-3 flex-1 w-full animate-in fade-in zoom-in-95 duration-300">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Capture Photo</p>
+                                <div className="relative w-full aspect-[4/3] max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 shadow-2xl">
+                                    <Image 
+                                        src={previewProofs.photo} 
+                                        alt="Proof Photo" 
+                                        fill
+                                        className="object-contain" 
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/5 rounded-2xl border-2 border-dashed border-white/10 opacity-30">
+                                <Camera className="w-12 h-12 mb-2" />
+                                <p className="text-xs font-bold uppercase">No Photo Captured</p>
+                            </div>
+                        )}
+
+                        {previewProofs?.signature ? (
+                            <div className="flex flex-col items-center gap-3 flex-1 w-full animate-in fade-in zoom-in-95 duration-300">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Doctor Signature</p>
+                                <div className="relative w-full aspect-video max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 bg-white p-10 shadow-2xl">
+                                    <Image 
+                                        src={previewProofs.signature} 
+                                        alt="Signature" 
+                                        fill
+                                        className="object-contain" 
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white/5 rounded-2xl border-2 border-dashed border-white/10 opacity-30">
+                                <UserCircle className="w-12 h-12 mb-2" />
+                                <p className="text-xs font-bold uppercase">No Signature Captured</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div className="absolute top-4 left-4 flex items-center gap-2">
-                    <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg border-2 border-primary/20">
-                        {previewData?.title}
-                    </Badge>
+
+                <div className="p-4 border-t border-white/10 flex justify-end shrink-0">
+                    <Button variant="ghost" className="text-white hover:bg-white/10 font-headline" onClick={() => setPreviewProofs(null)}>Close Proofs</Button>
                 </div>
             </DialogContent>
         </Dialog>
