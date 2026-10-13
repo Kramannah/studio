@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -96,7 +97,9 @@ export function Home() {
     goToNextPage,
     goToPreviousPage,
     fetchMasterEntries: refreshEntries,
-    syncSource
+    syncSource,
+    loadTrend,
+    setLoadTrend
   } = useOfflineSync(user?.uid, true, selectedMonth, refetchAllocations);
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
@@ -215,7 +218,7 @@ export function Home() {
       case 'offline': return <OfflineList entries={offlineEntries} isSyncing={isSyncing} syncAll={syncAllOfflineEntries} isOnline={isOnline} onEdit={(entry) => handleEditEntry(entry, true)} onDelete={deleteOfflineEntry} />;
       case 'submitted': return <SubmittedList entries={masterEntries} allEntries={summaryEntries} doctors={doctors} nonCallDays={nonCallDays} onDelete={deleteMasterEntry} onEdit={(entry) => handleEditEntry(entry, false)} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} currentPage={currentPage} totalPages={totalPages} goToNextPage={goToNextPage} goToPreviousPage={goToPreviousPage} loading={entriesLoading} />;
       case 'summary': 
-        return <CallSummary pmrName={currentPmrName} entries={summaryEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />;
+        return <CallSummary pmrName={currentPmrName} entries={summaryEntries} doctors={doctors} nonCallDays={nonCallDays} timeLogs={timeLogs} selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} loadTrend={loadTrend} onLoadTrend={setLoadTrend} />;
       case 'master': return <MasterList doctors={doctors} entries={summaryEntries} onAddDoctor={addDoctor} onAddDoctorsBulk={addDoctorsBulk} onUpdateDoctor={handleUpdateDoctor} onDeleteDoctor={deleteDoctor} onDeleteDoctorsBulk={deleteDoctorsBulk} readOnly={false} />;
       case 'allocation': return <Q4AllocationView readOnly={true} />;
       case 'marketing-events': return <MarketingEventsView />;

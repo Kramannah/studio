@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -32,7 +33,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string, force?: boolean) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string, force?: boolean, trend?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
     syncSource?: 'cache' | 'server' | null;
@@ -61,24 +62,25 @@ export function UserDashboard({
 }: UserDashboardProps) {
     const [activeTab, setActiveTab] = useState('summary');
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [loadTrend, setLoadTrend] = useState(false);
     const lastFetchedRef = useRef<string>("");
 
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            const fetchKey = `${userId}_${selectedMonth}`;
+            const fetchKey = `${userId}_${selectedMonth}_${loadTrend}`;
             
             if (lastFetchedRef.current !== fetchKey) {
                 lastFetchedRef.current = fetchKey;
-                onFetchUserData(userId, selectedMonth, false);
+                onFetchUserData(userId, selectedMonth, false, loadTrend);
             }
         }
-    }, [selectedMonth, userId, onFetchUserData]);
+    }, [selectedMonth, userId, onFetchUserData, loadTrend]);
 
     const handleRefresh = async () => {
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth, true);
+            await onFetchUserData(userId, selectedMonth, true, loadTrend);
         } finally {
             setIsRefreshing(false);
         }
@@ -174,6 +176,8 @@ export function UserDashboard({
                             timeLogs={allTimeLogs || []} 
                             selectedMonth={selectedMonth}
                             onMonthChange={onMonthChange}
+                            loadTrend={loadTrend}
+                            onLoadTrend={setLoadTrend}
                         />
                     </TabsContent>
                     

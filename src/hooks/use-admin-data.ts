@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useCallback, useMemo, useRef } from "react";
@@ -85,13 +86,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, loadTrend = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const fetchId = `${uid}_${selectedMonth}`;
+    const fetchId = `${uid}_${selectedMonth}_${loadTrend}`;
     activeFetchIdRef.current = fetchId;
 
-    const cacheKey = `user_${uid}_${selectedMonth}`;
+    const cacheKey = `user_${uid}_${selectedMonth}_${loadTrend}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
     if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL)) { 
@@ -109,8 +110,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     const refDate = parseISO(selectedMonth + "-01");
-    // ROLLING WINDOW: Fetches last 4 months for trend accuracy and history discovery
-    const start = startOfMonth(subMonths(refDate, 3)).toISOString();
+    // ROLLING WINDOW: Fetches current month only by default, or 4 months if trend requested
+    const start = (loadTrend ? startOfMonth(subMonths(refDate, 3)) : startOfMonth(refDate)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
     const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string) => {
@@ -124,7 +125,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             );
             return await getDocs(q);
         } catch (err: any) {
-            // Index Error Fallback: Scan last 2000 records for the user regardless of date field order
+            // Index Error Fallback
             const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(2000));
             try {
                 const snap = await getDocs(fallbackQ);

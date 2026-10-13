@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -72,6 +73,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   const [syncSource, setSyncSource] = useState<'cache' | 'server' | null>(null);
+  const [loadTrend, setLoadTrend] = useState(false);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -126,7 +128,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             where("coverageDate", ">=", start),
             where("coverageDate", "<=", end),
             orderBy("coverageDate", "desc"),
-            limit(1000)
+            limit(1500)
         );
         const snap = await getDocs(q);
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
@@ -140,22 +142,28 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   const fetchMasterEntries = useCallback(async (force = false, pageNumber = 1) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
-    const fetchKey = `${userId}_${selectedMonth || 'current'}`;
+    const fetchKey = `${userId}_${selectedMonth || 'current'}_${loadTrend}`;
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
-    const start = startOfMonth(subMonths(refDate, 1)).toISOString();
-    const end = endOfMonth(refDate).toISOString();
+    
+    // Master range (always selected month only)
+    const mStart = startOfMonth(refDate).toISOString();
+    const mEnd = endOfMonth(refDate).toISOString();
+
+    // Summary range (optional trend)
+    const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
+    const sEnd = mEnd;
 
     if (force || lastFetchedKeyRef.current !== fetchKey) {
         pageHistoryRef.current = [null];
         setCurrentPage(1);
         await Promise.all([
-            fetchTotalCount(start, end),
-            fetchSummaryEntries(start, end)
+            fetchTotalCount(mStart, mEnd),
+            fetchSummaryEntries(sStart, sEnd)
         ]);
     } else if (pageNumber === 1) {
         await Promise.all([
-            fetchTotalCount(start, end),
-            fetchSummaryEntries(start, end)
+            fetchTotalCount(mStart, mEnd),
+            fetchSummaryEntries(sStart, sEnd)
         ]);
     }
 
@@ -165,8 +173,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         let q = query(
           collection(db!, "coverageEntries"), 
           where("userId", "==", userId),
-          where("coverageDate", ">=", start),
-          where("coverageDate", "<=", end),
+          where("coverageDate", ">=", mStart),
+          where("coverageDate", "<=", mEnd),
           orderBy("coverageDate", "desc"),
           limit(PAGE_SIZE)
         );
@@ -194,7 +202,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, active, selectedMonth, fetchTotalCount, fetchSummaryEntries]);
+  }, [userId, active, selectedMonth, loadTrend, fetchTotalCount, fetchSummaryEntries]);
 
   const goToNextPage = () => {
       if (currentPage * PAGE_SIZE < totalCount) {
@@ -401,6 +409,8 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     goToPreviousPage,
     fetchMasterEntries,
     syncSource,
+    loadTrend,
+    setLoadTrend,
     updateOfflineEntry: (e: any) => {
         const finalUpdate = { ...e };
         if (finalUpdate.submittedAt && !parseAnyDate(finalUpdate.submittedAt)) {

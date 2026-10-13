@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -62,7 +63,9 @@ export function CallSummary({
     timeLogs = [],
     selectedMonth,
     onMonthChange,
-    pmrName
+    pmrName,
+    loadTrend = false,
+    onLoadTrend
 }: { 
     entries: CoverageEntry[], 
     doctors: Doctor[], 
@@ -70,7 +73,9 @@ export function CallSummary({
     timeLogs: TimeLog[],
     selectedMonth?: string,
     onMonthChange?: (m: string) => void,
-    pmrName?: string
+    pmrName?: string,
+    loadTrend?: boolean,
+    onLoadTrend?: (val: boolean) => void
 }) {
     const [doctorSearch, setDoctorSearch] = useState("");
     const [concentrationType, setConcentrationType] = useState<"3x" | "4x">("4x");
@@ -443,31 +448,49 @@ export function CallSummary({
                             <ChartIcon className="w-5 h-5 text-[#f59e0b]" />
                             Activity Trend (Rolling 3 Months)
                         </h3>
-                        <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl p-6 h-[300px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={insights.trendData}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                                    <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 'bold' }} 
-                                    />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
-                                    <Tooltip 
-                                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
-                                        contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                                        itemStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
-                                        labelStyle={{ color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}
-                                    />
-                                    <Bar dataKey="calls" radius={[6, 6, 0, 0]} barSize={45}>
-                                        {insights.trendData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={index === 2 ? '#f59e0b' : '#3b82f6'} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </Card>
+                        {loadTrend ? (
+                            <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl p-6 h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={insights.trendData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                        <XAxis 
+                                            dataKey="name" 
+                                            axisLine={false} 
+                                            tickLine={false} 
+                                            tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 'bold' }} 
+                                        />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
+                                        <Tooltip 
+                                            cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                                            contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                                            itemStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                                            labelStyle={{ color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}
+                                        />
+                                        <Bar dataKey="calls" radius={[6, 6, 0, 0]} barSize={45}>
+                                            {insights.trendData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={index === 2 ? '#f59e0b' : '#3b82f6'} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Card>
+                        ) : (
+                            <Card className="bg-[#0a0c14] border border-white/5 shadow-2xl p-6 h-[180px] flex flex-col items-center justify-center text-center space-y-4">
+                                <div className="space-y-1">
+                                    <p className="text-sm font-bold text-white/70">Trend Chart is Hidden</p>
+                                    <p className="text-xs text-white/40">Load historical activity records to view the rolling 3-month performance chart.</p>
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => onLoadTrend?.(true)}
+                                    className="h-9 font-headline border-white/10 text-[#f59e0b] hover:bg-white/5 rounded-lg gap-2"
+                                >
+                                    <TrendingUp className="h-4 w-4" />
+                                    Load Activity Trend
+                                </Button>
+                            </Card>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
