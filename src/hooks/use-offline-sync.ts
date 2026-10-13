@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -266,7 +265,13 @@ export const useOfflineSync = (
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            console.error("Firestore submission failed:", error.message);
+            const permissionError = new FirestorePermissionError({
+                path: 'coverageEntries',
+                operation: 'create',
+                requestResourceData: basePayload,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+
             saveEntryOffline(basePayload);
             return false;
         }
@@ -342,7 +347,12 @@ export const useOfflineSync = (
             });
 
         } catch (error: any) {
-            console.warn(`Sync retry failed for report ${entry.id}.`);
+            const permissionError = new FirestorePermissionError({
+                path: 'coverageEntries',
+                operation: 'create',
+                requestResourceData: entry,
+            });
+            errorEmitter.emit('permission-error', permissionError);
         }
     }
 

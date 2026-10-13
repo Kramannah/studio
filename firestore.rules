@@ -53,6 +53,16 @@ service cloud.firestore {
       allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+
+      // Sub-collection for large proof data (photos and signatures)
+      match /proofs/{subId} {
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/coverageEntries/$(id)).data.userId == request.auth.uid || isManagerial());
+        allow write: if isSignedIn() && (
+          isManagerial() || 
+          (request.auth.uid == get(/databases/$(database)/documents/coverageEntries/$(id)).data.userId) ||
+          (!exists(/databases/$(database)/documents/coverageEntries/$(id))) // Allow write during batch create
+        );
+      }
     }
 
     match /doctors/{id} {
