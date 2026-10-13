@@ -33,7 +33,7 @@ interface UserDashboardProps {
     onUpdateDoctor?: (doctor: Doctor) => void;
     onDeleteDoctor?: (id: string) => void;
     onDeleteDoctorsBulk?: (ids: string[]) => void;
-    onFetchUserData?: (uid: string, month: string, force?: boolean, trend?: boolean) => Promise<void>;
+    onFetchUserData?: (uid: string, month: string, force?: boolean, trend?: boolean, summary?: boolean) => Promise<void>;
     selectedMonth?: string;
     onMonthChange?: (month: string) => void;
     syncSource?: 'cache' | 'server' | null;
@@ -67,20 +67,20 @@ export function UserDashboard({
 
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            const fetchKey = `${userId}_${selectedMonth}_${loadTrend}`;
+            const fetchKey = `${userId}_${selectedMonth}_${loadTrend}_${activeTab === 'summary'}`;
             
             if (lastFetchedRef.current !== fetchKey) {
                 lastFetchedRef.current = fetchKey;
-                onFetchUserData(userId, selectedMonth, false, loadTrend);
+                onFetchUserData(userId, selectedMonth, false, loadTrend, activeTab === 'summary');
             }
         }
-    }, [selectedMonth, userId, onFetchUserData, loadTrend]);
+    }, [selectedMonth, userId, onFetchUserData, loadTrend, activeTab]);
 
     const handleRefresh = async () => {
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth, true, loadTrend);
+            await onFetchUserData(userId, selectedMonth, true, loadTrend, activeTab === 'summary');
         } finally {
             setIsRefreshing(false);
         }

@@ -64,7 +64,13 @@ const sanitizePayload = (data: any): any => {
   return cleaned;
 };
 
-export const useOfflineSync = (userId?: string, active: boolean = true, selectedMonth?: string, onSyncSuccess?: () => void) => {
+export const useOfflineSync = (
+    userId?: string, 
+    active: boolean = true, 
+    selectedMonth?: string, 
+    onSyncSuccess?: () => void,
+    includeSummary: boolean = false
+) => {
   const { toast } = useToast();
   const [offlineEntries, setOfflineEntries] = useState<CoverageEntry[]>([]);
   const [masterEntries, setMasterEntries] = useState<CoverageEntry[]>([]); 
@@ -82,6 +88,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
   
   const isSyncInProgress = useRef(false);
   const lastFetchedKeyRef = useRef<string | null>(null);
+  const lastSummaryKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -128,7 +135,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             where("coverageDate", ">=", start),
             where("coverageDate", "<=", end),
             orderBy("coverageDate", "desc"),
-            limit(1500)
+            limit(1000)
         );
         const snap = await getDocs(q);
         const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
@@ -139,30 +146,36 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     }
   }, [userId]);
 
+  // ON-DEMAND SUMMARY TRIGGER
+  useEffect(() => {
+    if (includeSummary && userId && active) {
+        const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+        const mEnd = endOfMonth(refDate).toISOString();
+        const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
+        const summaryKey = `${userId}_${selectedMonth}_${loadTrend}`;
+        
+        if (lastSummaryKeyRef.current !== summaryKey) {
+            lastSummaryKeyRef.current = summaryKey;
+            fetchSummaryEntries(sStart, mEnd);
+        }
+    }
+  }, [includeSummary, userId, active, selectedMonth, loadTrend, fetchSummaryEntries]);
+
   const fetchMasterEntries = useCallback(async (force = false, pageNumber = 1) => {
     if (!userId || !db || (!active && !force) || !navigator.onLine) return;
     
-    const fetchKey = `${userId}_${selectedMonth || 'current'}_${loadTrend}`;
+    const fetchKey = `${userId}_${selectedMonth || 'current'}`;
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
     
     const mStart = startOfMonth(refDate).toISOString();
     const mEnd = endOfMonth(refDate).toISOString();
 
-    const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
-    const sEnd = mEnd;
-
     if (force || lastFetchedKeyRef.current !== fetchKey) {
         pageHistoryRef.current = [null];
         setCurrentPage(1);
-        await Promise.all([
-            fetchTotalCount(mStart, mEnd),
-            fetchSummaryEntries(sStart, sEnd)
-        ]);
+        await fetchTotalCount(mStart, mEnd);
     } else if (pageNumber === 1) {
-        await Promise.all([
-            fetchTotalCount(mStart, mEnd),
-            fetchSummaryEntries(sStart, sEnd)
-        ]);
+        await fetchTotalCount(mStart, mEnd);
     }
 
     setLoading(true);
@@ -200,7 +213,7 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     } finally {
         setLoading(false);
     }
-  }, [userId, active, selectedMonth, loadTrend, fetchTotalCount, fetchSummaryEntries]);
+  }, [userId, active, selectedMonth, fetchTotalCount]);
 
   const goToNextPage = () => {
       if (currentPage * PAGE_SIZE < totalCount) {
@@ -233,18 +246,13 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         try {
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
-            // SUB-COLLECTION PROOF SPLIT:
-            // Extract heavy fields to store in a sub-collection doc.
             const { photos, signature, jointCallSignature, ...textData } = basePayload;
             const proofData = { photos, signature, jointCallSignature };
             
             const sanitizedText = sanitizePayload(textData);
             sanitizedText.migrationStatus = 'optimized';
             
-            // Create the main doc reference first
             const mainDocRef = doc(collection(db!, "coverageEntries"));
-            
-            // Perform writes
             const batch = writeBatch(db!);
             batch.set(mainDocRef, sanitizedText);
             
@@ -305,8 +313,6 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
             if (!auth.currentUser) break;
 
             const { id, isOffline, ...rawData } = entry as any;
-            
-            // SUB-COLLECTION PROOF SPLIT
             const { photos, signature, jointCallSignature, ...textData } = rawData;
             const proofData = { photos, signature, jointCallSignature };
             

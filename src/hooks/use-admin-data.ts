@@ -70,7 +70,6 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     
     setLoadingApprovals(true);
     try {
-        // ACCURACY FIX: Increased limit to 5000 to ensure no records are truncated in global overview
         const [ncdSnap, prSnap] = await Promise.all([
             getDocs(query(collection(db!, "nonCallDays"), where("status", "==", "pending"), limit(5000))),
             getDocs(query(collection(db!, "planningRequests"), where("status", "==", "pending"), limit(5000)))
@@ -86,13 +85,13 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     } finally { setLoadingApprovals(false); }
   }, [active, isAuthorized]);
 
-  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, loadTrend = false) => {
+  const fetchUserData = useCallback(async (uid: string, selectedMonth: string, force = false, loadTrend = false, includeSummary = false) => {
     if (!uid || !db || !active || !isAuthorized) return;
     
-    const fetchId = `${uid}_${selectedMonth}_${loadTrend}`;
+    const fetchId = `${uid}_${selectedMonth}_${loadTrend}_${includeSummary}`;
     activeFetchIdRef.current = fetchId;
 
-    const cacheKey = `user_${uid}_${selectedMonth}_${loadTrend}`;
+    const cacheKey = `user_${uid}_${selectedMonth}_${loadTrend}_${includeSummary}`;
     const cached = ADMIN_SESSION_CACHE[cacheKey];
 
     if (!force && cached && (Date.now() - cached.timestamp < CACHE_TTL)) { 
@@ -110,22 +109,20 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
 
     setLoadingIndividual(true);
     const refDate = parseISO(selectedMonth + "-01");
-    // ROLLING WINDOW: Fetches current month only by default, or 4 months if trend requested
     const start = (loadTrend ? startOfMonth(subMonths(refDate, 3)) : startOfMonth(refDate)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
-    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string) => {
+    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, docLimit = 3000) => {
         try {
             const q = query(
                 collection(db!, collName), 
                 where("userId", "==", uid), 
                 where(dateField, ">=", filterStart),
                 where(dateField, "<=", filterEnd),
-                limit(3000)
+                limit(docLimit)
             );
             return await getDocs(q);
         } catch (err: any) {
-            // Index Error Fallback
             const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(2000));
             try {
                 const snap = await getDocs(fallbackQ);
@@ -153,8 +150,8 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     try {
         let lastSource: 'cache' | 'server' = 'cache';
 
-        const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void) => {
-            const snap = await resilientGetDocs(name, field, start, end);
+        const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void, docLimit = 3000) => {
+            const snap = await resilientGetDocs(name, field, start, end, docLimit);
             if (activeFetchIdRef.current === fetchId) {
                 const data = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() }));
                 if (name === 'coverageEntries') {
@@ -167,7 +164,11 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return [];
         };
 
-        const pEntries = fetchCollection("coverageEntries", "coverageDate", setIndividualEntries);
+        // HEAVY FETCH DECOUPLING: Only fetch coverageEntries if Summary is active or forced
+        const pEntries = includeSummary 
+            ? fetchCollection("coverageEntries", "coverageDate", setIndividualEntries, 1000)
+            : fetchCollection("coverageEntries", "coverageDate", setIndividualEntries, 100); // Small batch for Reports tab
+
         const pPlans = fetchCollection("plans", "plannedDate", setIndividualPlans);
         const pLogs = fetchCollection("timeLogs", "timeIn", setIndividualTimeLogs);
         const pNcds = fetchCollection("nonCallDays", "date", setIndividualNonCallDays);
