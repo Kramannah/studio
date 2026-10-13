@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useCallback, useMemo, useRef } from "react";
@@ -112,45 +111,37 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
     const start = (loadTrend ? startOfMonth(subMonths(refDate, 3)) : startOfMonth(refDate)).toISOString();
     const end = endOfMonth(refDate).toISOString();
 
-    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, docLimit = 3000) => {
+    const resilientGetDocs = async (collName: string, dateField: string, filterStart: string, filterEnd: string, docLimit = 1000) => {
         try {
             const q = query(
                 collection(db!, collName), 
                 where("userId", "==", uid), 
                 where(dateField, ">=", filterStart),
                 where(dateField, "<=", filterEnd),
+                orderBy(dateField, "desc"),
                 limit(docLimit)
             );
             return await getDocs(q);
         } catch (err: any) {
-            const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), orderBy(dateField, "desc"), limit(2000));
-            try {
-                const snap = await getDocs(fallbackQ);
-                return {
-                    docs: snap.docs.filter(doc => {
-                        const val = String(doc.data()[dateField] || "");
-                        return val >= filterStart && val <= filterEnd;
-                    }),
-                    metadata: snap.metadata
-                } as any;
-            } catch (e) {
-                const desperateQ = query(collection(db!, collName), where("userId", "==", uid), limit(2000));
-                const snap = await getDocs(desperateQ);
-                return {
-                    docs: snap.docs.filter(doc => {
-                        const val = String(doc.data()[dateField] || "");
-                        return val >= filterStart && val <= filterEnd;
-                    }),
-                    metadata: snap.metadata
-                } as any;
-            }
+            console.warn(`Fallack query for ${collName} due to: ${err.message}`);
+            // FALLBACK: Query without complex filtering or sorting to bypass index issues
+            const fallbackQ = query(collection(db!, collName), where("userId", "==", uid), limit(docLimit));
+            const snap = await getDocs(fallbackQ);
+            const filtered = snap.docs.filter(doc => {
+                const val = String(doc.data()[dateField] || "");
+                return val >= filterStart && val <= filterEnd;
+            });
+            return {
+                docs: filtered,
+                metadata: snap.metadata
+            } as any;
         }
     };
 
     try {
         let lastSource: 'cache' | 'server' = 'cache';
 
-        const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void, docLimit = 3000) => {
+        const fetchCollection = async (name: string, field: string, setter: (val: any[]) => void, docLimit = 1000) => {
             const snap = await resilientGetDocs(name, field, start, end, docLimit);
             if (activeFetchIdRef.current === fetchId) {
                 const data = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() }));
@@ -164,11 +155,7 @@ export function useAdminData(managerId?: string, userProfiles: Record<string, Us
             return [];
         };
 
-        // HEAVY FETCH DECOUPLING: Only fetch coverageEntries if Summary is active or forced
-        const pEntries = includeSummary 
-            ? fetchCollection("coverageEntries", "coverageDate", setIndividualEntries, 1000)
-            : fetchCollection("coverageEntries", "coverageDate", setIndividualEntries, 100); // Small batch for Reports tab
-
+        const pEntries = fetchCollection("coverageEntries", "coverageDate", setIndividualEntries, includeSummary ? 1000 : 100);
         const pPlans = fetchCollection("plans", "plannedDate", setIndividualPlans);
         const pLogs = fetchCollection("timeLogs", "timeIn", setIndividualTimeLogs);
         const pNcds = fetchCollection("nonCallDays", "date", setIndividualNonCallDays);

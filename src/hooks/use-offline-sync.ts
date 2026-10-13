@@ -125,8 +125,12 @@ export const useOfflineSync = (
     }
   }, [userId]);
 
-  const fetchSummaryEntries = useCallback(async (start: string, end: string) => {
+  const fetchSummaryEntries = useCallback(async (start: string, end: string, force = false) => {
     if (!userId || !db) return;
+    
+    const summaryKey = `${userId}_${selectedMonth}_${loadTrend}`;
+    if (!force && lastSummaryKeyRef.current === summaryKey && summaryEntries.length > 0) return;
+
     try {
         const q = query(
             collection(db!, "coverageEntries"),
@@ -136,27 +140,45 @@ export const useOfflineSync = (
             orderBy("coverageDate", "desc"),
             limit(1000)
         );
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
-        setSummaryEntries(fetched);
-        setSyncSource(snap.metadata.fromCache ? 'cache' : 'server');
-    } catch (e) {
-        console.warn("Summary fetch failed:", e);
-    }
-  }, [userId]);
+        
+        let snap;
+        try {
+            snap = await getDocs(q);
+        } catch (err: any) {
+            console.warn("Summary optimized fetch failed, trying resilient fallback...", err.message);
+            // FALLBACK: Simpler query without orderBy to bypass missing index errors
+            const fallbackQ = query(
+                collection(db!, "coverageEntries"),
+                where("userId", "==", userId),
+                limit(1000)
+            );
+            const fallbackSnap = await getDocs(fallbackQ);
+            const filteredDocs = fallbackSnap.docs.filter(doc => {
+                const val = String(doc.data().coverageDate || "");
+                return val >= start && val <= end;
+            });
+            snap = { docs: filteredDocs, metadata: fallbackSnap.metadata };
+        }
 
-  // ON-DEMAND SUMMARY TRIGGER
+        const fetched = (snap.docs || []).map((d: any) => ({ id: d.id, ...d.data() } as CoverageEntry));
+        
+        // Ensure chronological sorting for UI components if fallback was used
+        fetched.sort((a, b) => (b.coverageDate || b.submittedAt || "").localeCompare(a.coverageDate || a.submittedAt || ""));
+        
+        setSummaryEntries(fetched);
+        setSyncSource(snap.metadata?.fromCache ? 'cache' : 'server');
+        lastSummaryKeyRef.current = summaryKey;
+    } catch (e) {
+        console.warn("Summary fetch failed entirely:", e);
+    }
+  }, [userId, summaryEntries.length, selectedMonth, loadTrend]);
+
   useEffect(() => {
     if (includeSummary && userId && active) {
         const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
         const mEnd = endOfMonth(refDate).toISOString();
         const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
-        const summaryKey = `${userId}_${selectedMonth}_${loadTrend}`;
-        
-        if (lastSummaryKeyRef.current !== summaryKey) {
-            lastSummaryKeyRef.current = summaryKey;
-            fetchSummaryEntries(sStart, mEnd);
-        }
+        fetchSummaryEntries(sStart, mEnd);
     }
   }, [includeSummary, userId, active, selectedMonth, loadTrend, fetchSummaryEntries]);
 
@@ -180,21 +202,41 @@ export const useOfflineSync = (
     setLoading(true);
     
     try {
-        let q = query(
+        const qBase = query(
           collection(db!, "coverageEntries"), 
           where("userId", "==", userId),
           where("coverageDate", ">=", mStart),
-          where("coverageDate", "<=", mEnd),
-          orderBy("coverageDate", "desc"),
-          limit(PAGE_SIZE)
+          where("coverageDate", "<=", mEnd)
         );
+
+        let q = query(qBase, orderBy("coverageDate", "desc"), limit(PAGE_SIZE));
         
         const cursor = pageHistoryRef.current[pageNumber - 1];
         if (cursor) {
             q = query(q, startAfter(cursor));
         }
         
-        const querySnapshot = await getDocs(q);
+        let querySnapshot;
+        try {
+            querySnapshot = await getDocs(q);
+        } catch (err: any) {
+            console.warn("Resilient fetch for master entries triggered...");
+            const fallbackQ = query(collection(db!, "coverageEntries"), where("userId", "==", userId), limit(300));
+            const fullSnap = await getDocs(fallbackQ);
+            const filtered = fullSnap.docs
+                .map(d => ({ id: d.id, ...d.data() } as CoverageEntry))
+                .filter(d => {
+                    const v = String(d.coverageDate || "");
+                    return v >= mStart && v <= mEnd;
+                })
+                .sort((a, b) => (b.coverageDate || "").localeCompare(a.coverageDate || ""));
+            
+            setMasterEntries(filtered.slice((pageNumber - 1) * PAGE_SIZE, pageNumber * PAGE_SIZE));
+            setSyncSource(fullSnap.metadata.fromCache ? 'cache' : 'server');
+            setLoading(false);
+            return;
+        }
+
         const fetched = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CoverageEntry));
         
         setMasterEntries(fetched);
@@ -232,6 +274,17 @@ export const useOfflineSync = (
     }
   }, [fetchMasterEntries, active, userId]);
 
+  const refreshAllData = async () => {
+    const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
+    const mEnd = endOfMonth(refDate).toISOString();
+    const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
+    
+    await Promise.all([
+        fetchMasterEntries(true),
+        fetchSummaryEntries(sStart, mEnd, true)
+    ]);
+  };
+
   const saveEntry = async (entry: Omit<CoverageEntry, 'id' | 'submittedAt' | 'userId'>): Promise<boolean> => {
     if (!userId || !db) return false;
     
@@ -260,17 +313,16 @@ export const useOfflineSync = (
             
             await batch.commit();
             
-            await fetchMasterEntries(true);
+            await refreshAllData();
             toast({ title: "Report Saved Successfully" });
             if (onSyncSuccess) onSyncSuccess();
             return true;
         } catch (error: any) {
-            const permissionError = new FirestorePermissionError({
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'coverageEntries',
                 operation: 'create',
                 requestResourceData: basePayload,
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            }));
 
             saveEntryOffline(basePayload);
             return false;
@@ -347,17 +399,16 @@ export const useOfflineSync = (
             });
 
         } catch (error: any) {
-            const permissionError = new FirestorePermissionError({
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: 'coverageEntries',
                 operation: 'create',
                 requestResourceData: entry,
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            }));
         }
     }
 
     if (successCount > 0 || expiredCount > 0) {
-        fetchMasterEntries(true);
+        await refreshAllData();
         if (onSyncSuccess) onSyncSuccess();
         
         if (expiredCount > 0) {
@@ -373,7 +424,7 @@ export const useOfflineSync = (
 
     setIsSyncing(false);
     isSyncInProgress.current = false;
-  }, [isOnline, userId, offlineEntries, toast, fetchMasterEntries, onSyncSuccess]);
+  }, [isOnline, userId, offlineEntries, toast, onSyncSuccess, selectedMonth, loadTrend]);
 
   useEffect(() => {
     if (isOnline && offlineEntries.length > 0 && !isSyncInProgress.current) {
@@ -390,14 +441,13 @@ export const useOfflineSync = (
     const proofDocRef = doc(db!, "coverageEntries", id, "proofs", "data");
     
     try {
-        // Atomic batch delete for the report and its proofs
         const batch = writeBatch(db!);
         batch.delete(docRef);
         batch.delete(proofDocRef);
         
         await batch.commit();
         
-        fetchMasterEntries(true);
+        await refreshAllData();
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();
     } catch (e: any) {
@@ -435,7 +485,7 @@ export const useOfflineSync = (
         
         await batch.commit();
         
-        setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data, migrationStatus: 'optimized'} : item));
+        await refreshAllData();
         toast({ title: "Report Updated" });
         if (onSyncSuccess) onSyncSuccess();
     } catch (err: any) {
