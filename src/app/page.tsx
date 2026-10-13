@@ -100,7 +100,7 @@ export function Home() {
     syncSource,
     loadTrend,
     setLoadTrend
-  } = useOfflineSync(user?.uid, true, selectedMonth, refetchAllocations, activeView === 'summary');
+  } = useOfflineSync(user?.uid, true, selectedMonth, refetchAllocations, activeView === 'summary' || activeView === 'submitted');
   
   const { doctors, addDoctor, addDoctorsBulk, updateDoctor, deleteDoctor, deleteDoctorsBulk, loading: doctorsLoading } = useDoctors(!!user);
   

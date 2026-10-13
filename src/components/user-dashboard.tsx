@@ -67,11 +67,14 @@ export function UserDashboard({
 
     useEffect(() => {
         if (onFetchUserData && userId && selectedMonth) {
-            const fetchKey = `${userId}_${selectedMonth}_${loadTrend}_${activeTab === 'summary'}`;
+            // Updated logic: Include month-wide summary records for both 'summary' and 'submitted' tabs.
+            // This ensures the Calendar view in the reports tab can show activity indicators for all dates.
+            const needsSummary = activeTab === 'summary' || activeTab === 'submitted';
+            const fetchKey = `${userId}_${selectedMonth}_${loadTrend}_${needsSummary}`;
             
             if (lastFetchedRef.current !== fetchKey) {
                 lastFetchedRef.current = fetchKey;
-                onFetchUserData(userId, selectedMonth, false, loadTrend, activeTab === 'summary');
+                onFetchUserData(userId, selectedMonth, false, loadTrend, needsSummary);
             }
         }
     }, [selectedMonth, userId, onFetchUserData, loadTrend, activeTab]);
@@ -80,7 +83,8 @@ export function UserDashboard({
         if (!onFetchUserData || !userId || !selectedMonth) return;
         setIsRefreshing(true);
         try {
-            await onFetchUserData(userId, selectedMonth, true, loadTrend, activeTab === 'summary');
+            const needsSummary = activeTab === 'summary' || activeTab === 'submitted';
+            await onFetchUserData(userId, selectedMonth, true, loadTrend, needsSummary);
         } finally {
             setIsRefreshing(false);
         }
