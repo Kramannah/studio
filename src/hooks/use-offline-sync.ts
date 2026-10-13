@@ -387,9 +387,16 @@ export const useOfflineSync = (
   const deleteMasterEntry = async (id: string) => {
     if (!db) return;
     const docRef = doc(db!, "coverageEntries", id);
+    const proofDocRef = doc(db!, "coverageEntries", id, "proofs", "data");
     
     try {
-        await deleteDoc(docRef);
+        // Atomic batch delete for the report and its proofs
+        const batch = writeBatch(db!);
+        batch.delete(docRef);
+        batch.delete(proofDocRef);
+        
+        await batch.commit();
+        
         fetchMasterEntries(true);
         toast({ title: "Report Deleted" });
         if (onSyncSuccess) onSyncSuccess();

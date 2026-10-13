@@ -9,7 +9,7 @@ service cloud.firestore {
     }
 
     function isOwner(docUserId) {
-      return isSignedIn() && string(docUserId) == request.auth.uid;
+      return isSignedIn() && (string(docUserId) == request.auth.uid || docUserId == request.auth.uid);
     }
 
     // Robust Administrative Check
@@ -49,10 +49,9 @@ service cloud.firestore {
     }
 
     match /coverageEntries/{id} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isManagerial());
+      allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
 
       // Sub-collection for large proof data (photos and signatures)
       match /proofs/{subId} {
@@ -60,7 +59,7 @@ service cloud.firestore {
         allow write: if isSignedIn() && (
           isManagerial() || 
           (request.auth.uid == get(/databases/$(database)/documents/coverageEntries/$(id)).data.userId) ||
-          (!exists(/databases/$(database)/documents/coverageEntries/$(id))) // Allow write during batch create
+          (!exists(/databases/$(database)/documents/coverageEntries/$(id))) // Allow write during batch create or deletion
         );
       }
     }
@@ -68,31 +67,31 @@ service cloud.firestore {
     match /doctors/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
     }
 
     match /plans/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
     }
 
     match /marketingEvents/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
     }
 
     match /nonCallDays/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
     }
 
     match /planningRequests/{id} {
       allow read, list: if isSignedIn() && (isOwner(resource.data.userId) || isManagerial());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isManagerial() || isOwner(resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isManagerial();
     }
 
     match /timeLogs/{id} {
