@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CoverageEntry } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { db, auth } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData, getDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, deleteDoc, updateDoc, limit, orderBy, startAfter, getCountFromServer, QueryDocumentSnapshot, DocumentData, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { safeStorageSet, parseAnyDate, getWeekFridayDeadline } from '@/lib/utils';
 import { format, subMonths, startOfMonth, endOfMonth, isValid, parseISO, isAfter } from 'date-fns';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -145,11 +145,9 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     const fetchKey = `${userId}_${selectedMonth || 'current'}_${loadTrend}`;
     const refDate = selectedMonth ? parseISO(selectedMonth + "-01") : new Date();
     
-    // Master range (always selected month only)
     const mStart = startOfMonth(refDate).toISOString();
     const mEnd = endOfMonth(refDate).toISOString();
 
-    // Summary range (optional trend)
     const sStart = (loadTrend ? startOfMonth(subMonths(refDate, 2)) : startOfMonth(refDate)).toISOString();
     const sEnd = mEnd;
 
@@ -235,8 +233,25 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
         try {
             if (!auth?.currentUser) throw new Error("AUTH_EXPIRED");
 
-            const sanitized = sanitizePayload(basePayload);
-            await addDoc(collection(db!, "coverageEntries"), sanitized);
+            // SUB-COLLECTION PROOF SPLIT:
+            // Extract heavy fields to store in a sub-collection doc.
+            const { photos, signature, jointCallSignature, ...textData } = basePayload;
+            const proofData = { photos, signature, jointCallSignature };
+            
+            const sanitizedText = sanitizePayload(textData);
+            sanitizedText.migrationStatus = 'optimized';
+            
+            // Create the main doc reference first
+            const mainDocRef = doc(collection(db!, "coverageEntries"));
+            
+            // Perform writes
+            const batch = writeBatch(db!);
+            batch.set(mainDocRef, sanitizedText);
+            
+            const proofDocRef = doc(db!, "coverageEntries", mainDocRef.id, "proofs", "data");
+            batch.set(proofDocRef, sanitizePayload(proofData));
+            
+            await batch.commit();
             
             await fetchMasterEntries(true);
             toast({ title: "Report Saved Successfully" });
@@ -289,16 +304,29 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
 
             if (!auth.currentUser) break;
 
-            const { id, isOffline, migrationStatus, ...dataToSync } = entry as any;
-            const sanitized = sanitizePayload(dataToSync);
+            const { id, isOffline, ...rawData } = entry as any;
             
-            let finalSubmittedAt = sanitized.submittedAt || entry.submittedAt || new Date().toISOString();
+            // SUB-COLLECTION PROOF SPLIT
+            const { photos, signature, jointCallSignature, ...textData } = rawData;
+            const proofData = { photos, signature, jointCallSignature };
+            
+            const sanitizedText = sanitizePayload(textData);
+            sanitizedText.migrationStatus = 'optimized';
+            
+            let finalSubmittedAt = sanitizedText.submittedAt || entry.submittedAt || new Date().toISOString();
             if (!parseAnyDate(finalSubmittedAt)) {
                 finalSubmittedAt = new Date().toISOString();
             }
+            sanitizedText.submittedAt = finalSubmittedAt;
+
+            const mainDocRef = doc(collection(db!, "coverageEntries"));
+            const batch = writeBatch(db!);
+            batch.set(mainDocRef, sanitizedText);
             
-            const finalData = { ...sanitized, submittedAt: finalSubmittedAt };
-            await addDoc(collection(db!, "coverageEntries"), finalData);
+            const proofDocRef = doc(db!, "coverageEntries", mainDocRef.id, "proofs", "data");
+            batch.set(proofDocRef, sanitizePayload(proofData));
+            
+            await batch.commit();
             
             successCount++;
             setOfflineEntries(prev => {
@@ -368,26 +396,32 @@ export const useOfflineSync = (userId?: string, active: boolean = true, selected
     if (!db) return;
 
     const sanitized = sanitizePayload(e);
-    const { id, ...data } = sanitized;
+    const { id, photos, signature, jointCallSignature, ...data } = sanitized;
     const docRef = doc(db!, "coverageEntries", id);
     
     if (data.submittedAt && !parseAnyDate(data.submittedAt)) {
         data.submittedAt = new Date().toISOString();
     }
     
-    updateDoc(docRef, data)
-      .then(() => {
-        setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data} : item));
+    try {
+        const batch = writeBatch(db!);
+        batch.update(docRef, { ...data, migrationStatus: 'optimized' });
+        
+        const proofDocRef = doc(db!, "coverageEntries", id, "proofs", "data");
+        batch.set(proofDocRef, { photos, signature, jointCallSignature }, { merge: true });
+        
+        await batch.commit();
+        
+        setMasterEntries(prev => prev.map(item => item.id === id ? {...item, ...data, migrationStatus: 'optimized'} : item));
         toast({ title: "Report Updated" });
         if (onSyncSuccess) onSyncSuccess();
-      })
-      .catch(async (err: any) => {
+    } catch (err: any) {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: docRef.path,
             operation: 'update',
             requestResourceData: data
         }));
-      });
+    }
   };
 
   return { 

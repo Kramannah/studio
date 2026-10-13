@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -41,8 +42,9 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
   const [loading, setLoading] = useState(active);
   
   const performFetch = useCallback(async (force = false) => {
-    if (!db || !active || !navigator.onLine) {
-        setLoading(false);
+    // SECURITY: Wait for authentication to resolve before attempting to read protected collections
+    if (!db || !active || !navigator.onLine || !user) {
+        if (!user && active) setLoading(false);
         return;
     }
 
@@ -74,8 +76,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
 
             masterList = samplesSnapshot.docs.map(docSnap => {
                 const data = docSnap.data();
-                // RESTORED: Treat undefined as true (Global) to prevent legacy data disappearance.
-                // An item is only private if explicitly set to false.
                 const isGlobalFlag = data.isGlobal !== false;
                 
                 return { 
@@ -114,6 +114,8 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
         }
 
         // Usage Promise (with Cache)
+        // ACCURACY FIX: Switched back to coverageEntries calculation logic. 
+        // Because of the Sub-collection Proof optimization, these docs are now light and fast to scan.
         const usageCacheKey = effectiveUserId || 'anonymous';
         if (includeUsage && effectiveUserId) {
             const cachedUsage = USAGE_CACHE[usageCacheKey];
@@ -165,8 +167,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
             isOverridden: overrides.has(sample.id)
         }));
 
-        // PMR VISIBILITY FILTER:
-        // Strictly exclude items that are private (isGlobal === false) AND not assigned to this specific PMR.
         if (!isAdminView && effectiveUserId) {
             finalAllocations = finalAllocations.filter(s => 
                 s.isGlobal !== false || s.isOverridden === true
@@ -183,7 +183,7 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     } finally {
         setLoading(false);
     }
-  }, [effectiveUserId, active, includeUsage, isAdminView]);
+  }, [effectiveUserId, active, includeUsage, isAdminView, user]);
 
   useEffect(() => {
     if (active) performFetch();
@@ -202,7 +202,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     const { id, ...rest } = data;
     const docRef = id ? doc(db!, "marketingSamples", id) : doc(collection(db!, "marketingSamples"));
     
-    // Default to global ONLY if strategy is truly not specified (safety fallback)
     if (rest.isGlobal === undefined) rest.isGlobal = true;
 
     lastGlobalFetch = 0;
@@ -252,7 +251,6 @@ export const useQ4Allocation = (active: boolean = true, includeUsage: boolean = 
     if (!db) return false;
     const batch = writeBatch(db!);
     data.forEach(item => {
-        // Bulk imports are Global by default
         const payload = { ...item, isGlobal: item.isGlobal !== false };
         batch.set(doc(collection(db!, "marketingSamples")), payload);
     });
