@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useMarketingEvents } from "@/hooks/use-marketing-events";
 import { useDoctors } from "@/hooks/use-doctors";
 import { useAuth } from "@/hooks/use-auth";
@@ -32,7 +33,8 @@ import {
     Check,
     X,
     FileSpreadsheet,
-    Edit
+    Edit,
+    RotateCcw
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { MarketingEvent } from "@/lib/types";
@@ -56,6 +58,67 @@ import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
+const ZoomableImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [scale, setScale] = useState(1);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+      setOrigin({ x, y });
+
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setScale((s) => Math.min(Math.max(s + delta, 1), 8));
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden w-full h-[70vh] rounded-2xl bg-black/10 border-2 border-white/5 cursor-crosshair group"
+    >
+      <div
+        className="w-full h-full transition-transform duration-150 ease-out"
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: `${origin.x}% ${origin.y}%`,
+        }}
+      >
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          className="object-contain"
+        />
+      </div>
+      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none font-mono">
+            {Math.round(scale * 100)}%
+        </Badge>
+        <Button 
+            size="icon" 
+            variant="secondary" 
+            className="h-8 w-8 rounded-full bg-black/60 hover:bg-primary border-none text-white"
+            onClick={(e) => { e.stopPropagation(); setScale(1); setOrigin({ x: 50, y: 50 }); }}
+        >
+            <RotateCcw className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 interface MarketingEventsViewProps {
     userId?: string;
     readOnly?: boolean;
@@ -77,7 +140,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     const [selectedQuarter, setSelectedQuarter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     
-    // Completion Dialog State
     const [completionDialog, setCompletionDialog] = useState<{ isOpen: boolean; group: MarketingEvent[] | null }>({
         isOpen: false,
         group: null
@@ -87,7 +149,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
     const [isProcessing, setIsProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Image Preview State
     const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
     const isGlobalMode = isAdmin && !userId;
@@ -230,7 +291,6 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             const reader = new FileReader();
             reader.onload = (event) => {
                 const base64 = event.target?.result as string;
-                // QUALITY: Removed compression to ensure proof-of-attendance photos stay clear and legible.
                 setProofPhoto(base64);
             };
             reader.readAsDataURL(file);
@@ -691,25 +751,25 @@ export function MarketingEventsView({ userId, readOnly = false, pmrName: propPmr
             </Dialog>
 
             <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-                <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/95 z-[1000]">
-                    <DialogHeader className="sr-only">
-                        <DialogTitle>{previewImage?.title || "Proof Preview"}</DialogTitle>
+                <DialogContent className="max-w-5xl p-0 overflow-hidden border-none bg-black/95 z-[1000] flex flex-col h-[90vh]">
+                    <DialogHeader className="p-4 border-b border-white/10 shrink-0">
+                        <DialogTitle className="text-white font-headline text-lg">{previewImage?.title}</DialogTitle>
                     </DialogHeader>
-                    <div className="relative w-full h-[85vh] flex items-center justify-center p-4">
+                    
+                    <div className="flex-1 p-6 space-y-4 overflow-hidden">
+                        <div className="flex items-center justify-between">
+                            <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg border-2 border-primary/20">
+                                {previewImage?.title}
+                            </Badge>
+                            <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Scroll wheel to zoom to cursor</p>
+                        </div>
                         {previewImage?.src && (
-                            <Image 
-                                src={previewImage.src} 
-                                alt="Full Proof" 
-                                width={1600} 
-                                height={1200} 
-                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" 
-                            />
+                            <ZoomableImage src={previewImage.src} alt="Full Proof" />
                         )}
                     </div>
-                    <div className="absolute top-4 left-4">
-                        <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg border-2 border-primary/20">
-                            {previewImage?.title}
-                        </Badge>
+
+                    <div className="p-4 border-t border-white/10 flex justify-end shrink-0">
+                        <Button variant="ghost" className="text-white hover:bg-white/10 font-headline" onClick={() => setPreviewImage(null)}>Close Preview</Button>
                     </div>
                 </DialogContent>
             </Dialog>

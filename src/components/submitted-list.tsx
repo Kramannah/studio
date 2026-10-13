@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, parseISO, isValid, isToday, isSameDay } from "date-fns";
 import Image from "next/image";
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info, ChevronLeft, ChevronRight, Loader2, Camera, UserCircle } from "lucide-react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Download, MoreHorizontal, Trash2, ChevronDown, ChevronUp, Edit, Search, Calendar as CalendarIcon, List, Maximize2, Info, ChevronLeft, ChevronRight, Loader2, Camera, UserCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
@@ -28,6 +28,70 @@ const DetailField = ({ label, value }: { label: string, value?: string | number 
         <p className="text-sm font-bold">{value || "—"}</p>
     </div>
 )
+
+const ZoomableImage = ({ src, alt, isSignature = false }: { src: string; alt: string; isSignature?: boolean }) => {
+  const [scale, setScale] = useState(1);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+      setOrigin({ x, y });
+
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setScale((s) => Math.min(Math.max(s + delta, 1), 8));
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden w-full aspect-[4/3] rounded-2xl bg-black/10 border-2 border-white/5 cursor-crosshair group"
+    >
+      <div
+        className="w-full h-full transition-transform duration-150 ease-out"
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: `${origin.x}% ${origin.y}%`,
+        }}
+      >
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          className={cn(
+            "object-contain",
+            isSignature ? "bg-white p-12" : ""
+          )}
+        />
+      </div>
+      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none font-mono">
+            {Math.round(scale * 100)}%
+        </Badge>
+        <Button 
+            size="icon" 
+            variant="secondary" 
+            className="h-8 w-8 rounded-full bg-black/60 hover:bg-primary border-none text-white"
+            onClick={(e) => { e.stopPropagation(); setScale(1); setOrigin({ x: 50, y: 50 }); }}
+        >
+            <RotateCcw className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 const EntryRow = ({ 
     entry, 
@@ -67,12 +131,10 @@ const EntryRow = ({
     const handleViewProofs = useCallback(async () => {
         const title = `Proofs: ${entry.firstName} ${entry.lastName}`;
         
-        // 1. Legacy Check
         if (entry.photos?.[0] || entry.signature) {
             return onPreview({ photo: entry.photos?.[0], signature: entry.signature || undefined }, title);
         }
         
-        // 2. Optimized Fetch
         if (!db || isFetchingProof) return;
         
         setIsFetchingProof(true);
@@ -341,7 +403,7 @@ export function SubmittedList({
          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
                 <h3 className="text-2xl font-black font-headline text-[#10b981]">Coverage Records</h3>
-                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Consolidated Proof Viewing Active.</p>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Cursor-centric zoom active. Scroll to inspect.</p>
             </div>
             <div className="w-[240px] shrink-0">
                 <Select value={selectedMonth} onValueChange={onMonthChange}>
@@ -514,32 +576,18 @@ export function SubmittedList({
                 </DialogHeader>
                 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-                    <div className="flex flex-col items-center justify-center gap-12 min-h-full">
+                    <div className="flex flex-col items-center gap-8 min-h-full">
                         {previewProofs?.photo && (
                             <div className="flex flex-col items-center gap-3 w-full animate-in fade-in zoom-in-95 duration-300">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Capture Photo</p>
-                                <div className="relative w-full aspect-[4/3] max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 shadow-2xl">
-                                    <Image 
-                                        src={previewProofs.photo} 
-                                        alt="Proof Photo" 
-                                        fill
-                                        className="object-contain" 
-                                    />
-                                </div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Capture Photo (Scroll to Zoom)</p>
+                                <ZoomableImage src={previewProofs.photo} alt="Proof Photo" />
                             </div>
                         )}
 
                         {previewProofs?.signature && (
                             <div className="flex flex-col items-center gap-3 w-full animate-in fade-in zoom-in-95 duration-300">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Doctor Signature</p>
-                                <div className="relative w-full aspect-video max-w-lg rounded-2xl overflow-hidden border-2 border-primary/20 bg-white p-10 shadow-2xl">
-                                    <Image 
-                                        src={previewProofs.signature} 
-                                        alt="Signature" 
-                                        fill
-                                        className="object-contain" 
-                                    />
-                                </div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Doctor Signature (Scroll to Zoom)</p>
+                                <ZoomableImage src={previewProofs.signature} alt="Signature" isSignature />
                             </div>
                         )}
                     </div>

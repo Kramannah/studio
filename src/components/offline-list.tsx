@@ -5,9 +5,9 @@ import type { CoverageEntry } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { format, parseISO, isValid } from "date-fns";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Button } from "./ui/button";
-import { RefreshCw, Hourglass, Edit, Maximize2, Trash2 } from "lucide-react";
+import { RefreshCw, Hourglass, Edit, Maximize2, Trash2, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { cn, parseAnyDate } from "@/lib/utils";
@@ -23,6 +23,70 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const ZoomableImage = ({ src, alt, isSignature = false }: { src: string; alt: string; isSignature?: boolean }) => {
+  const [scale, setScale] = useState(1);
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+      setOrigin({ x, y });
+
+      const delta = e.deltaY > 0 ? -0.2 : 0.2;
+      setScale((s) => Math.min(Math.max(s + delta, 1), 8));
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden w-full aspect-[4/3] rounded-2xl bg-black/10 border-2 border-white/5 cursor-crosshair group"
+    >
+      <div
+        className="w-full h-full transition-transform duration-150 ease-out"
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: `${origin.x}% ${origin.y}%`,
+        }}
+      >
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          className={cn(
+            "object-contain",
+            isSignature ? "bg-white p-12" : ""
+          )}
+        />
+      </div>
+      <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none font-mono">
+            {Math.round(scale * 100)}%
+        </Badge>
+        <Button 
+            size="icon" 
+            variant="secondary" 
+            className="h-8 w-8 rounded-full bg-black/60 hover:bg-primary border-none text-white"
+            onClick={(e) => { e.stopPropagation(); setScale(1); setOrigin({ x: 50, y: 50 }); }}
+        >
+            <RotateCcw className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 type OfflineListProps = {
   entries: CoverageEntry[];
   isSyncing: boolean;
@@ -33,7 +97,7 @@ type OfflineListProps = {
 };
 
 export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit, onDelete }: OfflineListProps) {
-  const [previewData, setPreviewData] = useState<{ src: string, title: string } | null>(null);
+  const [previewData, setPreviewData] = useState<{ src: string, title: string, isSignature?: boolean } | null>(null);
 
   if (entries.length === 0) {
     return (
@@ -106,7 +170,7 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit, onD
                           <h4 className="text-xs font-bold uppercase text-muted-foreground">Signature</h4>
                           <div 
                             className="p-1 bg-white border rounded-md shadow-sm flex items-center justify-center h-20 w-32 cursor-pointer group relative"
-                            onClick={() => setPreviewData({ src: entry.signature!, title: `Offline Signature: ${entry.firstName}` })}
+                            onClick={() => setPreviewData({ src: entry.signature!, title: `Offline Signature: ${entry.firstName}`, isSignature: true })}
                           >
                               <Image src={entry.signature} alt="signature" width={100} height={50} className="object-contain" />
                               <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -156,26 +220,17 @@ export function OfflineList({ entries, isSyncing, isOnline, syncAll, onEdit, onD
             <DialogContent className="max-w-4xl p-0 overflow-hidden border-none bg-black/90">
                 <DialogHeader className="sr-only">
                     <DialogTitle>{previewData?.title || "Offline Proof Preview"}</DialogTitle>
-                    <DialogDescription>Full-screen preview of a photo or signature captured while offline.</DialogDescription>
                 </DialogHeader>
-                <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg">
+                            {previewData?.title}
+                        </Badge>
+                        <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Scroll wheel to zoom to cursor</p>
+                    </div>
                     {previewData?.src && (
-                        <Image 
-                            src={previewData.src} 
-                            alt="Proof Preview" 
-                            width={1200} 
-                            height={800} 
-                            className={cn(
-                                "max-w-full max-h-full object-contain rounded-md shadow-2xl",
-                                previewData.title.includes("Signature") ? "bg-white p-8" : ""
-                            )} 
-                        />
+                        <ZoomableImage src={previewData.src} alt="Proof Preview" isSignature={previewData.isSignature} />
                     )}
-                </div>
-                <div className="absolute top-4 left-4">
-                    <Badge className="bg-primary text-primary-foreground font-headline text-sm px-4 py-1.5 shadow-lg">
-                        {previewData?.title}
-                    </Badge>
                 </div>
             </DialogContent>
         </Dialog>
