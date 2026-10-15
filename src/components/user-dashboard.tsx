@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Q4AllocationView } from "./q4-allocation-view";
 import { MarketingEventsView } from "./marketing-events-view";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface UserDashboardProps {
     userId: string;
@@ -94,19 +94,26 @@ export function UserDashboard({
     const dashboardPmrName = pmrInfo ? `${pmrInfo.firstName} ${pmrInfo.lastName}` : (userId || "PMR");
     
     const renderCacheStatus = () => {
-      if (syncSource === 'server') return (
-        <Badge variant="outline" className="h-7 px-3 border-blue-500/50 text-blue-500 bg-blue-500/5 text-[9px] font-black uppercase tracking-widest gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-          🔵 Fetched from Firestore
-        </Badge>
+      return (
+        <TooltipProvider>
+          {syncSource === 'server' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-600/50 cursor-help ml-2" />
+              </TooltipTrigger>
+              <TooltipContent><p className="font-headline text-[9px] uppercase">Live from Firestore</p></TooltipContent>
+            </Tooltip>
+          )}
+          {syncSource === 'cache' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500 border border-green-600/50 cursor-help ml-2" />
+              </TooltipTrigger>
+              <TooltipContent><p className="font-headline text-[9px] uppercase">Loaded from local cache</p></TooltipContent>
+            </Tooltip>
+          )}
+        </TooltipProvider>
       );
-      if (syncSource === 'cache') return (
-        <Badge variant="outline" className="h-7 px-3 border-green-500/50 text-green-500 bg-green-500/5 text-[9px] font-black uppercase tracking-widest gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          🟢 Loaded from local cache
-        </Badge>
-      );
-      return null;
     };
 
     return (

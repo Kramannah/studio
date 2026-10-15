@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useOfflineSync } from '@/hooks/use-offline-sync';
@@ -38,6 +37,7 @@ import { SubmittedList } from '@/components/submitted-list';
 import { Q4AllocationView } from '@/components/q4-allocation-view';
 import { TimeLogDialog } from '@/components/time-log-dialog';
 import { MarketingEventsView } from '@/components/marketing-events-view';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type View = 'planning' | 'coverage' | 'offline' | 'submitted' | 'summary' | 'master' | 'allocation' | 'marketing-events';
 
@@ -185,25 +185,34 @@ export function Home() {
   if (!user) return <LoginPage />;
 
   const renderCacheStatus = () => {
-    if (offlineEntries.length > 0) return (
-      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-yellow-500/50 text-yellow-500 bg-yellow-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
-        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-        🟡 Offline cache
-      </Badge>
+    return (
+      <TooltipProvider>
+        {offlineEntries.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse border border-yellow-600/50 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent><p className="font-headline text-[10px] uppercase">Offline cache (pending sync)</p></TooltipContent>
+          </Tooltip>
+        )}
+        {syncSource === 'server' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-3 h-3 rounded-full bg-blue-500 border border-blue-600/50 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent><p className="font-headline text-[10px] uppercase">Live connection (Firestore)</p></TooltipContent>
+          </Tooltip>
+        )}
+        {syncSource === 'cache' && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="w-3 h-3 rounded-full bg-green-500 border border-green-600/50 cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent><p className="font-headline text-[10px] uppercase">Local cache (offline mode)</p></TooltipContent>
+          </Tooltip>
+        )}
+      </TooltipProvider>
     );
-    if (syncSource === 'server') return (
-      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-blue-500/50 text-blue-500 bg-blue-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
-        <div className="w-2 h-2 rounded-full bg-blue-500" />
-        🔵 Fetched from Firestore
-      </Badge>
-    );
-    if (syncSource === 'cache') return (
-      <Badge variant="outline" className="hidden lg:flex h-7 px-3 border-green-500/50 text-green-500 bg-green-500/5 text-[10px] font-black uppercase tracking-widest gap-2">
-        <div className="w-2 h-2 rounded-full bg-green-500" />
-        🟢 Loaded from local cache
-      </Badge>
-    );
-    return null;
   };
 
   const renderContent = () => {
