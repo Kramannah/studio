@@ -208,8 +208,8 @@ export function CallSummary({
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
 
         const totalCalls = filteredEntries.length;
-        const targetCalls = activeDays * 15; 
-        const callRatePercentage = targetCalls > 0 ? Math.round((totalCalls / targetCalls) * 100) : 0;
+        const targetCalls = 300; 
+        const callRatePercentage = Math.round((totalCalls / targetCalls) * 100);
         const avgCallsPerDay = activeDays > 0 ? (totalCalls / activeDays).toFixed(2) : "0.00";
 
         const productUsage = filteredEntries.reduce((acc, entry) => {
@@ -381,11 +381,11 @@ export function CallSummary({
                     title="CALL RATE" 
                     value={
                         <div className="flex items-baseline gap-1">
-                            <span>{insights.totalCalls}/{Math.round(insights.targetCalls)}</span>
+                            <span>{insights.totalCalls}/300</span>
                             <span className="text-sm font-bold text-white/50">({insights.callRatePercentage}<span className="text-[10px] ml-0.5">%</span>)</span>
                         </div>
                     }
-                    description="15 calls per day target" 
+                    description="300 monthly calls target" 
                     icon={Activity} 
                     color="text-[#f59e0b]" 
                     bgColor="bg-[#241a12]" 
