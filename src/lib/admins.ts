@@ -28,7 +28,6 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "qsFiDEpOgOcTFSbiX2RJMrCKBHG3", // MQ-03 Capilos, Mark Anthony (Marco)
     ],
     "OU7hbPEFg7gaYfg1qHFOjNpBJLe2": [
-        "8QiLTKzhovh43RX2arJ4xNAgoRj2", // MQ-02 Ponce, John Martin G.
         "CUEmweKbvSeQkbG07NvULh4ZBEd2", // MQ-04 Ariscon, Roland
         "fwBf7XGUb6MSJygdL5NitBcbHRA3", // MQ-06 De Castro, Isabel Joy
         "NOYZ3h8yIaNINBVBgFYJzhKdisY2", // MQ-01 Rivera, Luzviminda
@@ -38,7 +37,6 @@ export const MANAGER_TEAMS: Record<string, string[]> = {
         "MkQwPWR0wyXrDRzIekEFMzQSu7Y2", // GMAS-01 Lestor, Gwyne Joseph
         "GjbznZ1QOwTfHMExfjsB3QsMpjl2", // GMAS-02 Casuncad, Sarah Mae
         "l5GMEE0OxpMOObd5qguyJtrVUi42", // GMAS-03 Dreu, Jacquelyn
-        "vc3H0WWzmWQcEdjiTV4nzgd3neB2", // GMAS-04 Racuya, Frances Era
         "IedPtMmuniSwpkYZ5YAXOSREoxl2", // GMAS-05 Baluyot, Ellen
         "JvBQZydSDxNkZRP2vNofGXMGbGk1", // NL-04 Aguinaldo, Maribel
         "JvY6C2uEdPeEqoWLuqB4eYfbZqj2", // NL-05 Tagao, Janet
