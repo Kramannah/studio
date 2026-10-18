@@ -37,8 +37,8 @@ export function parseAnyDate(date: any): Date | null {
   if (date instanceof Date) return isValid(date) ? date : null;
   
   // Handle Firestore Timestamp objects
-  if (typeof date === 'object' && date.seconds !== undefined) {
-    const d = new Date(date.seconds * 1000);
+  if (typeof date === 'object' && (date as any).seconds !== undefined) {
+    const d = new Date((date as any).seconds * 1000);
     return isValid(d) ? d : null;
   }
 
@@ -166,4 +166,33 @@ export function getStartOfQuarterISO() {
   const quarter = Math.floor(now.getMonth() / 3);
   const startOfQuarter = new Date(now.getFullYear(), quarter * 3, 1);
   return startOfQuarter.toISOString();
+}
+
+/**
+ * Calculates the Levenshtein distance between two strings.
+ */
+export function getLevenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+      }
+  }
+  return matrix[a.length][b.length];
+}
+
+/**
+ * Checks if two strings are similar based on a threshold (default 85%).
+ */
+export function isSimilarString(a: string, b: string, threshold = 0.85): boolean {
+  const sa = a.toLowerCase().trim();
+  const sb = b.toLowerCase().trim();
+  if (sa === sb) return true;
+  if (sa === "" || sb === "") return false;
+  const distance = getLevenshteinDistance(sa, sb);
+  const similarity = 1 - distance / Math.max(sa.length, sb.length);
+  return similarity >= threshold;
 }

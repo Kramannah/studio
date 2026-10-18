@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { CoverageEntry, Doctor, NonCallDay, TimeLog } from "@/lib/types";
@@ -6,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "./ui/card";
 import { format, parseISO, isWithinInterval, isValid, startOfMonth, endOfMonth, eachDayOfInterval, subMonths, isSameMonth } from "date-fns";
 import { Target, Users, TrendingUp, RefreshCw, Percent, Calendar as CalendarIcon, Building2, Briefcase, Pill, PackageCheck, CheckCircle2, UserCheck, Search, Stethoscope, Activity, BarChart as ChartIcon, Download, MapPin } from "lucide-react";
-import { cn, parseAnyDate, PH_HOLIDAYS } from "@/lib/utils";
+import { cn, parseAnyDate, PH_HOLIDAYS, isSimilarString } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -160,42 +159,100 @@ export function CallSummary({
             else activeDays += 1.0;
         });
 
-        const inbaseCalls = filteredEntries.filter(e => e.coverageType === 'inbase').length;
-        const outbaseCalls = filteredEntries.filter(e => e.coverageType === 'outbase').length;
-
         const normalizeStr = (s?: string) => (s ?? "").toLowerCase().trim().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
 
-        const providerVisits = filteredEntries.reduce((acc, entry) => {
-            const providerName = `${entry.firstName || ""} ${entry.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
-            const specialty = normalizeStr(entry.specialty);
-            const clinic = normalizeStr(entry.clinic);
-            const compositeKey = `${providerName}|${specialty}|${clinic}`;
+        // --- NEW FUZZY MATCHING VISIT AGGREGATION ---
+        const normalizedMaster = safeDoctors.map(d => ({
+            ...d,
+            fullName: `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' '),
+            normalizedSpec: normalizeStr(d.specialty),
+            normalizedClinic: normalizeStr(d.clinic)
+        }));
+
+        const visitTrackingMap = new Map<string, { 
+            name: string, 
+            specialty: string, 
+            clinic: string, 
+            actual: number, 
+            target: number, 
+            inMasterlist: boolean,
+            id: string
+        }>();
+
+        // Initialize with masterlist targets
+        normalizedMaster.forEach(d => {
+            const target = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
+            visitTrackingMap.set(d.id, {
+                name: `${d.firstName} ${d.lastName}`,
+                specialty: d.specialty || "—",
+                clinic: d.clinic || "—",
+                actual: 0,
+                target,
+                inMasterlist: true,
+                id: d.id
+            });
+        });
+
+        // Map reports to masterlist doctors using fuzzy logic
+        filteredEntries.forEach(entry => {
+            const entryName = `${entry.firstName || ""} ${entry.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
+            const entrySpec = normalizeStr(entry.specialty);
+            const entryClinic = normalizeStr(entry.clinic);
+            const entryComposite = `${entryName}|${entrySpec}|${entryClinic}`;
+
+            let matchId: string | null = null;
+
+            // 1. Exact composite match
+            const exactMatch = normalizedMaster.find(m => 
+                m.fullName === entryName && m.normalizedSpec === entrySpec && m.normalizedClinic === entryClinic
+            );
             
-            if (!acc[compositeKey]) {
-                acc[compositeKey] = {
-                    count: 0,
-                    firstName: entry.firstName || "",
-                    lastName: entry.lastName || "",
-                    specialty: entry.specialty || "—",
-                    clinic: entry.clinic || "—"
-                };
+            if (exactMatch) {
+                matchId = exactMatch.id;
+            } else {
+                // 2. Exact Name Match
+                const nameMatch = normalizedMaster.find(m => m.fullName === entryName);
+                if (nameMatch) {
+                    matchId = nameMatch.id;
+                } else {
+                    // 3. Fuzzy Name Match (85% similarity threshold)
+                    const fuzzyMatch = normalizedMaster.find(m => isSimilarString(m.fullName, entryName, 0.85));
+                    if (fuzzyMatch) matchId = fuzzyMatch.id;
+                }
             }
-            acc[compositeKey].count += 1;
-            return acc;
-        }, {} as Record<string, { count: number, firstName: string, lastName: string, specialty: string, clinic: string }>);
+
+            if (matchId) {
+                visitTrackingMap.get(matchId)!.actual += 1;
+            } else {
+                const ghostKey = `ghost|${entryComposite}`;
+                if (!visitTrackingMap.has(ghostKey)) {
+                    visitTrackingMap.set(ghostKey, {
+                        name: `${entry.firstName} ${entry.lastName}`,
+                        specialty: entry.specialty || "—",
+                        clinic: entry.clinic || "—",
+                        actual: 0,
+                        target: 0,
+                        inMasterlist: false,
+                        id: ghostKey
+                    });
+                }
+                visitTrackingMap.get(ghostKey)!.actual += 1;
+            }
+        });
+
+        const visitedDoctorList = Array.from(visitTrackingMap.values());
         
-        // CONCENTRATION (4X) Threshold Logic
-        const actualHighFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 4).length;
+        // CONCENTRATION (4X) logic based on merged counts
+        const actualHighFreqAchieved = visitedDoctorList.filter(v => v.actual >= 4).length;
         const targetHighFreqFromList = safeDoctors.filter(d => {
             const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
             return freqVal >= 4;
         }).length;
-        
         const totalHighFreqTarget = Math.max(targetHighFreqFromList, actualHighFreqAchieved);
         const percentageHighFreq = totalHighFreqTarget > 0 ? Math.round((actualHighFreqAchieved / totalHighFreqTarget) * 100) : 0;
         
-        // CONCENTRATION (3X) Threshold Logic
-        const actualMidFreqAchieved = Object.values(providerVisits).filter(v => v.count >= 3).length;
+        // CONCENTRATION (3X) logic
+        const actualMidFreqAchieved = visitedDoctorList.filter(v => v.actual >= 3).length;
         const targetMidFreqFromList = safeDoctors.filter(d => {
             const freqVal = parseInt(String(d.frequency || "1x").replace('x', ''), 10) || 1;
             return freqVal >= 3;
@@ -203,7 +260,7 @@ export function CallSummary({
         const totalMidFreqTarget = Math.max(targetMidFreqFromList, actualMidFreqAchieved);
         const percentageMidFreq = totalMidFreqTarget > 0 ? Math.round((actualMidFreqAchieved / totalMidFreqTarget) * 100) : 0;
 
-        const actualUniqueVisited = Object.keys(providerVisits).length;
+        const actualUniqueVisited = visitedDoctorList.filter(v => v.actual > 0).length;
         const totalDoctorsInUniverse = Math.max(safeDoctors.length, actualUniqueVisited);
         const percentageReach = totalDoctorsInUniverse > 0 ? Math.round((actualUniqueVisited / totalDoctorsInUniverse) * 100) : 0;
 
@@ -235,61 +292,11 @@ export function CallSummary({
         const totalSamplesIssued = Object.values(productUsage).reduce((a, b) => a + b, 0);
         const sortedSpecialties = Object.entries(specialtyCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
-        const visitedDoctorListMap = new Map<string, any>();
-        
-        safeDoctors.forEach(doctor => {
-            const providerName = `${doctor.firstName || ""} ${doctor.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
-            const specialty = normalizeStr(doctor.specialty);
-            const clinic = normalizeStr(doctor.clinic);
-            const compositeKey = `${providerName}|${specialty}|${clinic}`;
-            
-            let visitData = providerVisits[compositeKey];
-            
-            if (!visitData) {
-                const fuzzyKey = Object.keys(providerVisits).find(k => k.startsWith(providerName + "|"));
-                if (fuzzyKey) visitData = providerVisits[fuzzyKey];
-            }
-
-            const actual = visitData?.count || 0;
-            const target = parseInt(String(doctor.frequency || "1x").replace('x', ''), 10) || 1;
-            
-            visitedDoctorListMap.set(compositeKey, {
-                name: `${doctor.firstName} ${doctor.lastName}`,
-                specialty: doctor.specialty || "—",
-                clinic: doctor.clinic || "—",
-                target,
-                actual,
-                isMet: actual >= target,
-                inMasterlist: true
-            });
-        });
-
-        Object.entries(providerVisits).forEach(([key, data]) => {
-            if (!visitedDoctorListMap.has(key)) {
-                const providerName = `${data.firstName || ""} ${data.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
-                const alreadyMatched = Array.from(visitedDoctorListMap.values()).some(d => 
-                    d.inMasterlist && d.name.toLowerCase().trim().replace(/\s+/g, ' ') === providerName
-                );
-
-                if (!alreadyMatched) {
-                    visitedDoctorListMap.set(key, {
-                        name: `${data.firstName} ${data.lastName}`,
-                        specialty: data.specialty,
-                        clinic: data.clinic,
-                        target: 0,
-                        actual: data.count,
-                        isMet: true,
-                        inMasterlist: false
-                    });
-                }
-            }
-        });
-
         return {
             workingDays,
             activeDays,
-            inbaseCalls,
-            outbaseCalls,
+            inbaseCalls: filteredEntries.filter(e => e.coverageType === 'inbase').length,
+            outbaseCalls: filteredEntries.filter(e => e.coverageType === 'outbase').length,
             totalCalls,
             targetCalls,
             callRatePercentage,
@@ -299,7 +306,7 @@ export function CallSummary({
             avgCallsPerDay,
             productUsage: sortedProductUsage,
             totalSamplesIssued,
-            visitedDoctorList: Array.from(visitedDoctorListMap.values()).sort((a, b) => b.actual - a.actual || a.name.localeCompare(b.name)),
+            visitedDoctorList: visitedDoctorList.sort((a, b) => b.actual - a.actual || a.name.localeCompare(b.name)),
             specialtyDistribution: sortedSpecialties,
             trendData
         };
@@ -542,7 +549,7 @@ export function CallSummary({
                                                         <Badge variant="secondary" className={cn("font-mono font-black h-7 px-3", doc.actual > 0 ? "bg-[#3b82f6]/20 text-[#3b82f6]" : "bg-white/5 text-white/20")}>{doc.actual}</Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        {doc.isMet ? <CheckCircle2 className="w-5 h-5 text-[#10b981] ml-auto" /> : <div className="w-5 h-5 rounded-full border-2 border-white/5 ml-auto" />}
+                                                        {doc.isMet || (doc.target > 0 && doc.actual >= doc.target) ? <CheckCircle2 className="w-5 h-5 text-[#10b981] ml-auto" /> : <div className="w-5 h-5 rounded-full border-2 border-white/5 ml-auto" />}
                                                     </TableCell>
                                                 </TableRow>
                                             ))

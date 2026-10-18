@@ -24,10 +24,10 @@ import {
 } from "lucide-react";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { parseAnyDate } from "@/lib/utils";
+import { parseAnyDate, isSimilarString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CoverageEntry, NonCallDay, UserProfile, Plan } from "@/lib/types";
+import type { CoverageEntry, NonCallDay, UserProfile, Plan, Doctor } from "@/lib/types";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { MANAGER_TEAMS } from "@/lib/admins";
@@ -108,6 +108,8 @@ export function CallPerformanceSummary({
             const trendRows: any[] = [];
             const specialtyRows: any[] = [];
 
+            const normalizeStr = (s?: string) => (s ?? "").toLowerCase().trim().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ');
+
             // SEQUENTIAL FETCH: Process each user one by one to prevent timeouts
             for (const uid of targetUserIds) {
                 const profile = userProfiles[uid];
@@ -121,7 +123,7 @@ export function CallPerformanceSummary({
                 pmrManagerName = hManager ? hManager.name : (mId || "DSM Assigned");
 
                 // Fetch data for this specific user
-                const [entriesSnap, ncdSnap, plansSnap] = await Promise.all([
+                const [entriesSnap, ncdSnap, plansSnap, doctorsSnap] = await Promise.all([
                     getDocs(query(
                         collection(db!, "coverageEntries"), 
                         where("userId", "==", uid),
@@ -142,12 +144,21 @@ export function CallPerformanceSummary({
                         where("plannedDate", ">=", queryStart), 
                         where("plannedDate", "<=", queryEnd), 
                         limit(3000)
-                    ))
+                    )),
+                    getDocs(query(collection(db!, "doctors"), where("userId", "==", uid), limit(1500)))
                 ]);
 
                 const uEntriesAll = entriesSnap.docs.map(d => d.data() as CoverageEntry);
                 const uNCDsAll = ncdSnap.docs.map(d => d.data() as NonCallDay);
                 const uPlansAll = plansSnap.docs.map(d => d.data() as Plan);
+                const uDoctors = doctorsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Doctor));
+
+                const normalizedMaster = uDoctors.map(d => ({
+                    ...d,
+                    fullName: `${d.firstName || ""} ${d.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' '),
+                    normalizedSpec: normalizeStr(d.specialty),
+                    normalizedClinic: normalizeStr(d.clinic)
+                }));
 
                 // --- 1. PROCESS PERFORMANCE SHEET (Selected Month) ---
                 const uEntries = uEntriesAll.filter(e => {
@@ -189,20 +200,39 @@ export function CallPerformanceSummary({
                 let unplannedCalls = 0;
                 const specialtyCountMap: Record<string, number> = {};
 
+                // Use the same robust grouping logic for 4X Concentration
+                const visitTrackingMap = new Map<string, number>(); // Map masterDoctorId -> Actual Visits
+                normalizedMaster.forEach(d => visitTrackingMap.set(d.id, 0));
+
                 uEntries.forEach(e => {
                     const d = parseAnyDate(e.coverageDate || e.submittedAt);
                     if (d && isValid(d)) {
                         const dateStr = format(d, 'yyyy-MM-dd');
                         daysWithCalls.add(dateStr);
                         
-                        const matchKey = `${dateStr}|${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
-                        const matchingPlanType = planLookup.get(matchKey);
+                        const entryName = `${e.firstName || ""} ${e.lastName || ""}`.toLowerCase().trim().replace(/\s+/g, ' ');
+                        const matchKey = `${dateStr}|${entryName}`;
                         
+                        // We check the planLookup using exact text match since plans are tied to doctors
+                        const matchingPlanType = planLookup.get(matchKey);
                         if (matchingPlanType === 'planned') plannedCalls++;
                         else unplannedCalls++;
 
                         const spec = (e.specialty || "Unspecified").trim();
                         specialtyCountMap[spec] = (specialtyCountMap[spec] || 0) + 1;
+
+                        // MERGE VISITS FOR CONCENTRATION
+                        const entrySpec = normalizeStr(e.specialty);
+                        const entryClinic = normalizeStr(e.clinic);
+                        
+                        let matchedDoctorId = normalizedMaster.find(m => 
+                            m.fullName === entryName && m.normalizedSpec === entrySpec && m.normalizedClinic === entryClinic
+                        )?.id || normalizedMaster.find(m => m.fullName === entryName)?.id || 
+                        normalizedMaster.find(m => isSimilarString(m.fullName, entryName, 0.85))?.id;
+
+                        if (matchedDoctorId) {
+                            visitTrackingMap.set(matchedDoctorId, (visitTrackingMap.get(matchedDoctorId) || 0) + 1);
+                        }
                     }
                 });
 
@@ -214,13 +244,8 @@ export function CallPerformanceSummary({
                     else activeDaysCount += 1.0;
                 });
 
-                const visitMap = new Map<string, number>();
-                uEntries.forEach(e => {
-                    const key = `${(e.firstName || "").toLowerCase().trim()}|${(e.lastName || "").toLowerCase().trim()}`;
-                    visitMap.set(key, (visitMap.get(key) || 0) + 1);
-                });
-
-                const highFreqAchievedCount = Array.from(visitMap.values()).filter(count => count >= 4).length;
+                const highFreqAchievedCount = Array.from(visitTrackingMap.values()).filter(count => count >= 4).length;
+                const uniqueDoctorsVisited = Array.from(visitTrackingMap.values()).filter(count => count > 0).length;
 
                 performanceRows.push({
                     "District Manager": pmrManagerName,
@@ -230,7 +255,7 @@ export function CallPerformanceSummary({
                     "Unplanned Calls": unplannedCalls,
                     "Total Call Rate": uEntries.length,
                     "Call Concentration (4X)": highFreqAchievedCount,
-                    "Call Reach": visitMap.size,
+                    "Call Reach": uniqueDoctorsVisited,
                     "Active days": activeDaysCount
                 });
 
